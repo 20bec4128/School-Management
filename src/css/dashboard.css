@@ -82,7 +82,7 @@
 
 /* Top Student: make ring + labels align like the reference */
 .top-student-row .top-student-name {
-  font-weight: 800;
+  font-weight: 600;
   font-size: 18px;
   margin-bottom: 2px;
 }

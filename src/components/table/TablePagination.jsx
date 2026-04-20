@@ -53,7 +53,7 @@ export function TablePagination({ paginationProps }) {
 
       {/* Right: Pagination controls */}
       <nav>
-        <ul className="pagination pagination-sm mb-0">
+        <ul className="pagination pagination-sm mb-0 tbl-pagination">
           {/* Previous button */}
           <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
             <button

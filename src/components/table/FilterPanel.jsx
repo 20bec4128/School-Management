@@ -19,21 +19,18 @@ export function FilterPanel({ filterProps }) {
     }
 
     return (
-      <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <span className="text-muted small">Active filters:</span>
+      <div className="d-flex flex-wrap align-items-center gap-8 px-20 py-8 border-bottom border-neutral-200">
+        <span className="text-sm text-secondary-light">Active filters:</span>
         {activeFilterTags.map((tag) => (
-          <span
-            key={tag.field}
-            className="filter-tag"
-          >
+          <span key={tag.field} className="filter-tag">
             {tag.label}: {tag.value}
             <button
               type="button"
-              className="btn-close btn-close-sm p-0 ms-1"
-              style={{ fontSize: '0.5rem' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-600)', lineHeight: 1, padding: 0 }}
               onClick={() => onRemoveFilter(tag.field)}
-              aria-label="Remove filter"
-            ></button>
+            >
+              <i className="ri-close-line"></i>
+            </button>
           </span>
         ))}
       </div>
@@ -44,30 +41,26 @@ export function FilterPanel({ filterProps }) {
   const filterableColumns = columns.filter(col => col.filterType);
 
   return (
-    <div className="card tbl-panel mb-3">
-        {/* Active filter tags */}
-        {activeFilterTags.length > 0 && (
-          <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-            <span className="text-muted small">Active filters:</span>
-            {activeFilterTags.map((tag) => (
-              <span
-                key={tag.field}
-                className="filter-tag"
+    <>
+      {activeFilterTags.length > 0 && (
+        <div className="d-flex flex-wrap align-items-center gap-8 px-20 py-8 border-bottom border-neutral-200">
+          <span className="text-sm text-secondary-light">Active filters:</span>
+          {activeFilterTags.map((tag) => (
+            <span key={tag.field} className="filter-tag">
+              {tag.label}: {tag.value}
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-600)', lineHeight: 1, padding: 0 }}
+                onClick={() => onRemoveFilter(tag.field)}
               >
-                {tag.label}: {tag.value}
-                <button
-                  type="button"
-                  className="btn-close btn-close-sm p-0 ms-1"
-                  style={{ fontSize: '0.5rem' }}
-                  onClick={() => onRemoveFilter(tag.field)}
-                  aria-label="Remove filter"
-                ></button>
-              </span>
-            ))}
-          </div>
-        )}
+                <i className="ri-close-line"></i>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
-        {/* Filter fields */}
+      <div className="px-20 py-16 border-bottom border-neutral-200 tbl-toolbar-row2">
         <div className="row g-3">
           {filterableColumns.map((column) => {
             const filterValue = pendingFilters[column.field]?.value || '';
@@ -120,24 +113,24 @@ export function FilterPanel({ filterProps }) {
           })}
         </div>
 
-        {/* Action buttons */}
-        <div className="d-flex justify-content-end gap-2 mt-3">
+        <div className="d-flex justify-content-end gap-8 mt-16">
           <button
             type="button"
-            className="btn btn-sm btn-outline-secondary"
+            className="btn btn-danger-200 text-danger-600 px-20 py-8 radius-8"
             onClick={onResetFilters}
           >
             Reset
           </button>
           <button
             type="button"
-            className="btn btn-sm btn-primary"
+            className="btn btn-primary-600 px-20 py-8 radius-8"
             onClick={onApplyFilters}
           >
             Apply Filters
           </button>
         </div>
-    </div>
+      </div>
+    </>
   );
 }
 

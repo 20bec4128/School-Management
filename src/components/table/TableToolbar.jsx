@@ -33,8 +33,7 @@ export function TableToolbar({ toolbarProps }) {
 
   return (
     <div
-      className="d-flex align-items-center justify-content-between flex-wrap gap-2 tbl-toolbar-row2"
-      style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-color)' }}
+      className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200 bg-neutral-50"
     >
       <div className="d-flex align-items-center gap-2">
         <div className="position-relative" ref={exportRef}>
@@ -78,15 +77,18 @@ export function TableToolbar({ toolbarProps }) {
         </div>
 
         <button
-          className={`btn btn-sm radius-8 fw-semibold ${columnPanelOpen ? 'btn-teal' : 'btn-outline-secondary'}`}
+          type="button"
+          className={`px-12 py-5-px border radius-8 d-flex align-items-center gap-8 text-sm ${
+            columnPanelOpen
+              ? 'btn-tbl-active'
+              : 'border-neutral-300 text-secondary-light'
+          }`}
           onClick={toggleColumnPanel}
         >
-          <i className="ri-layout-column-line me-1"></i>Columns
+          <i className="ri-layout-column-line text-md line-height-1"></i>
+          Columns
         </button>
 
-       
-
-     
       </div>
 
       <div className="d-flex align-items-center gap-2"> <div className="position-relative">
@@ -117,10 +119,16 @@ export function TableToolbar({ toolbarProps }) {
         </div>
 
         <button
-          className={`btn btn-sm radius-8 fw-semibold position-relative ${filterPanelOpen ? 'btn-teal' : 'btn-outline-secondary'}`}
+          type="button"
+          className={`px-12 py-5-px border radius-8 d-flex align-items-center gap-8 text-sm position-relative ${
+            filterPanelOpen || hasActiveFilters
+              ? 'btn-tbl-active'
+              : 'border-neutral-300 text-secondary-light'
+          }`}
           onClick={toggleFilterPanel}
         >
-          <i className="ri-filter-3-line me-1"></i>Filter
+          <i className="ri-filter-3-line text-md line-height-1"></i>
+          Filter
           {hasActiveFilters && <span className="filter-dot" />}
         </button>
 

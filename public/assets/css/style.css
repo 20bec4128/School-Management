@@ -62,7 +62,7 @@
     4.13 Overlay Css
     4.14 Position Css
 / ================================= Table Of Contents =================================== **/
-@import url("../../../../../css2");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap");
 :root {
   --default-font: ;
   --h1: clamp(2rem, 1.2rem + 4vw, 4.5rem);
@@ -12942,7 +12942,7 @@ input[type=date] {
 /* === apex-chart css start === */
 .apexcharts-tooltip-style-1 .apexcharts-tooltip {
   padding: 0.75rem 0.5rem;
-  background-color: var();
+  background-color: var(--white);
   border: 1px solid var(--input-bg);
   background-color: var(--white);
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.1);

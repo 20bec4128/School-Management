@@ -1,0 +1,102 @@
+/* Record count pill */
+.tbl-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--primary-100, rgba(37, 161, 148, 0.18));
+  color: var(--primary-600, #25a194);
+  white-space: nowrap;
+}
+
+/* Toolbar row 2 and column panel — matches thead bg */
+.tbl-toolbar-row2 {
+  background: var(--neutral-50, #EEF2F6);
+}
+
+/* Active state for Columns and Filter buttons */
+.btn-tbl-active {
+  background: var(--primary-50, #E6F7F5) !important;
+  border-color: var(--primary-200, #99DDD5) !important;
+  color: var(--primary-600, #25a194) !important;
+}
+
+/* Active filter dot */
+.filter-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger-600, #dc2626);
+}
+
+/* Active filter tag pills */
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--primary-50, #E6F7F5);
+  color: var(--primary-600, #25a194);
+}
+
+/* Column visibility chip toggles */
+.col-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--neutral-300, #D1D5DB);
+  background: transparent;
+  color: var(--text-secondary-light, #6C757D);
+  transition: all 0.15s;
+}
+.col-chip:hover:not(:disabled) {
+  border-color: var(--primary-300, #66CBBF);
+  color: var(--primary-600, #25a194);
+}
+.col-chip.col-chip--on {
+  background: var(--primary-50, #E6F7F5);
+  border-color: var(--primary-300, #66CBBF);
+  color: var(--primary-600, #25a194);
+}
+.col-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Pagination override to match theme */
+.tbl-pagination .page-link {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: none;
+  background: var(--neutral-200, #EBECEF);
+  color: var(--text-secondary-light, #6C757D);
+  font-size: 0.875rem;
+}
+.tbl-pagination .page-item.active .page-link,
+.tbl-pagination .page-link:hover {
+  background: var(--primary-600, #25a194);
+  color: #fff;
+}
+.tbl-pagination .page-item.disabled .page-link {
+  opacity: 0.45;
+  pointer-events: none;
+}

@@ -4,10 +4,16 @@
 :root {
   --sm-table-border: rgba(0, 0, 0, 0.09);
   --sm-table-head-bg: var(--neutral-50, #eef2f6);
+  --sm-bordered-head-bg: var(--neutral-100, #f3f4f6);
   --sm-table-page-bg: var(--neutral-200, #ebecef);
   --sm-table-accent: var(--primary-600, #25a194);
   --sm-table-text-muted: var(--text-secondary-light, rgba(0, 0, 0, 0.6));
   --sm-table-input-border: var(--input-form-light, rgba(0, 0, 0, 0.18));
+}
+
+/* Override legacy bordered-table header color from table-only stylesheet */
+.bordered-table thead tr th {
+  background-color: var(--sm-bordered-head-bg) !important;
 }
 
 /* Legacy-style HTML table grid lines */
