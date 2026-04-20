@@ -1,0 +1,107 @@
+/* Dashboard-only tweaks. Keep this file small and intentional. */
+
+.sm-calendar {
+  width: 100%;
+}
+
+.sm-calendar__header {
+  background: #e7f6f5;
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-calendar__nav {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 0;
+  background: #ffffff;
+  color: rgba(0, 0, 0, 0.65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.sm-calendar__nav i {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sm-calendar__title {
+  text-align: center;
+  font-weight: 700;
+  font-size: 18px;
+  color: rgba(0, 0, 0, 0.68);
+}
+
+.sm-calendar__week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  padding: 14px 6px 8px;
+}
+
+.sm-calendar__weekday {
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #000;
+}
+
+.sm-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  padding: 4px 6px 0;
+}
+
+.sm-calendar__day {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: rgba(0, 0, 0, 0.75);
+  border-radius: 10px;
+}
+
+.sm-calendar__day.is-empty {
+  background: transparent;
+}
+
+.sm-calendar__day.is-today {
+  background: rgba(10, 81, 206, 0.12);
+  color: rgba(0, 0, 0, 0.9);
+  font-weight: 700;
+}
+
+/* Top Student: make ring + labels align like the reference */
+.top-student-row .top-student-name {
+  font-weight: 800;
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+
+.top-student-row .top-student-class {
+  font-size: 14px;
+}
+
+.top-student-row .top-student-marks {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.top-student-row .top-student-marks-label {
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 14px;
+}
+
+.sm-ring {
+  flex: 0 0 auto;
+}

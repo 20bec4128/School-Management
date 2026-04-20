@@ -1,0 +1,59 @@
+/* Sidebar dropdown toggle for React */
+.sidebar-menu li.dropdown > .sidebar-submenu {
+  display: none;
+}
+
+.sidebar-menu li.dropdown.open > .sidebar-submenu {
+  display: block;
+}
+
+/* Hide the broken ::after remixicon arrow, use iconify-icon instead */
+.sidebar-menu li.dropdown > a::after {
+  display: none !important;
+}
+
+/* Style the iconify dropdown arrow */
+.sidebar-menu li.dropdown > a .sidebar-menu__arrow {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.125rem;
+  transition: transform 0.3s;
+}
+
+.sidebar-menu li.dropdown.open > a .sidebar-menu__arrow {
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* Overlay shown when sidebar is open on mobile */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2;
+  cursor: pointer;
+}
+
+/* Fix submenu dot overlapping text (circle-icon has a big white box-shadow in the theme) */
+.sidebar-menu .sidebar-submenu li a {
+  /* Theme sets horizontal padding to 0; keep it, but ensure there is room after the dot */
+  gap: 0;
+}
+
+.sidebar-submenu .circle-icon {
+  margin-inline-end: 0.75rem;
+  flex: 0 0 auto;
+}
+
+/* Make section headings align with menu items */
+.sidebar-menu .sidebar-menu-group-title {
+  padding: 0.5rem 0.75rem;
+  margin-block: 0.75rem 0.25rem;
+}
+
+/* Hide sidebar menu group titles when collapsed */
+.sidebar-menu-group-title.hidden {
+  display: none;
+}
+
