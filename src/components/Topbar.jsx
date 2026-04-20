@@ -153,6 +153,51 @@ const Topbar = () => {
               </div>
             </div>
 
+            {/* Profile dropdown */}
+            <div className="dropdown">
+              <button
+                className="w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-label="Profile Menu"
+              >
+                <img
+                  src="/assets/images/thumbs/leave-request-img2.png"
+                  alt="User"
+                  className="w-24 h-24 object-fit-cover rounded-circle"
+                />
+              </button>
+              <ul className="dropdown-menu to-top dropdown-menu-sm dropdown-menu-end border p-12">
+                <li>
+                  <a
+                    href="#"
+                    onClick={(e) => e.preventDefault()}
+                    className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
+                  >
+                    <iconify-icon icon="ri:user-3-line"></iconify-icon> My Profile
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#"
+                    onClick={(e) => e.preventDefault()}
+                    className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
+                  >
+                    <iconify-icon icon="ri:settings-3-line"></iconify-icon> Settings
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#"
+                    onClick={(e) => e.preventDefault()}
+                    className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
+                  >
+                    <iconify-icon icon="ri:shut-down-line"></iconify-icon> Logout
+                  </a>
+                </li>
+              </ul>
+            </div>
+
           </div>
         </div>
 

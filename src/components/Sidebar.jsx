@@ -4,8 +4,7 @@ import { useSidebar } from '../context/SidebarContext';
 
 const menuSections = [
   {
-    // Single continuous list (no visible heading)
-    title: '',
+    title: 'Core System',
     items: [
       {
         title: 'Dashboard',
@@ -68,6 +67,33 @@ const menuSections = [
         ],
       },
       {
+        title: 'Profile',
+        icon: 'ri:user-3-line',
+        submenu: [
+          { label: 'My Profile', href: '#' },
+          { label: 'Settings', href: '#' },
+          { label: 'Logout', href: '#' },
+        ],
+      },
+      {
+        title: 'Subscription (SaaS)',
+        icon: 'ri:vip-crown-line',
+        submenu: [
+          { label: 'FAQ', href: '#' },
+          { label: 'Slider', href: '#' },
+          { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
+          { label: 'General Settings', href: '#' },
+          { label: 'Subscription Plnas', href: '#' },
+          { label: 'School Subscription', href: '#' },
+
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Front Office',
+    items: [
+      {
         title: 'Front Office',
         icon: 'ri:building-4-line',
         submenu: [
@@ -80,33 +106,116 @@ const menuSections = [
         ],
       },
       {
-        title: 'Human Resource',
-        icon: 'ri:team-line',
+        title: 'Complain',
+        icon: 'ri:chat-3-line',
         submenu: [
-          { label: 'Manage Destination', href: '#' },
-          { label: 'Manage Employees', href: '#' },
+          { label: 'Complaints Type', href: '#' },
+          { label: 'Manage Complain', href: '#' },
         ],
       },
       {
-        title: 'Teacher',
-        icon: 'ri:user-star-line',
+        title: 'Announcement',
+        icon: 'ri:megaphone-line',
         submenu: [
-          { label: 'Department', href: '#' },
-          { label: 'Manage Teacher', href: '#' },
-          { label: 'Class Lecture', href: '#' },
-          { label: 'Rating', href: '#' },],
-      },
-      {
-        title: 'Manage Leave',
-        icon: 'ri:calendar-todo-line',
-        submenu: [
-          { label: 'Leave Type', href: '#' },
-          { label: 'Leave Application', href: '#' },
-          { label: 'Waiting Application', href: '#' },
-          { label: 'Approved Application', href: '#' },
-          { label: 'Declined Application', href: '#' },
+          { label: 'Notice', href: '#' },
+          { label: 'News', href: '#' },
         ],
       },
+      {
+        title: 'Event',
+        icon: 'ri:calendar-event-line',
+        submenu: [
+          { label: 'Calendar', href: '#' },
+          { label: 'Event List', href: '#' },
+        ],
+      },
+      {
+        title: 'Media Gallery',
+        icon: 'ri:image-line',
+        submenu: [                    
+          { label: 'Gallery', href: '#' },
+          { label: 'Images', href: '#' },
+         { label: 'Videos', href: '#' },
+
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Student Management',
+    items: [
+      {
+        title: 'Manage Student',
+        icon: 'ri:group-line',
+        submenu: [
+          { label: 'Student Type', href: '#' },
+          { label: 'Student List', href: '#' },
+          { label: 'Admit Student', href: '#' },
+          { label: 'Bulk Admission', href: '#' },
+          { label: 'Online Admission', href: '#' },
+          { label: 'Student Activity', href: '#' },
+        ],
+      },
+      {
+        title: 'Attendance',
+        icon: 'ri:calendar-check-line',
+        submenu: [
+          { label: 'Student Attendance', href: '#' },
+          { label: 'Teacher Attendance', href: '#' },
+          { label: 'Employee Attendance', href: '#' },
+          { label: 'Absent Email', href: '#' },
+          { label: 'Absent SMS', href: '#' },
+        ],
+      },
+      {
+        title: 'Promotion',
+        icon: 'ri:arrow-up-circle-line',
+        submenu: [
+          { label: 'Promote Students', href: '#' },
+          { label: 'Promotion History', href: '#' },
+        ],
+      },
+      {
+        title: 'Generate Card',
+        icon: 'ri:id-card-line',
+        submenu: [
+          { label: 'ID Card Setting', href: '#' },
+          { label: 'Admit Card Setting', href: '#' },
+          { label: 'Teacher ID card', href: '#' },
+          { label: 'Employee ID Card', href: '#' },
+          { label: 'Student ID Card', href: '#' },
+          { label: 'Student Admit Card', href: '#' },
+        ],
+      },
+      {
+        title: 'Certificate',
+        icon: 'ri:award-line',
+        submenu: [
+          { label: 'Certificate Type', href: '#' },
+          { label: 'Gerate Certificate', href: '#' },
+        ],
+      },
+      {
+        title: 'Scholarship',
+        icon: 'ri:graduation-cap-line',
+        submenu: [
+          { label: 'Candidate', href: '#' },
+          { label: 'Donar', href: '#' },
+          { label: 'Scholarship', href: '#' },
+        ],
+      },
+      {
+        title: 'Guardian',
+        icon: 'ri:account-circle-line',
+        submenu: [
+          
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Academic Management',
+    items: [
       {
         title: 'Academic',
         icon: 'ri:bank-line',
@@ -136,49 +245,31 @@ const menuSections = [
         title: 'Class Routine',
         icon: 'ri:time-line',
         submenu: [
-          { label: 'Routine', href: '#' },
-          { label: 'Periods', href: '#' },
+          
         ],
       },
       {
-        title: 'Guardian',
-        icon: 'ri:account-circle-line',
+        title: 'Teacher',
+        icon: 'ri:user-star-line',
         submenu: [
-          { label: 'Guardians List', href: '#' },
-          { label: 'Add Guardian', href: '#' },
-        ],
+          { label: 'Department', href: '#' },
+          { label: 'Manage Teacher', href: '#' },
+          { label: 'Class Lecture', href: '#' },
+          { label: 'Rating', href: '#' },],
       },
-      {
-        title: 'Manage Student',
-        icon: 'ri:group-line',
-        submenu: [
-          { label: 'Add Student', href: '#' },
-          { label: 'Student List', href: '#' },
-          { label: 'Categories', href: '#' },
-        ],
-      },
-      {
-        title: 'Attendance',
-        icon: 'ri:calendar-check-line',
-        submenu: [
-          { label: 'Student Attendance', href: '#' },
-          { label: 'Teacher Attendance', href: '#' },
-        ],
-      },
-      {
-        title: 'Generate Card',
-        icon: 'ri:id-card-line',
-        submenu: [
-          { label: 'ID Card', href: '#' },
-          { label: 'Admit Card', href: '#' },
-        ],
-      },
+    ],
+  },
+  {
+    title: 'Examination System',
+    items: [
       {
         title: 'Online Exam',
         icon: 'ri:computer-line',
         submenu: [
+          { label: 'Instruction', href: '#' },
           { label: 'Question Bank', href: '#' },
-          { label: 'Exam List', href: '#' },
+          { label: 'Online Exam', href: '#' },
+          { label: 'Exam Result', href: '#' },
         ],
       },
       {
@@ -186,49 +277,142 @@ const menuSections = [
         icon: 'ri:file-edit-line',
         submenu: [
           { label: 'Schedule', href: '#' },
-          { label: 'Exam Rooms', href: '#' },
+          { label: 'Exam Grade', href: '#' },
+          { label: 'Exam Term', href: '#' },
+          { label: 'Suggestion', href: '#' },
+          { label: 'Attendance', href: '#' },
         ],
       },
       {
         title: 'Exam Mark',
         icon: 'ri:file-chart-line',
         submenu: [
-          { label: 'Mark Entry', href: '#' },
-          { label: 'Result', href: '#' },
+          { label: 'Manage Mark', href: '#' },
+          { label: 'Exam Term Result', href: '#' },
+          { label: 'Exam final result', href: '#' },
+          { label: 'Merit List', href: '#' },
+          { label: 'Mark Sheet', href: '#' },
+          { label: 'Result Card', href: '#' },
+          { label: 'Mark send by Email', href: '#' },
+          { label: 'Mark send by SMS', href: '#' },
+          { label: 'Result Send by Email', href: '#' },
+          { label: 'Result Send by SMS', href: '#' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Human Resource (HR)',
+    items: [
+      {
+        title: 'Human Resource',
+        icon: 'ri:team-line',
+        submenu: [
+          { label: 'Manage Destination', href: '#' },
+          { label: 'Manage Employees', href: '#' },
         ],
       },
       {
-        title: 'Promotion',
-        icon: 'ri:arrow-up-circle-line',
+        title: 'Manage Leave',
+        icon: 'ri:calendar-todo-line',
         submenu: [
-          { label: 'Promote Students', href: '#' },
-          { label: 'Promotion History', href: '#' },
+          { label: 'Leave Type', href: '#' },
+          { label: 'Leave Application', href: '#' },
+          { label: 'Waiting Application', href: '#' },
+          { label: 'Approved Application', href: '#' },
+          { label: 'Declined Application', href: '#' },
         ],
       },
       {
-        title: 'Certificate',
-        icon: 'ri:award-line',
+        title: 'Payroll',
+        icon: 'ri:money-dollar-circle-line',
         submenu: [
-          { label: 'Generate', href: '#' },
-          { label: 'Certificate List', href: '#' },
+          { label: 'Salary Grade', href: '#' },
+          { label: 'Payslips', href: '#' },
+          { label: 'Salary History', href: '#' },
         ],
       },
+    ],
+  },
+  {
+    title: 'Finance & Accounts',
+    items: [
+      {
+        title: 'Accounting',
+        icon: 'ri:calculator-line',
+        submenu: [
+          { label: 'Discount', href: '#' },
+          { label: 'Fee Type', href: '#' },
+          { label: 'Fee Collection', href: '#' },
+          { label: 'Manage Invoice', href: '#' },
+          { label: 'Due Invoice', href: '#' },
+          { label: 'Due Receipt', href: '#' },
+          { label: 'Paid Receipt', href: '#' },
+          { label: 'Due Fee Email', href: '#' },
+          { label: 'Due Fee SMS', href: '#' },
+          { label: 'Income Head', href: '#' },
+          { label: 'Income', href: '#' },
+          { label: 'Expenditure Head', href: '#' },
+          { label: 'Expenditure', href: '#' },
+        ],
+      },
+      {
+        title: 'Report',
+        icon: 'ri:bar-chart-line',
+        submenu: [
+          { label: 'Income Report', href: '#' },
+          { label: 'Expenditure Report', href: '#' },
+          { label: 'Invoice Report', href: '#' },
+          { label: 'Due Fee Report', href: '#' },
+          { label: 'Fee Collection Report', href: '#' },
+          { label: 'Accounting Balance Report', href: '#' },
+          { label: 'Library Report', href: '#' },
+          { label: 'Student Attendance Report', href: '#' },
+          { label: 'Student Yearly Attendance Report', href: '#' },
+          { label: 'Teacher Attendance Report', href: '#' },
+          { label: 'Teacher Yearly Attendance Report', href: '#' },
+          { label: 'Employee Attendance Report', href: '#' },
+          { label: 'Employee Yearly Attendance Report', href: '#' },
+          { label: 'Student Report', href: '#' },
+          { label: 'Student Invoice Report', href: '#' },
+          { label: 'Student Activity Report', href: '#' },
+          { label: 'Payroll Report', href: '#' },
+          { label: 'Daily Transaction Report', href: '#' },
+          { label: 'Daily Statemen Report', href: '#' },
+          { label: 'Exam Result Report', href: '#' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Inventory & Assets',
+    items: [
       {
         title: 'Inventory',
         icon: 'ri:box-3-line',
         submenu: [
-          { label: 'Items', href: '#' },
-          { label: 'Stock', href: '#' },
+          
           { label: 'Suppliers', href: '#' },
+           { label: 'Warhouse', href: '#' },
+ { label: 'Category', href: '#' },
+ { label: 'Product', href: '#' },
+           { label: 'Purchase', href: '#' },
+                     { label: 'Sale', href: '#' },
+                               { label: 'Issue', href: '#' },
         ],
       },
       {
         title: 'Asset Management',
         icon: 'ri:building-2-line',
         submenu: [
-          { label: 'Assets', href: '#' },
-          { label: 'Categories', href: '#' },
-          { label: 'Maintenance', href: '#' },
+          { label: 'Vendor', href: '#' },
+          { label: 'Store', href: '#' },
+          { label: 'Category', href: '#' },
+          { label: 'Item', href: '#' },
+          { label: 'Purchase', href: '#' },
+         
+          { label: 'Issue', href: '#' },
+
         ],
       },
       {
@@ -236,137 +420,72 @@ const menuSections = [
         icon: 'ri:book-2-line',
         submenu: [
           { label: 'Books List', href: '#' },
-          { label: 'Members', href: '#' },
+          { label: 'Library Members', href: '#' },
           { label: 'Issue/Return', href: '#' },
+          { label: 'E-Book', href: '#' },
         ],
       },
+    ],
+  },
+  {
+    title: 'Transport & Facilities',
+    items: [
       {
         title: 'Transport',
         icon: 'ri:bus-line',
         submenu: [
-          { label: 'Routes', href: '#' },
           { label: 'Vehicles', href: '#' },
-          { label: 'Drivers', href: '#' },
+          { label: 'Trasnsport Route', href: '#' },
+          { label: 'Trasnsport Member', href: '#' },
         ],
       },
       {
         title: 'Hostel',
         icon: 'ri:hotel-bed-line',
         submenu: [
-          { label: 'Rooms', href: '#' },
-          { label: 'Residents', href: '#' },
-          { label: 'Hostel Fees', href: '#' },
+          { label: 'Manage Hostel', href: '#' },
+          { label: 'Manage Room', href: '#' },
+          { label: 'Hostel Member', href: '#' },
         ],
       },
+    ],
+  },
+  {
+    title: 'Communication System',
+    items: [
       {
         title: 'Mail & SMS',
         icon: 'ri:mail-line',
         submenu: [
-          { label: 'Compose', href: '#' },
-          { label: 'Templates', href: '#' },
-          { label: 'History', href: '#' },
+          { label: 'Email', href: '#' },
+          { label: 'SMS', href: '#' },
         ],
       },
-      {
-        title: 'Complain',
-        icon: 'ri:chat-3-line',
-        submenu: [
-          { label: 'New Complaint', href: '#' },
-          { label: 'Complaints List', href: '#' },
-        ],
-      },
-      {
-        title: 'Announcement',
-        icon: 'ri:megaphone-line',
-        submenu: [
-          { label: 'Create', href: '#' },
-          { label: 'Announcements List', href: '#' },
-        ],
-      },
-      {
-        title: 'Scholarship',
-        icon: 'ri:graduation-cap-line',
-        submenu: [
-          { label: 'Applications', href: '#' },
-          { label: 'Awarded List', href: '#' },
-        ],
-      },
-      {
-        title: 'Event',
-        icon: 'ri:calendar-event-line',
-        submenu: [
-          { label: 'Calendar', href: '#' },
-          { label: 'Event List', href: '#' },
-        ],
-      },
-      {
-        title: 'Payroll',
-        icon: 'ri:money-dollar-circle-line',
-        submenu: [
-          { label: 'Salary', href: '#' },
-          { label: 'Payslips', href: '#' },
-          { label: 'Deductions', href: '#' },
-        ],
-      },
-      {
-        title: 'Accounting',
-        icon: 'ri:calculator-line',
-        submenu: [
-          { label: 'Income', href: '#' },
-          { label: 'Expense', href: '#' },
-          { label: 'Ledger', href: '#' },
-        ],
-      },
-      {
-        title: 'Report',
-        icon: 'ri:bar-chart-line',
-        submenu: [
-          { label: 'Attendance', href: '#' },
-          { label: 'Fees', href: '#' },
-          { label: 'Exam Reports', href: '#' },
-        ],
-      },
-      {
-        title: 'Media Gallery',
-        icon: 'ri:image-line',
-        submenu: [
-          { label: 'Photos', href: '#' },
-          { label: 'Videos', href: '#' },
-        ],
-      },
+    ],
+  },
+  {
+    title: 'Website (CMS)',
+    items: [
       {
         title: 'Manage Frontend',
         icon: 'ri:layout-line',
         submenu: [
-          { label: 'Pages', href: '#' },
-          { label: 'Menus', href: '#' },
-          { label: 'Banners', href: '#' },
+          { label: 'Frontend Page', href: '#' },
+          { label: 'Slider', href: '#' },
+          { label: 'About School', href: '#' },
         ],
       },
+    ],
+  },
+  {
+    title: 'Miscellaneous',
+    items: [
       {
         title: 'Miscellaneous',
         icon: 'ri:more-2-line',
         submenu: [
           { label: 'Tools', href: '#' },
           { label: 'Settings', href: '#' },
-        ],
-      },
-      {
-        title: 'Subscription (SaaS)',
-        icon: 'ri:vip-crown-line',
-        submenu: [
-          { label: 'Plans', href: '#' },
-          { label: 'Billing', href: '#' },
-          { label: 'Invoices', href: '#' },
-        ],
-      },
-      {
-        title: 'Profile',
-        icon: 'ri:user-3-line',
-        submenu: [
-          { label: 'My Profile', href: '#' },
-          { label: 'Settings', href: '#' },
-          { label: 'Logout', href: '#' },
         ],
       },
     ],
