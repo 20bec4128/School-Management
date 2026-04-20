@@ -1,0 +1,185 @@
+/* Table styling aligned with legacy (oldcss) look, adapted for PrimeReact DataTable. */
+
+/* Prefer legacy theme variables when present (loaded from /assets/css/style.css). */
+:root {
+  --sm-table-border: rgba(0, 0, 0, 0.09);
+  --sm-table-head-bg: var(--neutral-50, #eef2f6);
+  --sm-table-page-bg: var(--neutral-200, #ebecef);
+  --sm-table-accent: var(--primary-600, #25a194);
+  --sm-table-text-muted: var(--text-secondary-light, rgba(0, 0, 0, 0.6));
+  --sm-table-input-border: var(--input-form-light, rgba(0, 0, 0, 0.18));
+}
+
+/* Legacy-style HTML table grid lines */
+table.dataTable {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+table.dataTable > thead > tr > th,
+table.dataTable > tbody > tr > td {
+  border-right: 1px solid var(--sm-table-border);
+}
+
+table.dataTable > thead > tr > th:last-child,
+table.dataTable > tbody > tr > td:last-child {
+  border-right: none;
+}
+
+/* DataTable container */
+.p-datatable {
+  border: 1px solid var(--sm-table-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.p-datatable .p-datatable-wrapper {
+  overflow: auto;
+}
+
+.p-datatable .p-datatable-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Header cells */
+.p-datatable .p-datatable-thead > tr > th {
+  background: var(--sm-table-head-bg) !important;
+  border-color: var(--sm-table-border) !important;
+  padding: 13px 13px 13px 24px;
+  font-weight: 600;
+}
+
+.p-datatable .p-datatable-thead > tr > th .p-column-title {
+  color: inherit;
+}
+
+.p-datatable .p-sortable-column:not(.p-highlight):hover {
+  background: var(--sm-table-head-bg) !important;
+}
+
+.p-datatable .p-sortable-column.p-highlight {
+  background: var(--sm-table-head-bg) !important;
+}
+
+.p-datatable .p-sortable-column .p-sortable-column-icon {
+  color: var(--sm-table-text-muted) !important;
+}
+
+/* Body cells */
+.p-datatable .p-datatable-tbody > tr > td {
+  border-color: var(--sm-table-border) !important;
+  padding: 12px 12px 12px 24px;
+}
+
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: rgba(37, 161, 148, 0.06); /* soft tint of primary */
+}
+
+.p-datatable .p-datatable-tbody > tr.p-highlight > td {
+  background: rgba(37, 161, 148, 0.12) !important;
+}
+
+/* Center numeric/date columns when PrimeReact applies alignment helper classes */
+.p-datatable .p-align-center,
+.p-datatable .p-column-title.p-text-center {
+  text-align: center;
+}
+
+/* PrimeReact paginator (if used elsewhere) */
+.p-paginator {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.p-paginator .p-paginator-pages .p-paginator-page,
+.p-paginator .p-paginator-first,
+.p-paginator .p-paginator-prev,
+.p-paginator .p-paginator-next,
+.p-paginator .p-paginator-last {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.p-paginator .p-paginator-pages .p-paginator-page {
+  background: var(--sm-table-page-bg) !important;
+  color: var(--sm-table-text-muted) !important;
+  border: none !important;
+  font-weight: 500;
+}
+
+.p-paginator .p-paginator-pages .p-paginator-page.p-highlight,
+.p-paginator .p-paginator-pages .p-paginator-page:hover {
+  background: var(--sm-table-accent) !important;
+  color: #fff !important;
+}
+
+/* Bootstrap pagination (your current TablePagination component) */
+.pagination .page-link {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px !important;
+  border: none !important;
+  background: var(--sm-table-page-bg) !important;
+  color: var(--sm-table-text-muted) !important;
+  box-shadow: none !important;
+}
+
+.pagination .page-item.disabled .page-link {
+  opacity: 0.55;
+}
+
+.pagination .page-item.active .page-link,
+.pagination .page-link:hover,
+.pagination .page-link:focus {
+  background: var(--sm-table-accent) !important;
+  color: #fff !important;
+}
+
+/* Optional: dark theme support (index.html sets data-theme) */
+[data-theme="dark"] .p-datatable {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .p-datatable .p-datatable-thead > tr > th {
+  /* old theme overrides --neutral-50 in dark mode */
+  background: var(--neutral-50, #1b2431) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+}
+
+[data-theme="dark"] .p-datatable .p-datatable-tbody > tr > td {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+[data-theme="dark"] .p-paginator .p-paginator-pages .p-paginator-page {
+  background: var(--neutral-200, rgba(255, 255, 255, 0.12)) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+[data-theme="dark"] .p-paginator .p-paginator-pages .p-paginator-page.p-highlight,
+[data-theme="dark"] .p-paginator .p-paginator-pages .p-paginator-page:hover {
+  background: var(--sm-table-accent) !important;
+  color: #fff !important;
+}
+
+[data-theme="dark"] .pagination .page-link {
+  background: var(--neutral-200, rgba(255, 255, 255, 0.12)) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+[data-theme="dark"] .pagination .page-item.active .page-link,
+[data-theme="dark"] .pagination .page-link:hover,
+[data-theme="dark"] .pagination .page-link:focus {
+  background: var(--sm-table-accent) !important;
+  color: #fff !important;
+}
