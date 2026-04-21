@@ -149,7 +149,7 @@ const menuSections = [
         icon: 'ri:group-line',
         submenu: [
           { label: 'Student Type', href: '#' },
-          { label: 'Student List', href: '#' },
+          { label: 'Student List', href: '#', page: 'student-list' },
           { label: 'Admit Student', href: '#' },
           { label: 'Bulk Admission', href: '#' },
           { label: 'Online Admission', href: '#' },

@@ -4,6 +4,7 @@ import Topbar from './components/Topbar'
 import { SidebarProvider } from './context/SidebarContext'
 import Dashboard from './pages/Dashboard'
 import TeacherDepartment from './pages/TeacherDepartment'
+import StudentList from './pages/StudentList'
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
@@ -12,6 +13,8 @@ function App() {
     switch (currentPage) {
       case 'teacher-department':
         return <TeacherDepartment />
+      case 'student-list':
+        return <StudentList />
       default:
         return <Dashboard />
     }
