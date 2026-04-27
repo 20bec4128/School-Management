@@ -1,117 +1,328 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
-import '../css/addModalShared.css'
+import SlideSidebar from '../components/SlideSidebar'
+import PhoneField from '../components/PhoneField'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import '../assets/css/addModalShared.css'
 
 const students = [
-  { sl: '01', admissionNo: 'AD52365', name: 'Kathryn Murphy', rollNo: '12', image: '/assets/images/thumbs/avatar-img1.png', className: 'Class 1 (A)', classGroup: 'Primary', section: 'Arts', dob: '05 May 2012', gender: 'Male', mobile: '209.555.0104', category: 'General', status: 'Active' },
-  { sl: '02', admissionNo: 'AD52365', name: 'Floyd Miles', rollNo: '1', image: '/assets/images/thumbs/avatar-img2.png', className: 'Class 2 (B)', classGroup: 'Primary', section: 'Science', dob: '05 May 2012', gender: 'Female', mobile: '209.555.0104', category: 'Special', status: 'Inactive' },
-  { sl: '03', admissionNo: 'AD52367', name: 'Cody Fisher', rollNo: '7', image: '/assets/images/thumbs/avatar-img3.png', className: 'Class 3 (A)', classGroup: 'SSC', section: 'Commerce', dob: '12 Feb 2013', gender: 'Male', mobile: '207.445.9821', category: 'OBC', status: 'Active' },
-  { sl: '04', admissionNo: 'AD52368', name: 'Jane Cooper', rollNo: '8', image: '/assets/images/thumbs/avatar-img4.png', className: 'Class 4 (C)', classGroup: 'SSC', section: 'Arts', dob: '17 Mar 2014', gender: 'Female', mobile: '204.658.4421', category: 'Special', status: 'Inactive' },
-  { sl: '05', admissionNo: 'AD52369', name: 'Esther Howard', rollNo: '15', image: '/assets/images/thumbs/avatar-img5.png', className: 'Class 5 (B)', classGroup: 'HSC', section: 'Science', dob: '25 Jul 2013', gender: 'Female', mobile: '209.875.9987', category: 'General', status: 'Active' },
-  { sl: '06', admissionNo: 'AD52370', name: 'Albert Flores', rollNo: '3', image: '/assets/images/thumbs/avatar-img6.png', className: 'Class 6 (A)', classGroup: 'HSC', section: 'Commerce', dob: '08 Dec 2011', gender: 'Male', mobile: '208.324.1110', category: 'OBC', status: 'Inactive' },
-  { sl: '07', admissionNo: 'AD52371', name: 'Jenny Wilson', rollNo: '9', image: '/assets/images/thumbs/avatar-img7.png', className: 'Class 7 (C)', classGroup: 'Hons', section: 'Arts', dob: '19 Sep 2010', gender: 'Female', mobile: '206.211.4567', category: 'General', status: 'Active' },
-  { sl: '08', admissionNo: 'AD52367', name: 'Jane Cooper', rollNo: '5', image: '/assets/images/thumbs/avatar-img3.png', className: 'Class 3 (A)', classGroup: 'SSC', section: 'Science', dob: '12 Jan 2013', gender: 'Female', mobile: '202.444.0089', category: 'OBC', status: 'Active' },
-  { sl: '09', admissionNo: 'AD52368', name: 'Cameron Williamson', rollNo: '23', image: '/assets/images/thumbs/avatar-img4.png', className: 'Class 4 (C)', classGroup: 'SSC', section: 'Commerce', dob: '08 Jul 2011', gender: 'Male', mobile: '203.111.0456', category: 'SC', status: 'Inactive' },
-  { sl: '10', admissionNo: 'AD52369', name: 'Theresa Webb', rollNo: '10', image: '/assets/images/thumbs/avatar-img5.png', className: 'Class 5 (A)', classGroup: 'HSC', section: 'Arts', dob: '18 Nov 2010', gender: 'Female', mobile: '205.777.0190', category: 'General', status: 'Active' },
-  { sl: '11', admissionNo: 'AD52370', name: 'Marvin McKinney', rollNo: '7', image: '/assets/images/thumbs/avatar-img6.png', className: 'Class 6 (B)', classGroup: 'HSC', section: 'Science', dob: '21 Mar 2011', gender: 'Male', mobile: '209.660.0912', category: 'General', status: 'Active' },
-  { sl: '12', admissionNo: 'AD52371', name: 'Courtney Henry', rollNo: '15', image: '/assets/images/thumbs/avatar-img7.png', className: 'Class 7 (A)', classGroup: 'Hons', section: 'Commerce', dob: '10 Feb 2009', gender: 'Female', mobile: '204.120.0023', category: 'OBC', status: 'Inactive' },
+  {
+    sl: '01',
+    school: 'Windsor Park High School',
+    photo: null,
+    name: 'John Carter',
+    group: 'Science',
+    className: '10',
+    section: 'A',
+    rollNo: '101',
+    email: 'john.carter@school.com',
+  },
+  {
+    sl: '02',
+    school: 'Windsor Park High School',
+    photo: null,
+    name: 'Emma Watson',
+    group: 'Commerce',
+    className: '11',
+    section: 'B',
+    rollNo: '102',
+    email: 'emma.watson@school.com',
+  },
+  {
+    sl: '03',
+    school: 'Windsor Park High School',
+    photo: null,
+    name: 'Daniel Joseph',
+    group: 'Arts',
+    className: '9',
+    section: 'C',
+    rollNo: '103',
+    email: 'daniel.joseph@school.com',
+  },
+  {
+    sl: '04',
+    school: 'Windsor Park High School',
+    photo: null,
+    name: 'Sophia Green',
+    group: 'Science',
+    className: '12',
+    section: 'A',
+    rollNo: '104',
+    email: 'sophia.green@school.com',
+  },
+  {
+    sl: '05',
+    school: 'Windsor Park High School',
+    photo: null,
+    name: 'Michael Brown',
+    group: 'Commerce',
+    className: '8',
+    section: 'D',
+    rollNo: '105',
+    email: 'michael.brown@school.com',
+  },
 ]
 
+const emptyForm = {
+  school: '',
+  name: '',
+  admissionNo: '',
+  admissionDate: '',
+  birthDate: '',
+  gender: '',
+  bloodGroup: '',
+  religion: '',
+  caste: '',
+  phone: '',
+  email: '',
+  nationalId: '',
+
+  studentType: '',
+  className: '',
+  section: '',
+  group: '',
+  rollNo: '',
+  registrationNo: '',
+  discount: '',
+  secondLanguage: '',
+
+  fatherName: '',
+  fatherPhone: '',
+  fatherEducation: '',
+  fatherProfession: '',
+  fatherDesignation: '',
+  fatherPhoto: null,
+
+  motherName: '',
+  motherPhone: '',
+  motherEducation: '',
+  motherProfession: '',
+  motherDesignation: '',
+  motherPhoto: null,
+
+  isGuardian: '',
+  relationWithGuardian: '',
+
+  presentAddress: '',
+  permanentAddress: '',
+  sameAsGuardianAddress: false,
+
+  previousSchoolName: '',
+  previousClass: '',
+  transferCertificate: null,
+
+  username: '',
+  password: '',
+  healthCondition: '',
+  otherInfo: '',
+  photo: null,
+}
+
 const emptyFilters = {
-  classGroup: 'Select',
+  school: 'Select',
+  className: 'Select',
   section: 'Select',
-  gender: 'Select',
-  status: 'Select',
+  group: 'Select',
 }
 
-const emptySidebarForm = {
-  roleName: '',
-  enterDate: '',
+const STEPS = ['Basic Info', 'Address Info', 'Academic Info', 'Other Info']
+
+const FIELD_ICONS = {
+  'School Name': 'ri-school-line',
+  Name: 'ri-user-3-line',
+  'Admission No': 'ri-profile-line',
+  'Admission Date': 'ri-calendar-check-line',
+  'Birth Date': 'ri-calendar-2-line',
+  Gender: 'ri-user-settings-line',
+  'Blood Group': 'ri-heart-pulse-line',
+  Religion: 'ri-bookmark-3-line',
+  Caste: 'ri-group-line',
+  Email: 'ri-mail-line',
+  'National ID': 'ri-fingerprint-line',
+  'Student Type': 'ri-team-line',
+  Class: 'ri-building-line',
+  Section: 'ri-layout-grid-line',
+  Group: 'ri-group-2-line',
+  'Roll No': 'ri-hashtag',
+  'Registration No': 'ri-file-list-3-line',
+  Discount: 'ri-percent-line',
+  'Second Language': 'ri-translate-2',
+  'Father Name': 'ri-user-line',
+  'Father Education': 'ri-graduation-cap-line',
+  'Father Profession': 'ri-briefcase-4-line',
+  'Father Designation': 'ri-medal-line',
+  'Mother Name': 'ri-user-line',
+  'Mother Education': 'ri-graduation-cap-line',
+  'Mother Profession': 'ri-briefcase-4-line',
+  'Mother Designation': 'ri-medal-line',
+  'Is Guardian?': 'ri-shield-user-line',
+  'Relation With Guardian': 'ri-links-line',
+  'Present Address': 'ri-map-pin-2-line',
+  'Permanent Address': 'ri-home-4-line',
+  Username: 'ri-at-line',
+  Password: 'ri-lock-2-line',
+  'Health Condition': 'ri-heart-add-line',
+  'Other Info': 'ri-information-line',
 }
 
-const StudentList = () => {
+const columnOptions = [
+  { key: 'school', label: 'School' },
+  { key: 'photo', label: 'Photo' },
+  { key: 'name', label: 'Name' },
+  { key: 'group', label: 'Group' },
+  { key: 'className', label: 'Class' },
+  { key: 'section', label: 'Section' },
+  { key: 'rollNo', label: 'Roll No' },
+  { key: 'email', label: 'Email' },
+]
+
+const FormField = ({ label, required, children, full = false, noIcon = false }) => {
+  const icon = FIELD_ICONS[label] || 'ri-edit-line'
+  return (
+    <div className={`avm-field${full ? ' full' : ''}`}>
+      <label className="avm-label">
+        {label}
+        {required && <span className="req"> *</span>}
+      </label>
+      {!noIcon ? (
+        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+          <span
+            style={{
+              position: 'absolute',
+              left: '0.85rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#667085',
+              fontSize: '0.95rem',
+              lineHeight: 1,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <i className={icon}></i>
+          </span>
+          {children}
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  )
+}
+
+const StudentList = ({ onNavigate }) => {
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [addStep, setAddStep] = useState(0)
+  const [editStep, setEditStep] = useState(0)
+  const [isAddPasswordVisible, setIsAddPasswordVisible] = useState(false)
+  const [isEditPasswordVisible, setIsEditPasswordVisible] = useState(false)
+  const [addForm, setAddForm] = useState(emptyForm)
+  const [editForm, setEditForm] = useState(emptyForm)
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-  const [isAddSidebarOpen, setIsAddSidebarOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [isEditSidebarOpen, setIsEditSidebarOpen] = useState(false)
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [addForm, setAddForm] = useState(emptySidebarForm)
-  const [editForm, setEditForm] = useState(emptySidebarForm)
 
-  const filteredStudents = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase()
+  const [addPreviews, setAddPreviews] = useState({
+    fatherPhoto: null,
+    motherPhoto: null,
+    transferCertificate: null,
+    photo: null,
+  })
 
-    return students.filter((student) => {
+  const [editPreviews, setEditPreviews] = useState({
+    fatherPhoto: null,
+    motherPhoto: null,
+    transferCertificate: null,
+    photo: null,
+  })
+
+  const addFatherPhotoRef = useRef(null)
+  const addMotherPhotoRef = useRef(null)
+  const addTransferCertificateRef = useRef(null)
+  const addStudentPhotoRef = useRef(null)
+
+  const editFatherPhotoRef = useRef(null)
+  const editMotherPhotoRef = useRef(null)
+  const editTransferCertificateRef = useRef(null)
+  const editStudentPhotoRef = useRef(null)
+
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+
+  const schoolOptions = useMemo(() => Array.from(new Set(students.map((item) => item.school))), [])
+  const classOptions = useMemo(() => Array.from(new Set(students.map((item) => item.className))), [])
+  const sectionOptions = useMemo(() => Array.from(new Set(students.map((item) => item.section))), [])
+  const groupOptions = useMemo(() => Array.from(new Set(students.map((item) => item.group))), [])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+
+    return students.filter((row) => {
       const matchesSearch =
-        normalizedSearch === '' ||
-        [
-          student.admissionNo,
-          student.name,
-          student.className,
-          student.dob,
-          student.gender,
-          student.mobile,
-          student.category,
-          student.status,
-        ]
+        !q ||
+        [row.school, row.name, row.group, row.className, row.section, row.rollNo, row.email]
           .join(' ')
           .toLowerCase()
-          .includes(normalizedSearch)
+          .includes(q)
 
-      const matchesClass =
-        filters.classGroup === 'Select' || student.classGroup === filters.classGroup
-      const matchesSection =
-        filters.section === 'Select' || student.section === filters.section
-      const matchesGender =
-        filters.gender === 'Select' || student.gender === filters.gender
-      const matchesStatus =
-        filters.status === 'Select' || student.status === filters.status
+      const matchesSchool = filters.school === 'Select' || row.school === filters.school
+      const matchesClass = filters.className === 'Select' || row.className === filters.className
+      const matchesSection = filters.section === 'Select' || row.section === filters.section
+      const matchesGroup = filters.group === 'Select' || row.group === filters.group
 
-      return (
-        matchesSearch &&
-        matchesClass &&
-        matchesSection &&
-        matchesGender &&
-        matchesStatus
-      )
+      return matchesSearch && matchesSchool && matchesClass && matchesSection && matchesGroup
     })
-  }, [filters, search])
+  }, [search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / rowsPerPage))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
-  const paginatedStudents = useMemo(() => {
+  const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
-    return filteredStudents.slice(start, start + rowsPerPage)
-  }, [currentPage, filteredStudents, rowsPerPage])
+    return filtered.slice(start, start + rowsPerPage)
+  }, [currentPage, filtered, rowsPerPage])
 
-  const allVisibleSelected =
-    paginatedStudents.length > 0 &&
-    paginatedStudents.every((student) => selectedRows.includes(student.sl))
+  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
 
-  const handleSearchChange = (event) => {
-    setSearch(event.target.value)
-    setCurrentPage(1)
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+    } else {
+      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+    }
   }
 
-  const handleRowsPerPageChange = (event) => {
-    setRowsPerPage(Number(event.target.value))
-    setCurrentPage(1)
+  const handleSelectRow = (id) => {
+    setSelectedRows((prev) =>
+      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
+    )
   }
 
-  const handlePendingFilterChange = (event) => {
-    const { id, value } = event.target
-    setPendingFilters((current) => ({ ...current, [id]: value }))
+  const handleChange = (setter) => (e) => {
+    const { id, value, type, checked } = e.target
+    setter((prev) => ({ ...prev, [id]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleApplyFilters = (event) => {
-    event.preventDefault()
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target
+    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handlePhotoChange = (e, key, setPreviewState, setter) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setter((prev) => ({ ...prev, [key]: file }))
+    setPreviewState((prev) => ({ ...prev, [key]: URL.createObjectURL(file) }))
+  }
+
+  const handleApplyFilters = (e) => {
+    e.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
   }
 
   const handleResetFilters = () => {
@@ -120,107 +331,660 @@ const StudentList = () => {
     setCurrentPage(1)
   }
 
-  const handleSidebarInputChange = (event, mode) => {
-    const { id, value } = event.target
-
-    if (mode === 'add') {
-      setAddForm((current) => ({ ...current, [id]: value }))
-      return
-    }
-
-    setEditForm((current) => ({ ...current, [id]: value }))
-  }
-
-  const openAddSidebar = () => {
-    setAddForm(emptySidebarForm)
-    setAddStep(0)
-    setIsAddSidebarOpen(true)
-  }
-
-  const closeAddSidebar = () => {
-    setIsAddSidebarOpen(false)
-    setAddForm(emptySidebarForm)
-  }
-
-  const openEditSidebar = (student) => {
-    setEditForm({
-      roleName: student.name,
-      enterDate: '',
+  const openAdd = () => {
+    setAddForm(emptyForm)
+    setIsAddPasswordVisible(false)
+    setAddPreviews({
+      fatherPhoto: null,
+      motherPhoto: null,
+      transferCertificate: null,
+      photo: null,
     })
-    setIsEditSidebarOpen(true)
+    setAddStep(0)
+    setIsAddOpen(true)
   }
 
-  const closeEditSidebar = () => {
-    setIsEditSidebarOpen(false)
-    setEditForm(emptySidebarForm)
-  }
-
-  const closeAllSidebars = () => {
-    closeAddSidebar()
-    closeEditSidebar()
-    setIsFilterSidebarOpen(false)
-  }
-
-  const handleAddSubmit = (event) => {
-    event?.preventDefault?.()
-    closeAddSidebar()
-  }
-
-  const handleEditSubmit = (event) => {
-    event.preventDefault()
-    closeEditSidebar()
-  }
-
-  const handleSelectAll = (event) => {
-    if (event.target.checked) {
-      setSelectedRows((current) => [
-        ...new Set([...current, ...paginatedStudents.map((student) => student.sl)]),
-      ])
-      return
-    }
-
-    setSelectedRows((current) =>
-      current.filter((id) => !paginatedStudents.some((student) => student.sl === id)),
-    )
-  }
-
-  const handleSelectRow = (studentId) => {
-    setSelectedRows((current) =>
-      current.includes(studentId)
-        ? current.filter((id) => id !== studentId)
-        : [...current, studentId],
-    )
+  const openEdit = (row) => {
+    setEditForm({
+      ...emptyForm,
+      school: row.school,
+      name: row.name,
+      group: row.group,
+      className: row.className,
+      section: row.section,
+      rollNo: row.rollNo,
+      email: row.email,
+    })
+    setIsEditPasswordVisible(false)
+    setEditPreviews({
+      fatherPhoto: null,
+      motherPhoto: null,
+      transferCertificate: null,
+      photo: row.photo || null,
+    })
+    setEditStep(0)
+    setIsEditOpen(true)
   }
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-
-    for (let page = start; page <= end; page += 1) {
-      pages.push(page)
-    }
-
+    for (let p = start; p <= end; p++) pages.push(p)
     return pages
   }
 
-  return (
+  const renderUploadField = (label, fileRef, preview, onSelect, note1, note2) => (
+    <div className="avm-field full">
+      <label className="avm-label">{label}</label>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".jpg,.jpeg,.png,.gif"
+        style={{ display: 'none' }}
+        onChange={onSelect}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <button type="button" className="avm-btn light" onClick={() => fileRef.current.click()}>
+          <i className="ri-upload-2-line"></i> Upload {label}
+        </button>
+        {preview && (
+          <img
+            src={preview}
+            alt="preview"
+            style={{
+              width: 60,
+              height: 65,
+              objectFit: 'cover',
+              borderRadius: 8,
+              border: '1px solid #d0d5dd',
+            }}
+          />
+        )}
+      </div>
+      <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>{note1}</span>
+      <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>{note2}</span>
+    </div>
+  )
+
+  const renderForm = (
+    form,
+    setter,
+    step,
+    previews,
+    refs,
+    setPreviewState,
+    isPasswordVisible,
+    setIsPasswordVisible,
+  ) => (
     <>
-      <div className="dashboard-main-body">
-        <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-          <div>
-            <h1 className="fw-semibold mb-4 h6 text-primary-light">Student List</h1>
-            <div>
-              <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
-                Dashboard
-              </button>
-              <span className="text-secondary-light"> / Student List</span>
-            </div>
+      {step === 0 ? (
+        <>
+          <p className="avm-section-title">Basic Information</p>
+          <div className="avm-grid">
+            <FormField label="School Name" required full>
+              <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
+                <option value="">--Select School--</option>
+                <option>Windsor Park High School</option>
+              </select>
+            </FormField>
+
+            <FormField label="Name" required>
+              <input
+                type="text"
+                className="avm-input"
+                id="name"
+                placeholder="Name"
+                value={form.name}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Admission No" required>
+              <input
+                type="text"
+                className="avm-input"
+                id="admissionNo"
+                placeholder="Admission No"
+                value={form.admissionNo}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Admission Date" required>
+              <input
+                type="date"
+                className="avm-input"
+                id="admissionDate"
+                value={form.admissionDate}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Birth Date" required>
+              <input
+                type="date"
+                className="avm-input"
+                id="birthDate"
+                value={form.birthDate}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Gender" required>
+              <select className="avm-select" id="gender" value={form.gender} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>Male</option>
+                <option>Female</option>
+                <option>Other</option>
+              </select>
+            </FormField>
+
+            <FormField label="Blood Group">
+              <select className="avm-select" id="bloodGroup" value={form.bloodGroup} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>A+</option>
+                <option>A-</option>
+                <option>B+</option>
+                <option>B-</option>
+                <option>O+</option>
+                <option>O-</option>
+                <option>AB+</option>
+                <option>AB-</option>
+              </select>
+            </FormField>
+
+            <FormField label="Religion">
+              <input
+                type="text"
+                className="avm-input"
+                id="religion"
+                placeholder="Religion"
+                value={form.religion}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Caste">
+              <input
+                type="text"
+                className="avm-input"
+                id="caste"
+                placeholder="Caste"
+                value={form.caste}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <PhoneField
+              id="phone"
+              label="Phone number"
+              required
+              value={form.phone}
+              onChange={(fullValue) => setter((prev) => ({ ...prev, phone: fullValue }))}
+            />
+
+            <FormField label="Email">
+              <input
+                type="email"
+                className="avm-input"
+                id="email"
+                placeholder="Email"
+                value={form.email}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="National ID">
+              <input
+                type="text"
+                className="avm-input"
+                id="nationalId"
+                placeholder="National ID"
+                value={form.nationalId}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
           </div>
+        </>
+      ) : step === 1 ? (
+        <>
+          <p className="avm-section-title">Address Information</p>
+          <div className="avm-grid">
+            <div className="avm-field full">
+              <label className="avm-label d-flex align-items-center gap-8" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  id="sameAsGuardianAddress"
+                  checked={form.sameAsGuardianAddress}
+                  onChange={handleChange(setter)}
+                />
+                Same as Guardian Address
+              </label>
+            </div>
+
+            <FormField label="Present Address" full>
+              <textarea
+                rows="4"
+                className="avm-input avm-textarea"
+                id="presentAddress"
+                placeholder="Present Address"
+                value={form.presentAddress}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Permanent Address" full>
+              <textarea
+                rows="4"
+                className="avm-input avm-textarea"
+                id="permanentAddress"
+                placeholder="Permanent Address"
+                value={form.permanentAddress}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+          </div>
+
+          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Previous School</p>
+          <div className="avm-grid">
+            <FormField label="School Name" full>
+              <input
+                type="text"
+                className="avm-input"
+                id="previousSchoolName"
+                placeholder="School Name"
+                value={form.previousSchoolName}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Class" full>
+              <input
+                type="text"
+                className="avm-input"
+                id="previousClass"
+                placeholder="Previous Class"
+                value={form.previousClass}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            {renderUploadField(
+              'Transfer Certificate',
+              refs.transferCertificateRef,
+              previews.transferCertificate,
+              (e) => handlePhotoChange(e, 'transferCertificate', setPreviewState, setter),
+              'Dimension:- Max-W: 1200px, Max-H: 600px',
+              'Image file format: .jpg, .jpeg, .png or .gif',
+            )}
+          </div>
+        </>
+      ) : step === 2 ? (
+        <>
+          <p className="avm-section-title">Academic Information</p>
+          <div className="avm-grid">
+            <FormField label="Student Type">
+              <select className="avm-select" id="studentType" value={form.studentType} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>Day Scholar</option>
+                <option>Hosteller</option>
+                <option>Transport</option>
+              </select>
+            </FormField>
+
+            <FormField label="Class" required>
+              <select className="avm-select" id="className" value={form.className} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>6</option>
+                <option>7</option>
+                <option>8</option>
+                <option>9</option>
+                <option>10</option>
+                <option>11</option>
+                <option>12</option>
+              </select>
+            </FormField>
+
+            <FormField label="Section" required>
+              <select className="avm-select" id="section" value={form.section} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>A</option>
+                <option>B</option>
+                <option>C</option>
+                <option>D</option>
+              </select>
+            </FormField>
+
+            <FormField label="Group">
+              <select className="avm-select" id="group" value={form.group} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>Science</option>
+                <option>Commerce</option>
+                <option>Arts</option>
+              </select>
+            </FormField>
+
+            <FormField label="Roll No" required>
+              <input
+                type="text"
+                className="avm-input"
+                id="rollNo"
+                placeholder="Roll No"
+                value={form.rollNo}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Registration No">
+              <input
+                type="text"
+                className="avm-input"
+                id="registrationNo"
+                placeholder="Registration No"
+                value={form.registrationNo}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Discount">
+              <select className="avm-select" id="discount" value={form.discount} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>No Discount</option>
+                <option>10%</option>
+                <option>20%</option>
+                <option>50%</option>
+              </select>
+            </FormField>
+
+            <FormField label="Second Language">
+              <input
+                type="text"
+                className="avm-input"
+                id="secondLanguage"
+                placeholder="Second Language"
+                value={form.secondLanguage}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+          </div>
+
+          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Guardian Information</p>
+          <div className="avm-grid">
+            <FormField label="Is Guardian?" required>
+              <select className="avm-select" id="isGuardian" value={form.isGuardian} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option>Father</option>
+                <option>Mother</option>
+                <option>Other</option>
+              </select>
+            </FormField>
+
+            <FormField label="Relation With Guardian">
+              <input
+                type="text"
+                className="avm-input"
+                id="relationWithGuardian"
+                placeholder="Relation With Guardian"
+                value={form.relationWithGuardian}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="avm-section-title">Father Information</p>
+          <div className="avm-grid">
+            <FormField label="Father Name">
+              <input
+                type="text"
+                className="avm-input"
+                id="fatherName"
+                placeholder="Father Name"
+                value={form.fatherName}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <PhoneField
+              id="fatherPhone"
+              label="Phone number"
+              value={form.fatherPhone}
+              onChange={(fullValue) => setter((prev) => ({ ...prev, fatherPhone: fullValue }))}
+            />
+
+            <FormField label="Father Education">
+              <input
+                type="text"
+                className="avm-input"
+                id="fatherEducation"
+                placeholder="Father Education"
+                value={form.fatherEducation}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Father Profession">
+              <input
+                type="text"
+                className="avm-input"
+                id="fatherProfession"
+                placeholder="Father Profession"
+                value={form.fatherProfession}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Father Designation">
+              <input
+                type="text"
+                className="avm-input"
+                id="fatherDesignation"
+                placeholder="Father Designation"
+                value={form.fatherDesignation}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            {renderUploadField(
+              'Father Photo',
+              refs.fatherPhotoRef,
+              previews.fatherPhoto,
+              (e) => handlePhotoChange(e, 'fatherPhoto', setPreviewState, setter),
+              'Dimension:- Max-W: 120px, Max-H: 130px',
+              'Image file format: .jpg, .jpeg, .png or .gif',
+            )}
+          </div>
+
+          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Mother Information</p>
+          <div className="avm-grid">
+            <FormField label="Mother Name">
+              <input
+                type="text"
+                className="avm-input"
+                id="motherName"
+                placeholder="Mother Name"
+                value={form.motherName}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <PhoneField
+              id="motherPhone"
+              label="Phone number"
+              value={form.motherPhone}
+              onChange={(fullValue) => setter((prev) => ({ ...prev, motherPhone: fullValue }))}
+            />
+
+            <FormField label="Mother Education">
+              <input
+                type="text"
+                className="avm-input"
+                id="motherEducation"
+                placeholder="Mother Education"
+                value={form.motherEducation}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Mother Profession">
+              <input
+                type="text"
+                className="avm-input"
+                id="motherProfession"
+                placeholder="Mother Profession"
+                value={form.motherProfession}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Mother Designation">
+              <input
+                type="text"
+                className="avm-input"
+                id="motherDesignation"
+                placeholder="Mother Designation"
+                value={form.motherDesignation}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            {renderUploadField(
+              'Mother Photo',
+              refs.motherPhotoRef,
+              previews.motherPhoto,
+              (e) => handlePhotoChange(e, 'motherPhoto', setPreviewState, setter),
+              'Dimension:- Max-W: 120px, Max-H: 130px',
+              'Image file format: .jpg, .jpeg, .png or .gif',
+            )}
+          </div>
+
+          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Other Information</p>
+          <div className="avm-grid">
+            <FormField label="Username" required>
+              <input
+                type="text"
+                className="avm-input"
+                id="username"
+                placeholder="Username"
+                value={form.username}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Password" required>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={isPasswordVisible ? 'text' : 'password'}
+                  className="avm-input"
+                  id="password"
+                  placeholder="Password"
+                  value={form.password}
+                  onChange={handleChange(setter)}
+                  style={{ paddingRight: '2.75rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordVisible((prev) => !prev)}
+                  aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                  className="border-0 bg-transparent text-secondary-light"
+                  style={{
+                    position: 'absolute',
+                    right: '0.85rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    lineHeight: 1,
+                  }}
+                >
+                  <i className={isPasswordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
+                </button>
+              </div>
+            </FormField>
+
+            <FormField label="Health Condition" full>
+              <input
+                type="text"
+                className="avm-input"
+                id="healthCondition"
+                placeholder="Health Condition"
+                value={form.healthCondition}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            <FormField label="Other Info" full>
+              <textarea
+                rows="4"
+                className="avm-input avm-textarea"
+                id="otherInfo"
+                placeholder="Other Info"
+                value={form.otherInfo}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
+
+            {renderUploadField(
+              'Photo',
+              refs.studentPhotoRef,
+              previews.photo,
+              (e) => handlePhotoChange(e, 'photo', setPreviewState, setter),
+              'Dimension:- Max-W: 120px, Max-H: 130px',
+              'Image file format: .jpg, .jpeg, .png or .gif',
+            )}
+          </div>
+
+          <div
+            className="mt-16 radius-8"
+            style={{
+              background: '#fff7e6',
+              border: '1px solid #f3d18b',
+              color: '#8a5a00',
+              padding: '0.9rem 1rem',
+              fontSize: '0.85rem',
+              fontWeight: 500,
+            }}
+          >
+            Instruction: Please add Guardian, Class &amp; Section before add Student.
+          </div>
+        </>
+      )}
+    </>
+  )
+
+  return (
+    <div className="dashboard-main-body">
+      <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
+        <div>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Student</h1>
+          <div>
+            <button
+              type="button"
+              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
+            >
+              Dashboard
+            </button>
+            <span className="text-secondary-light"> / Student</span>
+          </div>
+        </div>
+
+        <div className="d-flex flex-wrap align-items-center gap-12">
+
+          <button
+            type="button"
+            className="btn btn-light border d-flex align-items-center gap-6"
+            onClick={() => onNavigate?.('bulk-admission')}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-download-cloud-2-line"></i>
+            </span>
+            Import
+          </button>
+
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAddSidebar}
+            onClick={openAdd}
           >
             <span className="d-flex text-md">
               <i className="ri-add-large-line"></i>
@@ -228,398 +992,310 @@ const StudentList = () => {
             Add Student
           </button>
         </div>
+      </div>
 
-        <div className="mt-24">
-          <div className="card h-100">
-            <div className="card-body p-0 dataTable-wrapper">
-              <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-                <div className="d-flex flex-wrap align-items-center gap-16">
-                  <div className="dropdown">
+      <div className="card h-100">
+        <div className="card-body p-0 dataTable-wrapper">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-center gap-16">
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                  </span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
+                  <li>
                     <button
                       type="button"
-                      className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                      data-bs-toggle="dropdown"
-                      aria-expanded="false"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
                     >
-                      <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                        <i className="ri-file-upload-line text-md line-height-1"></i>
-                        Export
-                      </span>
-                      <span>
-                        <i className="ri-arrow-down-s-line"></i>
-                      </span>
+                      <i className="ri-file-3-line"></i> PDF
                     </button>
-                    <ul className="dropdown-menu p-12 border bg-base shadow">
-                      <li>
-                        <button
-                          type="button"
-                          className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                        >
-                          <i className="ri-file-3-line"></i>
-                          PDF
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                        >
-                          <i className="ri-file-excel-line"></i>
-                          Excel
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <form className="navbar-search dt-search m-0" onSubmit={(event) => event.preventDefault()}>
-                    <input
-                      type="text"
-                      className="dt-input bg-transparent radius-4"
-                      name="search"
-                      placeholder="Search..."
-                      value={search}
-                      onChange={handleSearchChange}
-                    />
-                    <iconify-icon icon="ion:search-outline" className="icon"></iconify-icon>
-                  </form>
-
-                  <button
-                    type="button"
-                    className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                    onClick={() => setIsFilterSidebarOpen(true)}
-                  >
-                    <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                      Filter
-                    </span>
-                    <span>
-                      <i className="ri-arrow-right-line"></i>
-                    </span>
-                  </button>
-                </div>
-
-                <div className="d-flex align-items-center gap-8 text-secondary-light">
-                  <span>Rows per page:</span>
-                  <div className="dt-length">
-                    <select
-                      name="dataTable_length"
-                      className="dt-input form-control form-select"
-                      value={rowsPerPage}
-                      onChange={handleRowsPerPageChange}
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
                     >
-                      <option value="5">5</option>
-                      <option value="10">10</option>
-                      <option value="25">25</option>
-                      <option value="50">50</option>
-                      <option value="100">100</option>
-                    </select>
-                  </div>
-                </div>
+                      <i className="ri-file-excel-2-line"></i> Excel
+                    </button>
+                  </li>
+                </ul>
               </div>
 
-              <div className="p-0 table-responsive">
-                <table className="table bordered-table mb-0 data-table" id="dataTable">
-                  <thead>
-                    <tr>
-                      <th scope="col">
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input className="form-check-input" type="checkbox" checked={allVisibleSelected} onChange={handleSelectAll} />
-                          <label className="form-check-label">S.L</label>
-                        </div>
-                      </th>
-                      <th scope="col">Admission No</th>
-                      <th scope="col">Name</th>
-                      <th scope="col">Class</th>
-                      <th scope="col">Date of Birth</th>
-                      <th scope="col">Gender</th>
-                      <th scope="col">Mobile Number</th>
-                      <th scope="col">Category</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedStudents.map((student) => (
-                      <tr key={student.sl}>
-                        <td>
-                          <div className="form-check style-check d-flex align-items-center">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              checked={selectedRows.includes(student.sl)}
-                              onChange={() => handleSelectRow(student.sl)}
-                            />
-                            <label className="form-check-label">{student.sl}</label>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="text-primary-600">{student.admissionNo}</span>
-                        </td>
-                        <td>
-                          <div className="d-flex align-items-center">
-                            <img
-                              src={student.image}
-                              alt={student.name}
-                              className="flex-shrink-0 me-12 radius-8"
-                            />
-                            <div>
-                              <h6 className="text-md mb-0 fw-medium flex-grow-1">{student.name}</h6>
-                              <span>
-                                Roll No: <span className="fw-semibold">{student.rollNo}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>{student.className}</td>
-                        <td>{student.dob}</td>
-                        <td>{student.gender}</td>
-                        <td>{student.mobile}</td>
-                        <td>{student.category}</td>
-                        <td>
-                          <span
-                            className={
-                              student.status === 'Active'
-                                ? 'bg-success-100 text-success-600 px-24 py-4 radius-4 fw-medium text-sm'
-                                : 'bg-danger-100 text-danger-600 px-24 py-4 radius-4 fw-medium text-sm'
-                            }
-                          >
-                            {student.status}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="btn-group">
-                            <button
-                              type="button"
-                              className="text-primary-light text-xl border-0 bg-transparent"
-                              data-bs-toggle="dropdown"
-                              data-bs-display="static"
-                              aria-expanded="false"
-                            >
-                              <iconify-icon icon="tabler:dots-vertical"></iconify-icon>
-                            </button>
-                            <ul className="dropdown-menu dropdown-menu-lg-end border p-12">
-                              <li>
-                                <button
-                                  type="button"
-                                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
-                                >
-                                  <i className="ri-user-3-line"></i>
-                                  View Teacher
-                                </button>
-                              </li>
-                              <li>
-                                <button
-                                  type="button"
-                                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
-                                  onClick={() => openEditSidebar(student)}
-                                >
-                                  <i className="ri-edit-2-line"></i>
-                                  Edit
-                                </button>
-                              </li>
-                              <li>
-                                <button
-                                  type="button"
-                                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
-                                >
-                                  <i className="ri-money-dollar-box-line"></i>
-                                  Collect Fees
-                                </button>
-                              </li>
-                              <li>
-                                <button
-                                  type="button"
-                                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
-                                >
-                                  <i className="ri-error-warning-line"></i>
-                                  Inactive
-                                </button>
-                              </li>
-                              <li>
-                                <button
-                                  type="button"
-                                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
-                                >
-                                  <i className="ri-delete-bin-6-line"></i>
-                                  Delete
-                                </button>
-                              </li>
-                            </ul>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {paginatedStudents.length === 0 ? (
-                      <tr>
-                        <td colSpan="10" className="text-center py-24 text-secondary-light">
-                          No students found for the current filters.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-                <span className="text-sm text-secondary-light">
-                  Showing {filteredStudents.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1}
-                  {' '}-{' '}
-                  {Math.min(currentPage * rowsPerPage, filteredStudents.length)} of {filteredStudents.length}
+              <button
+                type="button"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                onClick={() => setIsFilterSidebarOpen(true)}
+              >
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                  Filter
                 </span>
+                <span>
+                  <i className="ri-arrow-right-line"></i>
+                </span>
+              </button>
 
-                <div className="d-flex align-items-center gap-8">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-light border"
-                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Prev
-                  </button>
-
-                  {getVisiblePages().map((page) => (
-                    <button
-                      key={page}
-                      type="button"
-                      className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                      onClick={() => setCurrentPage(page)}
-                    >
-                      {page}
-                    </button>
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    Columns
+                  </span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
+                  {columnOptions.map((column) => (
+                    <li key={column.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[column.key]}
+                          onChange={() => toggleColumn(column.key)}
+                        />
+                        {column.label}
+                      </label>
+                    </li>
                   ))}
-
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-light border"
-                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
+                </ul>
               </div>
+
+              <select
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+              >
+                {[5, 10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="position-relative">
+              <input
+                type="text"
+                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
+                placeholder="Search student..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
+              />
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="p-0 table-responsive">
+            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1100 }}>
+              <thead>
+                <tr>
+                  <th scope="col">
+                    <div className="form-check style-check d-flex align-items-center">
+                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
+                      <label className="form-check-label">S.L</label>
+                    </div>
+                  </th>
+                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.photo ? <th scope="col">Photo</th> : null}
+                  {visibleColumns.name ? <th scope="col">Name</th> : null}
+                  {visibleColumns.group ? <th scope="col">Group</th> : null}
+                  {visibleColumns.className ? <th scope="col">Class</th> : null}
+                  {visibleColumns.section ? <th scope="col">Section</th> : null}
+                  {visibleColumns.rollNo ? <th scope="col">Roll No</th> : null}
+                  {visibleColumns.email ? <th scope="col">Email</th> : null}
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {paginated.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visibleColumnCount}
+                      className="text-center py-40 text-secondary-light"
+                    >
+                      No students found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((row) => (
+                    <tr key={row.sl}>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={selectedRows.includes(row.sl)}
+                            onChange={() => handleSelectRow(row.sl)}
+                          />
+                          <label className="form-check-label">{row.sl}</label>
+                        </div>
+                      </td>
+                      {visibleColumns.school ? <td>{row.school}</td> : null}
+                      {visibleColumns.photo ? (
+                        <td>
+                          <div
+                            className="w-40-px h-40-px rounded-circle bg-neutral-200 d-flex align-items-center justify-content-center overflow-hidden"
+                            style={{ minWidth: 40 }}
+                          >
+                            {row.photo ? (
+                              <img src={row.photo} alt={row.name} className="w-100 h-100 object-fit-cover" />
+                            ) : (
+                              <i className="ri-user-line text-secondary-light"></i>
+                            )}
+                          </div>
+                        </td>
+                      ) : null}
+                      {visibleColumns.name ? <td className="fw-medium text-primary-light">{row.name}</td> : null}
+                      {visibleColumns.group ? <td>{row.group}</td> : null}
+                      {visibleColumns.className ? <td>{row.className}</td> : null}
+                      {visibleColumns.section ? <td>{row.section}</td> : null}
+                      {visibleColumns.rollNo ? <td>{row.rollNo}</td> : null}
+                      {visibleColumns.email ? <td>{row.email}</td> : null}
+                      <td>
+                        <div className="d-flex align-items-center gap-10">
+                          <button
+                            type="button"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => openEdit(row)}
+                            title="Edit"
+                          >
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            title="Delete"
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+            <span className="text-sm text-secondary-light">
+              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+            </span>
+            <div className="d-flex align-items-center gap-8">
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Prev
+              </button>
+              {getVisiblePages().map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                  onClick={() => setCurrentPage(p)}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      <footer className="d-footer">
-        <div>
-          <p className="mb-0 text-center">
-            &copy; {new Date().getFullYear()} Made With &#10084; by Wowtheme7.
-          </p>
-        </div>
-      </footer>
-
-      <div
-        className={`overlay bg-black bg-opacity-50 w-100 h-100 position-fixed z-9 visibility-hidden opacity-0 duration-300 ${isAddSidebarOpen || isEditSidebarOpen || isFilterSidebarOpen ? 'active' : ''
-          }`}
-        onClick={closeAllSidebars}
-      ></div>
-
       <WizardPopup
-        open={isAddSidebarOpen}
+        modalWidth="700px"
+        open={isAddOpen}
         title="Add Student"
-        steps={['Basic', 'Date']}
+        steps={STEPS}
         step={addStep}
-        onClose={closeAddSidebar}
+        onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(1, s + 1))}
-        onSubmit={handleAddSubmit}
+        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
+        onSubmit={() => setIsAddOpen(false)}
         submitLabel="Save"
       >
-        {addStep === 0 ? (
-          <div className="avm-grid">
-            <div className="avm-field full">
-              <label htmlFor="roleName" className="avm-label">
-                Role Name
-              </label>
-              <input
-                type="text"
-                className="avm-input"
-                id="roleName"
-                placeholder="Enter Role Name"
-                value={addForm.roleName}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="avm-grid">
-            <div className="avm-field full">
-              <label htmlFor="enterDate" className="avm-label">
-                Date
-              </label>
-              <input
-                type="date"
-                className="avm-input"
-                id="enterDate"
-                value={addForm.enterDate}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              />
-            </div>
-          </div>
+        {renderForm(
+          addForm,
+          setAddForm,
+          addStep,
+          addPreviews,
+          {
+            fatherPhotoRef: addFatherPhotoRef,
+            motherPhotoRef: addMotherPhotoRef,
+            transferCertificateRef: addTransferCertificateRef,
+            studentPhotoRef: addStudentPhotoRef,
+          },
+          setAddPreviews,
+          isAddPasswordVisible,
+          setIsAddPasswordVisible,
         )}
       </WizardPopup>
 
-      <SlideSidebar
-        isOpen={isEditSidebarOpen}
-        title="Edit Department"
-        onClose={closeEditSidebar}
-        className="edit-sidebar"
+      <WizardPopup
+        modalWidth="700px"
+        open={isEditOpen}
+        title="Edit Student"
+        steps={STEPS}
+        step={editStep}
+        onClose={() => setIsEditOpen(false)}
+        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
+        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
+        onSubmit={() => setIsEditOpen(false)}
+        submitLabel="Update"
       >
-        <form className="d-flex flex-column p-20" onSubmit={handleEditSubmit}>
-          <div className="row g-3">
-            <div className="col-sm-12">
-              <label
-                htmlFor="roleName"
-                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-              >
-                Role Name
-              </label>
-              <input
-                type="text"
-                className="form-control"
-                id="roleName"
-                placeholder="Enter Role Name"
-                value={editForm.roleName}
-                onChange={(event) => handleSidebarInputChange(event, 'edit')}
-              />
-            </div>
-            <div className="col-sm-12">
-              <label
-                htmlFor="enterDate"
-                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-              >
-                Date
-              </label>
-              <input
-                type="date"
-                className="form-control"
-                id="enterDate"
-                value={editForm.enterDate}
-                onChange={(event) => handleSidebarInputChange(event, 'edit')}
-              />
-            </div>
-            <div className="col-12">
-              <div className="d-flex align-items-center justify-content-center gap-3 mt-8">
-                <button
-                  type="button"
-                  className="border border-danger-600 bg-hover-danger-200 text-danger-600 text-md px-50 py-11 radius-8"
-                  onClick={closeEditSidebar}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary-600 border border-primary-600 text-md px-28 py-12 radius-8 max-w-156-px w-100"
-                >
-                  Update
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
-      </SlideSidebar>
+        {renderForm(
+          editForm,
+          setEditForm,
+          editStep,
+          editPreviews,
+          {
+            fatherPhotoRef: editFatherPhotoRef,
+            motherPhotoRef: editMotherPhotoRef,
+            transferCertificateRef: editTransferCertificateRef,
+            studentPhotoRef: editStudentPhotoRef,
+          },
+          setEditPreviews,
+          isEditPasswordVisible,
+          setIsEditPasswordVisible,
+        )}
+      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
@@ -629,23 +1305,43 @@ const StudentList = () => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div>
-            <label htmlFor="classGroup" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School
+            </label>
+            <select
+              id="school"
+              className="form-control form-select"
+              value={pendingFilters.school}
+              onChange={handlePendingFilterChange}
+            >
+              <option value="Select">Select School</option>
+              {schoolOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Class
             </label>
             <select
-              id="classGroup"
+              id="className"
               className="form-control form-select"
-              value={pendingFilters.classGroup}
+              value={pendingFilters.className}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Class</option>
-              <option value="Primary">Primary</option>
-              <option value="SSC">SSC</option>
-              <option value="HSC">HSC</option>
-              <option value="Hons">Hons</option>
-              <option value="Masters">Masters</option>
+              <option value="Select">Select</option>
+              {classOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
+
           <div>
             <label htmlFor="section" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Section
@@ -656,60 +1352,54 @@ const StudentList = () => {
               value={pendingFilters.section}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Section</option>
-              <option value="Arts">Arts</option>
-              <option value="Science">Science</option>
-              <option value="Commerce">Commerce</option>
+              <option value="Select">Select</option>
+              {sectionOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
+
           <div>
-            <label htmlFor="gender" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Gender
+            <label htmlFor="group" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Group
             </label>
             <select
-              id="gender"
+              id="group"
               className="form-control form-select"
-              value={pendingFilters.gender}
+              value={pendingFilters.group}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
+              <option value="Select">Select</option>
+              {groupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
+
           <div>
-            <label htmlFor="status" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Status
-            </label>
-            <select
-              id="status"
-              className="form-control form-select"
-              value={pendingFilters.status}
-              onChange={handlePendingFilterChange}
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="btn btn-danger-200 text-danger-600 w-100"
             >
-              <option value="Select">Select Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-          <div>
-            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
           </div>
+
           <div>
-            <button
-              type="submit"
-              className="btn btn-primary-600 w-100"
-              onClick={() => setIsFilterSidebarOpen(false)}
-            >
+            <button type="submit" className="btn btn-primary-600 w-100">
               Apply
             </button>
           </div>
         </form>
       </SlideSidebar>
-    </>
+    </div>
   )
 }
 
 export default StudentList
+

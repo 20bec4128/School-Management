@@ -13,7 +13,6 @@ export function TableToolbar({ toolbarProps }) {
     onExportCSV,
     onExportXLS,
     onExportPDF,
-    totalRecords,
     selectedCount,
     hasActiveFilters,
   } = toolbarProps;
@@ -108,7 +107,7 @@ export function TableToolbar({ toolbarProps }) {
             className="form-select form-select-sm radius-8"
             style={{ width: 'auto' }}
             value={rowsPerPage}
-            onChange={e => onRowsPerPageChange(e.target.value)}
+            onChange={e => onRowsPerPageChange(Number(e.target.value))}
           >
             <option value={5}>5</option>
             <option value={10}>10</option>

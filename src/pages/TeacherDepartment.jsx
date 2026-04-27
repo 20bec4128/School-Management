@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import WizardPopup from '../components/WizardPopup'
-import '../css/addModalShared.css'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import '../assets/css/addModalShared.css'
 
 const departments = [
-  { sl: '01', school: 'ABC School', title: 'Principal', note: 'Main admin', status: 'Active' },
-  { sl: '02', school: 'XYZ School', title: 'Vice Principal', note: 'Operations lead', status: 'Active' },
-  { sl: '03', school: 'DEF Academy', title: 'Head Teacher', note: 'Department head', status: 'Inactive' },
-  { sl: '04', school: 'GHI College', title: 'Senior Teacher', note: 'Experienced staff', status: 'Active' },
-  { sl: '05', school: 'JKL High School', title: 'Teacher', note: '', status: 'Inactive' },
-  { sl: '06', school: 'MNO School', title: 'Assistant Teacher', note: 'Primary section', status: 'Active' },
+  { sl: '01', school: 'ABC School', title: 'Principal', note: 'Main admin', isViewOnWeb: 'Yes', status: 'Active' },
+  { sl: '02', school: 'XYZ School', title: 'Vice Principal', note: 'Operations lead', isViewOnWeb: 'Yes', status: 'Active' },
+  { sl: '03', school: 'DEF Academy', title: 'Head Teacher', note: 'Department head', isViewOnWeb: 'No', status: 'Inactive' },
+  { sl: '04', school: 'GHI College', title: 'Senior Teacher', note: 'Experienced staff', isViewOnWeb: 'Yes', status: 'Active' },
+  { sl: '05', school: 'JKL High School', title: 'Teacher', note: '', isViewOnWeb: 'No', status: 'Inactive' },
+  { sl: '06', school: 'MNO School', title: 'Assistant Teacher', note: 'Primary section', isViewOnWeb: 'Yes', status: 'Active' },
 ]
 
 const emptyFilters = {
@@ -19,9 +20,18 @@ const emptyFilters = {
 }
 
 const emptySidebarForm = {
+  school: '',
   departmentTitle: '',
+  isViewOnWeb: '',
   note: '',
 }
+
+const columnOptions = [
+  { key: 'school', label: 'School' },
+  { key: 'title', label: 'Title' },
+  { key: 'note', label: 'Note' },
+  { key: 'status', label: 'Status' },
+]
 
 const TeacherDepartment = () => {
   const [search, setSearch] = useState('')
@@ -33,9 +43,11 @@ const TeacherDepartment = () => {
   const [isAddSidebarOpen, setIsAddSidebarOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [isEditSidebarOpen, setIsEditSidebarOpen] = useState(false)
+  const [editStep, setEditStep] = useState(0)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [addForm, setAddForm] = useState(emptySidebarForm)
   const [editForm, setEditForm] = useState(emptySidebarForm)
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const schoolOptions = useMemo(
     () => Array.from(new Set(departments.map((item) => item.school))),
@@ -125,15 +137,19 @@ const TeacherDepartment = () => {
 
   const openEditSidebar = (row) => {
     setEditForm({
+      school: row.school,
       departmentTitle: row.title,
+      isViewOnWeb: row.isViewOnWeb || '',
       note: row.note || '',
     })
+    setEditStep(0)
     setIsEditSidebarOpen(true)
   }
 
   const closeEditSidebar = () => {
     setIsEditSidebarOpen(false)
     setEditForm(emptySidebarForm)
+    setEditStep(0)
   }
 
   const closeAllSidebars = () => {
@@ -148,7 +164,7 @@ const TeacherDepartment = () => {
   }
 
   const handleEditSubmit = (event) => {
-    event.preventDefault()
+    event?.preventDefault?.()
     closeEditSidebar()
   }
 
@@ -191,12 +207,14 @@ const TeacherDepartment = () => {
             <span className="text-secondary-light"> / Teacher Department</span>
           </div>
         </div>
-        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAddSidebar}>
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Department
-        </button>
+        <div className="d-flex flex-wrap align-items-center gap-12">
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAddSidebar}>
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Department
+          </button>
+        </div>
       </div>
 
       <div className="card h-100">
@@ -256,6 +274,35 @@ const TeacherDepartment = () => {
                   <i className="ri-arrow-right-line"></i>
                 </span>
               </button>
+
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
+                  {columnOptions.map((column) => (
+                    <li key={column.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[column.key]}
+                          onChange={() => toggleColumn(column.key)}
+                        />
+                        {column.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
 
             <div className="d-flex align-items-center gap-8 text-secondary-light">
@@ -287,10 +334,10 @@ const TeacherDepartment = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  <th scope="col">School</th>
-                  <th scope="col">Title</th>
-                  <th scope="col">Note</th>
-                  <th scope="col">Status</th>
+                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.title ? <th scope="col">Title</th> : null}
+                  {visibleColumns.note ? <th scope="col">Note</th> : null}
+                  {visibleColumns.status ? <th scope="col">Status</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
@@ -308,20 +355,22 @@ const TeacherDepartment = () => {
                         <label className="form-check-label">{row.sl}</label>
                       </div>
                     </td>
-                    <td>{row.school}</td>
-                    <td>{row.title}</td>
-                    <td>{row.note || '-'}</td>
-                    <td>
-                      <span
-                        className={
-                          row.status === 'Active'
-                            ? 'bg-success-100 text-success-600 px-24 py-4 radius-4 fw-medium text-sm'
-                            : 'bg-danger-100 text-danger-600 px-24 py-4 radius-4 fw-medium text-sm'
-                        }
-                      >
-                        {row.status}
-                      </span>
-                    </td>
+                    {visibleColumns.school ? <td>{row.school}</td> : null}
+                    {visibleColumns.title ? <td>{row.title}</td> : null}
+                    {visibleColumns.note ? <td>{row.note || '-'}</td> : null}
+                    {visibleColumns.status ? (
+                      <td>
+                        <span
+                          className={
+                            row.status === 'Active'
+                              ? 'bg-success-100 text-success-600 px-24 py-4 radius-4 fw-medium text-sm'
+                              : 'bg-danger-100 text-danger-600 px-24 py-4 radius-4 fw-medium text-sm'
+                          }
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                    ) : null}
                     <td>
                       <div className="btn-group">
                         <button
@@ -357,7 +406,7 @@ const TeacherDepartment = () => {
                 ))}
                 {paginatedDepartments.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-24 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
                       No departments found for the current filters.
                     </td>
                   </tr>
@@ -415,6 +464,7 @@ const TeacherDepartment = () => {
       ></div>
 
       <WizardPopup
+       modalWidth="500px"
         open={isAddSidebarOpen}
         title="Add Teacher Department"
         steps={['Basic']}
@@ -428,93 +478,154 @@ const TeacherDepartment = () => {
         
           <div className="avm-grid">
             <div className="avm-field full">
+              <label htmlFor="school" className="avm-label">
+                School Name 
+              </label>
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-school-line"></i>
+                </span>
+                <select
+                  id="school"
+                  className="avm-select"
+                  value={addForm.school}
+                  onChange={(event) => handleSidebarInputChange(event, 'add')}
+                >
+                  <option value="">Select School</option>
+                  {schoolOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+             </div>
+            <div className="avm-field full">
               <label htmlFor="departmentTitle" className="avm-label">
                 Department Title
               </label>
-              <input
-                type="text"
-                className="avm-input"
-                id="departmentTitle"
-                placeholder="Enter Department Title"
-                value={addForm.departmentTitle}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              />
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-bookmark-line"></i>
+                </span>
+                <input
+                  type="text"
+                  className="avm-input"
+                  id="departmentTitle"
+                  placeholder="Enter Department Title"
+                  value={addForm.departmentTitle}
+                  onChange={(event) => handleSidebarInputChange(event, 'add')}
+                />
+              </div>
             </div>
           </div>
         
+       
+
           <div className="avm-grid">
             <div className="avm-field full">
               <label htmlFor="note" className="avm-label">
                 Note
               </label>
-              <textarea
-                type="text"
-                rows='4'
-                className="avm-input"
-                id="note"
-                placeholder="Enter Note"
-                value={addForm.note}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              />
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '1.2rem', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-sticky-note-line"></i>
+                </span>
+                <textarea
+                  type="text"
+                  rows='4'
+                  className="avm-input"
+                  id="note"
+                  placeholder="Enter Note"
+                  value={addForm.note}
+                  onChange={(event) => handleSidebarInputChange(event, 'add')}
+                />
+              </div>
             </div>
           </div>
       
       </WizardPopup>
 
-      <SlideSidebar
-        isOpen={isEditSidebarOpen}
-        title="Edit Department"
+      <WizardPopup
+      modalWidth="500px"
+        open={isEditSidebarOpen}
+        title="Edit Teacher Department"
+        steps={['Basic']}
+        step={editStep}
         onClose={closeEditSidebar}
-        className="edit-sidebar"
+        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
+        onNext={() => setEditStep((s) => Math.min(1, s + 1))}
+        onSubmit={handleEditSubmit}
+        submitLabel="Update"
       >
-        <form className="d-flex flex-column p-20" onSubmit={handleEditSubmit}>
-          <div className="row g-3">
-            <div className="col-sm-12">
-              <label htmlFor="departmentTitle" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+        <div>
+          <div className="avm-grid">
+            <div className="avm-field full">
+              <label htmlFor="school" className="avm-label">
+                School Name
+              </label>
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-school-line"></i>
+                </span>
+                <select
+                  id="school"
+                  className="avm-select"
+                  value={editForm.school}
+                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                >
+                  <option value="">Select School</option>
+                  {schoolOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="avm-field full">
+              <label htmlFor="departmentTitle" className="avm-label">
                 Department Title
               </label>
-              <input
-                type="text"
-                className="form-control"
-                id="departmentTitle"
-                placeholder="Enter Department Title"
-                value={editForm.departmentTitle}
-                onChange={(event) => handleSidebarInputChange(event, 'edit')}
-              />
-            </div>
-            <div className="col-sm-12">
-              <label htmlFor="note" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-                Note
-              </label>
-              <input
-                type="text"
-                className="form-control"
-                id="note"
-                placeholder="Enter Note"
-                value={editForm.note}
-                onChange={(event) => handleSidebarInputChange(event, 'edit')}
-              />
-            </div>
-            <div className="col-12">
-              <div className="d-flex align-items-center justify-content-center gap-3 mt-8">
-                <button
-                  type="button"
-                  className="border border-danger-600 bg-hover-danger-200 text-danger-600 text-md px-50 py-11 radius-8"
-                  onClick={closeEditSidebar}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary-600 border border-primary-600 text-md px-28 py-12 radius-8 max-w-156-px w-100"
-                >
-                  Update
-                </button>
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-bookmark-line"></i>
+                </span>
+                <input
+                  type="text"
+                  className="avm-input"
+                  id="departmentTitle"
+                  placeholder="Enter Department Title"
+                  value={editForm.departmentTitle}
+                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                />
               </div>
             </div>
           </div>
-        </form>
-      </SlideSidebar>
+
+
+          <div className="avm-grid">
+            <div className="avm-field full">
+              <label htmlFor="note" className="avm-label">
+                Note
+              </label>
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '1.2rem', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-sticky-note-line"></i>
+                </span>
+                <textarea
+                  rows="4"
+                  className="avm-input"
+                  id="note"
+                  placeholder="Enter Note"
+                  value={editForm.note}
+                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
@@ -595,3 +706,4 @@ const TeacherDepartment = () => {
 }
 
 export default TeacherDepartment
+

@@ -1,0 +1,570 @@
+/* ============================================================
+   addModalShared.css — Bootstrap-safe, fully scoped
+   ============================================================ */
+
+/* ---- Backdrop ---- */
+.avm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  animation: avmFadeIn 0.2s ease;
+}
+
+@keyframes avmFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ---- Modal shell ---- */
+.avm-modal {
+  background: #ffffff;
+  border-radius: 0.875rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  width: 90%;
+  max-width: 480px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: avmSlideUp 0.28s ease;
+  /* Reset Bootstrap box-sizing */
+  box-sizing: border-box;
+}
+
+@keyframes avmSlideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ---- Header ---- */
+.avm-modal .avm-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f0f2f5;
+  flex-shrink: 0;
+}
+
+/* Override Bootstrap h2/h3/h4 inside modal */
+.avm-modal .avm-modal-title {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  color: #34393f !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+.avm-modal .avm-modal-close {
+  background: none !important;
+  border: none !important;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: #7a8a9a;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: background-color 0.18s, color 0.18s;
+  box-shadow: none !important;
+}
+
+.avm-modal .avm-modal-close:hover {
+  background-color: #f0f2f5 !important;
+  color: #34393f;
+}
+
+/* ---- Step Indicator ---- */
+.avm-modal .avm-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.1rem 1.5rem 0;
+  flex-shrink: 0;
+}
+
+.avm-modal .avm-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  position: relative;
+}
+
+.avm-modal .avm-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: calc(50% + 18px);
+  right: calc(-50% + 18px);
+  height: 2px;
+  background-color: #e9ecef;
+  transition: background-color 0.3s;
+}
+
+.avm-modal .avm-step.done::after {
+  background-color: #45597a;
+}
+
+.avm-modal .avm-step-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #d0d5dd;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #7a8a9a;
+  transition: all 0.25s ease;
+  position: relative;
+  z-index: 1;
+  /* Reset Bootstrap */
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.avm-modal .avm-step.active .avm-step-dot {
+  border-color: #45597a;
+  background: #45597a;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(69, 89, 122, 0.15);
+}
+
+.avm-modal .avm-step.done .avm-step-dot {
+  border-color: #45597a;
+  background: #45597a;
+  color: #ffffff;
+}
+
+.avm-modal .avm-step-label {
+  font-size: 0.75rem !important;
+  font-weight: 500;
+  color: #7a8a9a;
+  white-space: nowrap;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.avm-modal .avm-step.active .avm-step-label {
+  color: #45597a;
+  font-weight: 600;
+}
+
+.avm-modal .avm-step.done .avm-step-label {
+  color: #45597a;
+}
+
+/* ---- Body ---- */
+.avm-modal .avm-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+/* ---- Section Title ---- */
+.avm-modal .avm-section-title {
+  font-size: 0.75rem !important;
+  font-weight: 700;
+  color: #45597a;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e8edf4;
+  /* Reset Bootstrap heading margins */
+  margin-top: 0;
+  line-height: 1.4;
+}
+
+/* ---- Grid ---- */
+.avm-modal .avm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+}
+
+.avm-modal .avm-grid.single {
+  grid-template-columns: 1fr;
+}
+
+.avm-modal .avm-grid .full {
+  grid-column: 1 / -1;
+}
+
+/* ---- Form Field ---- */
+.avm-modal .avm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0;
+}
+
+.avm-modal .avm-label {
+  font-size: 0.875rem !important;
+  font-weight: 500;
+  color: #34393f;
+  margin-bottom: 0;
+  line-height: 1.35;
+}
+
+.avm-modal .avm-label .req {
+  color: #dc3545;
+  margin-left: 0.2rem;
+}
+
+/* ---- Inputs — reset Bootstrap then restyle ---- */
+.avm-modal .avm-input,
+.avm-modal .avm-select,
+.avm-modal .avm-textarea {
+  border-radius: 2rem !important;
+  border: 1px solid #d0d5dd !important;
+  padding: 0.6rem 1rem !important;
+  font-size: 0.9rem !important;
+  line-height: 1.35 !important;
+  background: #ffffff !important;
+  color: #010c1a !important;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  box-sizing: border-box;
+  font-family: inherit !important;
+  box-shadow: none !important;
+  outline: none;
+  /* Reset Bootstrap form-control */
+  appearance: auto;
+}
+
+.avm-modal .avm-select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.95rem center !important;
+  background-size: 14px 14px !important;
+  padding-right: 2.35rem !important;
+}
+
+.avm-modal .avm-textarea {
+  border-radius: 0.75rem !important;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.avm-modal .avm-input:hover,
+.avm-modal .avm-select:hover,
+.avm-modal .avm-textarea:hover {
+  border-color: #45597a !important;
+  background-color: #f8fafc !important;
+}
+
+.avm-modal .avm-input:focus,
+.avm-modal .avm-select:focus,
+.avm-modal .avm-textarea:focus {
+  outline: none !important;
+  border-color: #45597a !important;
+  box-shadow: 0 0 0 3px rgba(69, 89, 122, 0.14) !important;
+  background-color: #ffffff !important;
+}
+
+.avm-modal .avm-input:disabled,
+.avm-modal .avm-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f4f5f7 !important;
+}
+
+/* Fields with a leading icon inside input area */
+.avm-modal .avm-input-with-icon {
+  position: relative;
+}
+
+.avm-modal .avm-input-with-icon .avm-input,
+.avm-modal .avm-input-with-icon .avm-select,
+.avm-modal .avm-input-with-icon .avm-textarea {
+  padding-left: 3.15rem !important;
+  text-indent: 0 !important;
+}
+
+.avm-modal .avm-input-with-icon textarea.avm-input {
+  padding-left: 3.15rem !important;
+}
+
+/* Ensure native call-type radios remain visible inside add/edit modal forms */
+.avm-modal .avm-call-type-group .avm-call-type-radio {
+  appearance: radio !important;
+  -webkit-appearance: radio !important;
+  -moz-appearance: radio !important;
+  opacity: 1 !important;
+  display: inline-block !important;
+  visibility: visible !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+}
+
+.avm-modal .avm-input-with-icon .avm-select {
+  background-position: right 0.95rem center !important;
+  padding-right: 2.35rem !important;
+}
+
+.avm-modal .avm-input.error,
+.avm-modal .avm-select.error {
+  border-color: #dc3545 !important;
+}
+
+/* ---- Error text ---- */
+.avm-modal .avm-error {
+  font-size: 0.82rem;
+  color: #dc3545;
+  margin-top: 0.25rem;
+}
+
+/* ---- Password toggle ---- */
+.avm-modal .avm-password-wrap {
+  position: relative;
+}
+
+.avm-modal .avm-password-wrap .avm-input {
+  padding-right: 2.75rem !important;
+}
+
+.avm-modal .avm-password-toggle {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none !important;
+  border: none !important;
+  padding: 0;
+  color: #7a8a9a;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  box-shadow: none !important;
+}
+
+.avm-modal .avm-password-toggle:hover {
+  color: #45597a;
+}
+
+/* ---- Footer ---- */
+.avm-modal .avm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #f0f2f5;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.avm-modal .avm-footer-right {
+  display: flex;
+  gap: 0.65rem;
+}
+
+/* ---- Buttons — fully reset Bootstrap then restyle ---- */
+.avm-modal .avm-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 38px;
+  padding: 0 1.25rem !important;
+  border-radius: 2rem !important;
+  border: none !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.18s, box-shadow 0.18s, transform 0.15s;
+  white-space: nowrap;
+  font-family: inherit !important;
+  text-decoration: none;
+  vertical-align: middle;
+  box-shadow: none;
+}
+
+.avm-modal .avm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.avm-modal .avm-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.avm-modal .avm-btn.primary {
+  background-color: #45597a !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.avm-modal .avm-btn.primary:hover:not(:disabled) {
+  background-color: #374d6b !important;
+  box-shadow: 0 6px 16px rgba(69, 89, 122, 0.24) !important;
+}
+
+.avm-modal .avm-btn.light {
+  background-color: #f4f5f7 !important;
+  color: #5a6472 !important;
+  border: 1px solid #d0d5dd !important;
+}
+
+.avm-modal .avm-btn.light:hover:not(:disabled) {
+  background-color: #e8eaed !important;
+}
+
+.avm-modal .avm-btn.outline {
+  background-color: transparent !important;
+  color: #45597a !important;
+  border: 1px solid #45597a !important;
+}
+
+.avm-modal .avm-btn.outline:hover:not(:disabled) {
+  background-color: #e8edf4 !important;
+}
+
+.avm-modal .avm-btn.sm {
+  height: 32px;
+  padding: 0 1rem !important;
+  font-size: 0.82rem !important;
+}
+
+/* ---- Chip (multi-select tags) ---- */
+.avm-modal .avm-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.avm-modal .avm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #e8edf4;
+  color: #45597a;
+  border-radius: 2rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.avm-modal .avm-chip-remove {
+  background: none !important;
+  border: none !important;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 0.9rem;
+  color: #45597a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.avm-modal .avm-chip-remove:hover {
+  opacity: 1;
+}
+
+/* ---- Bank card ---- */
+.avm-modal .avm-bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.avm-modal .avm-bank-card {
+  border: 1px solid #dbe3ed;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: linear-gradient(180deg, #fcfdff 0%, #f7f9fc 100%);
+}
+
+.avm-modal .avm-bank-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.avm-modal .avm-bank-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.avm-modal .avm-bank-card-title {
+  margin: 0 !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  color: #344054 !important;
+}
+
+/* ---- Responsive ---- */
+@media (prefers-reduced-motion: reduce) {
+  .avm-modal .avm-btn,
+  .avm-modal .avm-input,
+  .avm-modal .avm-select { transition: none !important; }
+  .avm-modal .avm-btn:hover:not(:disabled) { transform: none; }
+}
+
+@media (max-width: 640px) {
+  .avm-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0.75rem 0.75rem 0 0;
+    align-self: flex-end;
+  }
+
+  .avm-modal .avm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .avm-modal .avm-step-label {
+    display: none;
+  }
+
+  .avm-modal .avm-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .avm-modal .avm-footer-right {
+    flex-direction: column;
+  }
+
+  .avm-modal .avm-btn {
+    width: 100%;
+  }
+
+  .avm-modal .avm-bank-columns {
+    grid-template-columns: 1fr;
+  }
+}

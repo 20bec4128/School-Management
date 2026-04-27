@@ -9,14 +9,16 @@ const WizardPopup = ({
   onSubmit,
   children,
   submitLabel = 'Save',
+  modalWidth,
 }) => {
   if (!open) return null
 
   const isLast = step === steps.length - 1
 
   return (
-    <div className="avm-backdrop" onClick={onClose}>
-      <div className="avm-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="avm-backdrop">
+      <div className="avm-modal"  style={modalWidth ? { maxWidth: modalWidth } : {}} onClick={(e) => e.stopPropagation()}>
+        
         <div className="avm-modal-header">
           <h2 className="avm-modal-title">{title}</h2>
           <button type="button" className="avm-modal-close" onClick={onClose}>

@@ -97,11 +97,11 @@ const menuSections = [
         title: 'Front Office',
         icon: 'ri:building-4-line',
         submenu: [
-          { label: 'Visitor Purpose', href: '#' },
-          { label: 'Visitor Info', href: '#' },
-          { label: 'Call Log', href: '#' },
-        { label: 'Postal Dispatch', href: '#' },
-          { label: 'Postal Receive', href: '#' },
+          { label: 'Visitor Purpose', href: '#' ,page: 'visitor-purpose' },
+          { label: 'Visitor Info', href: '#', page: 'visitor-info' },
+          { label: 'Call Log', href: '#', page: 'call-log' },
+        { label: 'Postal Dispatch', href: '#',page: 'postal-dispatch' },
+          { label: 'Postal Receive', href: '#',page : 'postal-receive' },
         
         ],
       },
@@ -109,33 +109,32 @@ const menuSections = [
         title: 'Complain',
         icon: 'ri:chat-3-line',
         submenu: [
-          { label: 'Complaints Type', href: '#' },
-          { label: 'Manage Complain', href: '#' },
+          { label: 'Complaints Type', href: '#',page: 'complain-type' },
+          { label: 'Manage Complain', href: '#',page: 'manage-complain' },
         ],
       },
       {
         title: 'Announcement',
         icon: 'ri:megaphone-line',
         submenu: [
-          { label: 'Notice', href: '#' },
-          { label: 'News', href: '#' },
+          { label: 'Notice', href: '#',page: 'notice' },
+          { label: 'News', href: '#',page: 'news' },
+          { label: 'Holiday', href: '#',page: 'holiday' },
         ],
       },
       {
         title: 'Event',
         icon: 'ri:calendar-event-line',
-        submenu: [
-          { label: 'Calendar', href: '#' },
-          { label: 'Event List', href: '#' },
-        ],
+        href: '#',
+        page: 'event',
       },
       {
         title: 'Media Gallery',
         icon: 'ri:image-line',
         submenu: [                    
-          { label: 'Gallery', href: '#' },
-          { label: 'Images', href: '#' },
-         { label: 'Videos', href: '#' },
+          { label: 'Gallery', href: '#',page: 'gallery' },
+          { label: 'Images', href: '#',page: 'images' },
+         { label: 'Videos', href: '#', page: 'videos' },
 
         ],
       },
@@ -148,70 +147,63 @@ const menuSections = [
         title: 'Manage Student',
         icon: 'ri:group-line',
         submenu: [
-          { label: 'Student Type', href: '#' },
+          { label: 'Student Type', href: '#',page: 'student-type' },
           { label: 'Student List', href: '#', page: 'student-list' },
-          { label: 'Admit Student', href: '#' },
-          { label: 'Bulk Admission', href: '#' },
-          { label: 'Online Admission', href: '#' },
-          { label: 'Student Activity', href: '#' },
+        
+          { label: 'Online Admission', href: '#',page: 'online-admission' },
+          { label: 'Student Activity', href: '#',page: 'student-activity' },
         ],
       },
       {
         title: 'Attendance',
         icon: 'ri:calendar-check-line',
         submenu: [
-          { label: 'Student Attendance', href: '#' },
-          { label: 'Teacher Attendance', href: '#' },
-          { label: 'Employee Attendance', href: '#' },
-          { label: 'Absent Email', href: '#' },
-          { label: 'Absent SMS', href: '#' },
+          { label: 'Student Attendance', href: '#',page: 'student-attendance' },
+          { label: 'Teacher Attendance', href: '#',page: 'teacher-attendance' },
+          { label: 'Employee Attendance', href: '#',page: 'employee-attendance' },
+          { label: 'Absent Email', href: '#',page: 'absent-email' },
+          { label: 'Absent SMS', href: '#',page: 'absent-sms' },
         ],
       },
       {
         title: 'Promotion',
         icon: 'ri:arrow-up-circle-line',
-        submenu: [
-          { label: 'Promote Students', href: '#' },
-          { label: 'Promotion History', href: '#' },
-        ],
+        href: '#',
+        page: 'promotion',
       },
       {
         title: 'Generate Card',
         icon: 'ri:id-card-line',
         submenu: [
-          { label: 'ID Card Setting', href: '#' },
-          { label: 'Admit Card Setting', href: '#' },
-          { label: 'Teacher ID card', href: '#' },
-          { label: 'Employee ID Card', href: '#' },
-          { label: 'Student ID Card', href: '#' },
-          { label: 'Student Admit Card', href: '#' },
+          { label: 'ID Card Setting', href: '#',page: 'id-card-setting' },
+          { label: 'Admit Card Setting', href: '#',page: 'admit-card-setting' },
+    
         ],
       },
       {
         title: 'Certificate',
         icon: 'ri:award-line',
         submenu: [
-          { label: 'Department', href: '#', page: 'teacher-department' },
-          { label: 'Manage Teacher', href: '#' },
-          { label: 'Class Lecture', href: '#' },
-          { label: 'Rating', href: '#' },
+          { label: 'Certificate Type', href: '#',page: 'certificate-type' },
+          { label: 'Generate Certificate', href: '#',page: 'generate-certificate' },
         ],
       },
       {
         title: 'Scholarship',
         icon: 'ri:graduation-cap-line',
         submenu: [
-          { label: 'Candidate', href: '#' },
-          { label: 'Donar', href: '#' },
-          { label: 'Scholarship', href: '#' },
+          { label: 'Candidate', href: '#',page: 'candidate' },
+          { label: 'Donar', href: '#',page: 'donar' },
+          { label: 'Scholarship', href: '#',page: 'scholarship' },
         ],
       },
       {
         title: 'Guardian',
         icon: 'ri:account-circle-line',
-        submenu: [
+        href: '#',
+        page: 'guardian',
           
-        ],
+        
       },
     ],
   },
@@ -222,34 +214,34 @@ const menuSections = [
         title: 'Academic',
         icon: 'ri:bank-line',
         submenu: [
-          { label: 'Class', href: '#' },
-          { label: 'Section', href: '#' },
-          { label: 'Subject', href: '#' },
-          { label: 'Syllabus', href: '#' },
-          { label: 'Material', href: '#' },
-          { label: 'Live Class', href: '#' },
-          { label: 'Assignment', href: '#' },
-          { label: 'Submission', href: '#' },
+          { label: 'Class', href: '#', page: 'class' },
+          { label: 'Section', href: '#', page: 'section' },
+          { label: 'Subject', href: '#', page: 'subject' },
+          { label: 'Syllabus', href: '#',page: 'syllabus' },
+          { label: 'Study Material', href: '#', page: 'study-material' },
+          { label: 'Live Class', href: '#', page: 'live-class' },
+          { label: 'Assignment', href: '#',page: 'assignment' },
+          { label: 'Submission', href: '#', page: 'submission' },
         ],
       },
       {
         title: 'Lesson Plan',
         icon: 'ri:file-list-3-line',
         submenu: [
-          { label: 'Lesson', href: '#' },
-          { label: 'Topic', href: '#' },
-          { label: 'Lesson Timeline', href: '#' },
-          { label: 'Lesson Status', href: '#' },
-          { label: 'Lesson Plan', href: '#' },
+          { label: 'Lesson', href: '#',page: 'lesson' },
+          { label: 'Topic', href: '#', page: 'topic' },
+          { label: 'Lesson Timeline', href: '#',page: 'lesson-timeline' },
+          { label: 'Lesson Status', href: '#',page: 'lesson-status' },
+          { label: 'Lesson Plan', href: '#',page: 'lesson-plan' },
         ],
       },
       {
         title: 'Class Routine',
         icon: 'ri:time-line',
-        submenu: [
+        href: '#',
+        page: 'class-routine',
           
-          
-        ],
+      
       },
       {
         title: 'Teacher',
@@ -257,9 +249,9 @@ const menuSections = [
         submenu: [
           { label: 'Teacher ID card', href: '#' },
           { label: 'Department', href: '#', page: 'teacher-department' },
-          { label: 'Manage Teacher', href: '#' },
-          { label: 'Class Lecture', href: '#' },
-          { label: 'Rating', href: '#' },
+          { label: 'Manage Teacher', href: '#', page: 'manage-teacher' },
+          { label: 'Class Lecture', href: '#', page: 'class-lecture' },
+          { label: 'Rating', href: '#', page: 'rating' },
         ],
       },
     ],
@@ -271,37 +263,38 @@ const menuSections = [
         title: 'Online Exam',
         icon: 'ri:computer-line',
         submenu: [
-          { label: 'Instruction', href: '#' },
-          { label: 'Question Bank', href: '#' },
-          { label: 'Online Exam', href: '#' },
-          { label: 'Exam Result', href: '#' },
+          { label: 'Exam Instruction', href: '#',page: 'exam-instruction' },
+          { label: 'Question Bank', href: '#',page: 'question-bank' },
+          { label: 'Online Exam', href: '#',page: 'onlineexam' },
+          { label: 'Exam Result', href: '#',page: 'exam-result' },
         ],
       },
       {
         title: 'Manage Exam',
         icon: 'ri:file-edit-line',
         submenu: [
-          { label: 'Schedule', href: '#' },
-          { label: 'Exam Grade', href: '#' },
-          { label: 'Exam Term', href: '#' },
-          { label: 'Suggestion', href: '#' },
-          { label: 'Attendance', href: '#' },
+         
+          { label: 'Exam Grade', href: '#',page: 'exam-grade' },
+          { label: 'Exam Term', href: '#' ,page : 'exam-term' },
+           { label: 'Schedule', href: '#',page : 'schedule' },
+          { label: 'Suggestion', href: '#',page: 'suggestion'},
+          { label: 'Attendance', href: '#',page: 'attendance' },
         ],
       },
       {
         title: 'Exam Mark',
         icon: 'ri:file-chart-line',
         submenu: [
-          { label: 'Manage Mark', href: '#' },
-          { label: 'Exam Term Result', href: '#' },
-          { label: 'Exam final result', href: '#' },
-          { label: 'Merit List', href: '#' },
-          { label: 'Mark Sheet', href: '#' },
-          { label: 'Result Card', href: '#' },
-          { label: 'Mark send by Email', href: '#' },
-          { label: 'Mark send by SMS', href: '#' },
-          { label: 'Result Send by Email', href: '#' },
-          { label: 'Result Send by SMS', href: '#' },
+          { label: 'Manage Mark', href: '#',page: 'manage-mark' },
+          { label: 'Exam Term Result', href: '#',page: 'exam-term-result' },
+          { label: 'Exam final result', href: '#', page: 'exam-final-result' },
+          { label: 'Merit List', href: '#', page: 'merit-list' },
+          { label: 'Mark Sheet', href: '#',page: 'mark-sheet' },
+          { label: 'Result Card', href: '#',page: 'result-card' },
+          { label: 'Mark send by Email', href: '#',page : 'mark-send-email' },
+          { label: 'Mark send by SMS', href: '#',page: 'mark-send-sms' },
+          { label: 'Result Send by Email', href: '#',page: 'result-email' },
+          { label: 'Result Send by SMS', href: '#',page: 'result-sms' },
         ],
       },
     ],
@@ -313,38 +306,29 @@ const menuSections = [
         title: 'Human Resource',
         icon: 'ri:team-line',
         submenu: [
-          { label: 'Manage Destination', href: '#' },
-          { label: 'Manage Employees', href: '#' },
-          { label: 'Manage Mark', href: '#' },
-          { label: 'Exam Term Result', href: '#' },
-          { label: 'Exam final result', href: '#' },
-          { label: 'Merit List', href: '#' },
-          { label: 'Mark Sheet', href: '#' },
-          { label: 'Result Card', href: '#' },
-          { label: 'Mark send by Email', href: '#' },
-          { label: 'Mark send by SMS', href: '#' },
-          { label: 'Result Send by Email', href: '#' },
-          { label: 'Result Send by SMS', href: '#' },
+          { label: 'Manage Destination', href: '#', page: 'manage-designation' },
+          { label: 'Manage Employees', href: '#',page: 'manage-employee' },
+        
         ],
       },
       {
         title: 'Manage Leave',
         icon: 'ri:calendar-todo-line',
         submenu: [
-          { label: 'Leave Type', href: '#' },
-          { label: 'Leave Application', href: '#' },
-          { label: 'Waiting Application', href: '#' },
-          { label: 'Approved Application', href: '#' },
-          { label: 'Declined Application', href: '#' },
+          { label: 'Leave Type', href: '#', page: 'leave-type' },
+          { label: 'Leave Application', href: '#',page: 'leave-application' },
+          { label: 'Waiting Application', href: '#',page: 'waiting-application' },
+          { label: 'Approved Application', href: '#',page: 'approved-application' },
+          { label: 'Declined Application', href: '#',page: 'declined-application' },
         ],
       },
       {
         title: 'Payroll',
         icon: 'ri:money-dollar-circle-line',
         submenu: [
-          { label: 'Salary Grade', href: '#' },
-          { label: 'Payslips', href: '#' },
-          { label: 'Salary History', href: '#' },
+          { label: 'Salary Grade', href: '#', page: 'salary-grade' },
+          { label: 'Salary Payment', href: '#',page: 'salary-payment' },
+          { label: 'Salary History', href: '#', page: 'salary-history' },
         ],
       },
     ],
@@ -356,9 +340,9 @@ const menuSections = [
         title: 'Accounting',
         icon: 'ri:calculator-line',
         submenu: [
-          { label: 'Discount', href: '#' },
-          { label: 'Fee Type', href: '#' },
-          { label: 'Fee Collection', href: '#' },
+          { label: 'Discount', href: '#',page : 'discount' },
+          { label: 'Fee Type', href: '#',page : 'fee-type' },
+          { label: 'Fee Collection', href: '#',page : 'fee-collection' },
           { label: 'Manage Invoice', href: '#' },
           { label: 'Due Invoice', href: '#' },
           { label: 'Due Receipt', href: '#' },
@@ -498,22 +482,7 @@ const menuSections = [
           { label: 'SMS', href: '#' },
         ],
       },
-      {
-        title: 'Complain',
-        icon: 'ri:chat-3-line',
-        submenu: [
-          { label: 'Complaints Type', href: '#' },
-          { label: 'Manage Complain', href: '#' },
-        ],
-      },
-      {
-        title: 'Announcement',
-        icon: 'ri:megaphone-line',
-        submenu: [
-          { label: 'Notice', href: '#' },
-          { label: 'News', href: '#' },
-        ],
-      },
+   
       {
         title: 'Scholarship',
         icon: 'ri:graduation-cap-line',
@@ -526,18 +495,16 @@ const menuSections = [
       {
         title: 'Event',
         icon: 'ri:calendar-event-line',
-        submenu: [
-          { label: 'Calendar', href: '#' },
-          { label: 'Event List', href: '#' },
-        ],
+        href: '#',
+        page: 'event',
       },
       {
         title: 'Payroll',
         icon: 'ri:money-dollar-circle-line',
         submenu: [
-          { label: 'Salary Grade', href: '#' },
+          { label: 'Salary Grade', href: '#', page: 'salary-grade' },
           { label: 'Payslips', href: '#' },
-          { label: 'Salary History', href: '#' },
+          { label: 'Salary History', href: '#', page: 'salary-history' },
         ],
       },
       {
@@ -585,16 +552,7 @@ const menuSections = [
           { label: 'Exam Result Report', href: '#' },
         ],
       },
-      {
-        title: 'Media Gallery',
-        icon: 'ri:image-line',
-        submenu: [                    
-          { label: 'Gallery', href: '#' },
-          { label: 'Images', href: '#' },
-         { label: 'Videos', href: '#' },
-
-        ],
-      },
+      
     ],
   },
   {
@@ -648,7 +606,7 @@ const menuSections = [
   },
 ];
 
-const Sidebar = ({ onNavigate }) => {
+const Sidebar = ({ onNavigate, currentPage }) => {
   const { isOpen, isCollapsed, closeSidebar, toggleSidebar } = useSidebar();
 
   const sidebarClass = [
@@ -665,12 +623,13 @@ const Sidebar = ({ onNavigate }) => {
     if (li) li.classList.toggle('open');
   };
 
-  const handleNavClick = (e, page) => {
-    e.preventDefault();
-    if (onNavigate) {
-      onNavigate(page);
-    }
-  };
+ const handleNavClick = (e, page) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (onNavigate) {
+    onNavigate(page);
+  }
+};
 
   return (
     <>
@@ -763,19 +722,42 @@ const Sidebar = ({ onNavigate }) => {
                   </li>
                 ) : null}
 
-                {section.items.map((item, index) => (
-                  <li key={index} className={item.submenu ? 'dropdown' : ''}>
-                    <a href="#" onClick={handleDropdownToggle}>
+                {section.items.map((item, index) => {
+                  const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+                  const hasActiveSubmenu = hasSubmenu
+                    ? item.submenu.some((sub) => sub.page && sub.page === currentPage)
+                    : false;
+                  const isItemActive = item.page && item.page === currentPage;
+
+                  return (
+                  <li key={index} className={hasSubmenu ? `dropdown${hasActiveSubmenu ? ' open' : ''}` : ''}>
+                    <a
+                      href={item.href || '#'}
+                      className={isItemActive ? 'active-page' : ''}
+                      onClick={(e) => {
+                        if (hasSubmenu) {
+                          handleDropdownToggle(e);
+                          if (item.page) {
+                            handleNavClick(e, item.page);
+                          }
+                          return;
+                        }
+                        if (item.page) {
+                          handleNavClick(e, item.page);
+                        }
+                      }}
+                    >
                       <iconify-icon icon={item.icon} className="menu-icon"></iconify-icon>
                       <span>{item.title}</span>
-                      <iconify-icon icon="ri:arrow-down-s-line" className="sidebar-menu__arrow"></iconify-icon>
+                      {hasSubmenu ? <iconify-icon icon="ri:arrow-down-s-line" className="sidebar-menu__arrow"></iconify-icon> : null}
                     </a>
-                    <ul className="sidebar-submenu">
-                      {item.submenu.map((sub, subIndex) => (
+                    {hasSubmenu ? <ul className="sidebar-submenu">
+                      {item.submenu?.map((sub, subIndex) => (
                         <li key={subIndex}>
-                          <a 
-                            href={sub.href} 
-                            onClick={(e) => sub.page && handleNavClick(e, sub.page)}
+                          <a
+                            href={sub.href}
+                            className={sub.page && sub.page === currentPage ? 'active-page' : ''}
+                            onClick={(e) => { if (sub.page) handleNavClick(e, sub.page) }}
                           >
                             <iconify-icon
                               icon="ri:circle-fill"
@@ -786,9 +768,9 @@ const Sidebar = ({ onNavigate }) => {
                           </a>
                         </li>
                       ))}
-                    </ul>
+                    </ul> : null}
                   </li>
-                ))}
+                )})}
               </React.Fragment>
             ))}
           </ul>

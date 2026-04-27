@@ -85,10 +85,19 @@
 }
 
 .sidebar-menu li.dropdown.open > a,
-.sidebar-menu li.dropdown.dropdown-open > a,
-.sidebar-menu li > a.active-page {
+.sidebar-menu li.dropdown.dropdown-open > a {
   background-color: var(--primary-600);
   color: #fff;
+}
+
+/* Active submenu page should use mild green hover-like effect (not dropdown active blue) */
+.sidebar-menu li > a.active-page {
+  background-color: transparent !important;
+  color: #15803d !important;
+}
+
+.sidebar-menu li > a.active-page .circle-icon {
+  color: #15803d !important;
 }
 
 .sidebar-menu .sidebar-submenu {
