@@ -27,7 +27,7 @@ public class WebConfig implements WebMvcConfigurer {
   public void addCorsMappings(CorsRegistry registry) {
     registry
         .addMapping("/api/**")
-        .allowedOrigins("http://localhost:5173", "http://localhost:3000")
+        .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
         .allowedHeaders("*")
         .allowCredentials(true)
@@ -35,7 +35,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     registry
         .addMapping("/uploads/**")
-        .allowedOrigins("http://localhost:5173", "http://localhost:3000")
+        .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
         .allowedMethods("GET", "OPTIONS")
         .allowedHeaders("*")
         .allowCredentials(true)

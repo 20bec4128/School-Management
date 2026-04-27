@@ -1,89 +1,23 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createSubject, deleteSubject, fetchSubjects, updateSubject } from '../apis/subjectsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchTeachers } from '../apis/teachersApi'
 import '../assets/css/addModalShared.css'
-
-const subjects = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    name: 'Mathematics',
-    subjectCode: 'MTH-101',
-    className: 'Class 10',
-    teacher: 'Mr. John Smith',
-    author: 'R.D. Sharma',
-    type: 'Core',
-    note: '',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    name: 'Physics',
-    subjectCode: 'PHY-102',
-    className: 'Class 11',
-    teacher: 'Mr. David Kim',
-    author: 'H.C. Verma',
-    type: 'Core',
-    note: 'Lab required.',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    name: 'English',
-    subjectCode: 'ENG-103',
-    className: 'Class 9',
-    teacher: 'Ms. Sarah Connor',
-    author: 'NCERT',
-    type: 'Core',
-    note: '',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    name: 'Biology',
-    subjectCode: 'BIO-104',
-    className: 'Class 11',
-    teacher: 'Ms. Patricia Nguyen',
-    author: 'S. Chand',
-    type: 'Elective',
-    note: 'Practical exam included.',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    name: 'Computer Science',
-    subjectCode: 'CS-105',
-    className: 'Class 12',
-    teacher: 'Mr. Robert Ashford',
-    author: 'Sumita Arora',
-    type: 'Elective',
-    note: '',
-  },
-]
-
-const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-
-const teacherOptions = [
-  'Mr. John Smith',
-  'Ms. Sarah Connor',
-  'Mr. David Kim',
-  'Ms. Linda Morrison',
-  'Mr. Robert Ashford',
-  'Ms. Patricia Nguyen',
-  'Mr. James Harrington',
-]
 
 const subjectTypeOptions = ['Core', 'Elective', 'Optional', 'Co-Curricular']
 
 const emptyForm = {
-  school: '',
+  schoolId: '',
   name: '',
   subjectCode: '',
   author: '',
   type: '',
-  className: '',
-  teacher: '',
+  classId: '',
+  teacherId: '',
   note: '',
 }
 
@@ -157,6 +91,15 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Subject = () => {
+  const [subjects, setSubjects] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [teachersLookup, setTeachersLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -172,32 +115,81 @@ const Subject = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(subjects.map((r) => r.school))),
-    [],
-  )
+  const loadLookups = useCallback(async () => {
+    const [schools, teachers] = await Promise.all([fetchSchoolsLookup(), fetchTeachers()])
+    setSchoolsLookup(Array.isArray(schools) ? schools : [])
+    const teacherRows = Array.isArray(teachers) ? teachers : []
+    setTeachersLookup(
+      teacherRows
+        .map((t) => ({ id: t?.id, name: t?.name }))
+        .filter((t) => t.id != null && t.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+  }, [])
 
-  const teacherFilterOptions = useMemo(
-    () => Array.from(new Set(subjects.map((r) => r.teacher))),
-    [],
-  )
+  const loadClassesForSchool = useCallback(async (schoolId) => {
+    if (!schoolId) {
+      setClassesLookup([])
+      return
+    }
+    const data = await fetchClasses({ schoolId })
+    setClassesLookup(Array.isArray(data) ? data : [])
+  }, [])
+
+  const loadSubjects = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchSubjects()
+      setSubjects(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setSubjects([])
+      setError(e?.message || 'Failed to load subjects')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadLookups()
+  }, [loadLookups])
+
+  useEffect(() => {
+    void loadSubjects()
+  }, [loadSubjects])
+
+  const schoolOptions = useMemo(() => {
+    const fromRows = subjects.map((r) => r?.school).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [subjects])
+
+  const teacherFilterOptions = useMemo(() => {
+    const fromRows = subjects.map((r) => r?.teacher).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [subjects])
+
+  const classFilterOptions = useMemo(() => {
+    const fromRows = subjects.map((r) => r?.className).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [subjects])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return subjects.filter((r) => {
       const matchesSearch =
         !q ||
-        [r.school, r.name, r.subjectCode, r.className, r.teacher, r.type]
+        [r?.school, r?.name, r?.subjectCode, r?.className, r?.teacher, r?.type]
+          .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesClass = filters.className === 'Select' || r.className === filters.className
-      const matchesType = filters.type === 'Select' || r.type === filters.type
-      const matchesTeacher = filters.teacher === 'Select' || r.teacher === filters.teacher
+      const matchesSchool = filters.school === 'Select' || r?.school === filters.school
+      const matchesClass = filters.className === 'Select' || r?.className === filters.className
+      const matchesType = filters.type === 'Select' || r?.type === filters.type
+      const matchesTeacher = filters.teacher === 'Select' || r?.teacher === filters.teacher
       return matchesSearch && matchesSchool && matchesClass && matchesType && matchesTeacher
     })
-  }, [search, filters])
+  }, [subjects, search, filters])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -207,12 +199,12 @@ const Subject = () => {
   }, [currentPage, filtered, rowsPerPage])
 
   const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -224,6 +216,12 @@ const Subject = () => {
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
     setter((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handleSchoolChange = (setter) => async (e) => {
+    const schoolId = e.target.value
+    setter((prev) => ({ ...prev, schoolId, classId: '' }))
+    await loadClassesForSchool(schoolId)
   }
 
   const handlePendingFilterChange = (e) => {
@@ -244,24 +242,100 @@ const Subject = () => {
   }
 
   const openAdd = () => {
+    setError('')
+    setEditingId(null)
     setAddForm(emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
+    setClassesLookup([])
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingId(row?.id ?? null)
+    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
+    void loadClassesForSchool(schoolId)
     setEditForm({
-      school: row.school,
-      name: row.name,
-      subjectCode: row.subjectCode,
-      author: row.author,
-      type: row.type,
-      className: row.className,
-      teacher: row.teacher,
-      note: row.note,
+      schoolId,
+      name: row?.name || '',
+      subjectCode: row?.subjectCode || '',
+      author: row?.author || '',
+      type: row?.type || '',
+      classId: row?.classId != null ? String(row.classId) : '',
+      teacherId: row?.teacherId != null ? String(row.teacherId) : '',
+      note: row?.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    classId: form.classId ? Number(form.classId) : null,
+    teacherId: form.teacherId ? Number(form.teacherId) : null,
+    name: form.name || '',
+    subjectCode: form.subjectCode || '',
+    author: form.author || '',
+    type: form.type || '',
+    note: form.note || '',
+  })
+
+  const handleCreate = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const created = await createSubject(buildPayload(addForm))
+      setSubjects((prev) => [created, ...prev])
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setCurrentPage(1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create subject')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (saving) return
+    if (!editingId) {
+      setError('No subject selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const updated = await updateSubject(editingId, buildPayload(editForm))
+      setSubjects((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingId(null)
+    } catch (e) {
+      setError(e?.message || 'Failed to update subject')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!id) return
+    const confirmed = window.confirm('Delete this subject? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteSubject(id)
+      setSubjects((prev) => prev.filter((r) => r.id !== id))
+      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
+    } catch (e) {
+      setError(e?.message || 'Failed to delete subject')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
@@ -282,12 +356,16 @@ const Subject = () => {
             <FormField label="School Name" required full>
               <select
                 className="avm-select"
-                id="school"
-                value={form.school}
-                onChange={handleChange(setter)}
+                id="schoolId"
+                value={form.schoolId}
+                onChange={handleSchoolChange(setter)}
               >
                 <option value="">--Select School--</option>
-                <option>Windsor Park High School</option>
+                {schoolsLookup.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.schoolName}
+                  </option>
+                ))}
               </select>
             </FormField>
 
@@ -347,14 +425,15 @@ const Subject = () => {
             <FormField label="Class" required full>
               <select
                 className="avm-select"
-                id="className"
-                value={form.className}
+                id="classId"
+                value={form.classId}
                 onChange={handleChange(setter)}
+                disabled={!form.schoolId}
               >
                 <option value="">--Select--</option>
-                {classOptions.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {classesLookup.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.className}
                   </option>
                 ))}
               </select>
@@ -363,14 +442,14 @@ const Subject = () => {
             <FormField label="Teacher" required full>
               <select
                 className="avm-select"
-                id="teacher"
-                value={form.teacher}
+                id="teacherId"
+                value={form.teacherId}
                 onChange={handleChange(setter)}
               >
                 <option value="">--Select--</option>
-                {teacherOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {teachersLookup.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name}
                   </option>
                 ))}
               </select>
@@ -573,16 +652,16 @@ const Subject = () => {
                   </tr>
                 ) : (
                   paginated.map((row) => (
-                    <tr key={row.sl}>
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{row.id}</label>
                         </div>
                       </td>
                       {visibleColumns.school ? <td>{row.school}</td> : null}
@@ -683,7 +762,7 @@ const Subject = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleCreate}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm, addStep)}
@@ -699,7 +778,7 @@ const Subject = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm, editStep)}
@@ -747,7 +826,7 @@ const Subject = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select</option>
-              {classOptions.map((c) => (
+              {classFilterOptions.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

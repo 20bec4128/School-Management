@@ -1,67 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createClass, deleteClass, fetchClasses, updateClass } from '../apis/classesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchTeachers } from '../apis/teachersApi'
 import '../assets/css/addModalShared.css'
 
-const classes = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    className: 'Class 8',
-    numericName: '8',
-    classTeacher: 'Mr. John Smith',
-    note: 'Morning shift class.',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    className: 'Class 9',
-    numericName: '9',
-    classTeacher: 'Ms. Sarah Connor',
-    note: '',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    className: 'Class 10',
-    numericName: '10',
-    classTeacher: 'Mr. David Kim',
-    note: 'Science stream available.',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    className: 'Class 11',
-    numericName: '11',
-    classTeacher: 'Ms. Linda Morrison',
-    note: '',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    className: 'Class 12',
-    numericName: '12',
-    classTeacher: 'Mr. Robert Ashford',
-    note: 'Board exam year.',
-  },
-]
-
-const teacherOptions = [
-  'Mr. John Smith',
-  'Ms. Sarah Connor',
-  'Mr. David Kim',
-  'Ms. Linda Morrison',
-  'Mr. Robert Ashford',
-  'Ms. Patricia Nguyen',
-  'Mr. James Harrington',
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
   className: '',
   numericName: '',
-  classTeacher: '',
+  teacherId: '',
   note: '',
 }
 
@@ -122,6 +72,14 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Class = () => {
+  const [classes, setClasses] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [teachersLookup, setTeachersLookup] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -137,31 +95,66 @@ const Class = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(classes.map((r) => r.school))),
-    [],
-  )
+  const loadLookups = useCallback(async () => {
+    const [schools, teachers] = await Promise.all([fetchSchoolsLookup(), fetchTeachers()])
+    setSchoolsLookup(Array.isArray(schools) ? schools : [])
+    const teacherRows = Array.isArray(teachers) ? teachers : []
+    setTeachersLookup(
+      teacherRows
+        .map((t) => ({ id: t?.id, name: t?.name }))
+        .filter((t) => t.id != null && t.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+  }, [])
 
-  const teacherFilterOptions = useMemo(
-    () => Array.from(new Set(classes.map((r) => r.classTeacher))),
-    [],
-  )
+  const loadClasses = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchClasses()
+      setClasses(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setClasses([])
+      setError(e?.message || 'Failed to load classes')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadLookups()
+  }, [loadLookups])
+
+  useEffect(() => {
+    void loadClasses()
+  }, [loadClasses])
+
+  const schoolOptions = useMemo(() => {
+    const fromRows = classes.map((r) => r?.schoolName).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [classes])
+
+  const teacherFilterOptions = useMemo(() => {
+    const fromRows = classes.map((r) => r?.teacherName).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [classes])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return classes.filter((r) => {
       const matchesSearch =
         !q ||
-        [r.school, r.className, r.numericName, r.classTeacher]
+        [r?.schoolName, r?.className, r?.numericName, r?.teacherName]
+          .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
+      const matchesSchool = filters.school === 'Select' || r.schoolName === filters.school
       const matchesTeacher =
-        filters.classTeacher === 'Select' || r.classTeacher === filters.classTeacher
+        filters.classTeacher === 'Select' || r.teacherName === filters.classTeacher
       return matchesSearch && matchesSchool && matchesTeacher
     })
-  }, [search, filters])
+  }, [classes, search, filters])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -171,12 +164,12 @@ const Class = () => {
   }, [currentPage, filtered, rowsPerPage])
 
   const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -208,21 +201,91 @@ const Class = () => {
   }
 
   const openAdd = () => {
+    setError('')
+    setEditingId(null)
     setAddForm(emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingId(row?.id ?? null)
     setEditForm({
-      school: row.school,
-      className: row.className,
-      numericName: row.numericName,
-      classTeacher: row.classTeacher,
-      note: row.note,
+      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
+      className: row?.className || '',
+      numericName: row?.numericName || '',
+      teacherId: row?.teacherId != null ? String(row.teacherId) : '',
+      note: row?.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    className: form.className || '',
+    numericName: form.numericName || '',
+    teacherId: form.teacherId ? Number(form.teacherId) : null,
+    note: form.note || '',
+  })
+
+  const handleCreate = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const created = await createClass(buildPayload(addForm))
+      setClasses((prev) => [created, ...prev])
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setCurrentPage(1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (saving) return
+    if (!editingId) {
+      setError('No class selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const updated = await updateClass(editingId, buildPayload(editForm))
+      setClasses((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingId(null)
+    } catch (e) {
+      setError(e?.message || 'Failed to update class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!id) return
+    const confirmed = window.confirm('Delete this class? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteClass(id)
+      setClasses((prev) => prev.filter((r) => r.id !== id))
+      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
+    } catch (e) {
+      setError(e?.message || 'Failed to delete class')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
@@ -240,12 +303,16 @@ const Class = () => {
         <FormField label="School Name" required full>
           <select
             className="avm-select"
-            id="school"
-            value={form.school}
+            id="schoolId"
+            value={form.schoolId}
             onChange={handleChange(setter)}
           >
             <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -274,14 +341,14 @@ const Class = () => {
         <FormField label="Class Teacher" required full>
           <select
             className="avm-select"
-            id="classTeacher"
-            value={form.classTeacher}
+            id="teacherId"
+            value={form.teacherId}
             onChange={handleChange(setter)}
           >
             <option value="">--Select--</option>
-            {teacherOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {teachersLookup.map((t) => (
+              <option key={t.id} value={String(t.id)}>
+                {t.name}
               </option>
             ))}
           </select>
@@ -328,6 +395,13 @@ const Class = () => {
           Add Class
         </button>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {/* Table Card */}
       <div className="card h-100">
@@ -470,30 +544,41 @@ const Class = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
                     <td
-                      colSpan={visibleColumnCount}
+                      colSpan={visibleColumnCount + 2}
+                      className="text-center py-40 text-secondary-light"
+                    >
+                      Loading classes...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visibleColumnCount + 2}
                       className="text-center py-40 text-secondary-light"
                     >
                       No classes found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
+                      {visibleColumns.school ? <td>{row.schoolName}</td> : null}
                       {visibleColumns.className ? (
                         <td className="fw-medium text-primary-light">{row.className}</td>
                       ) : null}
@@ -506,7 +591,7 @@ const Class = () => {
                           </span>
                         </td>
                       ) : null}
-                      {visibleColumns.classTeacher ? <td>{row.classTeacher}</td> : null}
+                      {visibleColumns.classTeacher ? <td>{row.teacherName || '-'}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
@@ -521,6 +606,8 @@ const Class = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={() => handleDelete(row.id)}
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -585,7 +672,7 @@ const Class = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleCreate}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
@@ -601,7 +688,7 @@ const Class = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}

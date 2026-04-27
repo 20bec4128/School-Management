@@ -1,69 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createSection, deleteSection, fetchSections, updateSection } from '../apis/sectionsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchTeachers } from '../apis/teachersApi'
 import '../assets/css/addModalShared.css'
 
-const sections = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    section: 'A',
-    className: 'Class 8',
-    classTeacher: 'Mr. John Smith',
-    note: 'Morning batch.',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    section: 'B',
-    className: 'Class 8',
-    classTeacher: 'Ms. Sarah Connor',
-    note: '',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    section: 'A',
-    className: 'Class 9',
-    classTeacher: 'Mr. David Kim',
-    note: 'Science stream.',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    section: 'B',
-    className: 'Class 10',
-    classTeacher: 'Ms. Linda Morrison',
-    note: '',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    section: 'A',
-    className: 'Class 12',
-    classTeacher: 'Mr. Robert Ashford',
-    note: 'Board exam year.',
-  },
-]
-
-const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-
-const teacherOptions = [
-  'Mr. John Smith',
-  'Ms. Sarah Connor',
-  'Mr. David Kim',
-  'Ms. Linda Morrison',
-  'Mr. Robert Ashford',
-  'Ms. Patricia Nguyen',
-  'Mr. James Harrington',
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
+  classId: '',
+  teacherId: '',
   name: '',
-  className: '',
-  classTeacher: '',
   note: '',
 }
 
@@ -126,6 +75,15 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Section = () => {
+  const [sections, setSections] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [teachersLookup, setTeachersLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -141,32 +99,81 @@ const Section = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(sections.map((r) => r.school))),
-    [],
-  )
+  const loadLookups = useCallback(async () => {
+    const [schools, teachers] = await Promise.all([fetchSchoolsLookup(), fetchTeachers()])
+    setSchoolsLookup(Array.isArray(schools) ? schools : [])
+    const teacherRows = Array.isArray(teachers) ? teachers : []
+    setTeachersLookup(
+      teacherRows
+        .map((t) => ({ id: t?.id, name: t?.name }))
+        .filter((t) => t.id != null && t.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+  }, [])
 
-  const teacherFilterOptions = useMemo(
-    () => Array.from(new Set(sections.map((r) => r.classTeacher))),
-    [],
-  )
+  const loadSections = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchSections()
+      setSections(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setSections([])
+      setError(e?.message || 'Failed to load sections')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadClassesForSchool = useCallback(async (schoolId) => {
+    if (!schoolId) {
+      setClassesLookup([])
+      return
+    }
+    const data = await fetchClasses({ schoolId })
+    setClassesLookup(Array.isArray(data) ? data : [])
+  }, [])
+
+  useEffect(() => {
+    void loadLookups()
+  }, [loadLookups])
+
+  useEffect(() => {
+    void loadSections()
+  }, [loadSections])
+
+  const schoolOptions = useMemo(() => {
+    const fromRows = sections.map((r) => r?.schoolName).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [sections])
+
+  const teacherFilterOptions = useMemo(() => {
+    const fromRows = sections.map((r) => r?.teacherName).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [sections])
+
+  const classFilterOptions = useMemo(() => {
+    const fromRows = sections.map((r) => r?.className).filter(Boolean)
+    return Array.from(new Set(fromRows)).sort()
+  }, [sections])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return sections.filter((r) => {
       const matchesSearch =
         !q ||
-        [r.school, r.section, r.className, r.classTeacher, r.note]
+        [r?.schoolName, r?.name, r?.className, r?.teacherName, r?.note]
+          .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
+      const matchesSchool = filters.school === 'Select' || r.schoolName === filters.school
       const matchesClass = filters.className === 'Select' || r.className === filters.className
       const matchesTeacher =
-        filters.classTeacher === 'Select' || r.classTeacher === filters.classTeacher
+        filters.classTeacher === 'Select' || r.teacherName === filters.classTeacher
       return matchesSearch && matchesSchool && matchesClass && matchesTeacher
     })
-  }, [search, filters])
+  }, [sections, search, filters])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -176,12 +183,12 @@ const Section = () => {
   }, [currentPage, filtered, rowsPerPage])
 
   const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -193,6 +200,12 @@ const Section = () => {
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
     setter((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handleSchoolChange = (setter) => async (e) => {
+    const schoolId = e.target.value
+    setter((prev) => ({ ...prev, schoolId, classId: '' }))
+    await loadClassesForSchool(schoolId)
   }
 
   const handlePendingFilterChange = (e) => {
@@ -213,21 +226,94 @@ const Section = () => {
   }
 
   const openAdd = () => {
+    setError('')
+    setEditingId(null)
     setAddForm(emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
+    void loadClassesForSchool('')
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingId(row?.id ?? null)
+    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
+    void loadClassesForSchool(schoolId)
     setEditForm({
-      school: row.school,
-      name: row.section,
-      className: row.className,
-      classTeacher: row.classTeacher,
-      note: row.note,
+      schoolId,
+      classId: row?.classId != null ? String(row.classId) : '',
+      teacherId: row?.teacherId != null ? String(row.teacherId) : '',
+      name: row?.name || '',
+      note: row?.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    classId: form.classId ? Number(form.classId) : null,
+    teacherId: form.teacherId ? Number(form.teacherId) : null,
+    name: form.name || '',
+    note: form.note || '',
+  })
+
+  const handleCreate = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const created = await createSection(buildPayload(addForm))
+      setSections((prev) => [created, ...prev])
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setCurrentPage(1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create section')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (saving) return
+    if (!editingId) {
+      setError('No section selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const updated = await updateSection(editingId, buildPayload(editForm))
+      setSections((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingId(null)
+    } catch (e) {
+      setError(e?.message || 'Failed to update section')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!id) return
+    const confirmed = window.confirm('Delete this section? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteSection(id)
+      setSections((prev) => prev.filter((r) => r.id !== id))
+      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
+    } catch (e) {
+      setError(e?.message || 'Failed to delete section')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
@@ -245,12 +331,16 @@ const Section = () => {
         <FormField label="School Name" required full>
           <select
             className="avm-select"
-            id="school"
-            value={form.school}
-            onChange={handleChange(setter)}
+            id="schoolId"
+            value={form.schoolId}
+            onChange={handleSchoolChange(setter)}
           >
             <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -268,14 +358,14 @@ const Section = () => {
         <FormField label="Class" required>
           <select
             className="avm-select"
-            id="className"
-            value={form.className}
+            id="classId"
+            value={form.classId}
             onChange={handleChange(setter)}
           >
             <option value="">--Select--</option>
-            {classOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {classesLookup.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.className}
               </option>
             ))}
           </select>
@@ -284,14 +374,14 @@ const Section = () => {
         <FormField label="Class Teacher" required>
           <select
             className="avm-select"
-            id="classTeacher"
-            value={form.classTeacher}
+            id="teacherId"
+            value={form.teacherId}
             onChange={handleChange(setter)}
           >
             <option value="">--Select--</option>
-            {teacherOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {teachersLookup.map((t) => (
+              <option key={t.id} value={String(t.id)}>
+                {t.name}
               </option>
             ))}
           </select>
@@ -338,6 +428,13 @@ const Section = () => {
           Add Section
         </button>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {/* Table Card */}
       <div className="card h-100">
@@ -481,41 +578,52 @@ const Section = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
                     <td
-                      colSpan={visibleColumnCount}
+                      colSpan={visibleColumnCount + 2}
+                      className="text-center py-40 text-secondary-light"
+                    >
+                      Loading sections...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visibleColumnCount + 2}
                       className="text-center py-40 text-secondary-light"
                     >
                       No sections found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
+                      {visibleColumns.school ? <td>{row.schoolName}</td> : null}
                       {visibleColumns.section ? (
                         <td>
                           <span className="bg-primary-100 text-primary-600 px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.section}
+                            {row.name}
                           </span>
                         </td>
                       ) : null}
                       {visibleColumns.className ? (
                         <td className="fw-medium text-primary-light">{row.className}</td>
                       ) : null}
-                      {visibleColumns.classTeacher ? <td>{row.classTeacher}</td> : null}
+                      {visibleColumns.classTeacher ? <td>{row.teacherName || '-'}</td> : null}
                       {visibleColumns.note ? (
                         <td>
                           {row.note ? (
@@ -550,7 +658,9 @@ const Section = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
                             title="Delete"
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -615,7 +725,7 @@ const Section = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleCreate}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
@@ -631,7 +741,7 @@ const Section = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}
@@ -681,7 +791,7 @@ const Section = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select</option>
-              {classOptions.map((c) => (
+              {classFilterOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
