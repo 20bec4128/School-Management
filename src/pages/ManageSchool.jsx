@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createSchool, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
 import '../assets/css/addModalShared.css'
-
-const SCHOOLS_API_BASE = '/api/schools'
 
 const emptyForm = {
   // Basic Information
@@ -324,32 +323,11 @@ const ManageSchool = () => {
     setIsEditOpen(true)
   }
 
-  const readApiError = async (res) => {
-    try {
-      const contentType = res.headers.get('content-type') || ''
-      if (contentType.includes('application/json')) {
-        const data = await res.json()
-        if (data?.message) return String(data.message)
-        return `Request failed (${res.status})`
-      }
-      const text = await res.text()
-      return text || `Request failed (${res.status})`
-    } catch {
-      return `Request failed (${res.status})`
-    }
-  }
-
   const loadSchools = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const query = new URLSearchParams({
-        page: String(Math.max(currentPage - 1, 0)),
-        size: String(rowsPerPage),
-      })
-      const res = await fetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
-      if (!res.ok) throw new Error(await readApiError(res))
-      const data = await res.json()
+      const data = await fetchSchoolsPage(currentPage - 1, rowsPerPage)
       if (Array.isArray(data)) {
         setSchools(data)
         setTotalElements(data.length)
@@ -411,30 +389,13 @@ const ManageSchool = () => {
     pinterestUrl: form.pinterestUrl || '',
   })
 
-  const buildUpsertFormData = (payload, form) => {
-    const fd = new FormData()
-    fd.append('data', JSON.stringify(payload))
-    if (form?.adminLogo instanceof File) fd.append('adminLogo', form.adminLogo)
-    if (form?.frontendLogo instanceof File) fd.append('frontendLogo', form.frontendLogo)
-    return fd
-  }
-
-  const savingRef = useRef(false)
-
   const handleCreateSchool = async () => {
-    if (savingRef.current) return
-    savingRef.current = true
+    if (saving) return
     setSaving(true)
     setError('')
     try {
       const payload = buildSchoolPayload(addForm)
-      const res = await fetch(SCHOOLS_API_BASE, {
-        method: 'POST',
-        body: buildUpsertFormData(payload, addForm),
-        headers: { Accept: 'application/json' },
-      })
-      if (!res.ok) throw new Error(await readApiError(res))
-      await res.json()
+      await createSchool(payload, addForm)
       setIsAddOpen(false)
       setAddForm(emptyForm)
       setAddStep(0)
@@ -447,28 +408,20 @@ const ManageSchool = () => {
       setError(e?.message || 'Failed to create school')
     } finally {
       setSaving(false)
-      savingRef.current = false
     }
   }
 
   const handleUpdateSchool = async () => {
-    if (savingRef.current) return
+    if (saving) return
     if (!editingSchoolId) {
       setError('No school selected for update')
       return
     }
-    savingRef.current = true
     setSaving(true)
     setError('')
     try {
       const payload = buildSchoolPayload(editForm)
-      const res = await fetch(`${SCHOOLS_API_BASE}/${editingSchoolId}`, {
-        method: 'PUT',
-        body: buildUpsertFormData(payload, editForm),
-        headers: { Accept: 'application/json' },
-      })
-      if (!res.ok) throw new Error(await readApiError(res))
-      await res.json()
+      await updateSchool(editingSchoolId, payload, editForm)
       setIsEditOpen(false)
       setEditForm(emptyForm)
       setEditStep(0)
@@ -478,7 +431,6 @@ const ManageSchool = () => {
       setError(e?.message || 'Failed to update school')
     } finally {
       setSaving(false)
-      savingRef.current = false
     }
   }
 
@@ -490,8 +442,7 @@ const ManageSchool = () => {
     setSaving(true)
     setError('')
     try {
-      const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(await readApiError(res))
+      await deleteSchool(schoolId)
       setSelectedRows((prev) => prev.filter((id) => id !== schoolId))
       await loadSchools()
     } catch (e) {
