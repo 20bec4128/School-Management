@@ -435,10 +435,8 @@ const StudentActivity = () => {
   }
 
   // ── Pagination ───────────────────────────────────────────────────────────────
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+  // Backend paging already returns the current page; avoid client-side slicing here.
+  const rowsToShow = filtered
 
   const getVisiblePages = () => {
     const pages = []
@@ -724,14 +722,14 @@ const StudentActivity = () => {
                       Loading student activities...
                     </td>
                   </tr>
-                ) : paginated.length === 0 ? (
+                ) : rowsToShow.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No student activities found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row, idx) => (
+                  rowsToShow.map((row, idx) => (
                     <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -786,7 +784,7 @@ const StudentActivity = () => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
               Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} –{' '}
-              {totalElements === 0 ? 0 : Math.min((currentPage - 1) * rowsPerPage + paginated.length, totalElements)} of {totalElements}
+              {totalElements === 0 ? 0 : Math.min((currentPage - 1) * rowsPerPage + rowsToShow.length, totalElements)} of {totalElements}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
