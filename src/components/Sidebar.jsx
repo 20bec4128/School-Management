@@ -481,7 +481,12 @@ const menuSections = [
           { label: 'Email', href: '#' },
           { label: 'SMS', href: '#' },
         ],
+<<<<<<< HEAD
       }, 
+=======
+      },
+   
+>>>>>>> 7c01e375a336e47b51676553b272bd372381e9f3
     ],
   },
   {
