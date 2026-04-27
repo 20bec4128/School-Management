@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
@@ -413,14 +413,17 @@ const ManageSchool = () => {
 
   const buildUpsertFormData = (payload, form) => {
     const fd = new FormData()
-    fd.append('data', new Blob([JSON.stringify(payload)], { type: 'application/json' }))
+    fd.append('data', JSON.stringify(payload))
     if (form?.adminLogo instanceof File) fd.append('adminLogo', form.adminLogo)
     if (form?.frontendLogo instanceof File) fd.append('frontendLogo', form.frontendLogo)
     return fd
   }
 
+  const savingRef = useRef(false)
+
   const handleCreateSchool = async () => {
-    if (saving) return
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     setError('')
     try {
@@ -428,6 +431,7 @@ const ManageSchool = () => {
       const res = await fetch(SCHOOLS_API_BASE, {
         method: 'POST',
         body: buildUpsertFormData(payload, addForm),
+        headers: { Accept: 'application/json' },
       })
       if (!res.ok) throw new Error(await readApiError(res))
       await res.json()
@@ -443,15 +447,17 @@ const ManageSchool = () => {
       setError(e?.message || 'Failed to create school')
     } finally {
       setSaving(false)
+      savingRef.current = false
     }
   }
 
   const handleUpdateSchool = async () => {
-    if (saving) return
+    if (savingRef.current) return
     if (!editingSchoolId) {
       setError('No school selected for update')
       return
     }
+    savingRef.current = true
     setSaving(true)
     setError('')
     try {
@@ -459,6 +465,7 @@ const ManageSchool = () => {
       const res = await fetch(`${SCHOOLS_API_BASE}/${editingSchoolId}`, {
         method: 'PUT',
         body: buildUpsertFormData(payload, editForm),
+        headers: { Accept: 'application/json' },
       })
       if (!res.ok) throw new Error(await readApiError(res))
       await res.json()
@@ -471,6 +478,7 @@ const ManageSchool = () => {
       setError(e?.message || 'Failed to update school')
     } finally {
       setSaving(false)
+      savingRef.current = false
     }
   }
 
