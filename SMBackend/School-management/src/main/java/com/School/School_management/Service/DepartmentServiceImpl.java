@@ -12,8 +12,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional
 public class DepartmentServiceImpl implements DepartmentService {
 
     private final DepartmentRepository departmentRepository;
@@ -25,12 +27,14 @@ public class DepartmentServiceImpl implements DepartmentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<DepartmentDto> getAll(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         return departmentRepository.findAll(pageable).map(this::toDto);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<DepartmentDto> getAll() {
         return departmentRepository.findAll(Sort.by("title").ascending())
                 .stream().map(this::toDto).collect(Collectors.toList());

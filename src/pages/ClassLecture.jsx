@@ -1,23 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import {
+  createClassLecture,
+  deleteClassLecture,
+  fetchClassLectures,
+  updateClassLecture,
+} from '../apis/classLectureApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSections } from '../apis/sectionsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchTeachers } from '../apis/teachersApi'
 import '../assets/css/addModalShared.css'
 
-const lectures = [
-  { sl: '01', school: 'Windsor Park High School', title: 'Principal', class: 'Class 1', section: 'A', subject: 'Mathematics', teacher: 'John Smith', classLecture: 'Youtube', academicYear: '2024-2025' },
-  { sl: '02', school: 'Windsor Park High School', title: 'Vice Principal', class: 'Class 2', section: 'B', subject: 'Science', teacher: 'Sarah Johnson', classLecture: 'Vimeo', academicYear: '2024-2025' },
-  { sl: '03', school: 'Windsor Park High School', title: 'Head Teacher', class: 'Class 3', section: 'A', subject: 'English', teacher: 'David Lee', classLecture: 'Power Point', academicYear: '2023-2024' },
-  { sl: '04', school: 'Windsor Park High School', title: 'Senior Teacher', class: 'Class 4', section: 'C', subject: 'History', teacher: 'Emily Clark', classLecture: 'Youtube', academicYear: '2024-2025' },
-  { sl: '05', school: 'Windsor Park High School', title: 'Teacher', class: 'Class 5', section: 'B', subject: 'Physics', teacher: 'Michael Brown', classLecture: 'Power Point', academicYear: '2023-2024' },
-]
-
 const emptyForm = {
+  schoolId: '',
   school: '',
   title: '',
+  classId: '',
   class: '',
+  sectionId: '',
   section: '',
   subject: '',
+  teacherId: '',
   lectureType: '',
+  academicYear: '',
+  lectureUrl: '',
   note: '',
 }
 
@@ -29,7 +37,10 @@ const FIELD_ICONS = {
   Class: 'ri-building-3-line',
   Section: 'ri-layout-grid-line',
   Subject: 'ri-book-open-line',
+  Teacher: 'ri-user-3-line',
   'Lecture Type': 'ri-video-line',
+  'Academic Year': 'ri-calendar-line',
+  'Lecture URL': 'ri-link',
   Note: 'ri-sticky-note-line',
 }
 
@@ -67,6 +78,16 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ClassLecture = () => {
+  const [lectures, setLectures] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [sectionsLookup, setSectionsLookup] = useState([])
+  const [teachersLookup, setTeachersLookup] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingLectureId, setEditingLectureId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -81,26 +102,91 @@ const ClassLecture = () => {
   const [pendingFilters, setPendingFilters] = useState({ class: 'All', subject: 'All', lectureType: 'All' })
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const loadSchoolsLookup = useCallback(async () => {
+    const schools = await fetchSchoolsLookup()
+    setSchoolsLookup(Array.isArray(schools) ? schools : [])
+  }, [])
+
+  const loadTeachersLookup = useCallback(async () => {
+    const teachers = await fetchTeachers()
+    const rows = Array.isArray(teachers) ? teachers : []
+    setTeachersLookup(
+      rows
+        .map((t) => ({ id: t?.id, name: t?.name }))
+        .filter((t) => t.id != null && t.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+  }, [])
+
+  const loadClassesForSchool = useCallback(async (schoolId) => {
+    if (!schoolId) {
+      setClassesLookup([])
+      return []
+    }
+    const data = await fetchClasses({ schoolId })
+    const rows = Array.isArray(data) ? data : []
+    setClassesLookup(rows)
+    return rows
+  }, [])
+
+  const loadSectionsForClass = useCallback(async ({ schoolId, classId }) => {
+    if (!classId) {
+      setSectionsLookup([])
+      return []
+    }
+    const data = await fetchSections({ schoolId, classId })
+    const rows = Array.isArray(data) ? data : []
+    setSectionsLookup(rows)
+    return rows
+  }, [])
+
+  const loadLectures = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchClassLectures()
+      setLectures(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setLectures([])
+      setError(e?.message || 'Failed to load class lectures')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSchoolsLookup()
+  }, [loadSchoolsLookup])
+
+  useEffect(() => {
+    void loadTeachersLookup()
+  }, [loadTeachersLookup])
+
+  useEffect(() => {
+    void loadLectures()
+  }, [loadLectures])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return lectures.filter((r) => {
       const matchesSearch =
         !q ||
-        [r.school, r.title, r.class, r.section, r.subject, r.teacher, r.classLecture, r.academicYear]
+        [r?.school, r?.title, r?.class, r?.section, r?.subject, r?.teacher, r?.classLecture, r?.academicYear]
+          .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(q)
-      const matchesClass = filters.class === 'All' || r.class === filters.class
-      const matchesSubject = filters.subject === 'All' || r.subject === filters.subject
-      const matchesLectureType = filters.lectureType === 'All' || r.classLecture === filters.lectureType
+      const matchesClass = filters.class === 'All' || r?.class === filters.class
+      const matchesSubject = filters.subject === 'All' || r?.subject === filters.subject
+      const matchesLectureType = filters.lectureType === 'All' || r?.classLecture === filters.lectureType
       return matchesSearch && matchesClass && matchesSubject && matchesLectureType
     })
-  }, [filters, search])
+  }, [lectures, filters, search])
 
-  const schoolOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item.school))), [])
-  const classOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item.class))), [])
-  const subjectOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item.subject))), [])
-  const lectureTypeOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item.classLecture))), [])
+  const schoolOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item?.school).filter(Boolean))), [lectures])
+  const classOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item?.class).filter(Boolean))), [lectures])
+  const subjectOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item?.subject).filter(Boolean))), [lectures])
+  const lectureTypeOptions = useMemo(() => Array.from(new Set(lectures.map((item) => item?.classLecture).filter(Boolean))), [lectures])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
@@ -108,11 +194,17 @@ const ClassLecture = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -124,19 +216,174 @@ const ClassLecture = () => {
     setter((prev) => ({ ...prev, [id]: value }))
   }
 
-  const openAdd = () => { setAddForm(emptyForm); setAddStep(0); setIsAddOpen(true) }
+  const handleSchoolChange = (setter) => async (e) => {
+    const schoolId = e.target.value
+    const selectedSchool = schoolsLookup.find((s) => String(s.id) === String(schoolId))
+    setter((prev) => ({
+      ...prev,
+      schoolId,
+      school: selectedSchool?.schoolName || '',
+      classId: '',
+      class: '',
+      sectionId: '',
+      section: '',
+    }))
+    setSectionsLookup([])
+    await loadClassesForSchool(schoolId)
+  }
+
+  const handleClassChange = (setter, getForm) => async (e) => {
+    const classId = e.target.value
+    const selectedClass = classesLookup.find((c) => String(c.id) === String(classId))
+    const schoolId = getForm().schoolId
+    setter((prev) => ({
+      ...prev,
+      classId,
+      class: selectedClass?.className || '',
+      sectionId: '',
+      section: '',
+    }))
+    await loadSectionsForClass({ schoolId, classId })
+  }
+
+  const handleSectionChange = (setter) => (e) => {
+    const sectionId = e.target.value
+    const selectedSection = sectionsLookup.find((s) => String(s.id) === String(sectionId))
+    setter((prev) => ({
+      ...prev,
+      sectionId,
+      section: selectedSection?.name || '',
+    }))
+  }
+
+  const openAdd = () => {
+    setError('')
+    setEditingLectureId(null)
+    setAddForm(emptyForm)
+    setAddStep(0)
+    setIsAddOpen(true)
+    setClassesLookup([])
+    setSectionsLookup([])
+  }
   const openEdit = (row) => {
+    setError('')
+    setEditingLectureId(row?.id ?? null)
+    const schoolId =
+      schoolsLookup.find((s) => s.schoolName === row?.school)?.id != null
+        ? String(schoolsLookup.find((s) => s.schoolName === row?.school).id)
+        : ''
+
     setEditForm({
-      school: row.school,
-      title: row.title,
-      class: row.class,
-      section: row.section,
-      subject: row.subject,
-      lectureType: row.classLecture,
-      note: '',
+      schoolId,
+      school: row?.school || '',
+      title: row?.title || '',
+      classId: '',
+      class: row?.class || '',
+      sectionId: '',
+      section: row?.section || '',
+      subject: row?.subject || '',
+      teacherId: row?.teacherId != null ? String(row.teacherId) : '',
+      lectureType: row?.classLecture || '',
+      academicYear: row?.academicYear || '',
+      lectureUrl: row?.lectureUrl || '',
+      note: row?.note || '',
     })
+
+    void (async () => {
+      if (!schoolId) {
+        setClassesLookup([])
+        setSectionsLookup([])
+        return
+      }
+      const classRows = await loadClassesForSchool(schoolId)
+      const classId =
+        classRows.find((c) => c.className === row?.class)?.id != null
+          ? String(classRows.find((c) => c.className === row?.class).id)
+          : ''
+
+      setEditForm((prev) => ({ ...prev, classId }))
+
+      const sectionRows = await loadSectionsForClass({ schoolId, classId })
+      const sectionId =
+        sectionRows.find((s) => s.name === row?.section)?.id != null
+          ? String(sectionRows.find((s) => s.name === row?.section).id)
+          : ''
+
+      setEditForm((prev) => ({ ...prev, sectionId }))
+    })()
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    school: form.school || '',
+    title: form.title || '',
+    class: form.class || '',
+    section: form.section || '',
+    subject: form.subject || '',
+    teacherId: form.teacherId ? Number(form.teacherId) : null,
+    classLecture: form.lectureType || '',
+    academicYear: form.academicYear || '',
+    lectureUrl: form.lectureUrl || '',
+    note: form.note || '',
+  })
+
+  const handleCreateLecture = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const created = await createClassLecture(buildPayload(addForm))
+      setLectures((prev) => [created, ...prev])
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setCurrentPage(1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create class lecture')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateLecture = async () => {
+    if (saving) return
+    if (!editingLectureId) {
+      setError('No class lecture selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const updated = await updateClassLecture(editingLectureId, buildPayload(editForm))
+      setLectures((prev) => prev.map((l) => (l.id === updated.id ? updated : l)))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingLectureId(null)
+    } catch (e) {
+      setError(e?.message || 'Failed to update class lecture')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteLecture = async (lectureId) => {
+    if (!lectureId) return
+    const confirmed = window.confirm('Delete this class lecture? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteClassLecture(lectureId)
+      setLectures((prev) => prev.filter((l) => l.id !== lectureId))
+      setSelectedRows((prev) => prev.filter((id) => id !== lectureId))
+    } catch (e) {
+      setError(e?.message || 'Failed to delete class lecture')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
@@ -161,9 +408,13 @@ const ClassLecture = () => {
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
         <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
+          <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleSchoolChange(setter)}>
             <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -180,23 +431,36 @@ const ClassLecture = () => {
         </FormField>
 
         <FormField label="Class" required>
-          <select className="avm-select" id="class" value={form.class} onChange={handleChange(setter)}>
+          <select
+            className="avm-select"
+            id="classId"
+            value={form.classId}
+            onChange={handleClassChange(setter, () => form)}
+            disabled={!form.schoolId}
+          >
             <option value="">--Select--</option>
-            <option>Class 1</option>
-            <option>Class 2</option>
-            <option>Class 3</option>
-            <option>Class 4</option>
-            <option>Class 5</option>
+            {classesLookup.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.className}
+              </option>
+            ))}
           </select>
         </FormField>
 
         <FormField label="Section" required>
-          <select className="avm-select" id="section" value={form.section} onChange={handleChange(setter)}>
+          <select
+            className="avm-select"
+            id="sectionId"
+            value={form.sectionId}
+            onChange={handleSectionChange(setter)}
+            disabled={!form.classId}
+          >
             <option value="">--Select--</option>
-            <option>A</option>
-            <option>B</option>
-            <option>C</option>
-            <option>D</option>
+            {sectionsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -211,6 +475,17 @@ const ClassLecture = () => {
           </select>
         </FormField>
 
+        <FormField label="Teacher" required full>
+          <select className="avm-select" id="teacherId" value={form.teacherId} onChange={handleChange(setter)}>
+            <option value="">--Select Teacher--</option>
+            {teachersLookup.map((t) => (
+              <option key={t.id} value={String(t.id)}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </FormField>
+
         <FormField label="Lecture Type" required>
           <select className="avm-select" id="lectureType" value={form.lectureType} onChange={handleChange(setter)}>
             <option value="">--Select--</option>
@@ -218,6 +493,28 @@ const ClassLecture = () => {
             <option>Vimeo</option>
             <option>Power Point</option>
           </select>
+        </FormField>
+
+        <FormField label="Academic Year" required>
+          <input
+            type="text"
+            className="avm-input"
+            id="academicYear"
+            placeholder="2026-2027"
+            value={form.academicYear}
+            onChange={handleChange(setter)}
+          />
+        </FormField>
+
+        <FormField label="Lecture URL" full>
+          <input
+            type="url"
+            className="avm-input"
+            id="lectureUrl"
+            placeholder="https://..."
+            value={form.lectureUrl}
+            onChange={handleChange(setter)}
+          />
         </FormField>
 
         <FormField label="Note" full noIcon>
@@ -260,6 +557,13 @@ const ClassLecture = () => {
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {/* Table Card */}
       <div className="card h-100">
@@ -435,24 +739,30 @@ const ClassLecture = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading class lectures...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No class lectures found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
                       {visibleColumns.school && <td>{row.school}</td>}
@@ -463,9 +773,17 @@ const ClassLecture = () => {
                       {visibleColumns.teacher && <td className="fw-medium text-primary-light">{row.teacher}</td>}
                       {visibleColumns.classLecture && (
                         <td>
-                          <span className={`px-12 py-4 radius-4 fw-medium text-sm ${lectureTypeBadge(row.classLecture)}`}>
-                            {row.classLecture}
-                          </span>
+                          {row.lectureUrl ? (
+                            <a href={row.lectureUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                              <span className={`px-12 py-4 radius-4 fw-medium text-sm ${lectureTypeBadge(row.classLecture)}`}>
+                                {row.classLecture}
+                              </span>
+                            </a>
+                          ) : (
+                            <span className={`px-12 py-4 radius-4 fw-medium text-sm ${lectureTypeBadge(row.classLecture)}`}>
+                              {row.classLecture}
+                            </span>
+                          )}
                         </td>
                       )}
                       {visibleColumns.academicYear && <td>{row.academicYear}</td>}
@@ -482,7 +800,9 @@ const ClassLecture = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDeleteLecture(row.id)}
                             title="Delete"
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -533,7 +853,7 @@ const ClassLecture = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleCreateLecture}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
@@ -549,7 +869,7 @@ const ClassLecture = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdateLecture}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}

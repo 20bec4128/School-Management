@@ -1,5 +1,4 @@
-// Use the Vite dev-server proxy (`/api` -> backend) to avoid browser CORS issues.
-const STUDENT_TYPE_API_BASE = '/api/student-types'
+const SECTIONS_API_BASE = '/api/sections'
 
 const readApiError = async (res) => {
   try {
@@ -16,20 +15,19 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchStudentTypesPage = async (page, size) => {
-  const query = new URLSearchParams({
-    page: String(Math.max(page, 0)),
-    size: String(size),
-  })
-  const res = await fetch(`${STUDENT_TYPE_API_BASE}?${query.toString()}`, {
-    headers: { Accept: 'application/json' },
-  })
+export const fetchSections = async ({ schoolId, classId } = {}) => {
+  const qs = new URLSearchParams()
+  if (schoolId != null && schoolId !== '') qs.set('schoolId', String(schoolId))
+  if (classId != null && classId !== '') qs.set('classId', String(classId))
+  const url = qs.toString() ? `${SECTIONS_API_BASE}?${qs.toString()}` : SECTIONS_API_BASE
+
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()
 }
 
-export const createStudentType = async (payload) => {
-  const res = await fetch(STUDENT_TYPE_API_BASE, {
+export const createSection = async (payload) => {
+  const res = await fetch(SECTIONS_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -38,8 +36,8 @@ export const createStudentType = async (payload) => {
   return res.json()
 }
 
-export const updateStudentType = async (id, payload) => {
-  const res = await fetch(`${STUDENT_TYPE_API_BASE}/${id}`, {
+export const updateSection = async (id, payload) => {
+  const res = await fetch(`${SECTIONS_API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -48,8 +46,9 @@ export const updateStudentType = async (id, payload) => {
   return res.json()
 }
 
-export const deleteStudentType = async (id) => {
-  const res = await fetch(`${STUDENT_TYPE_API_BASE}/${id}`, { method: 'DELETE' })
+export const deleteSection = async (id) => {
+  const res = await fetch(`${SECTIONS_API_BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
+

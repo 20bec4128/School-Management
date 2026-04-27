@@ -1,4 +1,5 @@
-const SCHOOLS_API_BASE = 'http://localhost:8081/api/schools'
+// Use the Vite dev-server proxy (`/api` -> backend) to avoid browser CORS issues.
+const SCHOOLS_API_BASE = '/api/schools'
 
 const readApiError = async (res) => {
   try {
