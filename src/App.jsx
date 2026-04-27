@@ -267,7 +267,7 @@ function App() {
         case 'payment-setting':
                 return <PaymentSetting/>
         case 'sms-setting':
-                return <SmsSetting/>    
+                return <SmsSetting/>
       default:
         return <Dashboard />
     }

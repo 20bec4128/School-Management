@@ -160,6 +160,8 @@ const ManageSchool = () => {
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -205,12 +207,9 @@ const ManageSchool = () => {
     })
   }, [schools, search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
   const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    return filtered
+  }, [filtered])
 
   const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
 
@@ -344,21 +343,41 @@ const ManageSchool = () => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(SCHOOLS_API_BASE, { headers: { Accept: 'application/json' } })
+      const query = new URLSearchParams({
+        page: String(Math.max(currentPage - 1, 0)),
+        size: String(rowsPerPage),
+      })
+      const res = await fetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
       if (!res.ok) throw new Error(await readApiError(res))
       const data = await res.json()
-      setSchools(Array.isArray(data) ? data : [])
+      if (Array.isArray(data)) {
+        setSchools(data)
+        setTotalElements(data.length)
+        setTotalPages(1)
+      } else {
+        setSchools(Array.isArray(data?.content) ? data.content : [])
+        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+      }
     } catch (e) {
       setSchools([])
+      setTotalElements(0)
+      setTotalPages(1)
       setError(e?.message || 'Failed to load schools')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentPage, rowsPerPage])
 
   useEffect(() => {
     void loadSchools()
   }, [loadSchools])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const buildSchoolPayload = (form) => ({
     schoolUrl: form.schoolUrl || '',
@@ -411,11 +430,15 @@ const ManageSchool = () => {
         body: buildUpsertFormData(payload, addForm),
       })
       if (!res.ok) throw new Error(await readApiError(res))
-      const created = await res.json()
-      setSchools((prev) => [created, ...prev])
+      await res.json()
       setIsAddOpen(false)
       setAddForm(emptyForm)
       setAddStep(0)
+      if (currentPage !== 1) {
+        setCurrentPage(1)
+      } else {
+        await loadSchools()
+      }
     } catch (e) {
       setError(e?.message || 'Failed to create school')
     } finally {
@@ -438,12 +461,12 @@ const ManageSchool = () => {
         body: buildUpsertFormData(payload, editForm),
       })
       if (!res.ok) throw new Error(await readApiError(res))
-      const updated = await res.json()
-      setSchools((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+      await res.json()
       setIsEditOpen(false)
       setEditForm(emptyForm)
       setEditStep(0)
       setEditingSchoolId(null)
+      await loadSchools()
     } catch (e) {
       setError(e?.message || 'Failed to update school')
     } finally {
@@ -461,8 +484,8 @@ const ManageSchool = () => {
     try {
       const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(await readApiError(res))
-      setSchools((prev) => prev.filter((s) => s.id !== schoolId))
       setSelectedRows((prev) => prev.filter((id) => id !== schoolId))
+      await loadSchools()
     } catch (e) {
       setError(e?.message || 'Failed to delete school')
     } finally {
@@ -1338,8 +1361,10 @@ const ManageSchool = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {totalElements === 0
+                ? 0
+                : Math.min((currentPage - 1) * rowsPerPage + filtered.length, totalElements)} of {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">
