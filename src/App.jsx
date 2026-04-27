@@ -89,6 +89,7 @@ import FeeType from './pages/FeeType'
 import FeeCollection from './pages/FeeCollection'
 import ManageSchool from './pages/ManageSchool'
 import PaymentSetting from './pages/PaymentSetting'
+import SmsSetting from './pages/SmsSetting'
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
 
@@ -265,6 +266,8 @@ function App() {
                 return <ManageSchool/>
         case 'payment-setting':
                 return <PaymentSetting/>
+        case 'sms-setting':
+                return <SmsSetting/>
       default:
         return <Dashboard />
     }

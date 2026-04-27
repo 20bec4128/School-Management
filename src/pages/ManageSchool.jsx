@@ -1,73 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
-const manageSchoolData = [
-  {
-    sl: '01',
-    schoolName: 'Windsor Park High School',
-    subscription: 'Premium',
-    isDemo: 'No',
-    address: '123 Park Avenue, New York, NY 10001',
-    phone: '+1 555-0100',
-    email: 'info@windsorpark.edu',
-    adminLogo: null,
-    status: 'Active',
-  },
-  {
-    sl: '02',
-    schoolName: 'Riverside Academy',
-    subscription: 'Standard',
-    isDemo: 'No',
-    address: '456 River Road, Chicago, IL 60601',
-    phone: '+1 555-0200',
-    email: 'contact@riverside.edu',
-    adminLogo: null,
-    status: 'Active',
-  },
-  {
-    sl: '03',
-    schoolName: 'Sunrise Public School',
-    subscription: 'Trial',
-    isDemo: 'Yes',
-    address: '789 Sunrise Blvd, Los Angeles, CA 90001',
-    phone: '+1 555-0300',
-    email: 'info@sunriseschool.edu',
-    adminLogo: null,
-    status: 'Inactive',
-  },
-  {
-    sl: '04',
-    schoolName: 'Green Valley School',
-    subscription: 'Premium',
-    isDemo: 'No',
-    address: '321 Green Valley Rd, Houston, TX 77001',
-    phone: '+1 555-0400',
-    email: 'admin@greenvalley.edu',
-    adminLogo: null,
-    status: 'Active',
-  },
-  {
-    sl: '05',
-    schoolName: 'Hilltop Academy',
-    subscription: 'Standard',
-    isDemo: 'No',
-    address: '654 Hilltop Drive, Phoenix, AZ 85001',
-    phone: '+1 555-0500',
-    email: 'info@hilltop.edu',
-    adminLogo: null,
-    status: 'Active',
-  },
-]
+const SCHOOLS_API_BASE = '/api/schools'
 
 const emptyForm = {
   // Basic Information
   schoolUrl: '',
   schoolCode: '',
   schoolName: '',
+  subscription: 'Standard',
+  isDemo: 'No',
+  status: 'Active',
   address: '',
   phone: '',
   registrationDate: '',
@@ -143,9 +90,12 @@ const columnOptions = [
   { key: 'address', label: 'Address' },
   { key: 'phone', label: 'Phone' },
   { key: 'email', label: 'Email' },
+  { key: 'adminLogoUrl', label: 'Admin Logo' },
   { key: 'status', label: 'Status' },
 ]
 
+const subscriptionOptions = ['Trial', 'Standard', 'Premium']
+const demoOptions = ['Yes', 'No']
 const statusOptions = ['Active', 'Inactive']
 const languageOptions = ['English', 'Spanish', 'French', 'German', 'Arabic', 'Hindi']
 const themeOptions = ['Default', 'Light', 'Dark', 'Modern', 'Classic']
@@ -201,9 +151,17 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ManageSchool = () => {
+  const [schools, setSchools] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingSchoolId, setEditingSchoolId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -227,14 +185,14 @@ const ManageSchool = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const schoolOptions = useMemo(
-    () => Array.from(new Set(manageSchoolData.map((item) => item.schoolName))),
-    [],
+    () => Array.from(new Set(schools.map((item) => item.schoolName))).sort(),
+    [schools],
   )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
 
-    return manageSchoolData.filter((row) => {
+    return schools.filter((row) => {
       const matchesSearch =
         !q ||
         [row.schoolName, row.address, row.phone, row.email, row.status]
@@ -247,22 +205,19 @@ const ManageSchool = () => {
 
       return matchesSearch && matchesSchool && matchesStatus
     })
-  }, [search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  }, [schools, search, filters])
 
   const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    return filtered
+  }, [filtered])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.id === id)))
     }
   }
 
@@ -314,6 +269,8 @@ const ManageSchool = () => {
   }
 
   const openAdd = () => {
+    setError('')
+    setEditingSchoolId(null)
     setAddForm(emptyForm)
     setAddFrontendLogoPreview(null)
     setAddAdminLogoPreview(null)
@@ -324,42 +281,216 @@ const ManageSchool = () => {
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingSchoolId(row.id)
     setEditForm({
-      schoolUrl: '',
-      schoolCode: '',
-      schoolName: row.schoolName,
-      address: row.address,
-      phone: row.phone,
-      registrationDate: '',
-      email: row.email,
-      fax: '',
-      footer: '',
-      currency: '',
-      currencySymbol: '',
-      enableFrontend: 'Yes',
-      examFinalResult: 'Average of All Exam',
-      language: '',
-      theme: '',
-      onlineAdmission: '',
-      enableRTL: 'No',
-      zoomApiKey: '',
-      zoomSecret: '',
-      googleMapUrl: '',
-      facebookUrl: '',
-      twitterUrl: '',
-      linkedinUrl: '',
-      youtubeUrl: '',
-      instagramUrl: '',
-      pinterestUrl: '',
+      schoolUrl: row.schoolUrl || '',
+      schoolCode: row.schoolCode || '',
+      schoolName: row.schoolName || '',
+      subscription: row.subscription || 'Standard',
+      isDemo: row.isDemo || 'No',
+      status: row.status || 'Active',
+      address: row.address || '',
+      phone: row.phone || '',
+      registrationDate: row.registrationDate || '',
+      email: row.email || '',
+      fax: row.fax || '',
+      footer: row.footer || '',
+      currency: row.currency || '',
+      currencySymbol: row.currencySymbol || '',
+      enableFrontend: row.enableFrontend || 'Yes',
+      examFinalResult: row.examFinalResult || 'Average of All Exam',
+      language: row.language || '',
+      theme: row.theme || '',
+      onlineAdmission: row.onlineAdmission || '',
+      enableRTL: row.enableRTL || 'No',
+      zoomApiKey: row.zoomApiKey || '',
+      zoomSecret: row.zoomSecret || '',
+      googleMapUrl: row.googleMapUrl || '',
+      facebookUrl: row.facebookUrl || '',
+      twitterUrl: row.twitterUrl || '',
+      linkedinUrl: row.linkedinUrl || '',
+      youtubeUrl: row.youtubeUrl || '',
+      instagramUrl: row.instagramUrl || '',
+      pinterestUrl: row.pinterestUrl || '',
       frontendLogo: null,
       adminLogo: null,
     })
-    setEditFrontendLogoPreview(null)
-    setEditAdminLogoPreview(null)
+    setEditFrontendLogoPreview(row.frontendLogoUrl || null)
+    setEditAdminLogoPreview(row.adminLogoUrl || null)
     setEditFrontendLogoInputKey((k) => k + 1)
     setEditAdminLogoInputKey((k) => k + 1)
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const readApiError = async (res) => {
+    try {
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        const data = await res.json()
+        if (data?.message) return String(data.message)
+        return `Request failed (${res.status})`
+      }
+      const text = await res.text()
+      return text || `Request failed (${res.status})`
+    } catch {
+      return `Request failed (${res.status})`
+    }
+  }
+
+  const loadSchools = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const query = new URLSearchParams({
+        page: String(Math.max(currentPage - 1, 0)),
+        size: String(rowsPerPage),
+      })
+      const res = await fetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
+      if (!res.ok) throw new Error(await readApiError(res))
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setSchools(data)
+        setTotalElements(data.length)
+        setTotalPages(1)
+      } else {
+        setSchools(Array.isArray(data?.content) ? data.content : [])
+        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+      }
+    } catch (e) {
+      setSchools([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError(e?.message || 'Failed to load schools')
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, rowsPerPage])
+
+  useEffect(() => {
+    void loadSchools()
+  }, [loadSchools])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const buildSchoolPayload = (form) => ({
+    schoolUrl: form.schoolUrl || '',
+    schoolCode: form.schoolCode || '',
+    schoolName: form.schoolName || '',
+    subscription: form.subscription || 'Standard',
+    isDemo: form.isDemo || 'No',
+    status: form.status || 'Active',
+    address: form.address || '',
+    phone: form.phone || '',
+    registrationDate: form.registrationDate || '',
+    email: form.email || '',
+    fax: form.fax || '',
+    footer: form.footer || '',
+    currency: form.currency || '',
+    currencySymbol: form.currencySymbol || '',
+    enableFrontend: form.enableFrontend || 'Yes',
+    examFinalResult: form.examFinalResult || 'Average of All Exam',
+    language: form.language || '',
+    theme: form.theme || '',
+    onlineAdmission: form.onlineAdmission || '',
+    enableRTL: form.enableRTL || 'No',
+    zoomApiKey: form.zoomApiKey || '',
+    zoomSecret: form.zoomSecret || '',
+    googleMapUrl: form.googleMapUrl || '',
+    facebookUrl: form.facebookUrl || '',
+    twitterUrl: form.twitterUrl || '',
+    linkedinUrl: form.linkedinUrl || '',
+    youtubeUrl: form.youtubeUrl || '',
+    instagramUrl: form.instagramUrl || '',
+    pinterestUrl: form.pinterestUrl || '',
+  })
+
+  const buildUpsertFormData = (payload, form) => {
+    const fd = new FormData()
+    fd.append('data', new Blob([JSON.stringify(payload)], { type: 'application/json' }))
+    if (form?.adminLogo instanceof File) fd.append('adminLogo', form.adminLogo)
+    if (form?.frontendLogo instanceof File) fd.append('frontendLogo', form.frontendLogo)
+    return fd
+  }
+
+  const handleCreateSchool = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const payload = buildSchoolPayload(addForm)
+      const res = await fetch(SCHOOLS_API_BASE, {
+        method: 'POST',
+        body: buildUpsertFormData(payload, addForm),
+      })
+      if (!res.ok) throw new Error(await readApiError(res))
+      await res.json()
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      if (currentPage !== 1) {
+        setCurrentPage(1)
+      } else {
+        await loadSchools()
+      }
+    } catch (e) {
+      setError(e?.message || 'Failed to create school')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateSchool = async () => {
+    if (saving) return
+    if (!editingSchoolId) {
+      setError('No school selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const payload = buildSchoolPayload(editForm)
+      const res = await fetch(`${SCHOOLS_API_BASE}/${editingSchoolId}`, {
+        method: 'PUT',
+        body: buildUpsertFormData(payload, editForm),
+      })
+      if (!res.ok) throw new Error(await readApiError(res))
+      await res.json()
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingSchoolId(null)
+      await loadSchools()
+    } catch (e) {
+      setError(e?.message || 'Failed to update school')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteSchool = async (schoolId) => {
+    if (!schoolId) return
+    const confirmed = window.confirm('Delete this school? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await readApiError(res))
+      setSelectedRows((prev) => prev.filter((id) => id !== schoolId))
+      await loadSchools()
+    } catch (e) {
+      setError(e?.message || 'Failed to delete school')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
@@ -418,6 +549,41 @@ const ManageSchool = () => {
                   value={form.schoolName}
                   onChange={handleChange(setter)}
                 />
+              </FormField>
+
+              <FormField label="Subscription" required>
+                <select
+                  id="subscription"
+                  className="avm-input"
+                  value={form.subscription}
+                  onChange={handleChange(setter)}
+                >
+                  {subscriptionOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Is Demo?" required>
+                <select id="isDemo" className="avm-input" value={form.isDemo} onChange={handleChange(setter)}>
+                  {demoOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Status" required>
+                <select id="status" className="avm-input" value={form.status} onChange={handleChange(setter)}>
+                  {statusOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </FormField>
 
               <FormField label="Address" required full>
@@ -952,6 +1118,13 @@ const ManageSchool = () => {
         </button>
       </div>
 
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
@@ -1088,34 +1261,42 @@ const ManageSchool = () => {
                   {visibleColumns.address ? <th scope="col">Address</th> : null}
                   {visibleColumns.phone ? <th scope="col">Phone</th> : null}
                   {visibleColumns.email ? <th scope="col">Email</th> : null}
-                  {visibleColumns.adminLogo ? <th scope="col">Admin Logo</th> : null}
+                  {visibleColumns.adminLogoUrl ? <th scope="col">Admin Logo</th> : null}
                   {visibleColumns.status ? <th scope="col">Status</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading schools...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={visibleColumnCount + 1}
+                      colSpan={visibleColumnCount + 2}
                       className="text-center py-40 text-secondary-light"
                     >
                       No school records found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </label>
                         </div>
                       </td>
                       {visibleColumns.schoolName ? (
@@ -1132,15 +1313,15 @@ const ManageSchool = () => {
                       {visibleColumns.address ? <td>{row.address}</td> : null}
                       {visibleColumns.phone ? <td>{row.phone}</td> : null}
                       {visibleColumns.email ? <td>{row.email}</td> : null}
-                      {visibleColumns.adminLogo ? (
+                      {visibleColumns.adminLogoUrl ? (
                         <td>
                           <div
                             className="w-40-px h-40-px rounded-circle bg-neutral-200 d-flex align-items-center justify-content-center overflow-hidden"
                             style={{ minWidth: 40 }}
                           >
-                            {row.adminLogo ? (
+                            {row.adminLogoUrl ? (
                               <img
-                                src={row.adminLogo}
+                                src={row.adminLogoUrl}
                                 alt={row.schoolName}
                                 className="w-100 h-100 object-fit-cover"
                               />
@@ -1164,6 +1345,7 @@ const ManageSchool = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDeleteSchool(row.id)}
                             title="Delete"
                           >
                             <i className="ri-delete-bin-line"></i>
@@ -1179,8 +1361,10 @@ const ManageSchool = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {totalElements === 0
+                ? 0
+                : Math.min((currentPage - 1) * rowsPerPage + filtered.length, totalElements)} of {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">
@@ -1229,7 +1413,7 @@ const ManageSchool = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleCreateSchool}
         submitLabel="Save School"
       >
         {renderForm(
@@ -1263,7 +1447,7 @@ const ManageSchool = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdateSchool}
         submitLabel="Update School"
       >
         {renderForm(
