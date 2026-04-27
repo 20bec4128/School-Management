@@ -247,7 +247,7 @@ const menuSections = [
         title: 'Teacher',
         icon: 'ri:user-star-line',
         submenu: [
-          { label: 'Teacher ID card', href: '#' },
+          
           { label: 'Department', href: '#', page: 'teacher-department' },
           { label: 'Manage Teacher', href: '#', page: 'manage-teacher' },
           { label: 'Class Lecture', href: '#', page: 'class-lecture' },
