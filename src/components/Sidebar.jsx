@@ -40,8 +40,8 @@ const menuSections = [
         icon: 'ri:user-settings-line',
         submenu: [
           { label: 'General Setting', href: '#' },
-          { label: 'Manage School', href: '#' },
-          { label: 'Payment Setting', href: '#' },
+          { label: 'Manage School', href: '#',page: 'manage-school' },
+          { label: 'Payment Setting', href: '#', page: 'payment-setting' },
           { label: 'SMS Setting', href: '#' },
           { label: 'Email Setting', href: '#' },
           { label: 'Academic Year', href: '#' },

@@ -87,6 +87,8 @@ import SalaryHistory from './pages/SalaryHistory'
 import Discount from './pages/Discount'
 import FeeType from './pages/FeeType'
 import FeeCollection from './pages/FeeCollection'
+import ManageSchool from './pages/ManageSchool'
+import PaymentSetting from './pages/PaymentSetting'
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
 
@@ -259,6 +261,10 @@ function App() {
                 return <FeeType/>
         case 'fee-collection':
                 return <FeeCollection/>
+        case 'manage-school':
+                return <ManageSchool/>
+        case 'payment-setting':
+                return <PaymentSetting/>
       default:
         return <Dashboard />
     }
