@@ -15,6 +15,14 @@ const readApiError = async (res) => {
   }
 }
 
+export const fetchAllDepartments = async () => {
+  const res = await fetch(`${DEPARTMENTS_API_BASE}/all`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const fetchDepartmentsPage = async (page, size) => {
   const query = new URLSearchParams({
     page: String(Math.max(page, 0)),

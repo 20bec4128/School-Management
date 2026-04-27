@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import WizardPopup from '../components/WizardPopup'
+import AddDepartmentModal from '../components/AddDepartmentModal'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import {
-  createDepartment,
   deleteDepartment,
   fetchDepartmentsPage,
   updateDepartment,
@@ -49,11 +49,9 @@ const TeacherDepartment = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [isAddSidebarOpen, setIsAddSidebarOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
   const [isEditSidebarOpen, setIsEditSidebarOpen] = useState(false)
   const [editStep, setEditStep] = useState(0)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [addForm, setAddForm] = useState(emptySidebarForm)
   const [editForm, setEditForm] = useState(emptySidebarForm)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -165,26 +163,18 @@ const TeacherDepartment = () => {
     setCurrentPage(1)
   }
 
-  const handleSidebarInputChange = (event, mode) => {
+  const handleSidebarInputChange = (event) => {
     const { id, value } = event.target
-    if (mode === 'add') {
-      setAddForm((current) => ({ ...current, [id]: value }))
-      return
-    }
     setEditForm((current) => ({ ...current, [id]: value }))
   }
 
   const openAddSidebar = () => {
     setError('')
-    setEditingDepartmentId(null)
-    setAddForm(emptySidebarForm)
-    setAddStep(0)
     setIsAddSidebarOpen(true)
   }
 
   const closeAddSidebar = () => {
     setIsAddSidebarOpen(false)
-    setAddForm(emptySidebarForm)
   }
 
   const openEditSidebar = (row) => {
@@ -214,6 +204,11 @@ const TeacherDepartment = () => {
     setIsFilterSidebarOpen(false)
   }
 
+  const handleAddSuccess = async () => {
+    if (currentPage !== 1) setCurrentPage(1)
+    else await loadDepartments()
+  }
+
   const mapFormToPayload = (form) => ({
     schoolId: form.schoolId ? Number(form.schoolId) : null,
     title: form.departmentTitle || '',
@@ -221,25 +216,6 @@ const TeacherDepartment = () => {
     isViewOnWeb: form.isViewOnWeb || 'Yes',
     status: form.status || 'Active',
   })
-
-  const handleAddSubmit = async () => {
-    if (saving) return
-    setSaving(true)
-    setError('')
-    try {
-      await createDepartment(mapFormToPayload(addForm))
-      closeAddSidebar()
-      if (currentPage !== 1) {
-        setCurrentPage(1)
-      } else {
-        await loadDepartments()
-      }
-    } catch (e) {
-      setError(e?.message || 'Failed to create department')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleEditSubmit = async () => {
     if (saving) return
@@ -579,102 +555,12 @@ const TeacherDepartment = () => {
         onClick={closeAllSidebars}
       ></div>
 
-      <WizardPopup
-        modalWidth="500px"
+      <AddDepartmentModal
         open={isAddSidebarOpen}
-        title="Add Teacher Department"
-        steps={['Basic']}
-        step={addStep}
         onClose={closeAddSidebar}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(1, s + 1))}
-        onSubmit={handleAddSubmit}
-        submitLabel="Save"
-      >
-        <div className="avm-grid">
-          <div className="avm-field full">
-            <label htmlFor="schoolId" className="avm-label">
-              School Name
-            </label>
-            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                <i className="ri-school-line"></i>
-              </span>
-              <select
-                id="schoolId"
-                className="avm-select"
-                value={addForm.schoolId}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              >
-                <option value="">Select School</option>
-                {schoolsLookup.map((row) => (
-                  <option key={row.id} value={String(row.id)}>
-                    {row.schoolName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="avm-field full">
-            <label htmlFor="departmentTitle" className="avm-label">
-              Department Title
-            </label>
-            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                <i className="ri-bookmark-line"></i>
-              </span>
-              <input
-                type="text"
-                className="avm-input"
-                id="departmentTitle"
-                placeholder="Enter Department Title"
-                value={addForm.departmentTitle}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              />
-            </div>
-          </div>
-          <div className="avm-field full">
-            <label htmlFor="status" className="avm-label">
-              Status
-            </label>
-            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                <i className="ri-checkbox-circle-line"></i>
-              </span>
-              <select
-                id="status"
-                className="avm-select"
-                value={addForm.status}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="avm-grid">
-          <div className="avm-field full">
-            <label htmlFor="note" className="avm-label">
-              Note
-            </label>
-            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '0.85rem', top: '1.2rem', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                <i className="ri-sticky-note-line"></i>
-              </span>
-              <textarea
-                rows="4"
-                className="avm-input"
-                id="note"
-                placeholder="Enter Note"
-                value={addForm.note}
-                onChange={(event) => handleSidebarInputChange(event, 'add')}
-              />
-            </div>
-          </div>
-        </div>
-      </WizardPopup>
+        schoolsLookup={schoolsLookup}
+        onSuccess={handleAddSuccess}
+      />
 
       <WizardPopup
         modalWidth="500px"
@@ -702,7 +588,7 @@ const TeacherDepartment = () => {
                   id="schoolId"
                   className="avm-select"
                   value={editForm.schoolId}
-                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                  onChange={(event) => handleSidebarInputChange(event)}
                 >
                   <option value="">Select School</option>
                   {schoolsLookup.map((row) => (
@@ -727,7 +613,7 @@ const TeacherDepartment = () => {
                   id="departmentTitle"
                   placeholder="Enter Department Title"
                   value={editForm.departmentTitle}
-                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                  onChange={(event) => handleSidebarInputChange(event)}
                 />
               </div>
             </div>
@@ -743,7 +629,7 @@ const TeacherDepartment = () => {
                   id="status"
                   className="avm-select"
                   value={editForm.status}
-                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                  onChange={(event) => handleSidebarInputChange(event)}
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -767,7 +653,7 @@ const TeacherDepartment = () => {
                   id="note"
                   placeholder="Enter Note"
                   value={editForm.note}
-                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                  onChange={(event) => handleSidebarInputChange(event)}
                 />
               </div>
             </div>

@@ -2,8 +2,8 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.DepartmentDto;
 import com.School.School_management.Service.DepartmentService;
+import java.util.List;
 import org.springframework.data.domain.Page;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,13 +16,17 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/departments")
-@CrossOrigin(origins = "*")
 public class DepartmentController {
 
     private final DepartmentService departmentService;
 
     public DepartmentController(DepartmentService departmentService) {
         this.departmentService = departmentService;
+    }
+
+    @GetMapping("/all")
+    public List<DepartmentDto> getAll() {
+        return departmentService.getAll();
     }
 
     @GetMapping

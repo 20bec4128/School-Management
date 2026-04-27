@@ -5,6 +5,8 @@ import com.School.School_management.Entity.Department;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Repository.DepartmentRepository;
 import com.School.School_management.Repository.SchoolRepository;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +28,12 @@ public class DepartmentServiceImpl implements DepartmentService {
     public Page<DepartmentDto> getAll(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         return departmentRepository.findAll(pageable).map(this::toDto);
+    }
+
+    @Override
+    public List<DepartmentDto> getAll() {
+        return departmentRepository.findAll(Sort.by("title").ascending())
+                .stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @Override

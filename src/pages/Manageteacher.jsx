@@ -4,6 +4,9 @@ import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createTeacher, deleteTeacher, fetchTeachers, updateTeacher } from '../apis/teachersApi'
+import { fetchAllDepartments } from '../apis/departmentsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import AddDepartmentModal from '../components/AddDepartmentModal'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -92,10 +95,14 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 
 const ManageTeacher = () => {
   const [teachers, setTeachers] = useState([])
+  const [departments, setDepartments] = useState([])
+  const [schools, setSchools] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingTeacherId, setEditingTeacherId] = useState(null)
+  const [isQuickAddDeptOpen, setIsQuickAddDeptOpen] = useState(false)
+  const [deptModalTarget, setDeptModalTarget] = useState('add')
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -124,7 +131,6 @@ const ManageTeacher = () => {
   const [editForm, setEditForm] = useState(emptyForm)
   const [photoPreview, setPhotoPreview] = useState(null)
   const [editPhotoPreview, setEditPhotoPreview] = useState(null)
-  const schoolOptions = ['Windsor Park High School']
   const photoRef = useRef()
   const editPhotoRef = useRef()
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
@@ -133,8 +139,10 @@ const ManageTeacher = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchTeachers()
-      setTeachers(Array.isArray(data) ? data : [])
+      const [teacherData, deptData, schoolData] = await Promise.all([fetchTeachers(), fetchAllDepartments(), fetchSchoolsLookup()])
+      setTeachers(Array.isArray(teacherData) ? teacherData : [])
+      setDepartments(Array.isArray(deptData) ? deptData : [])
+      setSchools(Array.isArray(schoolData) ? schoolData : [])
     } catch (e) {
       setTeachers([])
       setError(e?.message || 'Failed to load teachers')
@@ -169,11 +177,6 @@ const ManageTeacher = () => {
       return matchesSearch && matchesName && matchesDepartment && matchesEmail && matchesJoiningDate && matchesViewOnWeb
     })
   }, [teachers, filters, search])
-  const departmentOptions = useMemo(
-    () => Array.from(new Set(teachers.map((item) => item.department).filter(Boolean))),
-    [teachers],
-  )
-
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
@@ -348,6 +351,17 @@ const ManageTeacher = () => {
     }
   }
 
+  const openQuickAddDept = (target) => {
+    setDeptModalTarget(target)
+    setIsQuickAddDeptOpen(true)
+  }
+
+  const handleDeptAdded = (created) => {
+    setDepartments((prev) => [...prev, created].sort((a, b) => a.title.localeCompare(b.title)))
+    if (deptModalTarget === 'add') setAddForm((prev) => ({ ...prev, department: created.title }))
+    else setEditForm((prev) => ({ ...prev, department: created.title }))
+  }
+
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
@@ -363,11 +377,19 @@ const ManageTeacher = () => {
         <div className="avm-grid">
           <FormField label="Name" required><input type="text" className="avm-input" id="name" placeholder="Enter name" value={addForm.name} onChange={handleChange(setAddForm)} /></FormField>
           <FormField label="National ID"><input type="text" className="avm-input" id="nationalId" placeholder="Enter national ID" value={addForm.nationalId} onChange={handleChange(setAddForm)} /></FormField>
-          <FormField label="Department" required>
-            <select className="avm-select" id="department" value={addForm.department} onChange={handleChange(setAddForm)}>
-              <option value="">--Select--</option>
-              <option>Mathematics</option><option>Science</option><option>English</option><option>History</option><option>Physics</option>
-            </select>
+          <FormField label="Department" required noIcon>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div className="avm-input-with-icon" style={{ position: 'relative', flex: 1 }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}><i className="ri-building-line"></i></span>
+                <select className="avm-select" id="department" value={addForm.department} onChange={handleChange(setAddForm)}>
+                  <option value="">--Select--</option>
+                  {departments.map((d) => <option key={d.id} value={d.title}>{d.title}</option>)}
+                </select>
+              </div>
+              <button type="button" title="Add new department" onClick={() => openQuickAddDept('add')} style={{ flexShrink: 0, width: 36, height: 36, border: '1px solid #d0d5dd', borderRadius: 8, background: '#f9fafb', color: '#667085', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <i className="ri-add-line" style={{ fontSize: '1rem' }}></i>
+              </button>
+            </div>
           </FormField>
           <PhoneField
             id="phone"
@@ -464,10 +486,19 @@ const ManageTeacher = () => {
         <div className="avm-grid">
           <FormField label="Name" required><input type="text" className="avm-input" id="name" placeholder="Enter name" value={editForm.name} onChange={handleChange(setEditForm)} /></FormField>
           <FormField label="National ID"><input type="text" className="avm-input" id="nationalId" placeholder="Enter national ID" value={editForm.nationalId} onChange={handleChange(setEditForm)} /></FormField>
-          <FormField label="Department" required>
-            <select className="avm-select" id="department" value={editForm.department} onChange={handleChange(setEditForm)}>
-              <option value="">--Select--</option><option>Mathematics</option><option>Science</option><option>English</option><option>History</option><option>Physics</option>
-            </select>
+          <FormField label="Department" required noIcon>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div className="avm-input-with-icon" style={{ position: 'relative', flex: 1 }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}><i className="ri-building-line"></i></span>
+                <select className="avm-select" id="department" value={editForm.department} onChange={handleChange(setEditForm)}>
+                  <option value="">--Select--</option>
+                  {departments.map((d) => <option key={d.id} value={d.title}>{d.title}</option>)}
+                </select>
+              </div>
+              <button type="button" title="Add new department" onClick={() => openQuickAddDept('edit')} style={{ flexShrink: 0, width: 36, height: 36, border: '1px solid #d0d5dd', borderRadius: 8, background: '#f9fafb', color: '#667085', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <i className="ri-add-line" style={{ fontSize: '1rem' }}></i>
+              </button>
+            </div>
           </FormField>
           <PhoneField
             id="phone"
@@ -788,7 +819,7 @@ const ManageTeacher = () => {
               onChange={(e) => setPendingFilters((prev) => ({ ...prev, department: e.target.value }))}
             >
               <option value="All">All</option>
-              {departmentOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              {departments.map((d) => <option key={d.id} value={d.title}>{d.title}</option>)}
             </select>
           </div>
           <div>
@@ -844,6 +875,13 @@ const ManageTeacher = () => {
           </div>
         </form>
       </SlideSidebar>
+
+      <AddDepartmentModal
+        open={isQuickAddDeptOpen}
+        onClose={() => setIsQuickAddDeptOpen(false)}
+        schoolsLookup={schools}
+        onSuccess={handleDeptAdded}
+      />
     </div>
   )
 }
