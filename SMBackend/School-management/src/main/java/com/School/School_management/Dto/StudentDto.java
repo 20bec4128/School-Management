@@ -18,7 +18,9 @@ public class StudentDto {
         private String email;
         private String nationalId;
         private String studentType;
+        private Long classId;
         private String className;
+        private Long sectionId;
         private String section;
         private String group;
         private String rollNo;
@@ -86,8 +88,14 @@ public class StudentDto {
         public String getStudentType() { return studentType; }
         public void setStudentType(String studentType) { this.studentType = studentType; }
 
+        public Long getClassId() { return classId; }
+        public void setClassId(Long classId) { this.classId = classId; }
+
         public String getClassName() { return className; }
         public void setClassName(String className) { this.className = className; }
+
+        public Long getSectionId() { return sectionId; }
+        public void setSectionId(Long sectionId) { this.sectionId = sectionId; }
 
         public String getSection() { return section; }
         public void setSection(String section) { this.section = section; }
@@ -187,7 +195,9 @@ public class StudentDto {
         private String email;
         private String nationalId;
         private String studentType;
+        private Long classId;
         private String className;
+        private Long sectionId;
         private String section;
         private String group;
         private String rollNo;
@@ -264,8 +274,14 @@ public class StudentDto {
         public String getStudentType() { return studentType; }
         public void setStudentType(String studentType) { this.studentType = studentType; }
 
+        public Long getClassId() { return classId; }
+        public void setClassId(Long classId) { this.classId = classId; }
+
         public String getClassName() { return className; }
         public void setClassName(String className) { this.className = className; }
+
+        public Long getSectionId() { return sectionId; }
+        public void setSectionId(Long sectionId) { this.sectionId = sectionId; }
 
         public String getSection() { return section; }
         public void setSection(String section) { this.section = section; }

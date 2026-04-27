@@ -4,8 +4,12 @@ package com.School.School_management.Service;
 import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Dto.StudentDto;
 import com.School.School_management.Entity.ManageSchool;
+import com.School.School_management.Entity.SchoolClass;
+import com.School.School_management.Entity.SchoolSection;
 import com.School.School_management.Entity.Student;
 import com.School.School_management.Exception.StudentNotFoundException;
+import com.School.School_management.Repository.SchoolClassRepository;
+import com.School.School_management.Repository.SchoolSectionRepository;
 import com.School.School_management.Repository.StudentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,24 +23,33 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudentService {
 
     private final StudentRepository studentRepository;
+    private final SchoolClassRepository schoolClassRepository;
+    private final SchoolSectionRepository schoolSectionRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public StudentService(StudentRepository studentRepository, PasswordEncoder passwordEncoder) {
+    public StudentService(StudentRepository studentRepository,
+                          SchoolClassRepository schoolClassRepository,
+                          SchoolSectionRepository schoolSectionRepository,
+                          PasswordEncoder passwordEncoder) {
         this.studentRepository = studentRepository;
+        this.schoolClassRepository = schoolClassRepository;
+        this.schoolSectionRepository = schoolSectionRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional(readOnly = true)
     public PaginationResponse<StudentDto.Response> getAll(int page, int size, 
                                                            Long schoolId, 
+                                                           Long classId,
+                                                           Long sectionId,
                                                            String className, 
                                                            String section, 
                                                            String groupName) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         Page<Student> studentPage;
         
-        if (schoolId != null || className != null || section != null || groupName != null) {
-            studentPage = studentRepository.searchStudents(schoolId, className, section, groupName, pageable);
+        if (schoolId != null || classId != null || sectionId != null || className != null || section != null || groupName != null) {
+            studentPage = studentRepository.searchStudents(schoolId, classId, sectionId, className, section, groupName, pageable);
         } else {
             studentPage = studentRepository.findByDeletedFalse(pageable);
         }
@@ -57,17 +70,19 @@ public class StudentService {
     @Transactional
     public StudentDto.Response create(StudentDto.Request request) {
         // Validate unique admission number
-        if (studentRepository.existsByAdmissionNo(request.getAdmissionNo())) {
+        if (studentRepository.existsByAdmissionNoAndDeletedFalse(request.getAdmissionNo())) {
             throw new IllegalArgumentException("Admission number already exists: " + request.getAdmissionNo());
         }
         
         // Validate unique username
-        if (studentRepository.existsByUsername(request.getUsername())) {
+        if (studentRepository.existsByUsernameAndDeletedFalse(request.getUsername())) {
             throw new IllegalArgumentException("Username already exists: " + request.getUsername());
         }
         
         ManageSchool school = new ManageSchool();
         school.setId(request.getSchoolId());
+        SchoolClass schoolClass = resolveSchoolClass(request.getSchoolId(), request.getClassId());
+        SchoolSection schoolSection = resolveSchoolSection(request.getSchoolId(), request.getClassId(), request.getSectionId());
         
         Student student = new Student();
         student.setSchool(school);
@@ -83,8 +98,10 @@ public class StudentService {
         student.setEmail(request.getEmail());
         student.setNationalId(request.getNationalId());
         student.setStudentType(request.getStudentType());
-        student.setClassName(request.getClassName());
-        student.setSection(request.getSection());
+        student.setSchoolClass(schoolClass);
+        student.setClassName(resolveClassName(schoolClass, request.getClassName()));
+        student.setSchoolSection(schoolSection);
+        student.setSection(resolveSectionName(schoolSection, request.getSection()));
         student.setGroupName(request.getGroup());
         student.setRollNo(request.getRollNo());
         student.setRegistrationNo(request.getRegistrationNo());
@@ -124,12 +141,14 @@ public class StudentService {
         
         // Check username uniqueness if changed
         if (!student.getUsername().equals(request.getUsername()) && 
-            studentRepository.existsByUsername(request.getUsername())) {
+            studentRepository.existsByUsernameAndDeletedFalse(request.getUsername())) {
             throw new IllegalArgumentException("Username already exists: " + request.getUsername());
         }
         
         ManageSchool school = new ManageSchool();
         school.setId(request.getSchoolId());
+        SchoolClass schoolClass = resolveSchoolClass(request.getSchoolId(), request.getClassId());
+        SchoolSection schoolSection = resolveSchoolSection(request.getSchoolId(), request.getClassId(), request.getSectionId());
         
         student.setSchool(school);
         student.setName(request.getName());
@@ -144,8 +163,10 @@ public class StudentService {
         student.setEmail(request.getEmail());
         student.setNationalId(request.getNationalId());
         student.setStudentType(request.getStudentType());
-        student.setClassName(request.getClassName());
-        student.setSection(request.getSection());
+        student.setSchoolClass(schoolClass);
+        student.setClassName(resolveClassName(schoolClass, request.getClassName()));
+        student.setSchoolSection(schoolSection);
+        student.setSection(resolveSectionName(schoolSection, request.getSection()));
         student.setGroupName(request.getGroup());
         student.setRollNo(request.getRollNo());
         student.setRegistrationNo(request.getRegistrationNo());
@@ -192,6 +213,8 @@ public class StudentService {
         response.setId(entity.getId());
         response.setSchoolId(entity.getSchool() != null ? entity.getSchool().getId() : null);
         response.setSchoolName(entity.getSchool() != null ? entity.getSchool().getSchoolName() : null);
+        response.setClassId(entity.getSchoolClass() != null ? entity.getSchoolClass().getId() : null);
+        response.setSectionId(entity.getSchoolSection() != null ? entity.getSchoolSection().getId() : null);
         response.setName(entity.getName());
         response.setAdmissionNo(entity.getAdmissionNo());
         response.setAdmissionDate(entity.getAdmissionDate());
@@ -236,5 +259,55 @@ public class StudentService {
         response.setOtherInfo(entity.getOtherInfo());
         response.setPhotoUrl(entity.getPhotoUrl());
         return response;
+    }
+
+    private SchoolClass resolveSchoolClass(Long schoolId, Long classId) {
+        if (classId == null) {
+            throw new IllegalArgumentException("Class is required");
+        }
+
+        SchoolClass schoolClass = schoolClassRepository.findById(classId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+        if (schoolId != null && schoolClass.getSchool() != null && !schoolId.equals(schoolClass.getSchool().getId())) {
+            throw new IllegalArgumentException("Class does not belong to the selected school");
+        }
+        return schoolClass;
+    }
+
+    private SchoolSection resolveSchoolSection(Long schoolId, Long classId, Long sectionId) {
+        if (sectionId == null) {
+            throw new IllegalArgumentException("Section is required");
+        }
+
+        SchoolSection schoolSection = schoolSectionRepository.findById(sectionId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+        if (schoolId != null && schoolSection.getSchool() != null && !schoolId.equals(schoolSection.getSchool().getId())) {
+            throw new IllegalArgumentException("Section does not belong to the selected school");
+        }
+        if (classId != null && schoolSection.getSchoolClass() != null && !classId.equals(schoolSection.getSchoolClass().getId())) {
+            throw new IllegalArgumentException("Section does not belong to the selected class");
+        }
+        return schoolSection;
+    }
+
+    private String resolveClassName(SchoolClass schoolClass, String fallback) {
+        if (schoolClass == null) {
+            return fallback;
+        }
+        if (schoolClass.getClassName() != null && !schoolClass.getClassName().isBlank()) {
+            return schoolClass.getClassName();
+        }
+        return schoolClass.getNumericName() != null && !schoolClass.getNumericName().isBlank()
+            ? schoolClass.getNumericName()
+            : fallback;
+    }
+
+    private String resolveSectionName(SchoolSection schoolSection, String fallback) {
+        if (schoolSection == null) {
+            return fallback;
+        }
+        return schoolSection.getName() != null && !schoolSection.getName().isBlank()
+            ? schoolSection.getName()
+            : fallback;
     }
 }

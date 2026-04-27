@@ -23,10 +23,12 @@ public class StudentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Long sectionId,
             @RequestParam(required = false) String className,
             @RequestParam(required = false) String section,
             @RequestParam(required = false) String group) {
-        return ResponseEntity.ok(studentService.getAll(page, size, schoolId, className, section, group));
+        return ResponseEntity.ok(studentService.getAll(page, size, schoolId, classId, sectionId, className, section, group));
     }
 
     @PostMapping

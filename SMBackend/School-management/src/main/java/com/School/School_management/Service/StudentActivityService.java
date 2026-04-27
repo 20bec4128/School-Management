@@ -6,8 +6,11 @@ import com.School.School_management.Dto.StudentActivityDto;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Entity.Student;
 import com.School.School_management.Entity.StudentActivity;
+import com.School.School_management.Entity.SchoolClass;
+import com.School.School_management.Entity.SchoolSection;
 import com.School.School_management.Exception.StudentActivityNotFoundException;
 import com.School.School_management.Repository.StudentActivityRepository;
+import com.School.School_management.Repository.StudentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,9 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudentActivityService {
 
     private final StudentActivityRepository studentActivityRepository;
+    private final StudentRepository studentRepository;
 
-    public StudentActivityService(StudentActivityRepository studentActivityRepository) {
+    public StudentActivityService(
+            StudentActivityRepository studentActivityRepository,
+            StudentRepository studentRepository) {
         this.studentActivityRepository = studentActivityRepository;
+        this.studentRepository = studentRepository;
     }
 
     @Transactional(readOnly = true)
@@ -53,17 +60,15 @@ public class StudentActivityService {
 
     @Transactional
     public StudentActivityDto.Response create(StudentActivityDto.Request request) {
+        Student student = resolveStudent(request.getStudentId(), request.getSchoolId());
         ManageSchool school = new ManageSchool();
-        school.setId(request.getSchoolId());
-        
-        Student student = new Student();
-        student.setId(request.getStudentId());
+        school.setId(student.getSchool() != null ? student.getSchool().getId() : request.getSchoolId());
         
         StudentActivity activity = new StudentActivity();
         activity.setSchool(school);
         activity.setStudent(student);
-        activity.setClassName(request.getClassName());
-        activity.setSection(request.getSection());
+        activity.setClassName(resolveClassName(student.getSchoolClass(), request.getClassName()));
+        activity.setSection(resolveSectionName(student.getSchoolSection(), request.getSection()));
         activity.setActivityDate(request.getDate());
         activity.setActivityName(request.getActivity());
         activity.setDescription(request.getDescription());
@@ -78,16 +83,14 @@ public class StudentActivityService {
         StudentActivity activity = studentActivityRepository.findById(id)
             .orElseThrow(() -> new StudentActivityNotFoundException(id));
         
+        Student student = resolveStudent(request.getStudentId(), request.getSchoolId());
         ManageSchool school = new ManageSchool();
-        school.setId(request.getSchoolId());
-        
-        Student student = new Student();
-        student.setId(request.getStudentId());
+        school.setId(student.getSchool() != null ? student.getSchool().getId() : request.getSchoolId());
         
         activity.setSchool(school);
         activity.setStudent(student);
-        activity.setClassName(request.getClassName());
-        activity.setSection(request.getSection());
+        activity.setClassName(resolveClassName(student.getSchoolClass(), request.getClassName()));
+        activity.setSection(resolveSectionName(student.getSchoolSection(), request.getSection()));
         activity.setActivityDate(request.getDate());
         activity.setActivityName(request.getActivity());
         activity.setDescription(request.getDescription());
@@ -117,5 +120,38 @@ public class StudentActivityService {
         response.setActivity(entity.getActivityName());
         response.setDescription(entity.getDescription());
         return response;
+    }
+
+    private Student resolveStudent(Long studentId, Long schoolId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("Student is required");
+        }
+        Student student = studentRepository.findById(studentId)
+            .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
+        if (schoolId != null && student.getSchool() != null && !schoolId.equals(student.getSchool().getId())) {
+            throw new IllegalArgumentException("Student does not belong to the selected school");
+        }
+        return student;
+    }
+
+    private String resolveClassName(SchoolClass schoolClass, String fallback) {
+        if (schoolClass == null) {
+            return fallback;
+        }
+        if (schoolClass.getClassName() != null && !schoolClass.getClassName().isBlank()) {
+            return schoolClass.getClassName();
+        }
+        return schoolClass.getNumericName() != null && !schoolClass.getNumericName().isBlank()
+            ? schoolClass.getNumericName()
+            : fallback;
+    }
+
+    private String resolveSectionName(SchoolSection schoolSection, String fallback) {
+        if (schoolSection == null) {
+            return fallback;
+        }
+        return schoolSection.getName() != null && !schoolSection.getName().isBlank()
+            ? schoolSection.getName()
+            : fallback;
     }
 }
