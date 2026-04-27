@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -78,6 +78,7 @@ const StudentType = () => {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // ── Table state ──────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('')
@@ -125,49 +126,45 @@ const StudentType = () => {
     filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
 
   // ── Data fetching ────────────────────────────────────────────────────────────
-  const loadStudentTypes = useCallback(async (page, size) => {
-    setLoading(true)
-    setError('')
-    try {
-      const data = await fetchStudentTypesPage(page - 1, size)
-      if (Array.isArray(data)) {
-        setStudentTypes(data)
-        setTotalElements(data.length)
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const data = await fetchStudentTypesPage(currentPage - 1, rowsPerPage)
+        if (cancelled) return
+        if (Array.isArray(data)) {
+          setStudentTypes(data)
+          setTotalElements(data.length)
+          setTotalPages(1)
+        } else {
+          setStudentTypes(Array.isArray(data?.content) ? data.content : [])
+          setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+          setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+        }
+      } catch (e) {
+        if (cancelled) return
+        setStudentTypes([])
+        setTotalElements(0)
         setTotalPages(1)
-      } else {
-        setStudentTypes(Array.isArray(data?.content) ? data.content : [])
-        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
-        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+        setError(e?.message || 'Failed to load student types')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-    } catch (e) {
-      setStudentTypes([])
-      setTotalElements(0)
-      setTotalPages(1)
-      setError(e?.message || 'Failed to load student types')
-    } finally {
-      setLoading(false)
     }
-  }, [])
-
-  const loadSchools = useCallback(async () => {
-    try {
-      // Fetch a large page so the dropdown is fully populated
-      const data = await fetchSchoolsPage(0, 200)
-      const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
-      setSchools(list)
-    } catch {
-      // Non-fatal: the dropdown will just be empty
-      setSchools([])
-    }
-  }, [])
+    load()
+    return () => { cancelled = true }
+  }, [currentPage, rowsPerPage, refreshKey])
 
   useEffect(() => {
-    void loadStudentTypes(currentPage, rowsPerPage)
-  }, [currentPage, rowsPerPage, loadStudentTypes])
-
-  useEffect(() => {
-    void loadSchools()
-  }, [loadSchools])
+    fetchSchoolsPage(0, 200)
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
+        setSchools(list)
+      })
+      .catch(() => setSchools([]))
+  }, [])
 
   // ── Selection helpers ────────────────────────────────────────────────────────
   const handleSelectAll = (e) => {
@@ -245,8 +242,8 @@ const StudentType = () => {
       setIsAddOpen(false)
       setAddForm(emptyForm)
       setAddStep(0)
-      if (currentPage !== 1) setCurrentPage(1)
-      else await loadStudentTypes(currentPage, rowsPerPage)
+      setCurrentPage(1)
+      setRefreshKey((k) => k + 1)
     } catch (e) {
       setError(e?.message || 'Failed to create student type')
     } finally {
@@ -265,7 +262,7 @@ const StudentType = () => {
       setEditForm(emptyForm)
       setEditStep(0)
       setEditingId(null)
-      await loadStudentTypes(currentPage, rowsPerPage)
+      setRefreshKey((k) => k + 1)
     } catch (e) {
       setError(e?.message || 'Failed to update student type')
     } finally {
@@ -281,7 +278,7 @@ const StudentType = () => {
     try {
       await deleteStudentType(id)
       setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
-      await loadStudentTypes(currentPage, rowsPerPage)
+      setRefreshKey((k) => k + 1)
     } catch (e) {
       setError(e?.message || 'Failed to delete student type')
     } finally {

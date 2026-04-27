@@ -1,87 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
-import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { fetchSchoolsPage } from '../apis/schoolsApi'
+import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import {
+  createStudentActivity,
+  deleteStudentActivity,
+  fetchStudentActivitiesPage,
+  updateStudentActivity,
+} from '../apis/studentActivityApi'
 import '../assets/css/addModalShared.css'
 
-const studentActivities = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    student: 'Alice Brown',
-    className: '10',
-    section: 'A',
-    activity: 'Science Exhibition',
-    date: '2024-03-12',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    student: 'Michael Brown',
-    className: '9',
-    section: 'B',
-    activity: 'Football Practice',
-    date: '2024-03-14',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    student: 'Sophia Wilson',
-    className: '8',
-    section: 'A',
-    activity: 'Dance Competition',
-    date: '2024-03-16',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    student: 'David Johnson',
-    className: '10',
-    section: 'C',
-    activity: 'Math Olympiad',
-    date: '2024-03-18',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    student: 'Emma Davis',
-    className: '7',
-    section: 'B',
-    activity: 'Art Workshop',
-    date: '2024-03-20',
-  },
-]
-
-const schoolHierarchy = {
-  'Windsor Park High School': {
-    '10': {
-      A: ['Alice Brown', 'Ethan Carter'],
-      C: ['David Johnson'],
-    },
-    '9': {
-      B: ['Michael Brown', 'Noah Smith'],
-    },
-    '8': {
-      A: ['Sophia Wilson'],
-    },
-    '7': {
-      B: ['Emma Davis'],
-    },
-  },
-}
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
+  schoolName: '',
   className: '',
   section: '',
-  student: '',
+  studentId: '',
+  studentName: '',
   date: '',
   activity: '',
+  description: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  schoolId: 'Select',
   className: 'Select',
   section: 'Select',
 }
@@ -95,11 +39,12 @@ const FIELD_ICONS = {
   Student: 'ri-user-3-line',
   Date: 'ri-calendar-2-line',
   Activity: 'ri-medal-line',
+  Description: 'ri-file-text-line',
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
-  { key: 'student', label: 'Student' },
+  { key: 'schoolName', label: 'School' },
+  { key: 'studentName', label: 'Student' },
   { key: 'className', label: 'Class' },
   { key: 'section', label: 'Section' },
   { key: 'activity', label: 'Activity' },
@@ -141,9 +86,25 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const StudentActivity = () => {
-  const [search, setSearch] = useState('')  const [rowsPerPage, setRowsPerPage] = useState(10)
+  // ── Data state ──────────────────────────────────────────────────────────────
+  const [activities, setActivities] = useState([])
+  const [schools, setSchools] = useState([])
+  const [students, setStudents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // ── Table state ──────────────────────────────────────────────────────────────
+  const [search, setSearch] = useState('')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
+
+  // ── Modal / sidebar state ────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
@@ -156,84 +117,175 @@ const StudentActivity = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(() => Object.keys(schoolHierarchy), [])
-  const filterClassOptions = useMemo(
-    () => Array.from(new Set(studentActivities.map((item) => item.className))),
-    [],
-  )
-  const filterSectionOptions = useMemo(
-    () => Array.from(new Set(studentActivities.map((item) => item.section))),
-    [],
-  )
+  // ── Derived options ──────────────────────────────────────────────────────────
+  const schoolOptions = useMemo(() => schools.map(s => ({ id: s.id, name: s.schoolName })), [schools])
+  
+  const filterClassOptions = useMemo(() => {
+    const classes = new Set()
+    activities.forEach(item => {
+      if (item.className) classes.add(item.className)
+    })
+    return Array.from(classes).sort()
+  }, [activities])
+  
+  const filterSectionOptions = useMemo(() => {
+    const sections = new Set()
+    activities.forEach(item => {
+      if (item.section) sections.add(item.section)
+    })
+    return Array.from(sections).sort()
+  }, [activities])
 
-  const getClassOptions = (school) => {
-    if (!school || !schoolHierarchy[school]) return []
-    return Object.keys(schoolHierarchy[school])
+  // ── Dynamic dropdown options ─────────────────────────────────────────────────
+  const getClassOptions = () => {
+    if (!addForm.schoolId) return []
+    const school = schools.find(s => s.id === Number(addForm.schoolId))
+    if (!school || !school.classes) return []
+    return school.classes || []
   }
 
-  const getSectionOptions = (school, className) => {
-    if (!school || !className || !schoolHierarchy[school]?.[className]) return []
-    return Object.keys(schoolHierarchy[school][className])
+  const getSectionOptions = () => {
+    if (!addForm.schoolId || !addForm.className) return []
+    const school = schools.find(s => s.id === Number(addForm.schoolId))
+    if (!school || !school.sections || !school.sections[addForm.className]) return []
+    return school.sections[addForm.className] || []
   }
 
-  const getStudentOptions = (school, className, section) => {
-    if (!school || !className || !section || !schoolHierarchy[school]?.[className]?.[section]) return []
-    return schoolHierarchy[school][className][section]
-  }
+  // ── Fetch students when class and section change ─────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const loadStudents = async () => {
+      if (!addForm.schoolId || !addForm.className || !addForm.section) {
+        setStudents([])
+        return
+      }
+      try {
+        const data = await fetchStudentsByClassSection(addForm.schoolId, addForm.className, addForm.section)
+        if (!cancelled) setStudents(data)
+      } catch {
+        if (!cancelled) setStudents([])
+      }
+    }
+    loadStudents()
+    return () => { cancelled = true }
+  }, [addForm.schoolId, addForm.className, addForm.section])
 
+  useEffect(() => {
+    let cancelled = false
+    const loadStudents = async () => {
+      if (!editForm.schoolId || !editForm.className || !editForm.section) {
+        return
+      }
+      try {
+        const data = await fetchStudentsByClassSection(editForm.schoolId, editForm.className, editForm.section)
+        if (!cancelled) setStudents(data)
+      } catch {
+        if (!cancelled) setStudents([])
+      }
+    }
+    loadStudents()
+    return () => { cancelled = true }
+  }, [editForm.schoolId, editForm.className, editForm.section])
+
+  // ── Filtering (client-side within the current page) ──────────────────────────
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-
-    return studentActivities.filter((row) => {
+    return activities.filter((row) => {
       const matchesSearch =
         !q ||
-        [row.school, row.student, row.className, row.section, row.activity, row.date]
+        [row.schoolName, row.studentName, row.className, row.section, row.activity, row.date]
           .join(' ')
           .toLowerCase()
           .includes(q)
 
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
+      const matchesSchool = filters.schoolId === 'Select' || 
+        (filters.schoolId && row.schoolId === Number(filters.schoolId))
       const matchesClass = filters.className === 'Select' || row.className === filters.className
       const matchesSection = filters.section === 'Select' || row.section === filters.section
 
       return matchesSearch && matchesSchool && matchesClass && matchesSection
     })
-  }, [search, filters])
+  }, [activities, search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  const allSelected = filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
 
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+  // ── Data fetching ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const apiFilters = {
+          schoolId: filters.schoolId !== 'Select' ? filters.schoolId : null,
+          className: filters.className !== 'Select' ? filters.className : null,
+          section: filters.section !== 'Select' ? filters.section : null,
+        }
+        const data = await fetchStudentActivitiesPage(currentPage - 1, rowsPerPage, apiFilters)
+        if (cancelled) return
+        if (Array.isArray(data)) {
+          setActivities(data)
+          setTotalElements(data.length)
+          setTotalPages(1)
+        } else {
+          setActivities(Array.isArray(data?.content) ? data.content : [])
+          setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+          setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+        }
+      } catch (e) {
+        if (cancelled) return
+        setActivities([])
+        setTotalElements(0)
+        setTotalPages(1)
+        setError(e?.message || 'Failed to load student activities')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [currentPage, rowsPerPage, refreshKey, filters])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  // ── Load schools for dropdown ────────────────────────────────────────────────
+  useEffect(() => {
+    fetchSchoolsPage(0, 200)
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
+        setSchools(list)
+      })
+      .catch(() => setSchools([]))
+  }, [])
 
+  // ── Selection helpers ────────────────────────────────────────────────────────
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...filtered.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) => prev.filter((id) => !filtered.some((row) => row.id === id)))
     }
   }
 
   const handleSelectRow = (id) => {
     setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
+      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]
     )
   }
 
+  // ── Form helpers ─────────────────────────────────────────────────────────────
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
 
     setter((prev) => {
-      if (id === 'school') {
+      if (id === 'schoolId') {
+        const selectedSchool = schools.find(s => s.id === Number(value))
         return {
           ...prev,
-          school: value,
+          schoolId: value,
+          schoolName: selectedSchool?.schoolName || '',
           className: '',
           section: '',
-          student: '',
+          studentId: '',
+          studentName: '',
         }
       }
 
@@ -242,7 +294,8 @@ const StudentActivity = () => {
           ...prev,
           className: value,
           section: '',
-          student: '',
+          studentId: '',
+          studentName: '',
         }
       }
 
@@ -250,7 +303,17 @@ const StudentActivity = () => {
         return {
           ...prev,
           section: value,
-          student: '',
+          studentId: '',
+          studentName: '',
+        }
+      }
+
+      if (id === 'studentId') {
+        const selectedStudent = students.find(s => s.id === Number(value))
+        return {
+          ...prev,
+          studentId: value,
+          studentName: selectedStudent?.name || '',
         }
       }
 
@@ -268,32 +331,114 @@ const StudentActivity = () => {
     setFilters(pendingFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
+    setRefreshKey((k) => k + 1)
   }
 
   const handleResetFilters = () => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setCurrentPage(1)
+    setRefreshKey((k) => k + 1)
   }
 
+  // ── Open modals ──────────────────────────────────────────────────────────────
   const openAdd = () => {
+    setError('')
+    setEditingId(null)
     setAddForm(emptyForm)
+    setStudents([])
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingId(row.id)
     setEditForm({
-      school: row.school,
-      className: row.className,
-      section: row.section,
-      student: row.student,
-      date: row.date,
-      activity: row.activity,
+      id: row.id,
+      schoolId: row.schoolId || '',
+      schoolName: row.schoolName || '',
+      className: row.className || '',
+      section: row.section || '',
+      studentId: row.studentId || '',
+      studentName: row.studentName || '',
+      date: row.date || '',
+      activity: row.activity || '',
+      description: row.description || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
   }
+
+  // ── CRUD handlers ────────────────────────────────────────────────────────────
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    studentId: form.studentId ? Number(form.studentId) : null,
+    className: form.className || '',
+    section: form.section || '',
+    date: form.date || '',
+    activity: form.activity || '',
+    description: form.description || '',
+  })
+
+  const handleCreate = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      await createStudentActivity(buildPayload(addForm))
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setCurrentPage(1)
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create student activity')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (saving) return
+    if (!editingId) { setError('No record selected for update'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await updateStudentActivity(editingId, buildPayload(editForm))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingId(null)
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setError(e?.message || 'Failed to update student activity')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!id) return
+    if (!window.confirm('Delete this student activity? This cannot be undone.')) return
+    setSaving(true)
+    setError('')
+    try {
+      await deleteStudentActivity(id)
+      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setError(e?.message || 'Failed to delete student activity')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Pagination ───────────────────────────────────────────────────────────────
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage
+    return filtered.slice(start, start + rowsPerPage)
+  }, [currentPage, filtered, rowsPerPage])
 
   const getVisiblePages = () => {
     const pages = []
@@ -303,21 +448,27 @@ const StudentActivity = () => {
     return pages
   }
 
+  // ── Form renderer ─────────────────────────────────────────────────────────────
   const renderForm = (form, setter) => {
-    const classOptions = getClassOptions(form.school)
-    const sectionOptions = getSectionOptions(form.school, form.className)
-    const studentOptions = getStudentOptions(form.school, form.className, form.section)
+    const classOptions = getClassOptions()
+    const sectionOptions = getSectionOptions()
+    const currentStudents = students
 
     return (
       <>
         <p className="avm-section-title">Basic Information</p>
         <div className="avm-grid">
           <FormField label="School Name" required full>
-            <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
+            <select 
+              className="avm-select" 
+              id="schoolId" 
+              value={form.schoolId} 
+              onChange={handleChange(setter)}
+            >
               <option value="">--Select School--</option>
               {schoolOptions.map((school) => (
-                <option key={school} value={school}>
-                  {school}
+                <option key={school.id} value={school.id}>
+                  {school.name}
                 </option>
               ))}
             </select>
@@ -329,7 +480,7 @@ const StudentActivity = () => {
               id="className"
               value={form.className}
               onChange={handleChange(setter)}
-              disabled={!form.school}
+              disabled={!form.schoolId}
             >
               <option value="">--Select--</option>
               {classOptions.map((item) => (
@@ -360,15 +511,15 @@ const StudentActivity = () => {
           <FormField label="Student" required full>
             <select
               className="avm-select"
-              id="student"
-              value={form.student}
+              id="studentId"
+              value={form.studentId}
               onChange={handleChange(setter)}
               disabled={!form.section}
             >
-              <option value="">--Select--</option>
-              {studentOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              <option value="">--Select Student--</option>
+              {currentStudents.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.name} ({student.admissionNo})
                 </option>
               ))}
             </select>
@@ -384,13 +535,24 @@ const StudentActivity = () => {
             />
           </FormField>
 
-          <FormField label="Activity">
+          <FormField label="Activity" required full>
             <input
               type="text"
               className="avm-input"
               id="activity"
-              placeholder="Enter activity"
+              placeholder="Enter activity (e.g., Science Exhibition, Football Practice)"
               value={form.activity}
+              onChange={handleChange(setter)}
+            />
+          </FormField>
+
+          <FormField label="Description" full noIcon>
+            <textarea
+              rows="3"
+              className="avm-input avm-textarea"
+              id="description"
+              placeholder="Additional details about the activity..."
+              value={form.description}
               onChange={handleChange(setter)}
             />
           </FormField>
@@ -399,6 +561,7 @@ const StudentActivity = () => {
     )
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -414,7 +577,8 @@ const StudentActivity = () => {
             <span className="text-secondary-light"> / Student Activity</span>
           </div>
         </div>
-        <div className="d-flex flex-wrap align-items-center gap-12">
+
+        <div className="d-flex flex-wrap align-items-center gap-12">
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
@@ -428,10 +592,19 @@ const StudentActivity = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      )}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
+          {/* ── Toolbar ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
+              {/* Export */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -442,43 +615,33 @@ const StudentActivity = () => {
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
                     <i className="ri-file-upload-line text-md line-height-1"></i> Export
                   </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
                       <i className="ri-file-3-line"></i> PDF
                     </button>
                   </li>
                   <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
                       <i className="ri-file-excel-2-line"></i> Excel
                     </button>
                   </li>
                 </ul>
               </div>
 
+              {/* Filter */}
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
-                <span>
-                  <i className="ri-arrow-right-line"></i>
-                </span>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
+                <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
+              {/* Columns */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -486,12 +649,8 @@ const StudentActivity = () => {
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((column) => (
@@ -510,32 +669,26 @@ const StudentActivity = () => {
                 </ul>
               </div>
 
+              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
+                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
               >
                 {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
 
+            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search student activity..."
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setCurrentPage(1)
-                }}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
               />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
@@ -543,6 +696,7 @@ const StudentActivity = () => {
             </div>
           </div>
 
+          {/* ── Table ── */}
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1050 }}>
               <thead>
@@ -553,48 +707,53 @@ const StudentActivity = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.student ? <th scope="col">Student</th> : null}
-                  {visibleColumns.className ? <th scope="col">Class</th> : null}
-                  {visibleColumns.section ? <th scope="col">Section</th> : null}
-                  {visibleColumns.activity ? <th scope="col">Activity</th> : null}
-                  {visibleColumns.date ? <th scope="col">Date</th> : null}
+                  {visibleColumns.schoolName && <th scope="col">School</th>}
+                  {visibleColumns.studentName && <th scope="col">Student</th>}
+                  {visibleColumns.className && <th scope="col">Class</th>}
+                  {visibleColumns.section && <th scope="col">Section</th>}
+                  {visibleColumns.activity && <th scope="col">Activity</th>}
+                  {visibleColumns.date && <th scope="col">Date</th>}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading student activities...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No student activities found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.student ? (
-                        <td className="fw-medium text-primary-light">{row.student}</td>
-                      ) : null}
-                      {visibleColumns.className ? <td>{row.className}</td> : null}
-                      {visibleColumns.section ? <td>{row.section}</td> : null}
-                      {visibleColumns.activity ? <td>{row.activity}</td> : null}
-                      {visibleColumns.date ? <td>{row.date}</td> : null}
+                      {visibleColumns.schoolName && <td>{row.schoolName}</td>}
+                      {visibleColumns.studentName && (
+                        <td className="fw-medium text-primary-light">{row.studentName}</td>
+                      )}
+                      {visibleColumns.className && <td>{row.className}</td>}
+                      {visibleColumns.section && <td>{row.section}</td>}
+                      {visibleColumns.activity && <td>{row.activity}</td>}
+                      {visibleColumns.date && <td>{row.date}</td>}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
@@ -608,7 +767,9 @@ const StudentActivity = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
                             title="Delete"
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -621,12 +782,12 @@ const StudentActivity = () => {
             </table>
           </div>
 
+          {/* ── Pagination ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} –{' '}
+              {totalElements === 0 ? 0 : Math.min((currentPage - 1) * rowsPerPage + paginated.length, totalElements)} of {totalElements}
             </span>
-
             <div className="d-flex align-items-center gap-8">
               <button
                 type="button"
@@ -659,8 +820,9 @@ const StudentActivity = () => {
         </div>
       </div>
 
+      {/* ── Add Modal ── */}
       <WizardPopup
-        modalWidth="540px"
+        modalWidth="600px"
         open={isAddOpen}
         title="Add Student Activity"
         steps={STEPS}
@@ -668,14 +830,15 @@ const StudentActivity = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onSubmit={handleCreate}
+        submitLabel={saving ? 'Saving…' : 'Save'}
       >
-        {renderForm(addForm, setAddForm)}
+        {renderForm(addForm, setAddForm, false)}
       </WizardPopup>
 
+      {/* ── Edit Modal ── */}
       <WizardPopup
-        modalWidth="540px"
+        modalWidth="600px"
         open={isEditOpen}
         title="Edit Student Activity"
         steps={STEPS}
@@ -683,12 +846,13 @@ const StudentActivity = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
+        onSubmit={handleUpdate}
+        submitLabel={saving ? 'Saving…' : 'Update'}
       >
-        {renderForm(editForm, setEditForm)}
+        {renderForm(editForm, setEditForm, true)}
       </WizardPopup>
 
+      {/* ── Filter Sidebar ── */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Student Activity"
@@ -697,19 +861,19 @@ const StudentActivity = () => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
             </label>
             <select
-              id="school"
+              id="schoolId"
               className="form-control form-select"
-              value={pendingFilters.school}
+              value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {schoolOptions.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
                 </option>
               ))}
             </select>
@@ -775,4 +939,3 @@ const StudentActivity = () => {
 }
 
 export default StudentActivity
-
