@@ -1,17 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createTeacher, deleteTeacher, fetchTeachers, updateTeacher } from '../apis/teachersApi'
 import '../assets/css/addModalShared.css'
-
-const teachers = [
-  { sl: '01', photo: null, name: 'John Smith', department: 'Mathematics', phone: '+1 234 567 8901', email: 'john.smith@school.com', joiningDate: '2021-03-15', isViewOnWeb: true, displayOrder: 1 },
-  { sl: '02', photo: null, name: 'Sarah Johnson', department: 'Science', phone: '+1 234 567 8902', email: 'sarah.j@school.com', joiningDate: '2020-07-01', isViewOnWeb: true, displayOrder: 2 },
-  { sl: '03', photo: null, name: 'David Lee', department: 'English', phone: '+1 234 567 8903', email: 'david.lee@school.com', joiningDate: '2019-01-10', isViewOnWeb: false, displayOrder: 3 },
-  { sl: '04', photo: null, name: 'Emily Clark', department: 'History', phone: '+1 234 567 8904', email: 'emily.c@school.com', joiningDate: '2022-08-20', isViewOnWeb: true, displayOrder: 4 },
-  { sl: '05', photo: null, name: 'Michael Brown', department: 'Physics', phone: '+1 234 567 8905', email: 'michael.b@school.com', joiningDate: '2018-11-05', isViewOnWeb: false, displayOrder: 5 },
-]
 
 const emptyForm = {
   // Basic
@@ -98,6 +91,12 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ManageTeacher = () => {
+  const [teachers, setTeachers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingTeacherId, setEditingTeacherId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -130,21 +129,50 @@ const ManageTeacher = () => {
   const editPhotoRef = useRef()
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const loadTeachers = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchTeachers()
+      setTeachers(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setTeachers([])
+      setError(e?.message || 'Failed to load teachers')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadTeachers()
+  }, [loadTeachers])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return teachers.filter((r) => {
-      const matchesSearch = !q || [r.name, r.department, r.phone, r.email].join(' ').toLowerCase().includes(q)
-      const matchesName = !filters.name || r.name.toLowerCase().includes(filters.name.toLowerCase())
-      const matchesDepartment = filters.department === 'All' || r.department === filters.department
-      const matchesEmail = !filters.email || r.email.toLowerCase().includes(filters.email.toLowerCase())
-      const matchesJoiningDate = !filters.joiningDate || r.joiningDate === filters.joiningDate
+      const matchesSearch =
+        !q ||
+        [r?.name, r?.department, r?.phone, r?.email]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      const matchesName =
+        !filters.name || String(r?.name || '').toLowerCase().includes(filters.name.toLowerCase())
+      const matchesDepartment = filters.department === 'All' || r?.department === filters.department
+      const matchesEmail =
+        !filters.email || String(r?.email || '').toLowerCase().includes(filters.email.toLowerCase())
+      const matchesJoiningDate = !filters.joiningDate || r?.joiningDate === filters.joiningDate
       const matchesViewOnWeb =
         filters.isViewOnWeb === 'All' ||
-        (filters.isViewOnWeb === 'Yes' ? r.isViewOnWeb : !r.isViewOnWeb)
+        (filters.isViewOnWeb === 'Yes' ? r?.isViewOnWeb === 'Yes' : r?.isViewOnWeb === 'No')
       return matchesSearch && matchesName && matchesDepartment && matchesEmail && matchesJoiningDate && matchesViewOnWeb
     })
-  }, [filters, search])
-  const departmentOptions = useMemo(() => Array.from(new Set(teachers.map((item) => item.department))), [])
+  }, [teachers, filters, search])
+  const departmentOptions = useMemo(
+    () => Array.from(new Set(teachers.map((item) => item.department).filter(Boolean))),
+    [teachers],
+  )
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
@@ -152,11 +180,17 @@ const ManageTeacher = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -177,10 +211,141 @@ const ManageTeacher = () => {
     setPreview(URL.createObjectURL(file))
   }
 
-  const openAdd = () => { setAddForm(emptyForm); setPhotoPreview(null); setAddStep(0); setIsAddOpen(true) }
+  const openAdd = () => {
+    setError('')
+    setEditingTeacherId(null)
+    setAddForm(emptyForm)
+    setPhotoPreview(null)
+    setAddStep(0)
+    setIsAddOpen(true)
+  }
   const openEdit = (row) => {
-    setEditForm({ ...emptyForm, name: row.name, department: row.department, phone: row.phone, email: row.email, joiningDate: row.joiningDate, isViewOnWeb: row.isViewOnWeb ? 'Yes' : 'No' })
-    setEditPhotoPreview(null); setEditStep(0); setIsEditOpen(true)
+    setError('')
+    setEditingTeacherId(row?.id ?? null)
+    setEditForm({
+      ...emptyForm,
+      name: row?.name || '',
+      nationalId: row?.nationalId || '',
+      department: row?.department || '',
+      phone: row?.phone || '',
+      gender: row?.gender || '',
+      bloodGroup: row?.bloodGroup || '',
+      religion: row?.religion || '',
+      birthDate: row?.birthDate || '',
+      presentAddress: row?.presentAddress || '',
+      permanentAddress: row?.permanentAddress || '',
+      email: row?.email || '',
+      username: row?.username || '',
+      password: row?.password || '',
+      salaryGrade: row?.salaryGrade || '',
+      salaryType: row?.salaryType || '',
+      role: row?.role || 'Teacher',
+      joiningDate: row?.joiningDate || '',
+      resume: null,
+      isViewOnWeb: row?.isViewOnWeb || '',
+      facebookUrl: row?.facebookUrl || '',
+      linkedinUrl: row?.linkedinUrl || '',
+      twitterUrl: row?.twitterUrl || '',
+      instagramUrl: row?.instagramUrl || '',
+      youtubeUrl: row?.youtubeUrl || '',
+      pinterestUrl: row?.pinterestUrl || '',
+      otherInfo: row?.otherInfo || '',
+      photo: null,
+    })
+    setEditPhotoPreview(row?.photoUrl || null)
+    setEditStep(0)
+    setIsEditOpen(true)
+  }
+
+  const buildTeacherPayload = (form) => ({
+    name: form.name || '',
+    nationalId: form.nationalId || '',
+    department: form.department || '',
+    phone: form.phone || '',
+    gender: form.gender || '',
+    bloodGroup: form.bloodGroup || '',
+    religion: form.religion || '',
+    birthDate: form.birthDate || null,
+    presentAddress: form.presentAddress || '',
+    permanentAddress: form.permanentAddress || '',
+    email: form.email || '',
+    username: form.username || '',
+    password: form.password || '',
+    salaryGrade: form.salaryGrade || '',
+    salaryType: form.salaryType || '',
+    role: form.role || 'Teacher',
+    joiningDate: form.joiningDate || null,
+    isViewOnWeb: form.isViewOnWeb || '',
+    facebookUrl: form.facebookUrl || '',
+    linkedinUrl: form.linkedinUrl || '',
+    twitterUrl: form.twitterUrl || '',
+    instagramUrl: form.instagramUrl || '',
+    youtubeUrl: form.youtubeUrl || '',
+    pinterestUrl: form.pinterestUrl || '',
+    otherInfo: form.otherInfo || '',
+    displayOrder: form.displayOrder ?? null,
+  })
+
+  const handleCreateTeacher = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      const payload = buildTeacherPayload(addForm)
+      const created = await createTeacher(payload, addForm)
+      setTeachers((prev) => [created, ...prev])
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setPhotoPreview(null)
+      setCurrentPage(1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create teacher')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateTeacher = async () => {
+    if (saving) return
+    if (!editingTeacherId) {
+      setError('No teacher selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const payload = buildTeacherPayload(editForm)
+      const updated = await updateTeacher(editingTeacherId, payload, editForm)
+      setTeachers((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingTeacherId(null)
+      setEditPhotoPreview(null)
+    } catch (e) {
+      setError(e?.message || 'Failed to update teacher')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteTeacher = async (teacherId) => {
+    if (!teacherId) return
+    const confirmed = window.confirm('Delete this teacher? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteTeacher(teacherId)
+      setTeachers((prev) => prev.filter((t) => t.id !== teacherId))
+      setSelectedRows((prev) => prev.filter((id) => id !== teacherId))
+    } catch (e) {
+      setError(e?.message || 'Failed to delete teacher')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
@@ -411,6 +576,13 @@ const ManageTeacher = () => {
         </div>
       </div>
 
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
+
       {/* Table Card */}
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
@@ -489,20 +661,22 @@ const ManageTeacher = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">No teachers found.</td></tr>
-                ) : paginated.map((row) => (
-                  <tr key={row.sl}>
+                {loading ? (
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">Loading teachers...</td></tr>
+                ) : paginated.length === 0 ? (
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No teachers found.</td></tr>
+                ) : paginated.map((row, idx) => (
+                  <tr key={row.id}>
                     <td>
                         <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.sl)} onChange={() => handleSelectRow(row.sl)} />
-                          <label className="form-check-label">{row.sl}</label>
+                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.id)} onChange={() => handleSelectRow(row.id)} />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
                     {visibleColumns.photo ? (
                       <td>
                       <div className="w-40-px h-40-px rounded-circle bg-neutral-200 d-flex align-items-center justify-content-center overflow-hidden" style={{ minWidth: 40 }}>
-                        {row.photo ? <img src={row.photo} alt={row.name} className="w-100 h-100 object-fit-cover" /> : <i className="ri-user-line text-secondary-light"></i>}
+                        {row.photoUrl ? <img src={row.photoUrl} alt={row.name} className="w-100 h-100 object-fit-cover" /> : <i className="ri-user-line text-secondary-light"></i>}
                       </div>
                       </td>
                     ) : null}
@@ -514,7 +688,7 @@ const ManageTeacher = () => {
                     {visibleColumns.isViewOnWeb ? (
                       <td>
                         <div className="form-check form-switch d-flex justify-content-center mb-0">
-                          <input className="form-check-input" type="checkbox" defaultChecked={row.isViewOnWeb} style={{ cursor: 'pointer' }} />
+                          <input className="form-check-input" type="checkbox" defaultChecked={row.isViewOnWeb === 'Yes'} style={{ cursor: 'pointer' }} />
                         </div>
                       </td>
                     ) : null}
@@ -522,7 +696,7 @@ const ManageTeacher = () => {
                     <td>
                       <div className="d-flex align-items-center gap-10">
                         <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)} title="Edit"><i className="ri-edit-line"></i></button>
-                        <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete"><i className="ri-delete-bin-line"></i></button>
+                        <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => handleDeleteTeacher(row.id)} title="Delete" disabled={saving}><i className="ri-delete-bin-line"></i></button>
                       </div>
                     </td>
                   </tr>
@@ -557,7 +731,7 @@ const ManageTeacher = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleCreateTeacher}
         submitLabel="Save"
       >
         {renderAddStep()}
@@ -573,7 +747,7 @@ const ManageTeacher = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdateTeacher}
         submitLabel="Update"
       >
         {renderEditStep()}

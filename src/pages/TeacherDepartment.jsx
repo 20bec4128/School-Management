@@ -1,17 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import WizardPopup from '../components/WizardPopup'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import {
+  createDepartment,
+  deleteDepartment,
+  fetchDepartmentsPage,
+  updateDepartment,
+} from '../apis/departmentsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import '../assets/css/addModalShared.css'
-
-const departments = [
-  { sl: '01', school: 'ABC School', title: 'Principal', note: 'Main admin', isViewOnWeb: 'Yes', status: 'Active' },
-  { sl: '02', school: 'XYZ School', title: 'Vice Principal', note: 'Operations lead', isViewOnWeb: 'Yes', status: 'Active' },
-  { sl: '03', school: 'DEF Academy', title: 'Head Teacher', note: 'Department head', isViewOnWeb: 'No', status: 'Inactive' },
-  { sl: '04', school: 'GHI College', title: 'Senior Teacher', note: 'Experienced staff', isViewOnWeb: 'Yes', status: 'Active' },
-  { sl: '05', school: 'JKL High School', title: 'Teacher', note: '', isViewOnWeb: 'No', status: 'Inactive' },
-  { sl: '06', school: 'MNO School', title: 'Assistant Teacher', note: 'Primary section', isViewOnWeb: 'Yes', status: 'Active' },
-]
 
 const emptyFilters = {
   school: 'Select',
@@ -20,9 +18,10 @@ const emptyFilters = {
 }
 
 const emptySidebarForm = {
-  school: '',
+  schoolId: '',
   departmentTitle: '',
-  isViewOnWeb: '',
+  isViewOnWeb: 'Yes',
+  status: 'Active',
   note: '',
 }
 
@@ -34,9 +33,18 @@ const columnOptions = [
 ]
 
 const TeacherDepartment = () => {
+  const [departments, setDepartments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingDepartmentId, setEditingDepartmentId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [schoolsLookup, setSchoolsLookup] = useState([])
   const [selectedRows, setSelectedRows] = useState([])
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -50,12 +58,12 @@ const TeacherDepartment = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const schoolOptions = useMemo(
-    () => Array.from(new Set(departments.map((item) => item.school))),
-    [],
+    () => schoolsLookup.map((s) => s.schoolName),
+    [schoolsLookup],
   )
   const titleOptions = useMemo(
-    () => Array.from(new Set(departments.map((item) => item.title))),
-    [],
+    () => Array.from(new Set(departments.map((item) => item.title).filter(Boolean))).sort(),
+    [departments],
   )
 
   const filteredDepartments = useMemo(() => {
@@ -64,29 +72,71 @@ const TeacherDepartment = () => {
     return departments.filter((row) => {
       const matchesSearch =
         normalizedSearch === '' ||
-        [row.school, row.title, row.note, row.status]
+        [row.schoolName, row.title, row.note, row.status]
           .join(' ')
           .toLowerCase()
           .includes(normalizedSearch)
 
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
+      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
       const matchesTitle = filters.title === 'Select' || row.title === filters.title
       const matchesStatus = filters.status === 'Select' || row.status === filters.status
 
       return matchesSearch && matchesSchool && matchesTitle && matchesStatus
     })
-  }, [filters, search])
+  }, [departments, filters, search])
 
-  const totalPages = Math.max(1, Math.ceil(filteredDepartments.length / rowsPerPage))
-
-  const paginatedDepartments = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filteredDepartments.slice(start, start + rowsPerPage)
-  }, [currentPage, filteredDepartments, rowsPerPage])
+  const paginatedDepartments = useMemo(() => filteredDepartments, [filteredDepartments])
 
   const allVisibleSelected =
     paginatedDepartments.length > 0 &&
-    paginatedDepartments.every((row) => selectedRows.includes(row.sl))
+    paginatedDepartments.every((row) => selectedRows.includes(row.id))
+
+  const loadDepartments = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchDepartmentsPage(currentPage - 1, rowsPerPage)
+      if (Array.isArray(data)) {
+        setDepartments(data)
+        setTotalElements(data.length)
+        setTotalPages(1)
+      } else {
+        setDepartments(Array.isArray(data?.content) ? data.content : [])
+        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+      }
+    } catch (e) {
+      setDepartments([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError(e?.message || 'Failed to load departments')
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, rowsPerPage])
+
+  const loadSchoolsLookup = useCallback(async () => {
+    try {
+      const rows = await fetchSchoolsLookup()
+      setSchoolsLookup(rows)
+    } catch {
+      setSchoolsLookup([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadDepartments()
+  }, [loadDepartments])
+
+  useEffect(() => {
+    void loadSchoolsLookup()
+  }, [loadSchoolsLookup])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const handleSearchChange = (event) => {
     setSearch(event.target.value)
@@ -125,6 +175,8 @@ const TeacherDepartment = () => {
   }
 
   const openAddSidebar = () => {
+    setError('')
+    setEditingDepartmentId(null)
     setAddForm(emptySidebarForm)
     setAddStep(0)
     setIsAddSidebarOpen(true)
@@ -136,10 +188,13 @@ const TeacherDepartment = () => {
   }
 
   const openEditSidebar = (row) => {
+    setError('')
+    setEditingDepartmentId(row.id)
     setEditForm({
-      school: row.school,
-      departmentTitle: row.title,
-      isViewOnWeb: row.isViewOnWeb || '',
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      departmentTitle: row.title || '',
+      isViewOnWeb: row.isViewOnWeb || 'Yes',
+      status: row.status || 'Active',
       note: row.note || '',
     })
     setEditStep(0)
@@ -150,6 +205,7 @@ const TeacherDepartment = () => {
     setIsEditSidebarOpen(false)
     setEditForm(emptySidebarForm)
     setEditStep(0)
+    setEditingDepartmentId(null)
   }
 
   const closeAllSidebars = () => {
@@ -158,26 +214,81 @@ const TeacherDepartment = () => {
     setIsFilterSidebarOpen(false)
   }
 
-  const handleAddSubmit = (event) => {
-    event?.preventDefault?.()
-    closeAddSidebar()
+  const mapFormToPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    title: form.departmentTitle || '',
+    note: form.note || '',
+    isViewOnWeb: form.isViewOnWeb || 'Yes',
+    status: form.status || 'Active',
+  })
+
+  const handleAddSubmit = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      await createDepartment(mapFormToPayload(addForm))
+      closeAddSidebar()
+      if (currentPage !== 1) {
+        setCurrentPage(1)
+      } else {
+        await loadDepartments()
+      }
+    } catch (e) {
+      setError(e?.message || 'Failed to create department')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleEditSubmit = (event) => {
-    event?.preventDefault?.()
-    closeEditSidebar()
+  const handleEditSubmit = async () => {
+    if (saving) return
+    if (!editingDepartmentId) {
+      setError('No department selected for update')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await updateDepartment(editingDepartmentId, mapFormToPayload(editForm))
+      closeEditSidebar()
+      await loadDepartments()
+    } catch (e) {
+      setError(e?.message || 'Failed to update department')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteDepartment = async (departmentId) => {
+    if (!departmentId) return
+    const confirmed = window.confirm('Delete this department? This cannot be undone.')
+    if (!confirmed) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteDepartment(departmentId)
+      setSelectedRows((current) => current.filter((id) => id !== departmentId))
+      await loadDepartments()
+    } catch (e) {
+      setError(e?.message || 'Failed to delete department')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleSelectAll = (event) => {
     if (event.target.checked) {
       setSelectedRows((current) => [
-        ...new Set([...current, ...paginatedDepartments.map((row) => row.sl)]),
+        ...new Set([...current, ...paginatedDepartments.map((row) => row.id)]),
       ])
       return
     }
 
     setSelectedRows((current) =>
-      current.filter((id) => !paginatedDepartments.some((row) => row.sl === id)),
+      current.filter((id) => !paginatedDepartments.some((row) => row.id === id)),
     )
   }
 
@@ -216,6 +327,13 @@ const TeacherDepartment = () => {
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
@@ -342,84 +460,82 @@ const TeacherDepartment = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedDepartments.map((row) => (
-                  <tr key={row.sl}>
-                    <td>
-                      <div className="form-check style-check d-flex align-items-center">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          checked={selectedRows.includes(row.sl)}
-                          onChange={() => handleSelectRow(row.sl)}
-                        />
-                        <label className="form-check-label">{row.sl}</label>
-                      </div>
-                    </td>
-                    {visibleColumns.school ? <td>{row.school}</td> : null}
-                    {visibleColumns.title ? <td>{row.title}</td> : null}
-                    {visibleColumns.note ? <td>{row.note || '-'}</td> : null}
-                    {visibleColumns.status ? (
-                      <td>
-                        <span
-                          className={
-                            row.status === 'Active'
-                              ? 'bg-success-100 text-success-600 px-24 py-4 radius-4 fw-medium text-sm'
-                              : 'bg-danger-100 text-danger-600 px-24 py-4 radius-4 fw-medium text-sm'
-                          }
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                    ) : null}
-                    <td>
-                      <div className="btn-group">
-                        <button
-                          type="button"
-                          className="text-primary-light text-xl border-0 bg-transparent"
-                          data-bs-toggle="dropdown"
-                          data-bs-display="static"
-                          aria-expanded="false"
-                        >
-                          <iconify-icon icon="tabler:dots-vertical"></iconify-icon>
-                        </button>
-                        <ul className="dropdown-menu dropdown-menu-lg-end border p-12">
-                          <li>
-                            <button
-                              type="button"
-                              className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
-                              onClick={() => openEditSidebar(row)}
-                            >
-                              <i className="ri-edit-2-line"></i>
-                              Edit
-                            </button>
-                          </li>
-                          <li>
-                            <button type="button" className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6">
-                              <i className="ri-delete-bin-6-line"></i>
-                              Delete
-                            </button>
-                          </li>
-                        </ul>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-24 text-secondary-light">
+                      Loading departments...
                     </td>
                   </tr>
-                ))}
-                {paginatedDepartments.length === 0 ? (
+                ) : paginatedDepartments.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-24 text-secondary-light">
                       No departments found for the current filters.
                     </td>
                   </tr>
-                ) : null}
+                ) : (
+                  paginatedDepartments.map((row, idx) => (
+                    <tr key={row.id}>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
+                          />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
+                        </div>
+                      </td>
+                      {visibleColumns.school ? <td>{row.schoolName}</td> : null}
+                      {visibleColumns.title ? <td>{row.title}</td> : null}
+                      {visibleColumns.note ? <td>{row.note || '-'}</td> : null}
+                      {visibleColumns.status ? (
+                        <td>
+                          <span
+                            className={
+                              row.status === 'Active'
+                                ? 'bg-success-100 text-success-600 px-24 py-4 radius-4 fw-medium text-sm'
+                                : 'bg-danger-100 text-danger-600 px-24 py-4 radius-4 fw-medium text-sm'
+                            }
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                      ) : null}
+                      <td>
+                        <div className="d-flex align-items-center gap-10">
+                          <button
+                            type="button"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => openEditSidebar(row)}
+                            title="Edit"
+                          >
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDeleteDepartment(row.id)}
+                            title="Delete"
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filteredDepartments.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1}
               {' '}-{' '}
-              {Math.min(currentPage * rowsPerPage, filteredDepartments.length)} of {filteredDepartments.length}
+              {totalElements === 0
+                ? 0
+                : Math.min((currentPage - 1) * rowsPerPage + filteredDepartments.length, totalElements)} of {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">
@@ -464,7 +580,7 @@ const TeacherDepartment = () => {
       ></div>
 
       <WizardPopup
-       modalWidth="500px"
+        modalWidth="500px"
         open={isAddSidebarOpen}
         title="Add Teacher Department"
         steps={['Basic']}
@@ -475,79 +591,93 @@ const TeacherDepartment = () => {
         onSubmit={handleAddSubmit}
         submitLabel="Save"
       >
-        
-          <div className="avm-grid">
-            <div className="avm-field full">
-              <label htmlFor="school" className="avm-label">
-                School Name 
-              </label>
-              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                  <i className="ri-school-line"></i>
-                </span>
-                <select
-                  id="school"
-                  className="avm-select"
-                  value={addForm.school}
-                  onChange={(event) => handleSidebarInputChange(event, 'add')}
-                >
-                  <option value="">Select School</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-             </div>
-            <div className="avm-field full">
-              <label htmlFor="departmentTitle" className="avm-label">
-                Department Title
-              </label>
-              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                  <i className="ri-bookmark-line"></i>
-                </span>
-                <input
-                  type="text"
-                  className="avm-input"
-                  id="departmentTitle"
-                  placeholder="Enter Department Title"
-                  value={addForm.departmentTitle}
-                  onChange={(event) => handleSidebarInputChange(event, 'add')}
-                />
-              </div>
+        <div className="avm-grid">
+          <div className="avm-field full">
+            <label htmlFor="schoolId" className="avm-label">
+              School Name
+            </label>
+            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                <i className="ri-school-line"></i>
+              </span>
+              <select
+                id="schoolId"
+                className="avm-select"
+                value={addForm.schoolId}
+                onChange={(event) => handleSidebarInputChange(event, 'add')}
+              >
+                <option value="">Select School</option>
+                {schoolsLookup.map((row) => (
+                  <option key={row.id} value={String(row.id)}>
+                    {row.schoolName}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        
-       
+          <div className="avm-field full">
+            <label htmlFor="departmentTitle" className="avm-label">
+              Department Title
+            </label>
+            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                <i className="ri-bookmark-line"></i>
+              </span>
+              <input
+                type="text"
+                className="avm-input"
+                id="departmentTitle"
+                placeholder="Enter Department Title"
+                value={addForm.departmentTitle}
+                onChange={(event) => handleSidebarInputChange(event, 'add')}
+              />
+            </div>
+          </div>
+          <div className="avm-field full">
+            <label htmlFor="status" className="avm-label">
+              Status
+            </label>
+            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                <i className="ri-checkbox-circle-line"></i>
+              </span>
+              <select
+                id="status"
+                className="avm-select"
+                value={addForm.status}
+                onChange={(event) => handleSidebarInputChange(event, 'add')}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
-          <div className="avm-grid">
-            <div className="avm-field full">
-              <label htmlFor="note" className="avm-label">
-                Note
-              </label>
-              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '0.85rem', top: '1.2rem', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                  <i className="ri-sticky-note-line"></i>
-                </span>
-                <textarea
-                  type="text"
-                  rows='4'
-                  className="avm-input"
-                  id="note"
-                  placeholder="Enter Note"
-                  value={addForm.note}
-                  onChange={(event) => handleSidebarInputChange(event, 'add')}
-                />
-              </div>
+        <div className="avm-grid">
+          <div className="avm-field full">
+            <label htmlFor="note" className="avm-label">
+              Note
+            </label>
+            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '0.85rem', top: '1.2rem', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                <i className="ri-sticky-note-line"></i>
+              </span>
+              <textarea
+                rows="4"
+                className="avm-input"
+                id="note"
+                placeholder="Enter Note"
+                value={addForm.note}
+                onChange={(event) => handleSidebarInputChange(event, 'add')}
+              />
             </div>
           </div>
-      
+        </div>
       </WizardPopup>
 
       <WizardPopup
-      modalWidth="500px"
+        modalWidth="500px"
         open={isEditSidebarOpen}
         title="Edit Teacher Department"
         steps={['Basic']}
@@ -561,7 +691,7 @@ const TeacherDepartment = () => {
         <div>
           <div className="avm-grid">
             <div className="avm-field full">
-              <label htmlFor="school" className="avm-label">
+              <label htmlFor="schoolId" className="avm-label">
                 School Name
               </label>
               <div className="avm-input-with-icon" style={{ position: 'relative' }}>
@@ -569,15 +699,15 @@ const TeacherDepartment = () => {
                   <i className="ri-school-line"></i>
                 </span>
                 <select
-                  id="school"
+                  id="schoolId"
                   className="avm-select"
-                  value={editForm.school}
+                  value={editForm.schoolId}
                   onChange={(event) => handleSidebarInputChange(event, 'edit')}
                 >
                   <option value="">Select School</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {schoolsLookup.map((row) => (
+                    <option key={row.id} value={String(row.id)}>
+                      {row.schoolName}
                     </option>
                   ))}
                 </select>
@@ -601,8 +731,26 @@ const TeacherDepartment = () => {
                 />
               </div>
             </div>
+            <div className="avm-field full">
+              <label htmlFor="status" className="avm-label">
+                Status
+              </label>
+              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                  <i className="ri-checkbox-circle-line"></i>
+                </span>
+                <select
+                  id="status"
+                  className="avm-select"
+                  value={editForm.status}
+                  onChange={(event) => handleSidebarInputChange(event, 'edit')}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
           </div>
-
 
           <div className="avm-grid">
             <div className="avm-field full">
@@ -706,4 +854,3 @@ const TeacherDepartment = () => {
 }
 
 export default TeacherDepartment
-

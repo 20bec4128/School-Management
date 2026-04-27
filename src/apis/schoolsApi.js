@@ -35,6 +35,56 @@ export const fetchSchoolsPage = async (page, size) => {
   return res.json()
 }
 
+export const fetchSchoolNames = async () => {
+  const firstPage = await fetchSchoolsPage(0, 500)
+  const firstContent = Array.isArray(firstPage?.content) ? firstPage.content : []
+  const totalPages = Number.isFinite(firstPage?.totalPages) ? firstPage.totalPages : 1
+
+  if (totalPages <= 1) {
+    return Array.from(new Set(firstContent.map((s) => s?.schoolName).filter(Boolean))).sort()
+  }
+
+  const pageRequests = []
+  for (let page = 1; page < totalPages; page += 1) {
+    pageRequests.push(fetchSchoolsPage(page, 500))
+  }
+
+  const restPages = await Promise.all(pageRequests)
+  const allContent = restPages.reduce((acc, item) => {
+    if (Array.isArray(item?.content)) acc.push(...item.content)
+    return acc
+  }, [...firstContent])
+
+  return Array.from(new Set(allContent.map((s) => s?.schoolName).filter(Boolean))).sort()
+}
+
+export const fetchSchoolsLookup = async () => {
+  const firstPage = await fetchSchoolsPage(0, 500)
+  const firstContent = Array.isArray(firstPage?.content) ? firstPage.content : []
+  const totalPages = Number.isFinite(firstPage?.totalPages) ? firstPage.totalPages : 1
+
+  const pageRequests = []
+  for (let page = 1; page < totalPages; page += 1) {
+    pageRequests.push(fetchSchoolsPage(page, 500))
+  }
+  const restPages = await Promise.all(pageRequests)
+
+  const allContent = restPages.reduce((acc, item) => {
+    if (Array.isArray(item?.content)) acc.push(...item.content)
+    return acc
+  }, [...firstContent])
+
+  const byId = new Map()
+  for (const row of allContent) {
+    const id = row?.id
+    const schoolName = row?.schoolName
+    if (id == null || !schoolName) continue
+    byId.set(String(id), { id, schoolName })
+  }
+
+  return Array.from(byId.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+}
+
 export const createSchool = async (payload, form) => {
   const res = await fetch(SCHOOLS_API_BASE, {
     method: 'POST',
