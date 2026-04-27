@@ -10,7 +10,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/schools")
-@CrossOrigin(origins = "*")
 public class ManageSchoolController {
 
     private final ManageSchoolService manageSchoolService;

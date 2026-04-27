@@ -2,8 +2,9 @@ package com.School.School_management.Service;
 
 import com.School.School_management.Dto.ManageSchoolDto;
 import com.School.School_management.Entity.ManageSchool;
+import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.config.UploadProperties;
-import com.School.School_management.repo.SchoolRepository;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

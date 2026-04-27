@@ -1,4 +1,4 @@
-const SCHOOLS_API_BASE = '/api/schools'
+const SCHOOLS_API_BASE = 'http://localhost:8081/api/schools'
 
 const readApiError = async (res) => {
   try {
