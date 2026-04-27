@@ -1,4 +1,4 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.SubjectRequestDto;
 import com.School.School_management.Dto.SubjectResponseDto;
@@ -10,6 +10,7 @@ import com.School.School_management.Repository.SchoolClassRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.SubjectRepository;
 import com.School.School_management.Repository.TeacherRepository;
+import com.School.School_management.Service.SubjectService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

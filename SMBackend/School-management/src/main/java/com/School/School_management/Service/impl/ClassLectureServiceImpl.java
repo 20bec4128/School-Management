@@ -1,10 +1,11 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.ClassLectureDto;
 import com.School.School_management.Entity.ClassLecture;
 import com.School.School_management.Entity.ManageTeacher;
 import com.School.School_management.Repository.ClassLectureRepository;
 import com.School.School_management.Repository.TeacherRepository;
+import com.School.School_management.Service.ClassLectureService;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Service;

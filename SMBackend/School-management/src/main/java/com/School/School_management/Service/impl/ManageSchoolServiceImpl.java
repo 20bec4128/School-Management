@@ -1,8 +1,9 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.ManageSchoolDto;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Repository.SchoolRepository;
+import com.School.School_management.Service.ManageSchoolService;
 import com.School.School_management.config.UploadProperties;
 
 import org.springframework.data.domain.Page;

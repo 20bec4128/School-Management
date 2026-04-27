@@ -1,4 +1,4 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.SchoolSectionDto;
 import com.School.School_management.Entity.ManageSchool;
@@ -9,6 +9,7 @@ import com.School.School_management.Repository.SchoolClassRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.SchoolSectionRepository;
 import com.School.School_management.Repository.TeacherRepository;
+import com.School.School_management.Service.SchoolSectionService;
 import java.util.List;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -131,4 +132,3 @@ public class SchoolSectionServiceImpl implements SchoolSectionService {
     return dto;
   }
 }
-

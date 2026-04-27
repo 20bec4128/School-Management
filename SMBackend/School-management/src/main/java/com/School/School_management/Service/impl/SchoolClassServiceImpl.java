@@ -1,4 +1,4 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.SchoolClassDto;
 import com.School.School_management.Entity.ManageSchool;
@@ -7,6 +7,7 @@ import com.School.School_management.Entity.SchoolClass;
 import com.School.School_management.Repository.SchoolClassRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.TeacherRepository;
+import com.School.School_management.Service.SchoolClassService;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.data.domain.Sort;
@@ -118,4 +119,3 @@ public class SchoolClassServiceImpl implements SchoolClassService {
     return dto;
   }
 }
-

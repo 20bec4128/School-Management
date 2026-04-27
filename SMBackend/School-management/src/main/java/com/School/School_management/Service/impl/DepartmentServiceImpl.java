@@ -1,10 +1,11 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.DepartmentDto;
 import com.School.School_management.Entity.Department;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Repository.DepartmentRepository;
 import com.School.School_management.Repository.SchoolRepository;
+import com.School.School_management.Service.DepartmentService;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;

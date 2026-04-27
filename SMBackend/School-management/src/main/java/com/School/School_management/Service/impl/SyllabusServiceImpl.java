@@ -1,4 +1,4 @@
-package com.School.School_management.Service;
+package com.School.School_management.Service.impl;
 
 import com.School.School_management.Dto.SyllabusResponseDto;
 import com.School.School_management.Entity.ManageSchool;
