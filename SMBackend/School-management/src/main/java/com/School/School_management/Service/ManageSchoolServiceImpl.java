@@ -2,12 +2,13 @@ package com.School.School_management.Service;
 
 import com.School.School_management.Dto.ManageSchoolDto;
 import com.School.School_management.Entity.ManageSchool;
-import com.School.School_management.repo.SchoolRepository;
+import com.School.School_management.Repository.SchoolRepository;
+import com.School.School_management.config.UploadProperties;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,10 +27,10 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
 
     public ManageSchoolServiceImpl(
             SchoolRepository schoolRepository,
-            @Value("${app.upload.dir:uploads}") String uploadDir
+            UploadProperties uploadProperties
     ) {
         this.schoolRepository = schoolRepository;
-        this.schoolUploadDir = Paths.get(uploadDir, "schools").toAbsolutePath().normalize();
+        this.schoolUploadDir = Paths.get(uploadProperties.getDir(), "schools").toAbsolutePath().normalize();
     }
 
     @Override

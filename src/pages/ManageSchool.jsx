@@ -331,31 +331,33 @@ const ManageSchool = () => {
       if (Array.isArray(data)) {
         setSchools(data)
         setTotalElements(data.length)
-        setTotalPages(1)
+        const nextTotalPages = 1
+        setTotalPages(nextTotalPages)
+        setCurrentPage((prev) => (prev > nextTotalPages ? nextTotalPages : prev))
       } else {
         setSchools(Array.isArray(data?.content) ? data.content : [])
         setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
-        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+        const nextTotalPages = Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1)
+        setTotalPages(nextTotalPages)
+        setCurrentPage((prev) => (prev > nextTotalPages ? nextTotalPages : prev))
       }
     } catch (e) {
       setSchools([])
       setTotalElements(0)
       setTotalPages(1)
       setError(e?.message || 'Failed to load schools')
+      setCurrentPage((prev) => (prev !== 1 ? 1 : prev))
     } finally {
       setLoading(false)
     }
   }, [currentPage, rowsPerPage])
 
   useEffect(() => {
-    void loadSchools()
-  }, [loadSchools])
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
+    const fetchData = async () => {
+      await loadSchools()
     }
-  }, [currentPage, totalPages])
+    void fetchData()
+  }, [currentPage, rowsPerPage, loadSchools])
 
   const buildSchoolPayload = (form) => ({
     schoolUrl: form.schoolUrl || '',

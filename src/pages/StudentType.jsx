@@ -1,45 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
-import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { fetchSchoolsPage } from '../apis/schoolsApi'
+import {
+  createStudentType,
+  deleteStudentType,
+  fetchStudentTypesPage,
+  updateStudentType,
+} from '../apis/studentTypeApi'
 import '../assets/css/addModalShared.css'
 
-const studentTypeList = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    studentType: 'Day Scholar',
-    note: 'Regular day scholar students',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    studentType: 'Hosteller',
-    note: 'Students staying in hostel',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    studentType: 'Transport',
-    note: 'Students using school transport',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    studentType: 'Scholarship',
-    note: 'Students under scholarship category',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    studentType: 'Special Care',
-    note: 'Students requiring special attention',
-  },
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
   studentType: '',
   note: '',
 }
@@ -98,10 +71,23 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const StudentType = () => {
+  // ── Data state ──────────────────────────────────────────────────────────────
+  const [studentTypes, setStudentTypes] = useState([])
+  const [schools, setSchools] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+
+  // ── Table state ──────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
+
+  // ── Modal / sidebar state ────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
@@ -114,45 +100,81 @@ const StudentType = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(studentTypeList.map((item) => item.school))),
-    [],
-  )
-
+  // ── Derived options ──────────────────────────────────────────────────────────
   const studentTypeOptions = useMemo(
-    () => Array.from(new Set(studentTypeList.map((item) => item.studentType))),
-    [],
+    () => Array.from(new Set(studentTypes.map((item) => item.studentType))).sort(),
+    [studentTypes],
   )
 
+  // ── Filtering (client-side within the current page) ──────────────────────────
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-
-    return studentTypeList.filter((row) => {
+    return studentTypes.filter((row) => {
+      const schoolName = row.schoolName || row.school || ''
       const matchesSearch =
-        !q || [row.school, row.studentType, row.note].join(' ').toLowerCase().includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
+        !q || [schoolName, row.studentType, row.note].join(' ').toLowerCase().includes(q)
+      const matchesSchool =
+        filters.school === 'Select' || schoolName === filters.school
       const matchesStudentType =
         filters.studentType === 'Select' || row.studentType === filters.studentType
-
       return matchesSearch && matchesSchool && matchesStudentType
     })
-  }, [search, filters])
+  }, [studentTypes, search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  const allSelected =
+    filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
 
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+  // ── Data fetching ────────────────────────────────────────────────────────────
+  const loadStudentTypes = useCallback(async (page, size) => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchStudentTypesPage(page - 1, size)
+      if (Array.isArray(data)) {
+        setStudentTypes(data)
+        setTotalElements(data.length)
+        setTotalPages(1)
+      } else {
+        setStudentTypes(Array.isArray(data?.content) ? data.content : [])
+        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
+      }
+    } catch (e) {
+      setStudentTypes([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError(e?.message || 'Failed to load student types')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  const loadSchools = useCallback(async () => {
+    try {
+      // Fetch a large page so the dropdown is fully populated
+      const data = await fetchSchoolsPage(0, 200)
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
+      setSchools(list)
+    } catch {
+      // Non-fatal: the dropdown will just be empty
+      setSchools([])
+    }
+  }, [])
 
+  useEffect(() => {
+    void loadStudentTypes(currentPage, rowsPerPage)
+  }, [currentPage, rowsPerPage, loadStudentTypes])
+
+  useEffect(() => {
+    void loadSchools()
+  }, [loadSchools])
+
+  // ── Selection helpers ────────────────────────────────────────────────────────
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...filtered.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) => prev.filter((id) => !filtered.some((row) => row.id === id)))
     }
   }
 
@@ -162,6 +184,7 @@ const StudentType = () => {
     )
   }
 
+  // ── Form helpers ─────────────────────────────────────────────────────────────
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
     setter((prev) => ({ ...prev, [id]: value }))
@@ -185,41 +208,124 @@ const StudentType = () => {
     setCurrentPage(1)
   }
 
+  // ── Open modals ──────────────────────────────────────────────────────────────
   const openAdd = () => {
+    setError('')
+    setEditingId(null)
     setAddForm(emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingId(row.id)
     setEditForm({
-      school: row.school,
-      studentType: row.studentType,
-      note: row.note,
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      studentType: row.studentType || '',
+      note: row.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
   }
 
+  // ── CRUD handlers ────────────────────────────────────────────────────────────
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    studentType: form.studentType || '',
+    note: form.note || '',
+  })
+
+  const handleCreate = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      await createStudentType(buildPayload(addForm))
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      if (currentPage !== 1) setCurrentPage(1)
+      else await loadStudentTypes(currentPage, rowsPerPage)
+    } catch (e) {
+      setError(e?.message || 'Failed to create student type')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (saving) return
+    if (!editingId) { setError('No record selected for update'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await updateStudentType(editingId, buildPayload(editForm))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingId(null)
+      await loadStudentTypes(currentPage, rowsPerPage)
+    } catch (e) {
+      setError(e?.message || 'Failed to update student type')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!id) return
+    if (!window.confirm('Delete this student type? This cannot be undone.')) return
+    setSaving(true)
+    setError('')
+    try {
+      await deleteStudentType(id)
+      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
+      await loadStudentTypes(currentPage, rowsPerPage)
+    } catch (e) {
+      setError(e?.message || 'Failed to delete student type')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Pagination ───────────────────────────────────────────────────────────────
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-
-    for (let page = start; page <= end; page++) pages.push(page)
-
+    for (let p = start; p <= end; p++) pages.push(p)
     return pages
   }
 
+  // ── School name lookup (for display in table) ────────────────────────────────
+  const schoolNameById = useMemo(() => {
+    const map = {}
+    schools.forEach((s) => { map[s.id] = s.schoolName })
+    return map
+  }, [schools])
+
+  const getSchoolName = (row) =>
+    row.schoolName || row.school || schoolNameById[row.schoolId] || '-'
+
+  // ── Form renderer ─────────────────────────────────────────────────────────────
   const renderForm = (form, setter) => (
     <>
       <p className="avm-section-title">Basic Information</p>
-
       <div className="avm-grid">
         <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
+          <select
+            className="avm-select"
+            id="schoolId"
+            value={form.schoolId}
+            onChange={handleChange(setter)}
+          >
+            <option value="">-- Select School --</option>
+            {schools.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.schoolName}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -234,7 +340,7 @@ const StudentType = () => {
           />
         </FormField>
 
-        <FormField label="Note" full>
+        <FormField label="Note" full noIcon>
           <textarea
             rows="4"
             className="avm-input avm-textarea"
@@ -248,6 +354,13 @@ const StudentType = () => {
     </>
   )
 
+  // ── Filter sidebar school options (from live schools list) ───────────────────
+  const schoolFilterOptions = useMemo(
+    () => Array.from(new Set(schools.map((s) => s.schoolName))).sort(),
+    [schools],
+  )
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -265,7 +378,6 @@ const StudentType = () => {
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-12">
-
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
@@ -279,10 +391,19 @@ const StudentType = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      )}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
+          {/* ── Toolbar ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
+              {/* Export */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -293,43 +414,33 @@ const StudentType = () => {
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
                     <i className="ri-file-upload-line text-md line-height-1"></i> Export
                   </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
                       <i className="ri-file-3-line"></i> PDF
                     </button>
                   </li>
                   <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
                       <i className="ri-file-excel-2-line"></i> Excel
                     </button>
                   </li>
                 </ul>
               </div>
 
+              {/* Filter */}
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
-                <span>
-                  <i className="ri-arrow-right-line"></i>
-                </span>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
+                <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
+              {/* Columns */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -337,12 +448,8 @@ const StudentType = () => {
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((column) => (
@@ -361,32 +468,26 @@ const StudentType = () => {
                 </ul>
               </div>
 
+              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
+                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
               >
                 {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
 
+            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search student type..."
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setCurrentPage(1)
-                }}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
               />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
@@ -394,6 +495,7 @@ const StudentType = () => {
             </div>
           </div>
 
+          {/* ── Table ── */}
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 760 }}>
               <thead>
@@ -404,42 +506,47 @@ const StudentType = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.studentType ? <th scope="col">Student Type</th> : null}
-                  {visibleColumns.note ? <th scope="col">Note</th> : null}
+                  {visibleColumns.school && <th scope="col">School</th>}
+                  {visibleColumns.studentType && <th scope="col">Student Type</th>}
+                  {visibleColumns.note && <th scope="col">Note</th>}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading student types...
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No student types found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  filtered.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.studentType ? (
+                      {visibleColumns.school && <td>{getSchoolName(row)}</td>}
+                      {visibleColumns.studentType && (
                         <td className="fw-medium text-primary-light">{row.studentType}</td>
-                      ) : null}
-                      {visibleColumns.note ? <td>{row.note}</td> : null}
+                      )}
+                      {visibleColumns.note && <td>{row.note}</td>}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
@@ -453,7 +560,9 @@ const StudentType = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
                             title="Delete"
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -466,12 +575,12 @@ const StudentType = () => {
             </table>
           </div>
 
+          {/* ── Pagination ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} –{' '}
+              {totalElements === 0 ? 0 : Math.min((currentPage - 1) * rowsPerPage + filtered.length, totalElements)} of {totalElements}
             </span>
-
             <div className="d-flex align-items-center gap-8">
               <button
                 type="button"
@@ -481,14 +590,14 @@ const StudentType = () => {
               >
                 Prev
               </button>
-              {getVisiblePages().map((page) => (
+              {getVisiblePages().map((p) => (
                 <button
-                  key={page}
+                  key={p}
                   type="button"
-                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(page)}
+                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                  onClick={() => setCurrentPage(p)}
                 >
-                  {page}
+                  {p}
                 </button>
               ))}
               <button
@@ -504,6 +613,7 @@ const StudentType = () => {
         </div>
       </div>
 
+      {/* ── Add Modal ── */}
       <WizardPopup
         modalWidth="540px"
         open={isAddOpen}
@@ -513,12 +623,13 @@ const StudentType = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onSubmit={handleCreate}
+        submitLabel={saving ? 'Saving…' : 'Save'}
       >
         {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
+      {/* ── Edit Modal ── */}
       <WizardPopup
         modalWidth="540px"
         open={isEditOpen}
@@ -528,12 +639,13 @@ const StudentType = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
+        onSubmit={handleUpdate}
+        submitLabel={saving ? 'Saving…' : 'Update'}
       >
         {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
+      {/* ── Filter Sidebar ── */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Student Type"
@@ -552,19 +664,14 @@ const StudentType = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+              {schoolFilterOptions.map((name) => (
+                <option key={name} value={name}>{name}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label
-              htmlFor="studentType"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
+            <label htmlFor="studentType" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Student Type
             </label>
             <select
@@ -575,27 +682,19 @@ const StudentType = () => {
             >
               <option value="Select">Select</option>
               {studentTypeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+                <option key={option} value={option}>{option}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
           </div>
 
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100">
-              Apply
-            </button>
+            <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
           </div>
         </form>
       </SlideSidebar>
@@ -604,4 +703,3 @@ const StudentType = () => {
 }
 
 export default StudentType
-

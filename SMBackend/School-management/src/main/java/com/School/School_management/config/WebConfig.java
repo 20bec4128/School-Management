@@ -2,7 +2,6 @@ package com.School.School_management.config;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -13,8 +12,8 @@ public class WebConfig implements WebMvcConfigurer {
 
   private final String uploadDir;
 
-  public WebConfig(@Value("${app.upload.dir:uploads}") String uploadDir) {
-    this.uploadDir = uploadDir;
+  public WebConfig(UploadProperties uploadProperties) {
+    this.uploadDir = uploadProperties.getDir();
   }
 
   @Override
@@ -28,15 +27,19 @@ public class WebConfig implements WebMvcConfigurer {
   public void addCorsMappings(CorsRegistry registry) {
     registry
         .addMapping("/api/**")
-        .allowedOrigins("http://localhost:5173")
+        .allowedOrigins("http://localhost:5173", "http://localhost:3000")
         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-        .allowedHeaders("*");
+        .allowedHeaders("*")
+        .allowCredentials(true)
+        .maxAge(3600);
 
     registry
         .addMapping("/uploads/**")
-        .allowedOrigins("http://localhost:5173")
+        .allowedOrigins("http://localhost:5173", "http://localhost:3000")
         .allowedMethods("GET", "OPTIONS")
-        .allowedHeaders("*");
+        .allowedHeaders("*")
+        .allowCredentials(true)
+        .maxAge(3600);
   }
 }
 

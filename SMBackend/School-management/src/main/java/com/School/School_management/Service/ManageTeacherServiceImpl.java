@@ -2,7 +2,7 @@ package com.School.School_management.Service;
 
 import com.School.School_management.Dto.ManageTeacherDto;
 import com.School.School_management.Entity.ManageTeacher;
-import com.School.School_management.repo.TeacherRepository;
+import com.School.School_management.Repository.TeacherRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

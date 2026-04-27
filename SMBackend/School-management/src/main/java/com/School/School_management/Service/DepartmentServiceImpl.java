@@ -4,7 +4,7 @@ import com.School.School_management.Dto.DepartmentDto;
 import com.School.School_management.Entity.Department;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Repository.DepartmentRepository;
-import com.School.School_management.repo.SchoolRepository;
+import com.School.School_management.Repository.SchoolRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
