@@ -28,6 +28,29 @@ export const fetchStudentTypesPage = async (page, size) => {
   return res.json()
 }
 
+export const fetchStudentTypesLookup = async () => {
+  const firstPage = await fetchStudentTypesPage(0, 500)
+  const firstContent = Array.isArray(firstPage?.content) ? firstPage.content : []
+  const totalPages = Number.isFinite(firstPage?.totalPages) ? firstPage.totalPages : 1
+
+  if (totalPages <= 1) {
+    return Array.from(new Set(firstContent.map((item) => item?.studentType).filter(Boolean))).sort()
+  }
+
+  const pageRequests = []
+  for (let page = 1; page < totalPages; page += 1) {
+    pageRequests.push(fetchStudentTypesPage(page, 500))
+  }
+
+  const restPages = await Promise.all(pageRequests)
+  const allContent = restPages.reduce((acc, item) => {
+    if (Array.isArray(item?.content)) acc.push(...item.content)
+    return acc
+  }, [...firstContent])
+
+  return Array.from(new Set(allContent.map((item) => item?.studentType).filter(Boolean))).sort()
+}
+
 export const createStudentType = async (payload) => {
   const res = await fetch(STUDENT_TYPE_API_BASE, {
     method: 'POST',

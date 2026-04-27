@@ -18,16 +18,20 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     
     Page<Student> findByDeletedFalse(Pageable pageable);
     
-    boolean existsByAdmissionNo(String admissionNo);
+    boolean existsByAdmissionNoAndDeletedFalse(String admissionNo);
     
-    boolean existsByUsername(String username);
+    boolean existsByUsernameAndDeletedFalse(String username);
     
     @Query("SELECT s FROM Student s WHERE s.deleted = false AND " +
            "(:schoolId IS NULL OR s.school.id = :schoolId) AND " +
+           "(:classId IS NULL OR s.schoolClass.id = :classId) AND " +
+           "(:sectionId IS NULL OR s.schoolSection.id = :sectionId) AND " +
            "(:className IS NULL OR s.className = :className) AND " +
            "(:section IS NULL OR s.section = :section) AND " +
            "(:groupName IS NULL OR s.groupName = :groupName)")
     Page<Student> searchStudents(@Param("schoolId") Long schoolId,
+                                  @Param("classId") Long classId,
+                                  @Param("sectionId") Long sectionId,
                                   @Param("className") String className,
                                   @Param("section") String section,
                                   @Param("groupName") String groupName,

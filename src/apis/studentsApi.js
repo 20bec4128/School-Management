@@ -60,12 +60,22 @@ export const deleteStudent = async (studentId) => {
     return res.text();
 };
 
-export const fetchStudentsByClassSection = async (schoolId, className, section) => {
+export const fetchStudentsByClassSection = async ({
+    schoolId,
+    classId,
+    sectionId,
+    className,
+    section,
+}) => {
     const params = new URLSearchParams({
         schoolId: String(schoolId),
-        className,
-        section,
     });
+
+    if (classId != null && classId !== '') params.append('classId', String(classId));
+    if (sectionId != null && sectionId !== '') params.append('sectionId', String(sectionId));
+    if (className && className !== 'Select') params.append('className', className);
+    if (section && section !== 'Select') params.append('section', section);
+
     const res = await fetch(`${STUDENTS_API_BASE}?${params.toString()}`, {
         headers: { Accept: 'application/json' },
     });

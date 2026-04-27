@@ -53,8 +53,16 @@ public class Student {
     @Column(name = "student_type")
     private String studentType;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "class_id")
+    private SchoolClass schoolClass;
+
     @Column(name = "class_name")
     private String className;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "section_id")
+    private SchoolSection schoolSection;
 
     @Column(name = "section")
     private String section;
@@ -222,8 +230,14 @@ public class Student {
     public String getStudentType() { return studentType; }
     public void setStudentType(String studentType) { this.studentType = studentType; }
 
+    public SchoolClass getSchoolClass() { return schoolClass; }
+    public void setSchoolClass(SchoolClass schoolClass) { this.schoolClass = schoolClass; }
+
     public String getClassName() { return className; }
     public void setClassName(String className) { this.className = className; }
+
+    public SchoolSection getSchoolSection() { return schoolSection; }
+    public void setSchoolSection(SchoolSection schoolSection) { this.schoolSection = schoolSection; }
 
     public String getSection() { return section; }
     public void setSection(String section) { this.section = section; }
@@ -349,7 +363,9 @@ public class Student {
         public StudentBuilder email(String email) { student.setEmail(email); return this; }
         public StudentBuilder nationalId(String nationalId) { student.setNationalId(nationalId); return this; }
         public StudentBuilder studentType(String studentType) { student.setStudentType(studentType); return this; }
+        public StudentBuilder schoolClass(SchoolClass schoolClass) { student.setSchoolClass(schoolClass); return this; }
         public StudentBuilder className(String className) { student.setClassName(className); return this; }
+        public StudentBuilder schoolSection(SchoolSection schoolSection) { student.setSchoolSection(schoolSection); return this; }
         public StudentBuilder section(String section) { student.setSection(section); return this; }
         public StudentBuilder groupName(String groupName) { student.setGroupName(groupName); return this; }
         public StudentBuilder rollNo(String rollNo) { student.setRollNo(rollNo); return this; }

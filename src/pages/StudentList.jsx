@@ -3,8 +3,11 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsPage, createStudent, updateStudent, deleteStudent } from '../apis/studentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchStudentTypesLookup } from '../apis/studentTypeApi'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -22,7 +25,9 @@ const emptyForm = {
   email: '',
   nationalId: '',
   studentType: '',
+  classId: '',
   className: '',
+  sectionId: '',
   section: '',
   group: '',
   rollNo: '',
@@ -128,7 +133,9 @@ const buildPayload = (form) => ({
   email: form.email || null,
   nationalId: form.nationalId || null,
   studentType: form.studentType || null,
+  classId: form.classId ? Number(form.classId) : null,
   className: form.className || null,
+  sectionId: form.sectionId ? Number(form.sectionId) : null,
   section: form.section || null,
   group: form.group || null,
   rollNo: form.rollNo || null,
@@ -157,6 +164,107 @@ const buildPayload = (form) => ({
   healthCondition: form.healthCondition || null,
   otherInfo: form.otherInfo || null,
 })
+
+const getClassOptionValue = (item) => item?.numericName || item?.className || item?.name || String(item?.id ?? '')
+const getClassOptionLabel = (item) => item?.className || item?.numericName || item?.name || String(item?.id ?? '')
+const getSectionOptionValue = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
+const getSectionOptionLabel = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
+
+const findMatchingClassOption = (value, classOptions) =>
+  classOptions.find((item) =>
+    [item?.className, item?.numericName, item?.name, String(item?.id ?? '')].some(
+      (candidate) => String(candidate) === String(value),
+    ),
+  )
+
+const findMatchingSectionOption = (value, sectionOptions) =>
+  sectionOptions.find((item) =>
+    [item?.name, item?.sectionName, item?.section, String(item?.id ?? '')].some(
+      (candidate) => String(candidate) === String(value),
+    ),
+  )
+
+const useStudentListLookups = (form, enabled, setter) => {
+  const [classOptions, setClassOptions] = useState([])
+  const [sectionOptions, setSectionOptions] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadClasses = async () => {
+      if (!enabled || !form.school) {
+        setClassOptions([])
+        setSectionOptions([])
+        return
+      }
+
+      try {
+        const data = await fetchClasses({ schoolId: form.school })
+        if (!cancelled) {
+          setClassOptions(Array.isArray(data) ? data : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setClassOptions([])
+          setSectionOptions([])
+        }
+      }
+    }
+
+    loadClasses()
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, form.school])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSections = async () => {
+      const selectedClass = findMatchingClassOption(form.classId || form.className, classOptions)
+      if (!enabled || !form.school || !selectedClass?.id) {
+        setSectionOptions([])
+        return
+      }
+
+      try {
+        const data = await fetchSections({ schoolId: form.school, classId: selectedClass.id })
+        if (!cancelled) {
+          setSectionOptions(Array.isArray(data) ? data : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setSectionOptions([])
+        }
+      }
+    }
+
+    loadSections()
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, form.school, form.classId, form.className, classOptions])
+
+  useEffect(() => {
+    if (!enabled || classOptions.length === 0) return
+
+    const selectedClass = findMatchingClassOption(form.classId || form.className, classOptions)
+    if (selectedClass?.id && String(selectedClass.id) !== String(form.classId)) {
+      setter((prev) => (String(prev.school) === String(form.school) ? { ...prev, classId: String(selectedClass.id) } : prev))
+    }
+  }, [enabled, form.school, form.classId, form.className, classOptions, setter])
+
+  useEffect(() => {
+    if (!enabled || sectionOptions.length === 0) return
+
+    const selectedSection = findMatchingSectionOption(form.sectionId || form.section, sectionOptions)
+    if (selectedSection?.id && String(selectedSection.id) !== String(form.sectionId)) {
+      setter((prev) => (String(prev.school) === String(form.school) ? { ...prev, sectionId: String(selectedSection.id) } : prev))
+    }
+  }, [enabled, form.school, form.sectionId, form.section, sectionOptions, setter])
+
+  return { classOptions, sectionOptions }
+}
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -216,6 +324,7 @@ const StudentList = ({ onNavigate }) => {
   const [submitError, setSubmitError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [schoolList, setSchoolList] = useState([])
+  const [studentTypeOptions, setStudentTypeOptions] = useState([])
 
   const [addPreviews, setAddPreviews] = useState({
     fatherPhoto: null, motherPhoto: null, transferCertificate: null, photo: null,
@@ -264,6 +373,28 @@ const StudentList = ({ onNavigate }) => {
 
   useEffect(() => {
     fetchSchoolsLookup().then(setSchoolList).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadStudentTypes = async () => {
+      try {
+        const data = await fetchStudentTypesLookup()
+        if (!cancelled) {
+          setStudentTypeOptions(Array.isArray(data) ? data : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setStudentTypeOptions([])
+        }
+      }
+    }
+
+    loadStudentTypes()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const schoolOptions = useMemo(() => {
@@ -357,7 +488,9 @@ const StudentList = ({ onNavigate }) => {
       email: row.email || '',
       nationalId: row.nationalId || '',
       studentType: row.studentType || '',
+      classId: row.classId ? String(row.classId) : '',
       className: row.className || '',
+      sectionId: row.sectionId ? String(row.sectionId) : '',
       section: row.section || '',
       group: row.group || '',
       rollNo: row.rollNo || '',
@@ -401,6 +534,9 @@ const StudentList = ({ onNavigate }) => {
     setSubmitError(null)
     setIsEditOpen(true)
   }
+
+  const addLookups = useStudentListLookups(addForm, isAddOpen, setAddForm)
+  const editLookups = useStudentListLookups(editForm, isEditOpen, setEditForm)
 
   const handleAddSubmit = async () => {
     setSubmitError(null)
@@ -470,7 +606,7 @@ const StudentList = ({ onNavigate }) => {
   )
 
   const renderForm = (
-    form, setter, step, previews, refs, setPreviewState, isPasswordVisible, setIsPasswordVisible,
+    form, setter, step, previews, refs, setPreviewState, isPasswordVisible, setIsPasswordVisible, lookups,
   ) => (
     <>
       {step === 0 ? (
@@ -478,7 +614,21 @@ const StudentList = ({ onNavigate }) => {
           <p className="avm-section-title">Basic Information</p>
           <div className="avm-grid">
             <FormField label="School Name" required full>
-              <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
+              <select
+                className="avm-select"
+                id="school"
+                value={form.school}
+                onChange={(e) =>
+                  setter((prev) => ({
+                    ...prev,
+                    school: e.target.value,
+                    classId: '',
+                    className: '',
+                    sectionId: '',
+                    section: '',
+                  }))
+                }
+              >
                 <option value="">--Select School--</option>
                 {schoolList.map((s) => (
                   <option key={s.id} value={s.id}>{s.schoolName}</option>
@@ -585,22 +735,53 @@ const StudentList = ({ onNavigate }) => {
             <FormField label="Student Type">
               <select className="avm-select" id="studentType" value={form.studentType} onChange={handleChange(setter)}>
                 <option value="">--Select--</option>
-                <option>Day Scholar</option><option>Hosteller</option><option>Transport</option>
+                {studentTypeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </FormField>
 
             <FormField label="Class" required>
-              <select className="avm-select" id="className" value={form.className} onChange={handleChange(setter)}>
+              <select
+                className="avm-select"
+                id="classId"
+                value={form.classId}
+                onChange={(e) =>
+                  setter((prev) => ({
+                    ...prev,
+                    classId: e.target.value,
+                    section: '',
+                    sectionId: '',
+                  }))
+                }
+              >
                 <option value="">--Select--</option>
-                <option>6</option><option>7</option><option>8</option><option>9</option>
-                <option>10</option><option>11</option><option>12</option>
+                {(lookups?.classOptions || []).map((item) => {
+                  const value = getClassOptionValue(item)
+                  const label = getClassOptionLabel(item)
+                  return (
+                    <option key={item.id || value} value={value}>
+                      {label}
+                    </option>
+                  )
+                })}
               </select>
             </FormField>
 
             <FormField label="Section" required>
-              <select className="avm-select" id="section" value={form.section} onChange={handleChange(setter)}>
+              <select className="avm-select" id="sectionId" value={form.sectionId} onChange={handleChange(setter)} disabled={!form.classId}>
                 <option value="">--Select--</option>
-                <option>A</option><option>B</option><option>C</option><option>D</option>
+                {(lookups?.sectionOptions || []).map((item) => {
+                  const value = getSectionOptionValue(item)
+                  const label = getSectionOptionLabel(item)
+                  return (
+                    <option key={item.id || value} value={value}>
+                      {label}
+                    </option>
+                  )
+                })}
               </select>
             </FormField>
 
@@ -1007,7 +1188,7 @@ const StudentList = ({ onNavigate }) => {
         {renderForm(
           addForm, setAddForm, addStep, addPreviews,
           { fatherPhotoRef: addFatherPhotoRef, motherPhotoRef: addMotherPhotoRef, transferCertificateRef: addTransferCertificateRef, studentPhotoRef: addStudentPhotoRef },
-          setAddPreviews, isAddPasswordVisible, setIsAddPasswordVisible,
+          setAddPreviews, isAddPasswordVisible, setIsAddPasswordVisible, addLookups,
         )}
       </WizardPopup>
 
@@ -1027,7 +1208,7 @@ const StudentList = ({ onNavigate }) => {
         {renderForm(
           editForm, setEditForm, editStep, editPreviews,
           { fatherPhotoRef: editFatherPhotoRef, motherPhotoRef: editMotherPhotoRef, transferCertificateRef: editTransferCertificateRef, studentPhotoRef: editStudentPhotoRef },
-          setEditPreviews, isEditPasswordVisible, setIsEditPasswordVisible,
+          setEditPreviews, isEditPasswordVisible, setIsEditPasswordVisible, editLookups,
         )}
       </WizardPopup>
 
