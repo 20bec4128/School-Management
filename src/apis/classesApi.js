@@ -22,7 +22,8 @@ export const fetchClasses = async ({ schoolId } = {}) => {
 
   const res = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
 export const createClass = async (payload) => {
@@ -50,4 +51,3 @@ export const deleteClass = async (id) => {
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
-

@@ -15,12 +15,16 @@ const readApiError = async (res) => {
   }
 }
 
+const unwrapCollection = (data) =>
+  Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+
 export const fetchClassLectures = async () => {
   const res = await fetch(CLASS_LECTURES_API_BASE, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
-  return res.json()
+  const data = await res.json()
+  return unwrapCollection(data)
 }
 
 export const createClassLecture = async (payload) => {
@@ -48,4 +52,3 @@ export const deleteClassLecture = async (id) => {
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
-

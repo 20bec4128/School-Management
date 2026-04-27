@@ -10,6 +10,7 @@ import {
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchSubjects } from '../apis/subjectsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import '../assets/css/addModalShared.css'
 
@@ -21,6 +22,7 @@ const emptyForm = {
   class: '',
   sectionId: '',
   section: '',
+  subjectId: '',
   subject: '',
   teacherId: '',
   lectureType: '',
@@ -82,6 +84,7 @@ const ClassLecture = () => {
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [sectionsLookup, setSectionsLookup] = useState([])
+  const [subjectsLookup, setSubjectsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -116,6 +119,11 @@ const ClassLecture = () => {
         .filter((t) => t.id != null && t.name)
         .sort((a, b) => a.name.localeCompare(b.name)),
     )
+  }, [])
+
+  const loadSubjectsLookup = useCallback(async () => {
+    const subjects = await fetchSubjects()
+    setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
   }, [])
 
   const loadClassesForSchool = useCallback(async (schoolId) => {
@@ -163,8 +171,24 @@ const ClassLecture = () => {
   }, [loadTeachersLookup])
 
   useEffect(() => {
+    void loadSubjectsLookup()
+  }, [loadSubjectsLookup])
+
+  useEffect(() => {
     void loadLectures()
   }, [loadLectures])
+
+  const getAvailableSubjects = useCallback(
+    (form) =>
+      subjectsLookup.filter((subject) => {
+        const matchesSchool =
+          !form.schoolId || String(subject?.schoolId ?? '') === String(form.schoolId)
+        const matchesClass =
+          !form.classId || String(subject?.classId ?? '') === String(form.classId)
+        return matchesSchool && matchesClass
+      }),
+    [subjectsLookup],
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -227,6 +251,8 @@ const ClassLecture = () => {
       class: '',
       sectionId: '',
       section: '',
+      subjectId: '',
+      subject: '',
     }))
     setSectionsLookup([])
     await loadClassesForSchool(schoolId)
@@ -242,6 +268,8 @@ const ClassLecture = () => {
       class: selectedClass?.className || '',
       sectionId: '',
       section: '',
+      subjectId: '',
+      subject: '',
     }))
     await loadSectionsForClass({ schoolId, classId })
   }
@@ -253,6 +281,18 @@ const ClassLecture = () => {
       ...prev,
       sectionId,
       section: selectedSection?.name || '',
+    }))
+  }
+
+  const handleSubjectChange = (setter, getForm) => (e) => {
+    const subjectId = e.target.value
+    const selectedSubject = getAvailableSubjects(getForm()).find(
+      (subject) => String(subject?.id) === String(subjectId),
+    )
+    setter((prev) => ({
+      ...prev,
+      subjectId,
+      subject: selectedSubject?.name || '',
     }))
   }
 
@@ -268,10 +308,15 @@ const ClassLecture = () => {
   const openEdit = (row) => {
     setError('')
     setEditingLectureId(row?.id ?? null)
-    const schoolId =
-      schoolsLookup.find((s) => s.schoolName === row?.school)?.id != null
-        ? String(schoolsLookup.find((s) => s.schoolName === row?.school).id)
-        : ''
+    const selectedSchool = schoolsLookup.find((s) => s.schoolName === row?.school)
+    const schoolId = selectedSchool?.id != null ? String(selectedSchool.id) : ''
+    const selectedSubject = subjectsLookup.find((subject) => {
+      const matchesSchool =
+        schoolId && subject?.schoolId != null
+          ? String(subject.schoolId) === schoolId
+          : true
+      return matchesSchool && subject?.name === row?.subject
+    })
 
     setEditForm({
       schoolId,
@@ -281,6 +326,7 @@ const ClassLecture = () => {
       class: row?.class || '',
       sectionId: '',
       section: row?.section || '',
+      subjectId: selectedSubject?.id != null ? String(selectedSubject.id) : '',
       subject: row?.subject || '',
       teacherId: row?.teacherId != null ? String(row.teacherId) : '',
       lectureType: row?.classLecture || '',
@@ -308,8 +354,23 @@ const ClassLecture = () => {
         sectionRows.find((s) => s.name === row?.section)?.id != null
           ? String(sectionRows.find((s) => s.name === row?.section).id)
           : ''
+      const matchingSubject = subjectsLookup.find((subject) => {
+        const matchesSchool =
+          schoolId && subject?.schoolId != null
+            ? String(subject.schoolId) === schoolId
+            : true
+        const matchesClass =
+          classId && subject?.classId != null
+            ? String(subject.classId) === classId
+            : true
+        return matchesSchool && matchesClass && subject?.name === row?.subject
+      })
 
-      setEditForm((prev) => ({ ...prev, sectionId }))
+      setEditForm((prev) => ({
+        ...prev,
+        sectionId,
+        subjectId: matchingSubject?.id != null ? String(matchingSubject.id) : prev.subjectId,
+      }))
     })()
     setEditStep(0)
     setIsEditOpen(true)
@@ -403,8 +464,11 @@ const ClassLecture = () => {
     return map[type] || 'bg-neutral-100 text-secondary-light'
   }
 
-  const renderForm = (form, setter) => (
-    <>
+  const renderForm = (form, setter) => {
+    const availableSubjects = getAvailableSubjects(form)
+
+    return (
+      <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
         <FormField label="School Name" required full>
@@ -419,15 +483,14 @@ const ClassLecture = () => {
         </FormField>
 
         <FormField label="Title" required full>
-          <select className="avm-select" id="title" value={form.title} onChange={handleChange(setter)}>
-            <option value="">--Select--</option>
-            <option>Principal</option>
-            <option>Vice Principal</option>
-            <option>Head Teacher</option>
-            <option>Senior Teacher</option>
-            <option>Teacher</option>
-            <option>Assistant Teacher</option>
-          </select>
+          <input
+            type="text"
+            className="avm-input"
+            id="title"
+            placeholder="Enter lecture title"
+            value={form.title}
+            onChange={handleChange(setter)}
+          />
         </FormField>
 
         <FormField label="Class" required>
@@ -465,13 +528,19 @@ const ClassLecture = () => {
         </FormField>
 
         <FormField label="Subject" required>
-          <select className="avm-select" id="subject" value={form.subject} onChange={handleChange(setter)}>
+          <select
+            className="avm-select"
+            id="subjectId"
+            value={form.subjectId}
+            onChange={handleSubjectChange(setter, () => form)}
+            disabled={!form.classId}
+          >
             <option value="">--Select--</option>
-            <option>Mathematics</option>
-            <option>Science</option>
-            <option>English</option>
-            <option>History</option>
-            <option>Physics</option>
+            {availableSubjects.map((subject) => (
+              <option key={subject.id} value={String(subject.id)}>
+                {subject.name}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -535,7 +604,8 @@ const ClassLecture = () => {
         </FormField>
       </div>
     </>
-  )
+    )
+  }
 
   return (
     <div className="dashboard-main-body">

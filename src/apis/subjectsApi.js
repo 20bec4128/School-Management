@@ -18,7 +18,8 @@ const readApiError = async (res) => {
 export const fetchSubjects = async () => {
   const res = await fetch(SUBJECTS_API_BASE, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
 export const createSubject = async (payload) => {
@@ -46,4 +47,3 @@ export const deleteSubject = async (id) => {
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
-

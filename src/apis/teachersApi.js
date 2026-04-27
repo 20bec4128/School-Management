@@ -28,7 +28,8 @@ export const fetchTeachers = async () => {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
 export const createTeacher = async (payload, form) => {
@@ -54,4 +55,3 @@ export const deleteTeacher = async (teacherId) => {
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
-

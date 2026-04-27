@@ -15,6 +15,9 @@ const readApiError = async (res) => {
   }
 }
 
+const unwrapCollection = (data) =>
+  Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+
 export const fetchSections = async ({ schoolId, classId } = {}) => {
   const qs = new URLSearchParams()
   if (schoolId != null && schoolId !== '') qs.set('schoolId', String(schoolId))
@@ -23,7 +26,8 @@ export const fetchSections = async ({ schoolId, classId } = {}) => {
 
   const res = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
-  return res.json()
+  const data = await res.json()
+  return unwrapCollection(data)
 }
 
 export const createSection = async (payload) => {
@@ -51,4 +55,3 @@ export const deleteSection = async (id) => {
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
-
