@@ -13,6 +13,19 @@ public record CurrentUser(
         Long parentId,
         Set<String> permissions
 ) {
+    private static String normalizeRoleName(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim().toUpperCase()
+                .replace('-', '_')
+                .replace(' ', '_');
+        trimmed = trimmed.replaceAll("_+", "_");
+        trimmed = trimmed.replaceAll("^_+|_+$", "");
+        if ("SUPERADMIN".equals(trimmed)) trimmed = "SUPER_ADMIN";
+        if ("HEADOFFICEADMIN".equals(trimmed) || "HEAD_OFFICEADMIN".equals(trimmed)) trimmed = "HEAD_OFFICE_ADMIN";
+        if ("SCHOOLADMIN".equals(trimmed)) trimmed = "SCHOOL_ADMIN";
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     public boolean hasPermission(String permission) {
         if (permission == null || permission.isBlank()) return true;
         if (isRole("SUPER_ADMIN")) return true;
@@ -21,9 +34,10 @@ public record CurrentUser(
     }
 
     public boolean isRole(String expected) {
-        if (expected == null) return false;
-        if (role == null) return false;
-        return role.trim().equalsIgnoreCase(expected.trim());
+        String e = normalizeRoleName(expected);
+        String r = normalizeRoleName(role);
+        if (e == null || r == null) return false;
+        return r.equals(e);
     }
 
     public boolean isSuperAdmin() {

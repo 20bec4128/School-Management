@@ -1,10 +1,9 @@
-const normalizeRole = (value) => String(value || '').trim().toUpperCase()
+import { normalizeRole } from './roles'
 
 export const getEditableRoles = (role) => {
   const r = normalizeRole(role)
-  // Backend role naming: HEAD_OFFICE_ADMIN is represented as ADMIN
-  if (r === 'SUPER_ADMIN') return ['ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'STUDENT', 'PARENT']
-  if (r === 'ADMIN' || r === 'HEAD_OFFICE_ADMIN') return ['SCHOOL_ADMIN']
+  if (r === 'SUPER_ADMIN') return ['HEAD_OFFICE_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'STUDENT', 'PARENT']
+  if (r === 'HEAD_OFFICE_ADMIN') return ['SCHOOL_ADMIN']
   if (r === 'SCHOOL_ADMIN') return ['TEACHER', 'STUDENT', 'PARENT']
   return []
 }

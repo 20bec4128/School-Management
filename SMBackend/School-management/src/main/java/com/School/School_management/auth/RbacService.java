@@ -84,7 +84,12 @@ public class RbacService {
         if (role == null) return null;
         String trimmed = role.trim();
         if (trimmed.isEmpty()) return null;
-        return trimmed.toUpperCase();
+        String normalized = trimmed.toUpperCase()
+                .replace('-', '_')
+                .replace(' ', '_');
+        normalized = normalized.replaceAll("_+", "_");
+        normalized = normalized.replaceAll("^_+|_+$", "");
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private boolean hasSchoolOverride(Long schoolId, String role) {

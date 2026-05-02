@@ -1,12 +1,13 @@
 import { getCurrentRole, getCurrentUser } from './currentUser'
+import { normalizeRole } from './roles'
 
 export const isGlobalRole = (role) => {
-  const r = String(role || '').toUpperCase()
-  return r === 'SUPER_ADMIN' || r === 'ADMIN'
+  const r = normalizeRole(role)
+  return r === 'SUPER_ADMIN' || r === 'HEAD_OFFICE_ADMIN'
 }
 
 export const isSchoolScopedRole = (role) => {
-  const r = String(role || '').toUpperCase()
+  const r = normalizeRole(role)
   return r === 'SCHOOL_ADMIN' || r === 'TEACHER' || r === 'STUDENT' || r === 'PARENT'
 }
 
@@ -17,4 +18,3 @@ export const getLockedSchool = () => {
   if (user?.schoolId == null) return { locked: true, schoolId: null, schoolName: null }
   return { locked: true, schoolId: String(user.schoolId), schoolName: user?.schoolName || null }
 }
-

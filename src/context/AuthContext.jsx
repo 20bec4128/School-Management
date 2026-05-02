@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { login as loginApi, logout as logoutApi, me as meApi } from '../apis/authApi'
 import { getToken, setToken } from '../apis/apiClient'
+import { normalizeRole } from '../utils/roles'
 
 const USER_KEY = 'sm_user'
 const CHILD_KEY = 'sm_selected_child_id'
@@ -33,8 +34,6 @@ const writeJson = (key, value) => {
     // ignore
   }
 }
-
-const normalizeRole = (value) => String(value || '').trim().toUpperCase()
 
 const pickPermissions = (user) => {
   const perms = user?.permissions ?? user?.perms ?? user?.authorities ?? []

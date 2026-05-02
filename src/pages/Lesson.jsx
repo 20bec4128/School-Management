@@ -7,6 +7,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import '../assets/css/addModalShared.css'
+import FindEmptyState from '../components/FindEmptyState'
 
 const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
@@ -557,17 +558,17 @@ const Lesson = () => {
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-12 p-20">
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
-                + Add
-              </button>
               <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
                 Find
               </button>
+              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                + Add
+              </button>
             </div>
 
-            <div className="d-flex align-items-center gap-8">
+            <div className="d-flex flex-wrap align-items-center gap-8">
               <div className="position-relative">
                 <input
                   className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
@@ -580,13 +581,16 @@ const Lesson = () => {
                   <i className="ri-search-line"></i>
                 </span>
               </div>
+              <button
+                type="button"
+                className="btn btn-light border"
+                onClick={handleResetFilters}
+                disabled={!hasSearched || saving}
+              >
+                Reset
+              </button>
               <div className="dropdown">
-                <button
-                  className="btn btn-light border dropdown-toggle"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
+                <button className="btn btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                   Columns ({visibleColumnCount})
                 </button>
                 <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
@@ -600,120 +604,131 @@ const Lesson = () => {
                   ))}
                 </ul>
               </div>
+              <select
+                className="form-select"
+                style={{ width: 120 }}
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+                disabled={!hasSearched}
+              >
+                {[5, 10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}/page
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {!hasSearched ? (
-            <div className="px-20 py-40 text-center text-secondary-light">
-              Use <strong>Find</strong> to select School, Academic Year, Class and Subject.
-            </div>
-          ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
-          ) : (
-            <>
-              <div className="table-responsive">
-                <table className="table mb-0">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 48 }}>
-                        <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
-                      </th>
-                      {visibleColumns.school && <th>School</th>}
-                      {visibleColumns.academicYear && <th>Academic Year</th>}
-                      {visibleColumns.className && <th>Class</th>}
-                      {visibleColumns.subjectName && <th>Subject</th>}
-                      {visibleColumns.lesson && <th>Lesson</th>}
-                      {visibleColumns.note && <th>Note</th>}
-                      <th style={{ width: 160 }}>Action</th>
+          <div className="table-responsive">
+            <table className="table table-striped align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style={{ width: 48 }}>
+                    <input
+                      type="checkbox"
+                      checked={hasSearched && allSelected}
+                      onChange={handleSelectAll}
+                      disabled={!hasSearched || loading}
+                    />
+                  </th>
+                  {visibleColumns.school && <th>School</th>}
+                  {visibleColumns.academicYear && <th>Academic Year</th>}
+                  {visibleColumns.className && <th>Class</th>}
+                  {visibleColumns.subjectName && <th>Subject</th>}
+                  {visibleColumns.lesson && <th>Lesson</th>}
+                  {visibleColumns.note && <th>Note</th>}
+                  <th style={{ width: 160 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!hasSearched ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-24 text-secondary-light">
+                      <FindEmptyState
+                        title="Lesson"
+                        description="Use the Find button to select School, Academic Year, Class and Subject to load lessons."
+                        buttonLabel="Find Lessons"
+                        onFind={() => setIsFindSidebarOpen(true)}
+                      />
+                    </td>
+                  </tr>
+                ) : loading ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-24 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-24 text-secondary-light">
+                      No lessons found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
+                      </td>
+                      {visibleColumns.school && <td>{r.schoolName}</td>}
+                      {visibleColumns.academicYear && <td>{r.academicYear}</td>}
+                      {visibleColumns.className && <td>{r.className}</td>}
+                      {visibleColumns.subjectName && <td>{r.subjectName}</td>}
+                      {visibleColumns.lesson && <td className="fw-medium text-primary-light">{r.lesson}</td>}
+                      {visibleColumns.note && <td>{r.note}</td>}
+                      <td>
+                        <div className="d-flex gap-8">
+                          <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={saving}>
+                            Edit
+                          </button>
+                          <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={saving}>
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="text-center py-24 text-secondary-light">
-                          No lessons found.
-                        </td>
-                      </tr>
-                    ) : (
-                      paginated.map((r) => (
-                        <tr key={r.id}>
-                          <td>
-                            <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
-                          </td>
-                          {visibleColumns.school && <td>{r.schoolName}</td>}
-                          {visibleColumns.academicYear && <td>{r.academicYear}</td>}
-                          {visibleColumns.className && <td>{r.className}</td>}
-                          {visibleColumns.subjectName && <td>{r.subjectName}</td>}
-                          {visibleColumns.lesson && <td className="fw-medium text-primary-light">{r.lesson}</td>}
-                          {visibleColumns.note && <td>{r.note}</td>}
-                          <td>
-                            <div className="d-flex gap-8">
-                              <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={saving}>
-                                Edit
-                              </button>
-                              <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={saving}>
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-              <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
-                <div className="d-flex align-items-center gap-8">
-                  <span className="text-secondary-light">Rows per page:</span>
-                  <select
-                    className="form-select form-select-sm"
-                    style={{ width: 90 }}
-                    value={rowsPerPage}
-                    onChange={(e) => {
-                      setRowsPerPage(Number(e.target.value))
-                      setCurrentPage(1)
-                    }}
-                  >
-                    {[5, 10, 20, 50].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="d-flex align-items-center gap-8">
+          {hasSearched && !loading ? (
+            <div className="d-flex align-items-center justify-content-end p-20 flex-wrap gap-16">
+              <div className="d-flex align-items-center gap-8">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Prev
+                </button>
+                {getVisiblePages().map((p) => (
                   <button
+                    key={p}
                     type="button"
-                    className="btn btn-sm btn-light border"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
+                    className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                    onClick={() => setCurrentPage(p)}
                   >
-                    Prev
+                    {p}
                   </button>
-                  {getVisiblePages().map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                      onClick={() => setCurrentPage(p)}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-light border"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
               </div>
-            </>
-          )}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -875,4 +890,3 @@ const Lesson = () => {
 }
 
 export default Lesson
-

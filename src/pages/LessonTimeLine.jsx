@@ -6,6 +6,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import '../assets/css/addModalShared.css'
+import FindEmptyState from '../components/FindEmptyState'
 
 const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
@@ -305,20 +306,13 @@ const LessonTimeline = () => {
             </div>
           </div>
 
-          {!hasSearched ? (
-            <div className="px-20 py-40 text-center text-secondary-light">
-              Use <strong>Find</strong> to select School, Academic Year, Class and Subject.
-            </div>
-          ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
-          ) : (
-            <div className="p-20">
-              <div className="row g-16">
-                <div className="col-12 col-lg-5">
-                  <div className="border rounded">
-                    <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">Lessons</div>
-                    <div className="table-responsive">
-                      <table className="table mb-0">
+          <div className="p-20">
+            <div className="row g-16">
+              <div className="col-12 col-lg-5">
+                <div className="border rounded">
+                  <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">Lessons</div>
+                  <div className="table-responsive">
+                    <table className="table table-striped align-middle mb-0">
                         <thead>
                           <tr>
                             <th style={{ width: '42%' }}>Lesson</th>
@@ -328,7 +322,24 @@ const LessonTimeline = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredLessons.length === 0 ? (
+                          {!hasSearched ? (
+                            <tr>
+                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                                <FindEmptyState
+                                  title="Lesson Timeline"
+                                  description="Use the Find button to select School, Academic Year, Class and Subject to load the timeline."
+                                  buttonLabel="Find Lesson Timeline"
+                                  onFind={() => setIsFindSidebarOpen(true)}
+                                />
+                              </td>
+                            </tr>
+                          ) : loading ? (
+                            <tr>
+                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                                Loading...
+                              </td>
+                            </tr>
+                          ) : filteredLessons.length === 0 ? (
                             <tr>
                               <td colSpan={4} className="text-center py-20 text-secondary-light">
                                 No lessons found.
@@ -342,7 +353,10 @@ const LessonTimeline = () => {
                                   <td
                                     className="fw-medium text-primary-light"
                                     style={{ cursor: 'pointer' }}
-                                    onClick={() => handleSelectLesson(l.lessonId)}
+                                    onClick={() => {
+                                      if (!hasSearched || loading) return
+                                      handleSelectLesson(l.lessonId)
+                                    }}
                                   >
                                     {l.lessonName || `Lesson ${l.lessonId}`}
                                   </td>
@@ -384,13 +398,13 @@ const LessonTimeline = () => {
                   </div>
                 </div>
 
-                <div className="col-12 col-lg-7">
-                  <div className="border rounded">
-                    <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">
-                      Topics {selectedLesson ? <span className="text-secondary-light">/ {selectedLesson.lessonName}</span> : null}
-                    </div>
-                    <div className="table-responsive">
-                      <table className="table mb-0">
+              <div className="col-12 col-lg-7">
+                <div className="border rounded">
+                  <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">
+                    Topics {selectedLesson ? <span className="text-secondary-light">/ {selectedLesson.lessonName}</span> : null}
+                  </div>
+                  <div className="table-responsive">
+                    <table className="table table-striped align-middle mb-0">
                         <thead>
                           <tr>
                             <th style={{ width: '45%' }}>Topic</th>
@@ -400,7 +414,17 @@ const LessonTimeline = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {!selectedLessonId ? (
+                          {!hasSearched ? (
+                            <tr>
+                              
+                            </tr>
+                          ) : loading ? (
+                            <tr>
+                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                                Loading...
+                              </td>
+                            </tr>
+                          ) : !selectedLessonId ? (
                             <tr>
                               <td colSpan={4} className="text-center py-20 text-secondary-light">
                                 Select a lesson to view topics.
@@ -454,10 +478,8 @@ const LessonTimeline = () => {
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
-
       <SlideSidebar isOpen={isFindSidebarOpen} title="Find Lesson Timeline" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
@@ -559,4 +581,3 @@ const LessonTimeline = () => {
 }
 
 export default LessonTimeline
-

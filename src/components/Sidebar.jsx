@@ -3,6 +3,7 @@ import '../css/sidebar.css';
 import { useSidebar } from '../context/SidebarContext';
 import { can } from '../utils/permissions';
 import { canManageUsers } from '../utils/editableRoles';
+import { normalizeRole } from '../utils/roles';
 
 const menuSections = [
   {
@@ -822,9 +823,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     user?.fullName ||
     user?.email ||
     'User';
-  const role = user?.role || user?.userRole || user?.authority || '';
-  const isStudent = String(role).toUpperCase() === 'STUDENT'
-  const isSchoolAdmin = String(role).toUpperCase() === 'SCHOOL_ADMIN'
+  const role = normalizeRole(user?.role || user?.userRole || user?.authority);
+  const isStudent = role === 'STUDENT'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const studentAllowedPages = new Set([
     'dashboard',
     'class-routine',

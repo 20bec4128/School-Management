@@ -1,9 +1,11 @@
 package com.School.School_management.config;
 
+import com.School.School_management.auth.JwtAuthInterceptor;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -11,9 +13,19 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
   private final String uploadDir;
+  private final JwtAuthInterceptor jwtAuthInterceptor;
 
-  public WebConfig(UploadProperties uploadProperties) {
+  public WebConfig(UploadProperties uploadProperties, JwtAuthInterceptor jwtAuthInterceptor) {
     this.uploadDir = uploadProperties.getDir();
+    this.jwtAuthInterceptor = jwtAuthInterceptor;
+  }
+
+  @Override
+  public void addInterceptors(InterceptorRegistry registry) {
+    registry
+        .addInterceptor(jwtAuthInterceptor)
+        .addPathPatterns("/api/**")
+        .excludePathPatterns("/api/auth/**");
   }
 
   @Override

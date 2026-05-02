@@ -6,6 +6,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import '../assets/css/addModalShared.css'
+import FindEmptyState from '../components/FindEmptyState'
 
 const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
@@ -290,20 +291,13 @@ const LessonStatus = () => {
             </div>
           </div>
 
-          {!hasSearched ? (
-            <div className="px-20 py-40 text-center text-secondary-light">
-              Use <strong>Find</strong> to select School, Academic Year, Class and Subject.
-            </div>
-          ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
-          ) : (
-            <div className="p-20">
-              <div className="row g-16">
-                <div className="col-12 col-lg-5">
-                  <div className="border rounded">
-                    <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">Lessons</div>
-                    <div className="table-responsive">
-                      <table className="table mb-0">
+          <div className="p-20">
+            <div className="row g-16">
+              <div className="col-12 col-lg-5">
+                <div className="border rounded">
+                  <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">Lessons</div>
+                  <div className="table-responsive">
+                    <table className="table table-striped align-middle mb-0">
                         <thead>
                           <tr>
                             <th style={{ width: '70%' }}>Lesson</th>
@@ -311,7 +305,24 @@ const LessonStatus = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredLessons.length === 0 ? (
+                          {!hasSearched ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                <FindEmptyState
+                                  title="Lesson Status"
+                                  description="Use the Find button to select School, Academic Year, Class and Subject to load lesson statuses."
+                                  buttonLabel="Find Lesson Status"
+                                  onFind={() => setIsFindSidebarOpen(true)}
+                                />
+                              </td>
+                            </tr>
+                          ) : loading ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                Loading...
+                              </td>
+                            </tr>
+                          ) : filteredLessons.length === 0 ? (
                             <tr>
                               <td colSpan={2} className="text-center py-20 text-secondary-light">
                                 No lessons found.
@@ -324,7 +335,10 @@ const LessonStatus = () => {
                               return (
                                 <tr
                                   key={l.lessonId}
-                                  onClick={() => setSelectedLessonId(l.lessonId)}
+                                  onClick={() => {
+                                    if (!hasSearched || loading) return
+                                    setSelectedLessonId(l.lessonId)
+                                  }}
                                   style={{ cursor: 'pointer', background: isActive ? '#f8fafc' : undefined }}
                                 >
                                   <td className="fw-medium text-primary-light">{l.lessonName || `Lesson ${l.lessonId}`}</td>
@@ -355,14 +369,15 @@ const LessonStatus = () => {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="col-12 col-lg-7">
-                  <div className="border rounded">
-                    <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">
-                      Topics {selectedLesson ? <span className="text-secondary-light">/ {selectedLesson.lessonName}</span> : null}
-                    </div>
-                    <div className="table-responsive">
-                      <table className="table mb-0">
+              <div className="col-12 col-lg-7">
+                <div className="border rounded">
+                  <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">
+                    Topics {selectedLesson ? <span className="text-secondary-light">/ {selectedLesson.lessonName}</span> : null}
+                  </div>
+                  <div className="table-responsive">
+                    <table className="table table-striped align-middle mb-0">
                         <thead>
                           <tr>
                             <th style={{ width: '60%' }}>Topic</th>
@@ -370,7 +385,24 @@ const LessonStatus = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {!selectedLesson ? (
+                          {!hasSearched ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                <FindEmptyState
+                                  title="Lesson Status"
+                                  description="Use the Find button to select School, Academic Year, Class and Subject to load lesson statuses."
+                                  buttonLabel="Find Lesson Status"
+                                  onFind={() => setIsFindSidebarOpen(true)}
+                                />
+                              </td>
+                            </tr>
+                          ) : loading ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                Loading...
+                              </td>
+                            </tr>
+                          ) : !selectedLesson ? (
                             <tr>
                               <td colSpan={2} className="text-center py-20 text-secondary-light">
                                 Select a lesson to view topics.
@@ -410,10 +442,7 @@ const LessonStatus = () => {
                 </div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-
+          </div>
       <SlideSidebar
         isOpen={isFindSidebarOpen}
         title="Find Lesson Status"

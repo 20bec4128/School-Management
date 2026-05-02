@@ -103,15 +103,28 @@ import AccessDenied from './pages/AccessDenied'
 
 import { useAuth } from './context/AuthContext'
 import { can } from './utils/permissions'
+import { normalizeRole } from './utils/roles'
+import ProtectedRoute from './components/ProtectedRoute'
 import HeadOffices from './pages/HeadOffices'
 function App() {
   const { status, token, user, role, parentChildren, selectedChildId, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('dashboard')
 
   const homePage = useMemo(() => {
-    const r = String(role || '').toUpperCase()
+    const backendHome = user?.homePage
+    if (typeof backendHome === 'string' && backendHome.trim()) {
+      // Parent "home" depends on whether a child is selected; backend can't know that local choice.
+      if (backendHome === 'parent-dashboard' || backendHome === 'parent-child-select') {
+        const children = Array.isArray(parentChildren) ? parentChildren : []
+        if (children.length > 1 && !selectedChildId) return 'parent-child-select'
+        return 'parent-dashboard'
+      }
+      return backendHome
+    }
+
+    const r = normalizeRole(role)
     if (r === 'SUPER_ADMIN') return 'super-admin-dashboard'
-    if (r === 'ADMIN' || r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
+    if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
     if (r === 'STUDENT') return 'student-dashboard'
@@ -136,19 +149,53 @@ function App() {
     const has = (perm) => can(user, perm)
     switch (currentPage) {
       case 'super-admin-dashboard':
-        return <SuperAdminDashboard />
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['SUPER_ADMIN']}>
+            <SuperAdminDashboard />
+          </ProtectedRoute>
+        )
+      case 'head-office-dashboard':
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['HEAD_OFFICE_ADMIN']}>
+            <HeadOfficeDashboard />
+          </ProtectedRoute>
+        )
       case 'head-offices':
-        return <HeadOffices />
+        return (
+          <ProtectedRoute user={user} role={role} permission={['HEAD_OFFICE_MANAGE', '*']}>
+            <HeadOffices />
+          </ProtectedRoute>
+        )
       case 'school-admin-dashboard':
-        return <SchoolAdminDashboard />
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['SCHOOL_ADMIN']}>
+            <SchoolAdminDashboard />
+          </ProtectedRoute>
+        )
       case 'teacher-dashboard':
-        return <TeacherDashboard />
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['TEACHER']}>
+            <TeacherDashboard />
+          </ProtectedRoute>
+        )
       case 'student-dashboard':
-        return <StudentDashboard />
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['STUDENT']}>
+            <StudentDashboard />
+          </ProtectedRoute>
+        )
       case 'parent-dashboard':
-        return <ParentDashboard />
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['PARENT']}>
+            <ParentDashboard />
+          </ProtectedRoute>
+        )
       case 'parent-child-select':
-        return <ParentChildSelect onDone={() => setCurrentPage('parent-dashboard')} />
+        return (
+          <ProtectedRoute user={user} role={role} allowedRoles={['PARENT']}>
+            <ParentChildSelect onDone={() => setCurrentPage('parent-dashboard')} />
+          </ProtectedRoute>
+        )
       case 'user-role-acl':
         return has(['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']) ? <UserRoleAcl /> : <AccessDenied />
       case 'teacher-department':
@@ -319,7 +366,11 @@ function App() {
         case 'fee-collection':
                 return <FeeCollection/>
         case 'manage-school':
-                return <ManageSchool/>
+                return (
+                  <ProtectedRoute user={user} role={role} permission={['SCHOOL_MANAGE', '*']}>
+                    <ManageSchool />
+                  </ProtectedRoute>
+                )
         case 'payment-setting':
                 return <PaymentSetting/>
         case 'sms-setting':

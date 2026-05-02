@@ -8,11 +8,14 @@ import com.School.School_management.Entity.Student;
 import com.School.School_management.Repository.AdminUserRepository;
 import com.School.School_management.Repository.HeadOfficeRepository;
 import com.School.School_management.Repository.ParentRepository;
+import com.School.School_management.Repository.ParentStudentRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Repository.TeacherRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
@@ -34,6 +37,7 @@ public class AuthController {
     private final RbacService rbacService;
     private final AdminUserRepository adminUserRepository;
     private final ParentRepository parentRepository;
+    private final ParentStudentRepository parentStudentRepository;
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
     private final SchoolRepository schoolRepository;
@@ -46,6 +50,7 @@ public class AuthController {
             RbacService rbacService,
             AdminUserRepository adminUserRepository,
             ParentRepository parentRepository,
+            ParentStudentRepository parentStudentRepository,
             TeacherRepository teacherRepository,
             StudentRepository studentRepository,
             SchoolRepository schoolRepository,
@@ -57,6 +62,7 @@ public class AuthController {
         this.rbacService = rbacService;
         this.adminUserRepository = adminUserRepository;
         this.parentRepository = parentRepository;
+        this.parentStudentRepository = parentStudentRepository;
         this.teacherRepository = teacherRepository;
         this.studentRepository = studentRepository;
         this.schoolRepository = schoolRepository;
@@ -75,6 +81,114 @@ public class AuthController {
         normalized = normalized.replaceAll("_+", "_");
         normalized = normalized.replaceAll("^_+|_+$", "");
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static String normalizeRoleForInternal(String raw) {
+        String normalized = normalizeRoleNameForPermissions(raw);
+        if (normalized == null) return null;
+
+        // Internal (backend) RBAC role names.
+        if ("HEAD_OFFICE_ADMIN".equals(normalized)) return "ADMIN";
+        if ("GUARDIAN".equals(normalized)) return "PARENT";
+        return normalized;
+    }
+
+    private static String normalizeRoleForClient(String raw) {
+        if (raw == null) return null;
+        String r = raw.trim().toUpperCase()
+                .replace('-', '_')
+                .replace(' ', '_');
+        r = r.replaceAll("_+", "_");
+        r = r.replaceAll("^_+|_+$", "");
+        if (r.isEmpty()) return null;
+
+        // Canonical names expected by the frontend.
+        if ("ADMIN".equals(r)) return "HEAD_OFFICE_ADMIN";
+        if ("GUARDIAN".equals(r)) return "PARENT";
+        return r;
+    }
+
+    private static String homePageForClientRole(String clientRole, int childCount) {
+        if (clientRole == null) return "dashboard";
+        return switch (clientRole) {
+            case "SUPER_ADMIN" -> "super-admin-dashboard";
+            case "HEAD_OFFICE_ADMIN" -> "head-office-dashboard";
+            case "SCHOOL_ADMIN" -> "school-admin-dashboard";
+            case "TEACHER" -> "teacher-dashboard";
+            case "STUDENT" -> "student-dashboard";
+            case "PARENT" -> (childCount > 1 ? "parent-child-select" : "parent-dashboard");
+            default -> "dashboard";
+        };
+    }
+
+    private void putRoleContext(Map<String, Object> body, String roleUpper, String username) {
+        if (roleUpper == null || roleUpper.isBlank() || username == null || username.isBlank()) return;
+
+        if ("TEACHER".equals(roleUpper)) {
+            teacherRepository.findByUsername(username).ifPresent((t) -> {
+                body.put("userId", t.getId());
+                body.put("teacherId", t.getId());
+                body.put("name", t.getName());
+                body.put("teacherRole", t.getRole());
+                if (t.getSchoolId() != null) {
+                    body.put("schoolId", t.getSchoolId());
+                    putSchoolName(body, t.getSchoolId());
+                }
+            });
+            return;
+        }
+
+        if ("STUDENT".equals(roleUpper)) {
+            studentRepository.findByUsernameAndDeletedFalse(username).ifPresent((s) -> {
+                body.put("userId", s.getId());
+                body.put("studentId", s.getId());
+                body.put("name", s.getName());
+                if (s.getSchool() != null) {
+                    body.put("schoolId", s.getSchool().getId());
+                    body.put("schoolName", s.getSchool().getSchoolName());
+                }
+            });
+            return;
+        }
+
+        if ("PARENT".equals(roleUpper)) {
+            parentRepository.findByUsername(username).ifPresent((p) -> {
+                body.put("userId", p.getId());
+                body.put("parentId", p.getId());
+                body.put("name", p.getName());
+                body.put("schoolId", p.getSchoolId());
+
+                List<Long> childIds = parentStudentRepository.findStudentIdsByParentId(p.getId());
+                if (childIds == null) childIds = List.of();
+                List<Map<String, Object>> children = new ArrayList<>();
+                if (!childIds.isEmpty()) {
+                    for (Student s : studentRepository.findAllById(childIds)) {
+                        if (s == null || Boolean.TRUE.equals(s.getDeleted())) continue;
+                        Map<String, Object> c = new HashMap<>();
+                        c.put("id", s.getId());
+                        c.put("studentId", s.getId());
+                        c.put("name", s.getName());
+                        if (s.getSchool() != null) {
+                            c.put("schoolId", s.getSchool().getId());
+                            c.put("schoolName", s.getSchool().getSchoolName());
+                        }
+                        if (s.getClassName() != null) c.put("className", s.getClassName());
+                        if (s.getSection() != null) c.put("section", s.getSection());
+                        children.add(c);
+                    }
+                }
+                body.put("children", children);
+            });
+            return;
+        }
+
+        adminUserRepository.findByUsername(username).ifPresent((a) -> {
+            body.put("userId", a.getId());
+            if (a.getSchoolId() != null) {
+                body.put("schoolId", a.getSchoolId());
+                putSchoolName(body, a.getSchoolId());
+            }
+        });
     }
 
     @PostMapping("/login")
@@ -113,15 +227,23 @@ public class AuthController {
 
         Map<String, Object> body = new HashMap<>();
         body.put("username", auth.username());
-        body.put("role", auth.role());
+        String clientRole = normalizeRoleForClient(auth.role());
+        body.put("role", clientRole);
         body.put("token", token);
-        if (auth.userId() != null) body.put("userId", auth.userId());
         if (auth.headOfficeId() != null) body.put("headOfficeId", auth.headOfficeId());
         putHeadOfficeName(body, auth.headOfficeId());
         if (auth.schoolId() != null) body.put("schoolId", auth.schoolId());
         putSchoolName(body, auth.schoolId());
-        if (auth.name() != null) body.put("name", auth.name());
+        // Permissions are still keyed by the RBAC/system role names used in the backend.
         body.put("permissions", permissionsFor(permRole != null ? permRole : auth.role(), auth.schoolId(), auth.headOfficeId()));
+
+        String internalRoleUpper = auth.role() == null ? null : auth.role().trim().toUpperCase();
+        putRoleContext(body, internalRoleUpper, auth.username());
+
+        int childCount = 0;
+        Object children = body.get("children");
+        if (children instanceof List<?> list) childCount = list.size();
+        body.put("homePage", homePageForClientRole(clientRole, childCount));
 
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(body);
     }
@@ -146,42 +268,18 @@ public class AuthController {
 
         Map<String, Object> body = new HashMap<>();
         body.put("username", claims.username());
-        body.put("role", role);
+        body.put("role", normalizeRoleForClient(role));
         if (claims.headOfficeId() != null) body.put("headOfficeId", claims.headOfficeId());
         putHeadOfficeName(body, claims.headOfficeId());
         if (claims.schoolId() != null) body.put("schoolId", claims.schoolId());
         putSchoolName(body, claims.schoolId());
         body.put("permissions", permissionsFor((permRole != null && !permRole.isBlank()) ? permRole : role, claims.schoolId(), claims.headOfficeId()));
 
-        if ("TEACHER".equals(role)) {
-            teacherRepository.findByUsername(claims.username()).ifPresent((t) -> {
-                body.put("userId", t.getId());
-                body.put("name", t.getName());
-            });
-        } else if ("STUDENT".equals(role)) {
-            studentRepository.findByUsernameAndDeletedFalse(claims.username()).ifPresent((s) -> {
-                body.put("userId", s.getId());
-                body.put("name", s.getName());
-                if (s.getSchool() != null) {
-                    body.put("schoolId", s.getSchool().getId());
-                    body.put("schoolName", s.getSchool().getSchoolName());
-                }
-            });
-        } else if ("PARENT".equals(role)) {
-            parentRepository.findByUsername(claims.username()).ifPresent((p) -> {
-                body.put("userId", p.getId());
-                body.put("name", p.getName());
-                body.put("schoolId", p.getSchoolId());
-            });
-        } else {
-            adminUserRepository.findByUsername(claims.username()).ifPresent((a) -> {
-                body.put("userId", a.getId());
-                if (a.getSchoolId() != null) {
-                    body.put("schoolId", a.getSchoolId());
-                    putSchoolName(body, a.getSchoolId());
-                }
-            });
-        }
+        putRoleContext(body, role, claims.username());
+        int childCount = 0;
+        Object children = body.get("children");
+        if (children instanceof List<?> list) childCount = list.size();
+        body.put("homePage", homePageForClientRole(normalizeRoleForClient(role), childCount));
 
         return ResponseEntity.ok(body);
     }
@@ -212,7 +310,8 @@ public class AuthController {
         if (admin.isPresent() && Boolean.TRUE.equals(admin.get().getActive())) {
             if (passwordEncoder.matches(password, admin.get().getPasswordHash())) {
                 AdminUser a = admin.get();
-                return new AuthResult(username, a.getRole(), a.getId(), a.getHeadOfficeId(), a.getSchoolId(), null, null, null, null);
+                String internalRole = normalizeRoleForInternal(a.getRole());
+                return new AuthResult(username, internalRole, a.getId(), a.getHeadOfficeId(), a.getSchoolId(), null, null, null, null);
             }
         }
 

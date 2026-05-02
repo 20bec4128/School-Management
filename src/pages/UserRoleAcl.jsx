@@ -11,6 +11,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { getCurrentRole, getCurrentUser } from '../utils/currentUser'
 import { can } from '../utils/permissions'
+import { normalizeRole } from '../utils/roles'
 import '../assets/css/addModalShared.css'
 
 const normalizeRoleName = (value) => String(value || '').trim().toUpperCase()
@@ -225,10 +226,10 @@ const UserRoleAcl = () => {
   const [error, setError] = useState('')
   const [permissions, setPermissions] = useState([])
   const [roles, setRoles] = useState([])
-  const currentRole = getCurrentRole()
+  const currentRole = normalizeRole(getCurrentRole())
   const currentUser = getCurrentUser()
   const isSuperAdminMode = currentRole === 'SUPER_ADMIN'
-  const isAdminMode = currentRole === 'ADMIN'
+  const isAdminMode = currentRole === 'HEAD_OFFICE_ADMIN'
   const canAddRole = can(currentUser, ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE'])
   const rawOwnedPerms = currentUser?.permissions
   const ownsAllPermissions = rawOwnedPerms === '*' || (Array.isArray(rawOwnedPerms) && rawOwnedPerms.includes('*'))

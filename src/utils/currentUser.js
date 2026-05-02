@@ -1,3 +1,5 @@
+import { normalizeRole } from './roles'
+
 const USER_KEY = 'sm_user'
 
 export const getCurrentUser = () => {
@@ -11,5 +13,5 @@ export const getCurrentUser = () => {
 
 export const getCurrentRole = () => {
   const user = getCurrentUser()
-  return String(user?.role || user?.userRole || user?.authority || '').toUpperCase()
+  return normalizeRole(user?.role || user?.userRole || user?.authority)
 }

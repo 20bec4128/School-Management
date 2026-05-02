@@ -8,6 +8,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
@@ -17,6 +19,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class JwtAuthInterceptor implements HandlerInterceptor {
 
     public static final String ATTR_USER = "authUser";
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthInterceptor.class);
 
     private final JwtService jwtService;
     private final RbacService rbacService;
@@ -61,13 +64,13 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        String roleName = claims.role() == null ? null : claims.role().trim().toUpperCase();
+        String roleName = normalizeRoleName(claims.role());
         if (roleName == null || roleName.isBlank()) {
             writeError(response, 401, "Unauthorized");
             return false;
         }
 
-        String permRoleName = claims.permRole() == null ? null : claims.permRole().trim().toUpperCase();
+        String permRoleName = normalizeRoleName(claims.permRole());
         String effectivePermRole = (permRoleName != null && !permRoleName.isBlank()) ? permRoleName : roleName;
 
         Long headOfficeId = claims.headOfficeId();
@@ -117,10 +120,17 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         request.setAttribute(ATTR_USER, user);
         CurrentUserHolder.set(user);
 
+        // SUPER_ADMIN is all-access for all API endpoints.
+        // RBAC annotations are still required for other roles (default-deny).
+        if (user.isSuperAdmin()) {
+            return true;
+        }
+
         String[] required = requiredPermissions(handler);
         if (required == null || required.length == 0) {
             // Default deny for safety: all /api/** routes must declare required permissions.
-            writeError(response, 403, "Forbidden");
+            log.warn("Forbidden (no @RequirePermission). path={} user={} role={} perms={}", path, user.username(), user.role(), user.permissions());
+            writeError(response, 403, "Forbidden", Map.of("role", user.role(), "required", "NONE"));
             return false;
         }
         boolean ok = false;
@@ -131,7 +141,15 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             }
         }
         if (!ok) {
-            writeError(response, 403, "Forbidden");
+            log.warn(
+                    "Forbidden (missing permission). path={} user={} role={} required={} perms={}",
+                    path,
+                    user.username(),
+                    user.role(),
+                    java.util.Arrays.toString(required),
+                    user.permissions()
+            );
+            writeError(response, 403, "Forbidden", Map.of("role", user.role(), "required", java.util.Arrays.toString(required)));
             return false;
         }
 
@@ -159,6 +177,19 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
                 .toArray(String[]::new);
     }
 
+    private String normalizeRoleName(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim().toUpperCase()
+                .replace('-', '_')
+                .replace(' ', '_');
+        trimmed = trimmed.replaceAll("_+", "_");
+        trimmed = trimmed.replaceAll("^_+|_+$", "");
+        if ("SUPERADMIN".equals(trimmed)) trimmed = "SUPER_ADMIN";
+        if ("HEADOFFICEADMIN".equals(trimmed) || "HEAD_OFFICEADMIN".equals(trimmed)) trimmed = "HEAD_OFFICE_ADMIN";
+        if ("SCHOOLADMIN".equals(trimmed)) trimmed = "SCHOOL_ADMIN";
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private String readBearer(HttpServletRequest request) {
         String auth = request.getHeader("Authorization");
         if (auth == null) return null;
@@ -171,6 +202,21 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         response.setStatus(status);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        objectMapper.writeValue(response.getWriter(), Map.of("message", message));
+    }
+
+    private void writeError(HttpServletResponse response, int status, String message, Map<String, Object> debug) throws Exception {
+        response.setStatus(status);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        if (debug != null) {
+            try {
+                response.setHeader("X-SM-Auth-Role", String.valueOf(debug.getOrDefault("role", "")));
+                response.setHeader("X-SM-Auth-Required", String.valueOf(debug.getOrDefault("required", "")));
+            } catch (Exception ignored) {
+                // ignore header failures
+            }
+        }
         objectMapper.writeValue(response.getWriter(), Map.of("message", message));
     }
 }
