@@ -2,6 +2,8 @@
 package com.School.School_management.Repository;
 
 import com.School.School_management.Entity.Student;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,6 +23,10 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     boolean existsByAdmissionNoAndDeletedFalse(String admissionNo);
     
     boolean existsByUsernameAndDeletedFalse(String username);
+
+    Optional<Student> findByUsernameAndDeletedFalse(String username);
+
+    List<Student> findAllBySchoolClass_IdAndSchoolSection_IdAndDeletedFalse(Long classId, Long sectionId);
     
     @Query("SELECT s FROM Student s WHERE s.deleted = false AND " +
            "(:schoolId IS NULL OR s.school.id = :schoolId) AND " +

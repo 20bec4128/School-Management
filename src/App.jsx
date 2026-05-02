@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import { SidebarProvider } from './context/SidebarContext'
@@ -90,8 +90,44 @@ import FeeCollection from './pages/FeeCollection'
 import ManageSchool from './pages/ManageSchool'
 import PaymentSetting from './pages/PaymentSetting'
 import SmsSetting from './pages/SmsSetting'
+
+import { logout as logoutApi, me as meApi } from './apis/authApi'
+import { getToken, setToken } from './apis/apiClient'
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
+  const [user, setUser] = useState(null)
+
+  const loadMe = useCallback(async () => {
+    const token = getToken()
+    if (!token) {
+      setUser(null)
+      return
+    }
+    try {
+      const meResult = await meApi()
+      setUser(meResult || null)
+    } catch {
+      setUser(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadMe()
+  }, [loadMe])
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logoutApi()
+    } catch {
+      // Ignore API failures; client-side logout should still clear auth.
+    } finally {
+      setToken(null)
+      setUser(null)
+      setCurrentPage('dashboard')
+      // Ensure any token-gated views reset.
+      window.location.reload()
+    }
+  }, [])
 
   const renderPage = () => {
     switch (currentPage) {
@@ -275,7 +311,7 @@ function App() {
 
   return (
     <SidebarProvider>
-      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} />
+      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={handleLogout} />
 
       <main className="dashboard-main">
         <Topbar />

@@ -11,5 +11,7 @@ public interface SchoolSectionRepository extends JpaRepository<SchoolSection, Lo
   List<SchoolSection> findAllBySchoolClass_IdOrderByIdDesc(Long classId);
 
   List<SchoolSection> findAllBySchool_IdAndSchoolClass_IdOrderByIdDesc(Long schoolId, Long classId);
+
+  boolean existsByIdAndSchool_IdAndSchoolClass_Id(Long id, Long schoolId, Long classId);
 }
 

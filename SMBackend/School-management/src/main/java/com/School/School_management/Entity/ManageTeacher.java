@@ -49,6 +49,9 @@ public class ManageTeacher {
     private String resumeUrl;
     private Integer displayOrder;
 
+    @Column(name = "school_id")
+    private Long schoolId;
+
     public Long getId() {
         return id;
     }
@@ -56,6 +59,10 @@ public class ManageTeacher {
     public void setId(Long id) {
         this.id = id;
     }
+
+    public Long getSchoolId() { return schoolId; }
+
+    public void setSchoolId(Long schoolId) { this.schoolId = schoolId; }
 
     public String getName() {
         return name;

@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 uploads
+.npm-cache
 
 # Editor directories and files
 .vscode/*

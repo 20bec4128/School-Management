@@ -1,4 +1,4 @@
-package com.School.School_management.Service.impl;
+package com.School.School_management.ServiceImpl;
 
 import com.School.School_management.Dto.SchoolClassDto;
 import com.School.School_management.Entity.ManageSchool;

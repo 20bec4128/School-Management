@@ -72,6 +72,12 @@ public class ManageSchool {
     // File Paths (important for your UI images)
     private String frontendLogoUrl;
     private String adminLogoUrl;
+
+    @Column(name = "head_office_id")
+    private Long headOfficeId;
+
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
 	public Long getId() {
 		return id;
 	}
@@ -138,6 +144,14 @@ public class ManageSchool {
 	public void setEmail(String email) {
 		this.email = email;
 	}
+
+    public Long getHeadOfficeId() { return headOfficeId; }
+
+    public void setHeadOfficeId(Long headOfficeId) { this.headOfficeId = headOfficeId; }
+
+    public Boolean getIsDeleted() { return isDeleted; }
+
+    public void setIsDeleted(Boolean isDeleted) { this.isDeleted = isDeleted; }
 	public String getFax() {
 		return fax;
 	}
