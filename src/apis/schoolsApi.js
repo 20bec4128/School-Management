@@ -1,4 +1,6 @@
 // Use the Vite dev-server proxy (`/api` -> backend) to avoid browser CORS issues.
+import { apiFetch } from './apiClient'
+
 const SCHOOLS_API_BASE = '/api/schools'
 
 const readApiError = async (res) => {
@@ -29,9 +31,7 @@ export const fetchSchoolsPage = async (page, size) => {
     page: String(Math.max(page, 0)),
     size: String(size),
   })
-  const res = await fetch(`${SCHOOLS_API_BASE}?${query.toString()}`, {
-    headers: { Accept: 'application/json' },
-  })
+  const res = await apiFetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()
 }
@@ -87,7 +87,7 @@ export const fetchSchoolsLookup = async () => {
 }
 
 export const createSchool = async (payload, form) => {
-  const res = await fetch(SCHOOLS_API_BASE, {
+  const res = await apiFetch(SCHOOLS_API_BASE, {
     method: 'POST',
     body: buildUpsertFormData(payload, form),
   })
@@ -96,7 +96,7 @@ export const createSchool = async (payload, form) => {
 }
 
 export const updateSchool = async (schoolId, payload, form) => {
-  const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, {
+  const res = await apiFetch(`${SCHOOLS_API_BASE}/${schoolId}`, {
     method: 'PUT',
     body: buildUpsertFormData(payload, form),
   })
@@ -105,7 +105,7 @@ export const updateSchool = async (schoolId, payload, form) => {
 }
 
 export const deleteSchool = async (schoolId) => {
-  const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
+  const res = await apiFetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

@@ -1,10 +1,8 @@
-import { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import i18n from '../i18n/index.js'
+import { useState } from 'react'
 import '../css/login.css'
 
-import { login as loginApi } from '../apis/authApi'
-import { setToken } from '../apis/apiClient'
+import { useAuth } from '../context/AuthContext'
+import loginPageImg from '../assets/login_page.png'
 
 const IconUser = (props) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
@@ -126,7 +124,8 @@ const LogoApple = (props) => (
 )
 
 export default function Login({ onSuccess }) {
-  const { t } = useTranslation()
+  const { login } = useAuth()
+  const t = (_key, opts = {}) => opts?.defaultValue ?? ''
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -134,22 +133,13 @@ export default function Login({ onSuccess }) {
   const [error, setError] = useState('')
   const [remember, setRemember] = useState(true)
 
-  const languages = useMemo(
-    () => [
-      { code: 'en', label: 'English' },
-      { code: 'hi', label: 'Hindi' },
-    ],
-    [],
-  )
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setBusy(true)
     try {
-      const result = await loginApi(username.trim(), password)
-      setToken(result?.token, remember)
-      onSuccess?.({ ...result, remember })
+      await login({ username: username.trim(), password, remember })
+      onSuccess?.()
     } catch (err) {
       setError(err?.message || 'Login failed')
     } finally {
@@ -160,6 +150,9 @@ export default function Login({ onSuccess }) {
   return (
     <div className="sm-login">
       <div className="sm-login-shell">
+        {/* <section className="sm-login-visual" aria-hidden="true">
+          <img src={loginPageImg} alt="" />
+        </section> */}
         <section className="sm-login-left">
           <div className="sm-login-brand">
             <div className="sm-login-logo" aria-hidden="true">

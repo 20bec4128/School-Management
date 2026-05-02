@@ -43,6 +43,7 @@ const buildUpsertFormData = (payload, file) => {
 
 export const fetchAssignments = async () => {
   const res = await apiFetch(ASSIGNMENTS_API_BASE, { headers: { Accept: 'application/json' } })
+  if (res.status === 403) return []
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()
   return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []

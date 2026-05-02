@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import { SidebarProvider } from './context/SidebarContext'
+import Login from './pages/Login'
+import ParentChildSelect from './pages/ParentChildSelect'
 import Dashboard from './pages/Dashboard'
+import SuperAdminDashboard from './pages/SuperAdminDashboard'
+import HeadOfficeDashboard from './pages/HeadOfficeDashboard'
+import SchoolAdminDashboard from './pages/SchoolAdminDashboard'
+import TeacherDashboard from './pages/TeacherDashboard'
+import StudentDashboard from './pages/StudentDashboard'
+import ParentDashboard from './pages/ParentDashboard'
 import TeacherDepartment from './pages/TeacherDepartment'
 import StudentList from './pages/StudentList'
 import ManageTeacher from './pages/Manageteacher'
@@ -90,47 +98,59 @@ import FeeCollection from './pages/FeeCollection'
 import ManageSchool from './pages/ManageSchool'
 import PaymentSetting from './pages/PaymentSetting'
 import SmsSetting from './pages/SmsSetting'
+import UserRoleAcl from './pages/UserRoleAcl'
+import AccessDenied from './pages/AccessDenied'
 
-import { logout as logoutApi, me as meApi } from './apis/authApi'
-import { getToken, setToken } from './apis/apiClient'
+import { useAuth } from './context/AuthContext'
+import { can } from './utils/permissions'
+import HeadOffices from './pages/HeadOffices'
 function App() {
+  const { status, token, user, role, parentChildren, selectedChildId, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('dashboard')
-  const [user, setUser] = useState(null)
 
-  const loadMe = useCallback(async () => {
-    const token = getToken()
-    if (!token) {
-      setUser(null)
-      return
+  const homePage = useMemo(() => {
+    const r = String(role || '').toUpperCase()
+    if (r === 'SUPER_ADMIN') return 'super-admin-dashboard'
+    if (r === 'ADMIN' || r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
+    if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
+    if (r === 'TEACHER') return 'teacher-dashboard'
+    if (r === 'STUDENT') return 'student-dashboard'
+    if (r === 'PARENT') {
+      const children = Array.isArray(parentChildren) ? parentChildren : []
+      if (children.length > 1 && !selectedChildId) return 'parent-child-select'
+      return 'parent-dashboard'
     }
-    try {
-      const meResult = await meApi()
-      setUser(meResult || null)
-    } catch {
-      setUser(null)
-    }
-  }, [])
+    return 'dashboard'
+  }, [role, parentChildren, selectedChildId])
 
   useEffect(() => {
-    void loadMe()
-  }, [loadMe])
-
-  const handleLogout = useCallback(async () => {
-    try {
-      await logoutApi()
-    } catch {
-      // Ignore API failures; client-side logout should still clear auth.
-    } finally {
-      setToken(null)
-      setUser(null)
-      setCurrentPage('dashboard')
-      // Ensure any token-gated views reset.
-      window.location.reload()
+    if (status !== 'ready') return
+    if (!token) {
+      setCurrentPage('login')
+      return
     }
-  }, [])
+    setCurrentPage((prev) => (prev === 'login' ? homePage : prev))
+  }, [status, token, homePage])
 
   const renderPage = () => {
+    const has = (perm) => can(user, perm)
     switch (currentPage) {
+      case 'super-admin-dashboard':
+        return <SuperAdminDashboard />
+      case 'head-offices':
+        return <HeadOffices />
+      case 'school-admin-dashboard':
+        return <SchoolAdminDashboard />
+      case 'teacher-dashboard':
+        return <TeacherDashboard />
+      case 'student-dashboard':
+        return <StudentDashboard />
+      case 'parent-dashboard':
+        return <ParentDashboard />
+      case 'parent-child-select':
+        return <ParentChildSelect onDone={() => setCurrentPage('parent-dashboard')} />
+      case 'user-role-acl':
+        return has(['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']) ? <UserRoleAcl /> : <AccessDenied />
       case 'teacher-department':
         return <TeacherDepartment />
       
@@ -309,12 +329,24 @@ function App() {
     }
   }
 
+  if (status !== 'ready') return null
+
+  if (!token || currentPage === 'login') {
+    return (
+      <Login
+        onSuccess={() => {
+          setCurrentPage(homePage)
+        }}
+      />
+    )
+  }
+
   return (
     <SidebarProvider>
-      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={handleLogout} />
+      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={logout} />
 
       <main className="dashboard-main">
-        <Topbar />
+        <Topbar user={user} onLogout={logout} />
         {renderPage()}
       </main>
     </SidebarProvider>

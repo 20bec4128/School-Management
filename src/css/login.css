@@ -41,9 +41,27 @@
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(10px);
   display: grid;
-  grid-template-columns: 1fr;
+  
   justify-items: center;
   
+}
+
+.sm-login-visual {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 70% 20%, rgba(90, 59, 255, 0.20), rgba(255, 255, 255, 0));
+}
+
+.sm-login-visual img {
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
 }
 
 .sm-login-left {
@@ -175,6 +193,11 @@
     max-height: none;
     background: rgba(255, 255, 255, 0.62);
     border-radius: 20px;
+    grid-template-columns: 1fr;
+  }
+
+  .sm-login-visual {
+    display: none;
   }
 
   .sm-login-left {

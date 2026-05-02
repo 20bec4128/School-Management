@@ -1,124 +1,43 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createClassRoutine, deleteClassRoutine, fetchClassRoutines, updateClassRoutine } from '../apis/classRoutinesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSections } from '../apis/sectionsApi'
+import { fetchSubjects } from '../apis/subjectsApi'
+import { fetchTeachers } from '../apis/teachersApi'
+import { can } from '../utils/permissions'
+import { useAuth } from '../context/AuthContext'
 import '../assets/css/addModalShared.css'
 
-const classRoutines = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    className: 'Class 10',
-    section: 'A',
-    subject: 'Mathematics',
-    day: 'Monday',
-    teacher: 'Mr. John Smith',
-    startTime: '08:00 AM',
-    endTime: '09:00 AM',
-    roomNo: '101',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    className: 'Class 10',
-    section: 'A',
-    subject: 'Physics',
-    day: 'Monday',
-    teacher: 'Mr. David Kim',
-    startTime: '09:15 AM',
-    endTime: '10:15 AM',
-    roomNo: '102',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    className: 'Class 11',
-    section: 'B',
-    subject: 'English',
-    day: 'Tuesday',
-    teacher: 'Ms. Sarah Connor',
-    startTime: '10:30 AM',
-    endTime: '11:30 AM',
-    roomNo: '203',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    className: 'Class 9',
-    section: 'A',
-    subject: 'Biology',
-    day: 'Wednesday',
-    teacher: 'Ms. Patricia Nguyen',
-    startTime: '01:00 PM',
-    endTime: '02:00 PM',
-    roomNo: '105',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    className: 'Class 12',
-    section: 'A',
-    subject: 'Computer Science',
-    day: 'Thursday',
-    teacher: 'Mr. Robert Ashford',
-    startTime: '03:30 PM',
-    endTime: '04:30 PM',
-    roomNo: 'Lab-1',
-  },
-]
-
-const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-const sectionOptions = ['A', 'B', 'C', 'D']
-const subjectOptions = [
-  'Mathematics', 'Physics', 'Chemistry', 'Biology',
-  'English', 'Computer Science', 'History', 'Geography',
-]
-const teacherOptions = [
-  'Mr. John Smith', 'Ms. Sarah Connor', 'Mr. David Kim',
-  'Ms. Linda Morrison', 'Mr. Robert Ashford', 'Ms. Patricia Nguyen',
-]
+const STEPS = ['Basic Info']
 const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 const emptyForm = {
-  school: '',
-  className: '',
-  section: '',
-  subject: '',
-  day: '',
-  teacher: '',
+  schoolId: 'Select',
+  classId: 'Select',
+  sectionId: 'Select',
+  subjectId: 'Select',
+  teacherId: 'Select',
+  day: 'Monday',
   startTime: '',
   endTime: '',
   roomNo: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
-  className: 'Select',
-  section: 'Select',
-  day: 'Select',
-}
-
-const STEPS = ['Basic Info', 'Schedule']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Class: 'ri-building-line',
-  Section: 'ri-layout-grid-line',
-  Subject: 'ri-book-open-line',
-  Day: 'ri-calendar-2-line',
-  Teacher: 'ri-user-3-line',
-  'Start Time': 'ri-time-line',
-  'End Time': 'ri-time-line',
-  'Room No': 'ri-door-open-line',
+  schoolId: 'Select',
 }
 
 const columnOptions = [
   { key: 'school', label: 'School' },
   { key: 'className', label: 'Class' },
-  { key: 'section', label: 'Section' },
-  { key: 'subject', label: 'Subject' },
+  { key: 'sectionName', label: 'Section' },
+  { key: 'subjectName', label: 'Subject' },
+  { key: 'teacherName', label: 'Teacher' },
   { key: 'day', label: 'Day' },
-  { key: 'teacher', label: 'Teacher' },
   { key: 'startTime', label: 'Start Time' },
   { key: 'endTime', label: 'End Time' },
   { key: 'roomNo', label: 'Room No' },
@@ -137,676 +56,574 @@ const dayBadgeColor = (day) => {
   return `${map[day] || 'bg-neutral-100 text-secondary-light'} px-12 py-4 radius-4 fw-medium text-sm`
 }
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
 const ClassRoutine = () => {
+  const { user, schoolId } = useAuth()
+  const canManage = can(user, ['CLASS_ROUTINE_MANAGE', '*'])
+
+  const [rows, setRows] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [teachersLookup, setTeachersLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [sectionsLookup, setSectionsLookup] = useState([])
+  const [subjectsLookup, setSubjectsLookup] = useState([])
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRows, setSelectedRows] = useState([])
+
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
+  const [editingId, setEditingId] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
+
+  const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
+  const [pendingFilters, setPendingFilters] = useState(() => ({
+    schoolId: schoolId != null ? String(schoolId) : 'Select',
+  }))
+  const [filters, setFilters] = useState(() => ({
+    schoolId: schoolId != null ? String(schoolId) : 'Select',
+  }))
+  const [findErrors, setFindErrors] = useState({})
+  const [hasSearched, setHasSearched] = useState(false)
+
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(classRoutines.map((r) => r.school))),
-    [],
-  )
+  const loadLookups = useCallback(async () => {
+    const [schools, teachers, classes, sections, subjects] = await Promise.all([
+      fetchSchoolsLookup(),
+      fetchTeachers(),
+      fetchClasses(),
+      fetchSections(),
+      fetchSubjects(),
+    ])
+    setSchoolsLookup(Array.isArray(schools) ? schools : [])
+    setTeachersLookup(Array.isArray(teachers) ? teachers : [])
+    setClassesLookup(Array.isArray(classes) ? classes : [])
+    setSectionsLookup(Array.isArray(sections) ? sections : [])
+    setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
+  }, [])
+
+  const loadRows = useCallback(async (effectiveSchoolId) => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchClassRoutines({ schoolId: effectiveSchoolId })
+      setRows(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setRows([])
+      setError(e?.message || 'Failed to load class routines')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadLookups()
+    if (filters.schoolId !== 'Select') {
+      void loadRows(filters.schoolId)
+      setHasSearched(true)
+    }
+  }, [loadLookups]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const validateFind = () => {
+    const errs = {}
+    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
+    return errs
+  }
+
+  const handleApplyFilters = async (e) => {
+    e.preventDefault()
+    const errs = validateFind()
+    if (Object.keys(errs).length > 0) {
+      setFindErrors(errs)
+      return
+    }
+    setFindErrors({})
+    setFilters(pendingFilters)
+    setHasSearched(true)
+    setIsFindSidebarOpen(false)
+    setCurrentPage(1)
+    await loadRows(pendingFilters.schoolId)
+  }
 
   const filtered = useMemo(() => {
+    if (!hasSearched) return []
     const q = search.trim().toLowerCase()
-    return classRoutines.filter((r) => {
-      const matchesSearch =
-        !q ||
-        [r.school, r.className, r.section, r.subject, r.day, r.teacher, r.startTime, r.endTime, r.roomNo]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesClass = filters.className === 'Select' || r.className === filters.className
-      const matchesSection = filters.section === 'Select' || r.section === filters.section
-      const matchesDay = filters.day === 'Select' || r.day === filters.day
-      return matchesSearch && matchesSchool && matchesClass && matchesSection && matchesDay
-    })
-  }, [search, filters])
+    if (!q) return rows
+    return rows.filter((r) =>
+      [r?.className, r?.sectionName, r?.subjectName, r?.teacherName, r?.day, r?.startTime, r?.endTime, r?.roomNo]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    )
+  }, [rows, hasSearched, search])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const teacherOptions = useMemo(() => {
+    return (Array.isArray(teachersLookup) ? teachersLookup : [])
+      .map((t) => ({ id: t?.id, name: t?.name }))
+      .filter((t) => t.id != null && t.name)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [teachersLookup])
 
-  const handleSelectAll = (e) => {
-    if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
-  }
-
-  const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
-    setFilters(pendingFilters)
-    setCurrentPage(1)
-  }
-
-  const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setCurrentPage(1)
+  const validateForm = (form) => {
+    const errs = {}
+    if (!form.schoolId || form.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (!form.classId || form.classId === 'Select') errs.classId = 'Class is required.'
+    if (!form.sectionId || form.sectionId === 'Select') errs.sectionId = 'Section is required.'
+    if (!form.subjectId || form.subjectId === 'Select') errs.subjectId = 'Subject is required.'
+    if (!form.teacherId || form.teacherId === 'Select') errs.teacherId = 'Teacher is required.'
+    if (!form.day) errs.day = 'Day is required.'
+    if (!form.startTime) errs.startTime = 'Start time is required.'
+    if (!form.endTime) errs.endTime = 'End time is required.'
+    return errs
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
+    setAddForm({ ...emptyForm, schoolId: filters.schoolId })
+    setFormErrors({})
     setIsAddOpen(true)
+    setAddStep(0)
   }
 
   const openEdit = (row) => {
+    setEditingId(row?.id ?? null)
     setEditForm({
-      school: row.school,
-      className: row.className,
-      section: row.section,
-      subject: row.subject,
-      day: row.day,
-      teacher: row.teacher,
-      startTime: row.startTime,
-      endTime: row.endTime,
-      roomNo: row.roomNo,
+      schoolId: row?.schoolId != null ? String(row.schoolId) : filters.schoolId,
+      classId: row?.classId != null ? String(row.classId) : 'Select',
+      sectionId: row?.sectionId != null ? String(row.sectionId) : 'Select',
+      subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
+      teacherId: row?.teacherId != null ? String(row.teacherId) : 'Select',
+      day: row?.day || 'Monday',
+      startTime: row?.startTime || '',
+      endTime: row?.endTime || '',
+      roomNo: row?.roomNo || '',
     })
-    setEditStep(0)
+    setFormErrors({})
     setIsEditOpen(true)
+    setEditStep(0)
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
+  const submitAdd = async () => {
+    const errs = validateForm(addForm)
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs)
+      return
+    }
+    try {
+      setSaving(true)
+      setError('')
+      await createClassRoutine({
+        schoolId: Number(addForm.schoolId),
+        classId: Number(addForm.classId),
+        sectionId: Number(addForm.sectionId),
+        subjectId: Number(addForm.subjectId),
+        teacherId: Number(addForm.teacherId),
+        day: addForm.day,
+        startTime: addForm.startTime,
+        endTime: addForm.endTime,
+        roomNo: addForm.roomNo || null,
+      })
+      setIsAddOpen(false)
+      await loadRows(filters.schoolId)
+    } catch (e) {
+      setError(e?.message || 'Failed to create routine')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const renderForm = (form, setter, step) => (
-    <>
-      <p className="avm-section-title">{STEPS[step]}</p>
+  const submitEdit = async () => {
+    if (!editingId) return
+    const errs = validateForm(editForm)
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs)
+      return
+    }
+    try {
+      setSaving(true)
+      setError('')
+      await updateClassRoutine(editingId, {
+        id: editingId,
+        schoolId: Number(editForm.schoolId),
+        classId: Number(editForm.classId),
+        sectionId: Number(editForm.sectionId),
+        subjectId: Number(editForm.subjectId),
+        teacherId: Number(editForm.teacherId),
+        day: editForm.day,
+        startTime: editForm.startTime,
+        endTime: editForm.endTime,
+        roomNo: editForm.roomNo || null,
+      })
+      setIsEditOpen(false)
+      setEditingId(null)
+      await loadRows(filters.schoolId)
+    } catch (e) {
+      setError(e?.message || 'Failed to update routine')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    if (!row?.id) return
+    if (!window.confirm('Delete this class routine?')) return
+    try {
+      setSaving(true)
+      setError('')
+      await deleteClassRoutine(row.id, { schoolId: filters.schoolId })
+      await loadRows(filters.schoolId)
+    } catch (e) {
+      setError(e?.message || 'Failed to delete routine')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const renderEntryForm = (form, setForm) => {
+    const localClassOptions = classesLookup
+      .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
+      .slice()
+      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
+
+    const localSectionOptions = sectionsLookup
+      .filter((s) => {
+        if (!form.schoolId || form.schoolId === 'Select') return true
+        if (String(s.schoolId) !== String(form.schoolId)) return false
+        if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+
+    const localSubjectOptions = subjectsLookup
+      .filter((s) => {
+        if (!form.schoolId || form.schoolId === 'Select') return true
+        if (String(s.schoolId) !== String(form.schoolId)) return false
+        if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+
+    const onChange = (e) => {
+      const { id, value } = e.target
+      setForm((prev) => {
+        if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }
+        if (id === 'classId') return { ...prev, classId: value, sectionId: 'Select', subjectId: 'Select' }
+        return { ...prev, [id]: value }
+      })
+      setFormErrors((prev) => ({ ...prev, [id]: '' }))
+    }
+
+    return (
       <div className="avm-grid">
+        <div className="avm-field">
+          <label className="avm-label">
+            School <span className="req"> *</span>
+          </label>
+          <select id="schoolId" className={`form-control form-select${formErrors.schoolId ? ' is-invalid' : ''}`} value={form.schoolId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select School--</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
+          </select>
+          {formErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{formErrors.schoolId}</div> : null}
+        </div>
 
-        {step === 0 && (
-          <>
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="school"
-                value={form.school}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select School--</option>
-                <option>Windsor Park High School</option>
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Class <span className="req"> *</span>
+          </label>
+          <select id="classId" className={`form-control form-select${formErrors.classId ? ' is-invalid' : ''}`} value={form.classId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Class--</option>
+            {localClassOptions.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.className}
+              </option>
+            ))}
+          </select>
+          {formErrors.classId ? <div className="text-danger-600 text-sm mt-4">{formErrors.classId}</div> : null}
+        </div>
 
-            <FormField label="Class" required>
-              <select
-                className="avm-select"
-                id="className"
-                value={form.className}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {classOptions.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Section <span className="req"> *</span>
+          </label>
+          <select id="sectionId" className={`form-control form-select${formErrors.sectionId ? ' is-invalid' : ''}`} value={form.sectionId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Section--</option>
+            {localSectionOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.sectionId ? <div className="text-danger-600 text-sm mt-4">{formErrors.sectionId}</div> : null}
+        </div>
 
-            <FormField label="Section" required>
-              <select
-                className="avm-select"
-                id="section"
-                value={form.section}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {sectionOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Subject <span className="req"> *</span>
+          </label>
+          <select id="subjectId" className={`form-control form-select${formErrors.subjectId ? ' is-invalid' : ''}`} value={form.subjectId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Subject--</option>
+            {localSubjectOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{formErrors.subjectId}</div> : null}
+        </div>
 
-            <FormField label="Subject" required full>
-              <select
-                className="avm-select"
-                id="subject"
-                value={form.subject}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {subjectOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Teacher <span className="req"> *</span>
+          </label>
+          <select id="teacherId" className={`form-control form-select${formErrors.teacherId ? ' is-invalid' : ''}`} value={form.teacherId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Teacher--</option>
+            {teacherOptions.map((t) => (
+              <option key={t.id} value={String(t.id)}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.teacherId ? <div className="text-danger-600 text-sm mt-4">{formErrors.teacherId}</div> : null}
+        </div>
 
-            <FormField label="Teacher" required full>
-              <select
-                className="avm-select"
-                id="teacher"
-                value={form.teacher}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {teacherOptions.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </FormField>
-          </>
-        )}
+        <div className="avm-field">
+          <label className="avm-label">
+            Day <span className="req"> *</span>
+          </label>
+          <select id="day" className="form-control form-select" value={form.day} onChange={onChange} disabled={saving}>
+            {dayOptions.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {step === 1 && (
-          <>
-            <FormField label="Day" required full>
-              <select
-                className="avm-select"
-                id="day"
-                value={form.day}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {dayOptions.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Start Time <span className="req"> *</span>
+          </label>
+          <input id="startTime" type="time" className={`form-control${formErrors.startTime ? ' is-invalid' : ''}`} value={form.startTime} onChange={onChange} disabled={saving} />
+          {formErrors.startTime ? <div className="text-danger-600 text-sm mt-4">{formErrors.startTime}</div> : null}
+        </div>
 
-            <FormField label="Start Time" required>
-              <input
-                type="time"
-                className="avm-input"
-                id="startTime"
-                value={form.startTime}
-                onChange={handleChange(setter)}
-                placeholder="3:30 PM"
-              />
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            End Time <span className="req"> *</span>
+          </label>
+          <input id="endTime" type="time" className={`form-control${formErrors.endTime ? ' is-invalid' : ''}`} value={form.endTime} onChange={onChange} disabled={saving} />
+          {formErrors.endTime ? <div className="text-danger-600 text-sm mt-4">{formErrors.endTime}</div> : null}
+        </div>
 
-            <FormField label="End Time" required>
-              <input
-                type="time"
-                className="avm-input"
-                id="endTime"
-                value={form.endTime}
-                onChange={handleChange(setter)}
-                placeholder="3:30 PM"
-              />
-            </FormField>
-
-            <FormField label="Room No" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="roomNo"
-                placeholder="Room No"
-                value={form.roomNo}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-          </>
-        )}
+        <div className="avm-field">
+          <label className="avm-label">Room No</label>
+          <input id="roomNo" className="form-control" value={form.roomNo} onChange={onChange} disabled={saving} />
+        </div>
       </div>
-    </>
-  )
+    )
+  }
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Class Routine</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Class Routine</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Class Routine
-        </button>
       </div>
 
-      {/* Table Card */}
+      {error ? (
+        <div className="card mb-16">
+          <div className="card-body px-20 py-12 text-danger-600">{error}</div>
+        </div>
+      ) : null}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-            <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
+            <div className="d-flex align-items-center gap-8">
+              {canManage ? (
+                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving || !hasSearched}>
+                  + Add
                 </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
-                <span><i className="ri-arrow-right-line"></i></span>
+              ) : null}
+              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                Find
               </button>
-
-              {/* Columns */}
+            </div>
+            <div className="d-flex align-items-center gap-8">
+              <div className="position-relative">
+                <input className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} disabled={!hasSearched} onChange={(e) => setSearch(e.target.value)} />
+                <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                  <i className="ri-search-line"></i>
+                </span>
+              </div>
               <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                <button className="btn btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  Columns ({visibleColumnCount})
                 </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  {columnOptions.map((column) => (
-                    <li key={column.key}>
-                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
-                        {column.label}
+                <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
+                  {columnOptions.map((col) => (
+                    <li key={col.key} className="dropdown-item">
+                      <label className="d-flex align-items-center gap-8 m-0">
+                        <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                        <span>{col.label}</span>
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
-
-              {/* Rows per page */}
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-              >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-
-            {/* Search */}
-            <div className="position-relative">
-              <input
-                type="text"
-                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search class routines..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
-              />
-              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                <i className="ri-search-line"></i>
-              </span>
             </div>
           </div>
 
-          {/* Table */}
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1000 }}>
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={handleSelectAll}
-                      />
-                      <label className="form-check-label">S.L</label>
-                    </div>
-                  </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.className ? <th scope="col">Class</th> : null}
-                  {visibleColumns.section ? <th scope="col">Section</th> : null}
-                  {visibleColumns.subject ? <th scope="col">Subject</th> : null}
-                  {visibleColumns.day ? <th scope="col">Day</th> : null}
-                  {visibleColumns.teacher ? <th scope="col">Teacher</th> : null}
-                  {visibleColumns.startTime ? <th scope="col">Start Time</th> : null}
-                  {visibleColumns.endTime ? <th scope="col">End Time</th> : null}
-                  {visibleColumns.roomNo ? <th scope="col">Room No</th> : null}
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
-                      No class routines found.
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
-                      <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
-                          />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.className ? (
-                        <td className="fw-medium text-primary-light">{row.className}</td>
-                      ) : null}
-                      {visibleColumns.section ? (
-                        <td>
-                          <span className="bg-primary-100 text-primary-600 px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.section}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.subject ? (
-                        <td>
-                          <span className="bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.subject}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.day ? (
-                        <td>
-                          <span className={dayBadgeColor(row.day)}>{row.day}</span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.teacher ? <td>{row.teacher}</td> : null}
-                      {visibleColumns.startTime ? (
-                        <td>
-                          <span className="d-flex align-items-center gap-4">
-                            <i className="ri-time-line text-secondary-light text-sm"></i>
-                            {row.startTime}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.endTime ? (
-                        <td>
-                          <span className="d-flex align-items-center gap-4">
-                            <i className="ri-time-line text-secondary-light text-sm"></i>
-                            {row.endTime}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.roomNo ? (
-                        <td>
-                          <span className="bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm">
-                            <i className="ri-door-open-line" style={{ marginRight: 4, fontSize: '0.8rem' }}></i>
-                            {row.roomNo}
-                          </span>
-                        </td>
-                      ) : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </td>
+          {!hasSearched ? (
+            <div className="px-20 py-40 text-center text-secondary-light">Use <strong>Find</strong> to select School.</div>
+          ) : loading ? (
+            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
+          ) : (
+            <>
+              <div className="table-responsive">
+                <table className="table mb-0">
+                  <thead>
+                    <tr>
+                      {visibleColumns.school && <th>School</th>}
+                      {visibleColumns.className && <th>Class</th>}
+                      {visibleColumns.sectionName && <th>Section</th>}
+                      {visibleColumns.subjectName && <th>Subject</th>}
+                      {visibleColumns.teacherName && <th>Teacher</th>}
+                      {visibleColumns.day && <th>Day</th>}
+                      {visibleColumns.startTime && <th>Start</th>}
+                      {visibleColumns.endTime && <th>End</th>}
+                      {visibleColumns.roomNo && <th>Room</th>}
+                      <th style={{ width: 160 }}>Action</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {paginated.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="text-center py-24 text-secondary-light">
+                          No routines found.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginated.map((r) => (
+                        <tr key={r.id}>
+                          {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
+                          {visibleColumns.className && <td>{r.className || r.classId}</td>}
+                          {visibleColumns.sectionName && <td>{r.sectionName || r.sectionId}</td>}
+                          {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
+                          {visibleColumns.teacherName && <td>{r.teacherName || r.teacherId}</td>}
+                          {visibleColumns.day && (
+                            <td>
+                              <span className={dayBadgeColor(r.day)}>{r.day}</span>
+                            </td>
+                          )}
+                          {visibleColumns.startTime && <td>{r.startTime}</td>}
+                          {visibleColumns.endTime && <td>{r.endTime}</td>}
+                          {visibleColumns.roomNo && <td>{r.roomNo || '-'}</td>}
+                          <td>
+                            <div className="d-flex gap-8">
+                              <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={!canManage || saving}>
+                                Edit
+                              </button>
+                              <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* Pagination */}
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+              <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
+                <div className="d-flex align-items-center gap-8">
+                  <span className="text-secondary-light">Rows per page:</span>
+                  <select className="form-select form-select-sm" style={{ width: 90 }} value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
+                    {[5, 10, 20, 50].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="d-flex align-items-center gap-8">
+                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                    Prev
+                  </button>
+                  <span className="text-secondary-light text-sm">
+                    Page {currentPage} / {totalPages}
+                  </span>
+                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Add Modal */}
-      <WizardPopup
-        modalWidth="560px"
-        open={isAddOpen}
-        title="Add Class Routine"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
+      <WizardPopup modalWidth="900px" open={isAddOpen} title="Add Class Routine" steps={STEPS} step={addStep} onClose={() => setIsAddOpen(false)} onBack={() => setAddStep((s) => Math.max(0, s - 1))} onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))} onSubmit={submitAdd} submitLabel={saving ? 'Saving...' : 'Save'}>
+        {renderEntryForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* Edit Modal */}
-      <WizardPopup
-        modalWidth="560px"
-        open={isEditOpen}
-        title="Edit Class Routine"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
+      <WizardPopup modalWidth="900px" open={isEditOpen} title="Edit Class Routine" steps={STEPS} step={editStep} onClose={() => setIsEditOpen(false)} onBack={() => setEditStep((s) => Math.max(0, s - 1))} onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))} onSubmit={submitEdit} submitLabel={saving ? 'Updating...' : 'Update'}>
+        {renderEntryForm(editForm, setEditForm)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Class Routines"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+      <SlideSidebar isOpen={isFindSidebarOpen} title="Find Class Routine" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            <select id="schoolId" className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`} value={pendingFilters.schoolId} onChange={(e) => { setPendingFilters({ schoolId: e.target.value }); setFindErrors({}) }}>
+              <option value="Select">--Select School--</option>
+              {schoolsLookup.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.schoolName}
+                </option>
+              ))}
             </select>
+            {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
           </div>
-
           <div>
-            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Class
-            </label>
-            <select
-              id="className"
-              className="form-control form-select"
-              value={pendingFilters.className}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="section" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Section
-            </label>
-            <select
-              id="section"
-              className="form-control form-select"
-              value={pendingFilters.section}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="day" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Day
-            </label>
-            <select
-              id="day"
-              className="form-control form-select"
-              value={pendingFilters.day}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {dayOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
-              Reset
+            <button type="submit" className="btn btn-primary-600 w-100" disabled={loading}>
+              Apply
             </button>
           </div>
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>
-              Apply
+            <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={() => { setPendingFilters(emptyFilters); setFilters(emptyFilters); setHasSearched(false); setRows([]) }}>
+              Reset
             </button>
           </div>
         </form>

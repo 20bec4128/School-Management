@@ -1,76 +1,36 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { createLesson, deleteLesson, fetchLessons, updateLesson } from '../apis/lessonsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSubjects } from '../apis/subjectsApi'
 import '../assets/css/addModalShared.css'
 
-const lessons = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    academicYear: '2025-2026',
-    className: 'Class 10',
-    subject: 'Mathematics',
-    lesson: 'Algebraic Expressions',
-    note: 'Introduction to variables and expressions.',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    academicYear: '2025-2026',
-    className: 'Class 9',
-    subject: 'Science',
-    lesson: 'Cell Structure',
-    note: 'Basics of plant and animal cells.',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    academicYear: '2025-2026',
-    className: 'Class 8',
-    subject: 'English',
-    lesson: 'Parts of Speech',
-    note: 'Understanding nouns, verbs, and adjectives.',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    academicYear: '2024-2025',
-    className: 'Class 11',
-    subject: 'Physics',
-    lesson: 'Motion in a Straight Line',
-    note: 'Kinematics and graphical representation.',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    academicYear: '2024-2025',
-    className: 'Class 12',
-    subject: 'Chemistry',
-    lesson: 'Electrochemistry',
-    note: 'Concepts of galvanic cells and electrodes.',
-  },
-]
+const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
 const emptyForm = {
-  school: '',
-  className: '',
-  subject: '',
+  schoolId: 'Select',
+  academicYear: 'Select',
+  classId: 'Select',
+  subjectId: 'Select',
   lesson: '',
   note: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  schoolId: 'Select',
   academicYear: 'Select',
-  className: 'Select',
-  subject: 'Select',
+  classId: 'Select',
+  subjectId: 'Select',
 }
 
 const STEPS = ['Basic']
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
+  'Academic Year': 'ri-calendar-line',
   Class: 'ri-building-line',
   Subject: 'ri-book-open-line',
   Lesson: 'ri-file-list-3-line',
@@ -81,8 +41,9 @@ const columnOptions = [
   { key: 'school', label: 'School' },
   { key: 'academicYear', label: 'Academic Year' },
   { key: 'className', label: 'Class' },
-  { key: 'subject', label: 'Subject' },
+  { key: 'subjectName', label: 'Subject' },
   { key: 'lesson', label: 'Lesson' },
+  { key: 'note', label: 'Note' },
 ]
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
@@ -120,58 +81,160 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Lesson = () => {
+  const [lessons, setLessons] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [subjectsLookup, setSubjectsLookup] = useState([])
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
+
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+
+  const [addQueue, setAddQueue] = useState([])
+  const [formErrors, setFormErrors] = useState({})
+
+  const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [findErrors, setFindErrors] = useState({})
+  const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(() => Array.from(new Set(lessons.map((r) => r.school))), [])
-  const academicYearOptions = useMemo(() => Array.from(new Set(lessons.map((r) => r.academicYear))), [])
-  const classOptions = useMemo(() => Array.from(new Set(lessons.map((r) => r.className))), [])
-  const subjectOptions = useMemo(() => Array.from(new Set(lessons.map((r) => r.subject))), [])
+  useEffect(() => {
+    let ignore = false
+    const run = async () => {
+      try {
+        setLoading(true)
+        setError('')
+        const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+        if (ignore) return
+        setSchoolsLookup(Array.isArray(schools) ? schools : [])
+        setClassesLookup(Array.isArray(classes) ? classes : [])
+        setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
+      } catch (e) {
+        if (!ignore) setError(e?.message || 'Failed to load lookups')
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    }
+    void run()
+    return () => {
+      ignore = true
+    }
+  }, [])
 
-  const subjectOptionsByClass = useMemo(
-    () => ({
-      'Class 8': ['English', 'Science', 'Social Science'],
-      'Class 9': ['Science', 'Mathematics', 'English'],
-      'Class 10': ['Mathematics', 'Science', 'English'],
-      'Class 11': ['Physics', 'Chemistry', 'Biology'],
-      'Class 12': ['Chemistry', 'Physics', 'Mathematics'],
-    }),
-    [],
+  const classOptions = useMemo(() => {
+    return classesLookup
+      .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
+      .slice()
+      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
+  }, [classesLookup, pendingFilters.schoolId])
+
+  const subjectOptions = useMemo(() => {
+    return subjectsLookup
+      .filter((s) => {
+        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
+        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+  }, [subjectsLookup, pendingFilters.schoolId, pendingFilters.classId])
+
+  const validateFind = () => {
+    const errs = {}
+    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (pendingFilters.academicYear === 'Select') errs.academicYear = 'Academic Year is required.'
+    if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
+    if (pendingFilters.subjectId === 'Select') errs.subjectId = 'Subject is required.'
+    return errs
+  }
+
+  const loadLessons = useCallback(
+    async (nextFilters) => {
+      const data = await fetchLessons({
+        schoolId: nextFilters.schoolId,
+        academicYear: nextFilters.academicYear,
+        classId: nextFilters.classId,
+        subjectId: nextFilters.subjectId,
+      })
+      setLessons(Array.isArray(data) ? data : [])
+    },
+    [setLessons],
   )
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+  const handleApplyFilters = async (e) => {
+    e.preventDefault()
+    const errs = validateFind()
+    if (Object.keys(errs).length > 0) {
+      setFindErrors(errs)
+      return
+    }
+    try {
+      setFindErrors({})
+      setError('')
+      setLoading(true)
+      await loadLessons(pendingFilters)
+      setFilters(pendingFilters)
+      setHasSearched(true)
+      setIsFindSidebarOpen(false)
+      setCurrentPage(1)
+      setSelectedRows([])
+    } catch (e2) {
+      setLessons([])
+      setError(e2?.message || 'Failed to load lessons')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-    return lessons.filter((r) => {
-      const matchesSearch =
-        !q ||
-        [r.school, r.academicYear, r.className, r.subject, r.lesson, r.note]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
+  const handleResetFilters = () => {
+    setPendingFilters(emptyFilters)
+    setFilters(emptyFilters)
+    setFindErrors({})
+    setHasSearched(false)
+    setLessons([])
+    setSearch('')
+    setCurrentPage(1)
+    setSelectedRows([])
+  }
 
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesAcademicYear =
-        filters.academicYear === 'Select' || r.academicYear === filters.academicYear
-      const matchesClass = filters.className === 'Select' || r.className === filters.className
-      const matchesSubject = filters.subject === 'Select' || r.subject === filters.subject
-
-      return matchesSearch && matchesSchool && matchesAcademicYear && matchesClass && matchesSubject
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target
+    setPendingFilters((prev) => {
+      if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
+      if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
+      return { ...prev, [id]: value }
     })
-  }, [search, filters])
+    setFindErrors((prev) => ({ ...prev, [id]: '' }))
+  }
+
+  const filtered = useMemo(() => {
+    if (!hasSearched) return []
+    const q = search.trim().toLowerCase()
+    if (!q) return lessons
+    return lessons.filter((r) =>
+      [r?.schoolName, r?.academicYear, r?.className, r?.subjectName, r?.lesson, r?.note]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    )
+  }, [lessons, search, hasSearched])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -180,155 +243,296 @@ const Lesson = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
-    }
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-
-    setter((prev) => {
-      const updated = { ...prev, [id]: value }
-
-      if (id === 'school') {
-        updated.className = ''
-        updated.subject = ''
-      }
-
-      if (id === 'className') {
-        updated.subject = ''
-      }
-
-      return updated
-    })
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
-    setFilters(pendingFilters)
-    setCurrentPage(1)
-    setIsFilterSidebarOpen(false)
-  }
-
-  const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setCurrentPage(1)
-  }
-
   const openAdd = () => {
-    setAddForm(emptyForm)
+    setAddForm({ ...emptyForm, ...filters })
+    setAddQueue([])
+    setFormErrors({})
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setEditingId(row?.id ?? null)
     setEditForm({
-      school: row.school,
-      className: row.className,
-      subject: row.subject,
-      lesson: row.lesson,
-      note: row.note,
+      schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
+      academicYear: row?.academicYear || 'Select',
+      classId: row?.classId != null ? String(row.classId) : 'Select',
+      subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
+      lesson: row?.lesson || '',
+      note: row?.note || '',
     })
+    setFormErrors({})
     setEditStep(0)
     setIsEditOpen(true)
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
+  const validateEntryForm = (form) => {
+    const errs = {}
+    if (!form.schoolId || form.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (!form.academicYear || form.academicYear === 'Select') errs.academicYear = 'Academic Year is required.'
+    if (!form.classId || form.classId === 'Select') errs.classId = 'Class is required.'
+    if (!form.subjectId || form.subjectId === 'Select') errs.subjectId = 'Subject is required.'
+    if (!String(form.lesson || '').trim()) errs.lesson = 'Lesson is required.'
+    return errs
   }
 
-  const renderForm = (form, setter, step = 0) => {
-    const availableSubjects = form.className ? subjectOptionsByClass[form.className] || [] : []
+  const handleAddMore = () => {
+    const errs = validateEntryForm(addForm)
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs)
+      return
+    }
+    setFormErrors({})
+    setAddQueue((prev) => [
+      ...prev,
+      {
+        schoolId: addForm.schoolId,
+        academicYear: addForm.academicYear,
+        classId: addForm.classId,
+        subjectId: addForm.subjectId,
+        lesson: addForm.lesson,
+        note: addForm.note,
+      },
+    ])
+    setAddForm((prev) => ({ ...prev, lesson: '', note: '' }))
+  }
+
+  const submitAdd = async () => {
+    const entries = [...addQueue]
+    if (String(addForm.lesson || '').trim()) {
+      const errs = validateEntryForm(addForm)
+      if (Object.keys(errs).length > 0) {
+        setFormErrors(errs)
+        return
+      }
+      entries.push({
+        schoolId: addForm.schoolId,
+        academicYear: addForm.academicYear,
+        classId: addForm.classId,
+        subjectId: addForm.subjectId,
+        lesson: addForm.lesson,
+        note: addForm.note,
+      })
+    }
+
+    if (entries.length === 0) {
+      setFormErrors({ lesson: 'Add at least one lesson.' })
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+      for (const entry of entries) {
+        await createLesson({
+          schoolId: Number(entry.schoolId),
+          academicYear: entry.academicYear,
+          classId: Number(entry.classId),
+          subjectId: Number(entry.subjectId),
+          lesson: entry.lesson,
+          note: entry.note,
+        })
+      }
+      setIsAddOpen(false)
+      setAddQueue([])
+      setAddForm(emptyForm)
+      if (hasSearched) await loadLessons(filters)
+    } catch (e) {
+      setError(e?.message || 'Failed to create lesson')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submitEdit = async () => {
+    if (!editingId) return
+    const errs = validateEntryForm(editForm)
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs)
+      return
+    }
+    try {
+      setSaving(true)
+      setError('')
+      await updateLesson(editingId, {
+        id: editingId,
+        schoolId: Number(editForm.schoolId),
+        academicYear: editForm.academicYear,
+        classId: Number(editForm.classId),
+        subjectId: Number(editForm.subjectId),
+        lesson: editForm.lesson,
+        note: editForm.note,
+      })
+      setIsEditOpen(false)
+      setEditingId(null)
+      if (hasSearched) await loadLessons(filters)
+    } catch (e) {
+      setError(e?.message || 'Failed to update lesson')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    const id = row?.id
+    if (!id) return
+    if (!window.confirm(`Delete lesson "${row?.lesson || id}"?`)) return
+    try {
+      setSaving(true)
+      setError('')
+      await deleteLesson(id)
+      if (hasSearched) await loadLessons(filters)
+    } catch (e) {
+      setError(e?.message || 'Failed to delete lesson')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const renderEntryForm = (form, setForm) => {
+    const localClassOptions = classesLookup
+      .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
+      .slice()
+      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
+
+    const localSubjectOptions = subjectsLookup
+      .filter((s) => {
+        if (!form.schoolId || form.schoolId === 'Select') return true
+        if (String(s.schoolId) !== String(form.schoolId)) return false
+        if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+
+    const onChange = (e) => {
+      const { id, value } = e.target
+      setForm((prev) => {
+        if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
+        if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
+        return { ...prev, [id]: value }
+      })
+      setFormErrors((prev) => ({ ...prev, [id]: '' }))
+    }
 
     return (
-      <>
-        <p className="avm-section-title">{STEPS[step]}</p>
-        <div className="avm-grid">
-          <FormField label="School Name" required full>
-            <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-              <option value="">--Select School--</option>
-              <option>Windsor Park High School</option>
-            </select>
-          </FormField>
+      <div className="avm-grid">
+        <FormField label="School Name" required>
+          <select
+            id="schoolId"
+            className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`}
+            value={form.schoolId}
+            onChange={onChange}
+            disabled={saving}
+          >
+            <option value="Select">--Select School--</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
+          </select>
+          {formErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{formErrors.schoolId}</div> : null}
+        </FormField>
 
-          <FormField label="Class" required>
-            <select
-              className="avm-select"
-              id="className"
-              value={form.className}
-              onChange={handleChange(setter)}
-              disabled={!form.school}
-            >
-              <option value="">--Select--</option>
-              {classOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </FormField>
+        <FormField label="Academic Year" required>
+          <select
+            id="academicYear"
+            className={`form-control form-select ps-44${formErrors.academicYear ? ' is-invalid' : ''}`}
+            value={form.academicYear}
+            onChange={onChange}
+            disabled={saving}
+          >
+            <option value="Select">--Select--</option>
+            {ACADEMIC_YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          {formErrors.academicYear ? <div className="text-danger-600 text-sm mt-4">{formErrors.academicYear}</div> : null}
+        </FormField>
 
-          <FormField label="Subject" required>
-            <select
-              className="avm-select"
-              id="subject"
-              value={form.subject}
-              onChange={handleChange(setter)}
-              disabled={!form.className}
-            >
-              <option value="">--Select--</option>
-              {availableSubjects.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </FormField>
+        <FormField label="Class" required>
+          <select
+            id="classId"
+            className={`form-control form-select ps-44${formErrors.classId ? ' is-invalid' : ''}`}
+            value={form.classId}
+            onChange={onChange}
+            disabled={saving}
+          >
+            <option value="Select">--Select Class--</option>
+            {localClassOptions.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.className}
+              </option>
+            ))}
+          </select>
+          {formErrors.classId ? <div className="text-danger-600 text-sm mt-4">{formErrors.classId}</div> : null}
+        </FormField>
 
-          <FormField label="Lesson" required full>
-            <input
-              type="text"
-              className="avm-input"
-              id="lesson"
-              placeholder="Lesson"
-              value={form.lesson}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
+        <FormField label="Subject" required>
+          <select
+            id="subjectId"
+            className={`form-control form-select ps-44${formErrors.subjectId ? ' is-invalid' : ''}`}
+            value={form.subjectId}
+            onChange={onChange}
+            disabled={saving}
+          >
+            <option value="Select">--Select Subject--</option>
+            {localSubjectOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{formErrors.subjectId}</div> : null}
+        </FormField>
 
-          <FormField label="Note" full>
-            <textarea
-              rows="4"
-              className="avm-input avm-textarea"
-              id="note"
-              placeholder="Note"
-              value={form.note}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-        </div>
-      </>
+        <FormField label="Lesson" required full>
+          <input
+            id="lesson"
+            className={`form-control ps-44${formErrors.lesson ? ' is-invalid' : ''}`}
+            value={form.lesson}
+            onChange={onChange}
+            disabled={saving}
+            placeholder="Enter lesson"
+          />
+          {formErrors.lesson ? <div className="text-danger-600 text-sm mt-4">{formErrors.lesson}</div> : null}
+        </FormField>
+
+        <FormField label="Note" full>
+          <textarea
+            id="note"
+            className="form-control ps-44"
+            rows={3}
+            value={form.note}
+            onChange={onChange}
+            disabled={saving}
+            placeholder="Optional note"
+          />
+        </FormField>
+      </div>
     )
+  }
+
+  const getVisiblePages = () => {
+    const maxButtons = 5
+    if (totalPages <= maxButtons) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    if (currentPage <= 3) return [1, 2, 3, 4, 5]
+    if (currentPage >= totalPages - 2) return [totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    return [currentPage - 2, currentPage - 1, currentPage, currentPage + 1, currentPage + 2]
   }
 
   return (
@@ -337,254 +541,184 @@ const Lesson = () => {
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Lesson</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Lesson</span>
           </div>
         </div>
-
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Lesson
-        </button>
       </div>
+
+      {error ? (
+        <div className="card mb-16">
+          <div className="card-body px-20 py-12 text-danger-600">{error}</div>
+        </div>
+      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-            <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                </ul>
-              </div>
-
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
-                <span>
-                  <i className="ri-arrow-right-line"></i>
-                </span>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
+            <div className="d-flex align-items-center gap-8">
+              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                + Add
               </button>
+              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                Find
+              </button>
+            </div>
 
+            <div className="d-flex align-items-center gap-8">
+              <div className="position-relative">
+                <input
+                  className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
+                  placeholder="Search..."
+                  value={search}
+                  disabled={!hasSearched}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                  <i className="ri-search-line"></i>
+                </span>
+              </div>
               <div className="dropdown">
                 <button
+                  className="btn btn-light border dropdown-toggle"
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                  Columns ({visibleColumnCount})
                 </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  {columnOptions.map((column) => (
-                    <li key={column.key}>
-                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
-                        {column.label}
+                <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
+                  {columnOptions.map((col) => (
+                    <li key={col.key} className="dropdown-item">
+                      <label className="d-flex align-items-center gap-8 m-0">
+                        <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                        <span>{col.label}</span>
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
-
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="position-relative">
-              <input
-                type="text"
-                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search lesson..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
-                  setCurrentPage(1)
-                }}
-              />
-              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                <i className="ri-search-line"></i>
-              </span>
             </div>
           </div>
 
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1100 }}>
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
-                      <label className="form-check-label">S.L</label>
-                    </div>
-                  </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.academicYear ? <th scope="col">Academic Year</th> : null}
-                  {visibleColumns.className ? <th scope="col">Class</th> : null}
-                  {visibleColumns.subject ? <th scope="col">Subject</th> : null}
-                  {visibleColumns.lesson ? <th scope="col">Lesson</th> : null}
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
-                      No lesson records found.
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
-                      <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
-                          />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.academicYear ? <td>{row.academicYear}</td> : null}
-                      {visibleColumns.className ? <td>{row.className}</td> : null}
-                      {visibleColumns.subject ? <td>{row.subject}</td> : null}
-                      {visibleColumns.lesson ? <td>{row.lesson}</td> : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </td>
+          {!hasSearched ? (
+            <div className="px-20 py-40 text-center text-secondary-light">
+              Use <strong>Find</strong> to select School, Academic Year, Class and Subject.
+            </div>
+          ) : loading ? (
+            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
+          ) : (
+            <>
+              <div className="table-responsive">
+                <table className="table mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 48 }}>
+                        <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
+                      </th>
+                      {visibleColumns.school && <th>School</th>}
+                      {visibleColumns.academicYear && <th>Academic Year</th>}
+                      {visibleColumns.className && <th>Class</th>}
+                      {visibleColumns.subjectName && <th>Subject</th>}
+                      {visibleColumns.lesson && <th>Lesson</th>}
+                      {visibleColumns.note && <th>Note</th>}
+                      <th style={{ width: 160 }}>Action</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {paginated.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-24 text-secondary-light">
+                          No lessons found.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginated.map((r) => (
+                        <tr key={r.id}>
+                          <td>
+                            <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
+                          </td>
+                          {visibleColumns.school && <td>{r.schoolName}</td>}
+                          {visibleColumns.academicYear && <td>{r.academicYear}</td>}
+                          {visibleColumns.className && <td>{r.className}</td>}
+                          {visibleColumns.subjectName && <td>{r.subjectName}</td>}
+                          {visibleColumns.lesson && <td className="fw-medium text-primary-light">{r.lesson}</td>}
+                          {visibleColumns.note && <td>{r.note}</td>}
+                          <td>
+                            <div className="d-flex gap-8">
+                              <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={saving}>
+                                Edit
+                              </button>
+                              <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={saving}>
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
+              <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
+                <div className="d-flex align-items-center gap-8">
+                  <span className="text-secondary-light">Rows per page:</span>
+                  <select
+                    className="form-select form-select-sm"
+                    style={{ width: 90 }}
+                    value={rowsPerPage}
+                    onChange={(e) => {
+                      setRowsPerPage(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                  >
+                    {[5, 10, 20, 50].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+                <div className="d-flex align-items-center gap-8">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-light border"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Prev
+                  </button>
+                  {getVisiblePages().map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-light border"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       <WizardPopup
-        modalWidth="560px"
+        modalWidth="700px"
         open={isAddOpen}
         title="Add Lesson"
         steps={STEPS}
@@ -592,14 +726,41 @@ const Lesson = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onSubmit={submitAdd}
+        submitLabel={saving ? 'Saving...' : 'Save'}
       >
-        {renderForm(addForm, setAddForm, addStep)}
+        {renderEntryForm(addForm, setAddForm)}
+
+        <div className="d-flex justify-content-end gap-8 mt-12">
+          <button type="button" className="btn btn-light border" onClick={handleAddMore} disabled={saving}>
+            Add More
+          </button>
+        </div>
+
+        {addQueue.length > 0 ? (
+          <div className="mt-12 border rounded p-12">
+            <div className="fw-semibold text-primary-light mb-8">Queued ({addQueue.length})</div>
+            <ul className="mb-0 ps-16">
+              {addQueue.map((q, idx) => (
+                <li key={`${q.lesson}-${idx}`} className="d-flex align-items-center justify-content-between gap-12">
+                  <span className="text-secondary-light">{q.lesson}</span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-light border"
+                    onClick={() => setAddQueue((prev) => prev.filter((_, i) => i !== idx))}
+                    disabled={saving}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </WizardPopup>
 
       <WizardPopup
-        modalWidth="560px"
+        modalWidth="700px"
         open={isEditOpen}
         title="Edit Lesson"
         steps={STEPS}
@@ -607,109 +768,103 @@ const Lesson = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
+        onSubmit={submitEdit}
+        submitLabel={saving ? 'Updating...' : 'Update'}
       >
-        {renderForm(editForm, setEditForm, editStep)}
+        {renderEntryForm(editForm, setEditForm)}
       </WizardPopup>
 
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Lesson"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+      <SlideSidebar isOpen={isFindSidebarOpen} title="Find Lesson" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School <span className="text-danger-600">*</span>
             </label>
             <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
+              id="schoolId"
+              className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`}
+              value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="Select">--Select School--</option>
+              {schoolsLookup.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.schoolName}
                 </option>
               ))}
             </select>
+            {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
           </div>
 
-          <div>
+          <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="academicYear" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Academic Year
+              Academic Year <span className="text-danger-600">*</span>
             </label>
             <select
               id="academicYear"
-              className="form-control form-select"
+              className={`form-control form-select${findErrors.academicYear ? ' is-invalid' : ''}`}
               value={pendingFilters.academicYear}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Academic Year</option>
-              {academicYearOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="Select">--Select--</option>
+              {ACADEMIC_YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>
+                  {y}
                 </option>
               ))}
             </select>
+            {findErrors.academicYear ? <div className="text-danger-600 text-sm mt-4">{findErrors.academicYear}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Class
+            <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Class <span className="text-danger-600">*</span>
             </label>
             <select
-              id="className"
-              className="form-control form-select"
-              value={pendingFilters.className}
+              id="classId"
+              className={`form-control form-select${findErrors.classId ? ' is-invalid' : ''}`}
+              value={pendingFilters.classId}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Class</option>
-              {classOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="Select">--Select--</option>
+              {classOptions.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.className}
                 </option>
               ))}
             </select>
+            {findErrors.classId ? <div className="text-danger-600 text-sm mt-4">{findErrors.classId}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="subject" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Subject
+            <label htmlFor="subjectId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Subject <span className="text-danger-600">*</span>
             </label>
             <select
-              id="subject"
-              className="form-control form-select"
-              value={pendingFilters.subject}
+              id="subjectId"
+              className={`form-control form-select${findErrors.subjectId ? ' is-invalid' : ''}`}
+              value={pendingFilters.subjectId}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Subject</option>
-              {subjectOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="Select">--Select--</option>
+              {subjectOptions.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
                 </option>
               ))}
             </select>
+            {findErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{findErrors.subjectId}</div> : null}
           </div>
 
           <div></div>
 
           <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
           </div>
-
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100">
+            <button type="submit" className="btn btn-primary-600 w-100" disabled={loading}>
               Apply
             </button>
           </div>
@@ -720,3 +875,4 @@ const Lesson = () => {
 }
 
 export default Lesson
+

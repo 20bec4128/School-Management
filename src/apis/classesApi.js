@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 const CLASSES_API_BASE = '/api/classes'
 
 const readApiError = async (res) => {
@@ -20,14 +22,14 @@ export const fetchClasses = async ({ schoolId } = {}) => {
   if (schoolId != null && schoolId !== '') qs.set('schoolId', String(schoolId))
   const url = qs.toString() ? `${CLASSES_API_BASE}?${qs.toString()}` : CLASSES_API_BASE
 
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()
   return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
 export const createClass = async (payload) => {
-  const res = await fetch(CLASSES_API_BASE, {
+  const res = await apiFetch(CLASSES_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -37,7 +39,7 @@ export const createClass = async (payload) => {
 }
 
 export const updateClass = async (id, payload) => {
-  const res = await fetch(`${CLASSES_API_BASE}/${id}`, {
+  const res = await apiFetch(`${CLASSES_API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -47,7 +49,7 @@ export const updateClass = async (id, payload) => {
 }
 
 export const deleteClass = async (id) => {
-  const res = await fetch(`${CLASSES_API_BASE}/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`${CLASSES_API_BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

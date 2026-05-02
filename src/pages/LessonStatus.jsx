@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
-import { fetchLessonStatusPageData, updateTopicStatus } from '../apis/lessonStatusApi'
+import { fetchLessonStatusPageData, updateLessonStatus, updateTopicStatus } from '../apis/lessonStatusApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
@@ -37,6 +37,11 @@ const statusMeta = (status) => {
   if (v === 'COMPLETED') return { label: 'Completed', cls: 'bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm' }
   if (v === 'GOING_ON') return { label: 'On Progress', cls: 'bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm' }
   return { label: 'Yet To Start', cls: 'bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm' }
+}
+
+const canCompleteLesson = (lesson) => {
+  const topics = Array.isArray(lesson?.topics) ? lesson.topics : []
+  return topics.every((t) => String(t?.topicStatus || 'YET_TO_START') === 'COMPLETED')
 }
 
 const LessonStatus = () => {
@@ -201,6 +206,21 @@ const LessonStatus = () => {
     }
   }
 
+  const handleLessonStatusChange = async (lesson, nextStatus) => {
+    if (!lesson?.lessonId) return
+    if (nextStatus === 'COMPLETED' && !canCompleteLesson(lesson)) return
+    try {
+      setSaving(true)
+      setError('')
+      const res = await updateLessonStatus({ lessonId: lesson.lessonId, status: nextStatus })
+      updateLessonInState(lesson.lessonId, { lessonStatus: res?.lessonStatus || nextStatus })
+    } catch (e) {
+      setError(e?.message || 'Failed to update lesson status')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const classOptions = useMemo(() => {
     return classesLookup
       .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
@@ -275,7 +295,7 @@ const LessonStatus = () => {
               Use <strong>Find</strong> to select School, Academic Year, Class and Subject.
             </div>
           ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading…</div>
+            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
           ) : (
             <div className="p-20">
               <div className="row g-16">
@@ -300,7 +320,7 @@ const LessonStatus = () => {
                           ) : (
                             filteredLessons.map((l) => {
                               const isActive = String(l.lessonId) === String(selectedLessonId)
-                              const meta = statusMeta(l.lessonStatus)
+                              const allowComplete = canCompleteLesson(l)
                               return (
                                 <tr
                                   key={l.lessonId}
@@ -309,7 +329,22 @@ const LessonStatus = () => {
                                 >
                                   <td className="fw-medium text-primary-light">{l.lessonName || `Lesson ${l.lessonId}`}</td>
                                   <td>
-                                    <span className={meta.cls}>{meta.label}</span>
+                                    <select
+                                      className="form-select form-select-sm"
+                                      value={l.lessonStatus || 'YET_TO_START'}
+                                      disabled={!canManageLessonStatus || saving}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={(e) => handleLessonStatusChange(l, e.target.value)}
+                                    >
+                                      {STATUS_OPTIONS.map((o) => (
+                                        <option key={o.value} value={o.value} disabled={o.value === 'COMPLETED' && !allowComplete}>
+                                          {o.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {!allowComplete && String(l.lessonStatus || 'YET_TO_START') !== 'COMPLETED' ? (
+                                      <div className="text-secondary-light text-xs mt-4">Complete all topics first.</div>
+                                    ) : null}
                                   </td>
                                 </tr>
                               )
@@ -485,4 +520,3 @@ const LessonStatus = () => {
 }
 
 export default LessonStatus
-

@@ -1,16 +1,23 @@
 const TOKEN_KEY = 'sm_token'
+const SESSION_TOKEN_KEY = 'sm_token_session'
 
 export const setToken = (token, remember = true) => {
   if (!token) {
     localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(SESSION_TOKEN_KEY)
     return
   }
-  if (remember) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+  if (remember) {
+    localStorage.setItem(TOKEN_KEY, token)
+    sessionStorage.removeItem(SESSION_TOKEN_KEY)
+  } else {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, token)
+    localStorage.removeItem(TOKEN_KEY)
+  }
 }
 
 export const getToken = () => {
-  return localStorage.getItem(TOKEN_KEY) || null
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(SESSION_TOKEN_KEY) || null
 }
 
 export const apiFetch = async (url, options = {}) => {

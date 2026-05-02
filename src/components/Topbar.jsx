@@ -1,8 +1,9 @@
 import '../css/topbar.css';
 import { useSidebar } from '../context/SidebarContext';
 import { useEffect, useState } from 'react';
+import ParentChildSelector from './ParentChildSelector'
 
-const Topbar = () => {
+const Topbar = ({ user, onLogout }) => {
   const { toggleSidebar } = useSidebar();
   const [theme, setTheme] = useState('light');
 
@@ -19,6 +20,14 @@ const Topbar = () => {
     document.documentElement.dataset.theme = next;
     localStorage.setItem('theme', next);
   };
+
+  const username =
+    user?.username ||
+    user?.userName ||
+    user?.name ||
+    user?.fullName ||
+    user?.email ||
+    '';
 
   return (
     <div className="navbar-header">
@@ -150,6 +159,37 @@ const Topbar = () => {
                 <div className="text-center py-12 px-16">
                   <a href="#" className="text-primary-600 fw-semibold text-md hover-underline">See All Notifications</a>
                 </div>
+              </div>
+            </div>
+
+            <ParentChildSelector />
+
+            {/* Profile dropdown */}
+            <div className="dropdown">
+              <button
+                className="w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center overflow-hidden"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-label="Profile Menu"
+              >
+                <img
+                  src="/assets/images/thumbs/leave-request-img2.png"
+                  alt="User"
+                  className="w-40-px h-40-px rounded-circle object-fit-cover"
+                />
+              </button>
+              <div className="dropdown-menu to-top dropdown-menu-sm p-0">
+                <div className="py-12 px-16 radius-8 bg-primary-50 mb-8">
+                  <div className="text-primary-light fw-semibold">{username || 'User'}</div>
+                </div>
+                <button
+                  type="button"
+                  className="dropdown-item d-flex align-items-center gap-2 py-10 px-16"
+                  onClick={() => onLogout?.()}
+                  disabled={!onLogout}
+                >
+                  <iconify-icon icon="ri:shut-down-line"></iconify-icon> Log Out
+                </button>
               </div>
             </div>
 
