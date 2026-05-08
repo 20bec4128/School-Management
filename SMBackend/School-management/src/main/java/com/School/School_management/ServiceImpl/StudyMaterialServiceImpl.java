@@ -61,7 +61,7 @@ public class StudyMaterialServiceImpl implements StudyMaterialService {
     }
 
     @Override
-    public List<StudyMaterialResponseDto> getAll() {
+    public List<StudyMaterialResponseDto> getAll(Long schoolId, Long classId, Long subjectId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
@@ -77,9 +77,9 @@ public class StudyMaterialServiceImpl implements StudyMaterialService {
             else list = repository.findBySubjectIdIn(subjectIds);
         } else if (user.isRole("STUDENT")) {
             Student s = studentRepository.findById(user.studentId()).orElseThrow(NotFoundException::new);
-            Long schoolId = s.getSchool() == null ? null : s.getSchool().getId();
-            if (schoolId == null || s.getSchoolClass() == null) list = List.of();
-            else list = repository.findBySchoolIdAndClassId(schoolId, s.getSchoolClass().getId());
+            Long studentSchoolId = s.getSchool() == null ? null : s.getSchool().getId();
+            if (studentSchoolId == null || s.getSchoolClass() == null) list = List.of();
+            else list = repository.findBySchoolIdAndClassId(studentSchoolId, s.getSchoolClass().getId());
         } else if (user.isRole("PARENT")) {
             List<Long> childIds = parentStudentRepository.findStudentIdsByParentId(user.parentId());
             Optional<Student> first = childIds.stream().map(studentRepository::findById).flatMap(Optional::stream).findFirst();
@@ -92,7 +92,12 @@ public class StudyMaterialServiceImpl implements StudyMaterialService {
             list = List.of();
         }
 
-        return list.stream().map(this::map).toList();
+        return list.stream()
+                .filter(item -> schoolId == null || schoolId.equals(item.getSchoolId()))
+                .filter(item -> classId == null || classId.equals(item.getClassId()))
+                .filter(item -> subjectId == null || subjectId.equals(item.getSubjectId()))
+                .map(this::map)
+                .toList();
     }
 
     @Override

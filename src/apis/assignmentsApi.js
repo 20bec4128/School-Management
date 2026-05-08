@@ -49,6 +49,16 @@ export const fetchAssignments = async () => {
   return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
+export const fetchAssignmentsForStudent = async (studentId) => {
+  const res = await apiFetch(`${ASSIGNMENTS_API_BASE}/student/${encodeURIComponent(String(studentId))}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (res.status === 403) return []
+  if (!res.ok) throw new Error(await readApiError(res))
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+}
+
 export const createAssignment = async (payload, file) => {
   const res = await apiFetch(ASSIGNMENTS_API_BASE, {
     method: 'POST',

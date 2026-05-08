@@ -5,11 +5,18 @@ import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Entity.SchoolClass;
 import com.School.School_management.Entity.Subject;
 import com.School.School_management.Entity.Syllabus;
+import com.School.School_management.Entity.Student;
 import com.School.School_management.Repository.SchoolClassRepository;
+import com.School.School_management.Repository.ParentStudentRepository;
 import com.School.School_management.Repository.SchoolRepository;
+import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Repository.SubjectRepository;
 import com.School.School_management.Repository.SyllabusRepository;
 import com.School.School_management.Service.SyllabusService;
+import com.School.School_management.auth.CurrentUser;
+import com.School.School_management.auth.CurrentUserHolder;
+import com.School.School_management.Exception.ForbiddenException;
+import com.School.School_management.Exception.NotFoundException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,6 +36,8 @@ public class SyllabusServiceImpl implements SyllabusService {
     private final SchoolRepository schoolRepository;
     private final SchoolClassRepository schoolClassRepository;
     private final SubjectRepository subjectRepository;
+    private final StudentRepository studentRepository;
+    private final ParentStudentRepository parentStudentRepository;
 
     @Value("${app.upload-dir:uploads}")
     private String uploadDir;
@@ -37,18 +46,27 @@ public class SyllabusServiceImpl implements SyllabusService {
             SyllabusRepository syllabusRepository,
             SchoolRepository schoolRepository,
             SchoolClassRepository schoolClassRepository,
-            SubjectRepository subjectRepository
+            SubjectRepository subjectRepository,
+            StudentRepository studentRepository,
+            ParentStudentRepository parentStudentRepository
     ) {
         this.syllabusRepository = syllabusRepository;
         this.schoolRepository = schoolRepository;
         this.schoolClassRepository = schoolClassRepository;
         this.subjectRepository = subjectRepository;
+        this.studentRepository = studentRepository;
+        this.parentStudentRepository = parentStudentRepository;
     }
 
     @Override
-    public List<SyllabusResponseDto> getAllSyllabuses() {
-        return syllabusRepository.findAll()
-                .stream()
+    public List<SyllabusResponseDto> getAllSyllabuses(Long schoolId, Long classId) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        return syllabusRepository.findAll().stream()
+                .filter(syllabus -> canAccess(user, syllabus))
+                .filter(syllabus -> schoolId == null || (syllabus.getSchool() != null && schoolId.equals(syllabus.getSchool().getId())))
+                .filter(syllabus -> classId == null || (syllabus.getSchoolClass() != null && classId.equals(syllabus.getSchoolClass().getId())))
                 .map(this::mapToResponseDto)
                 .toList();
     }
@@ -57,6 +75,9 @@ public class SyllabusServiceImpl implements SyllabusService {
     public SyllabusResponseDto getSyllabusById(Long id) {
         Syllabus syllabus = syllabusRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Syllabus not found with id: " + id));
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+        if (!canAccess(user, syllabus)) throw new NotFoundException();
 
         return mapToResponseDto(syllabus);
     }
@@ -159,6 +180,40 @@ public class SyllabusServiceImpl implements SyllabusService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to upload syllabus file");
         }
+    }
+
+    private boolean canAccess(CurrentUser user, Syllabus syllabus) {
+        if (user == null || syllabus == null) return false;
+        if (user.isSuperAdmin() || user.adminId() != null) return true;
+        if (user.isRole("TEACHER")) {
+            return syllabus.getSubject() != null
+                    && syllabus.getSubject().getTeacher() != null
+                    && user.teacherId() != null
+                    && user.teacherId().equals(syllabus.getSubject().getTeacher().getId());
+        }
+        if (user.isRole("STUDENT")) {
+            Student student = studentRepository.findById(user.studentId()).orElseThrow(NotFoundException::new);
+            Long schoolId = student.getSchool() == null ? null : student.getSchool().getId();
+            Long classId = student.getSchoolClass() == null ? null : student.getSchoolClass().getId();
+            return schoolId != null && classId != null
+                    && syllabus.getSchool() != null
+                    && syllabus.getSchoolClass() != null
+                    && schoolId.equals(syllabus.getSchool().getId())
+                    && classId.equals(syllabus.getSchoolClass().getId());
+        }
+        if (user.isRole("PARENT")) {
+            for (Long childId : parentStudentRepository.findStudentIdsByParentId(user.parentId())) {
+                Student child = studentRepository.findById(childId).orElse(null);
+                if (child == null || child.getSchool() == null || child.getSchoolClass() == null) continue;
+                if (syllabus.getSchool() != null && syllabus.getSchoolClass() != null
+                        && child.getSchool().getId().equals(syllabus.getSchool().getId())
+                        && child.getSchoolClass().getId().equals(syllabus.getSchoolClass().getId())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
     }
 
     private SyllabusResponseDto mapToResponseDto(Syllabus syllabus) {

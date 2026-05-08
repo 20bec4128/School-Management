@@ -64,6 +64,8 @@ export const AuthProvider = ({ children }) => {
   const userId = user?.userId ?? user?.id ?? null
   const teacherContext = user?.teacherContext ?? user?.teacher ?? null
   const studentId = user?.studentId ?? user?.student?.id ?? null
+  const studentClassId = user?.classId ?? user?.student?.classId ?? user?.student?.schoolClassId ?? user?.student?.schoolClass?.id ?? null
+  const studentSectionId = user?.sectionId ?? user?.student?.sectionId ?? user?.student?.schoolSectionId ?? user?.student?.schoolSection?.id ?? null
   const parentChildren = useMemo(() => pickChildren(user), [user])
 
   const [selectedChildId, setSelectedChildIdState] = useState(() => {
@@ -160,6 +162,8 @@ export const AuthProvider = ({ children }) => {
       userId,
       teacherContext,
       studentId,
+      studentClassId,
+      studentSectionId,
       parentChildren,
       selectedChildId,
       setSelectedChildId,
@@ -177,6 +181,8 @@ export const AuthProvider = ({ children }) => {
       userId,
       teacherContext,
       studentId,
+      studentClassId,
+      studentSectionId,
       parentChildren,
       selectedChildId,
       setSelectedChildId,

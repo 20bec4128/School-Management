@@ -25,7 +25,7 @@ public class LessonTimelineController {
             @RequestParam Long schoolId,
             @RequestParam String academicYear,
             @RequestParam Long classId,
-            @RequestParam Long subjectId
+            @RequestParam(required = false) Long subjectId
     ) {
         return service.listLessons(schoolId, academicYear, classId, subjectId);
     }
@@ -37,7 +37,7 @@ public class LessonTimelineController {
             @RequestParam Long schoolId,
             @RequestParam String academicYear,
             @RequestParam Long classId,
-            @RequestParam Long subjectId
+            @RequestParam(required = false) Long subjectId
     ) {
         return service.listTopics(schoolId, academicYear, classId, subjectId, lessonId);
     }
@@ -60,9 +60,8 @@ public class LessonTimelineController {
             @RequestParam Long schoolId,
             @RequestParam String academicYear,
             @RequestParam Long classId,
-            @RequestParam Long subjectId
+            @RequestParam(required = false) Long subjectId
     ) {
         return service.planView(schoolId, academicYear, classId, subjectId);
     }
 }
-

@@ -6,6 +6,7 @@ import { createSection, deleteSection, fetchSections, updateSection } from '../a
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -75,6 +76,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Section = () => {
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [sections, setSections] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
@@ -115,7 +117,7 @@ const Section = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchSections()
+      const data = await fetchSections({ schoolId: isSchoolSelectionEnabled ? activeSchoolId : undefined })
       setSections(Array.isArray(data) ? data : [])
     } catch (e) {
       setSections([])
@@ -123,7 +125,7 @@ const Section = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeSchoolId, isSchoolSelectionEnabled])
 
   const loadClassesForSchool = useCallback(async (schoolId) => {
     if (!schoolId) {

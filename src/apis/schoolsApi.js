@@ -95,6 +95,16 @@ export const createSchool = async (payload, form) => {
   return res.json()
 }
 
+export const createSchoolWithAdmin = async (payload, form) => {
+  const fd = buildUpsertFormData(payload, form)
+  const res = await apiFetch(`${SCHOOLS_API_BASE}/create-with-admin`, {
+    method: 'POST',
+    body: fd,
+  })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const updateSchool = async (schoolId, payload, form) => {
   const res = await apiFetch(`${SCHOOLS_API_BASE}/${schoolId}`, {
     method: 'PUT',

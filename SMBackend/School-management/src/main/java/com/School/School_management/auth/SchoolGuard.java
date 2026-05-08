@@ -25,7 +25,8 @@ public class SchoolGuard {
 
         // ADMIN with headOfficeId = head-office scoped admin
         if (user.isHeadOfficeScopedAdmin()) {
-            if (requestedSchoolId == null) throw new BadRequestException("schoolId is required");
+            // For read operations, allow null to mean "all schools under this head office".
+            if (requestedSchoolId == null) return null;
             ensureSchoolInHeadOffice(requestedSchoolId, user.headOfficeId());
             return requestedSchoolId;
         }

@@ -53,8 +53,8 @@ public class LessonTimelineServiceImpl implements LessonTimelineService {
 
     @Override
     public List<LessonTimelineLessonDto> listLessons(Long schoolId, String academicYear, Long classId, Long subjectId) {
-        if (schoolId == null || classId == null || subjectId == null || academicYear == null || academicYear.isBlank()) {
-            throw new BadRequestException("schoolId, academicYear, classId and subjectId are required");
+        if (schoolId == null || classId == null || academicYear == null || academicYear.isBlank()) {
+            throw new BadRequestException("schoolId, academicYear and classId are required");
         }
         Long effectiveSchoolId = schoolGuard.schoolIdForRead(CurrentUserHolder.get(), schoolId);
 
@@ -84,8 +84,8 @@ public class LessonTimelineServiceImpl implements LessonTimelineService {
 
     @Override
     public List<LessonTimelineTopicDto> listTopics(Long schoolId, String academicYear, Long classId, Long subjectId, Long lessonId) {
-        if (schoolId == null || classId == null || subjectId == null || lessonId == null || academicYear == null || academicYear.isBlank()) {
-            throw new BadRequestException("schoolId, academicYear, classId, subjectId and lessonId are required");
+        if (schoolId == null || classId == null || lessonId == null || academicYear == null || academicYear.isBlank()) {
+            throw new BadRequestException("schoolId, academicYear, classId and lessonId are required");
         }
         Long effectiveSchoolId = schoolGuard.schoolIdForRead(CurrentUserHolder.get(), schoolId);
 
@@ -170,8 +170,8 @@ public class LessonTimelineServiceImpl implements LessonTimelineService {
 
     @Override
     public List<LessonPlanRowDto> planView(Long schoolId, String academicYear, Long classId, Long subjectId) {
-        if (schoolId == null || classId == null || subjectId == null || academicYear == null || academicYear.isBlank()) {
-            throw new BadRequestException("schoolId, academicYear, classId and subjectId are required");
+        if (schoolId == null || classId == null || academicYear == null || academicYear.isBlank()) {
+            throw new BadRequestException("schoolId, academicYear and classId are required");
         }
         Long effectiveSchoolId = schoolGuard.schoolIdForRead(CurrentUserHolder.get(), schoolId);
 
@@ -246,4 +246,3 @@ public class LessonTimelineServiceImpl implements LessonTimelineService {
         }
     }
 }
-

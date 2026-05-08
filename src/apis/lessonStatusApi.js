@@ -48,4 +48,3 @@ export const updateLessonStatus = async ({ lessonId, status }) => {
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()
 }
-

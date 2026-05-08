@@ -1,5 +1,6 @@
-// apis/studentActivityApi.js
-const STUDENT_ACTIVITY_API_BASE = 'http://localhost:8081/api/student-activities';
+import { apiFetch } from './apiClient'
+
+const STUDENT_ACTIVITY_API_BASE = '/api/student-activities'
 
 const readApiError = async (res) => {
     try {
@@ -26,15 +27,15 @@ export const fetchStudentActivitiesPage = async (page, size, filters = {}) => {
     if (filters.className && filters.className !== 'Select') params.append('className', filters.className);
     if (filters.section && filters.section !== 'Select') params.append('section', filters.section);
     
-    const res = await fetch(`${STUDENT_ACTIVITY_API_BASE}?${params.toString()}`, {
+    const res = await apiFetch(`${STUDENT_ACTIVITY_API_BASE}?${params.toString()}`, {
         headers: { Accept: 'application/json' },
-    });
+    })
     if (!res.ok) throw new Error(await readApiError(res));
     return res.json();
 };
 
 export const createStudentActivity = async (payload) => {
-    const res = await fetch(STUDENT_ACTIVITY_API_BASE, {
+    const res = await apiFetch(STUDENT_ACTIVITY_API_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
@@ -44,7 +45,7 @@ export const createStudentActivity = async (payload) => {
 };
 
 export const updateStudentActivity = async (id, payload) => {
-    const res = await fetch(`${STUDENT_ACTIVITY_API_BASE}/${id}`, {
+    const res = await apiFetch(`${STUDENT_ACTIVITY_API_BASE}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
@@ -54,7 +55,7 @@ export const updateStudentActivity = async (id, payload) => {
 };
 
 export const deleteStudentActivity = async (id) => {
-    const res = await fetch(`${STUDENT_ACTIVITY_API_BASE}/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`${STUDENT_ACTIVITY_API_BASE}/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(await readApiError(res));
     return res.text();
 };

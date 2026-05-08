@@ -11,6 +11,9 @@ import {
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
+import { can } from '../utils/permissions'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const sessionYearOptions = ['2024-2025', '2023-2024', '2022-2023']
@@ -116,7 +119,47 @@ const normalizeSyllabus = (row) => ({
   fileUrl: row?.fileUrl || '',
 })
 
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected =
+    selectedChildId != null && selectedChildId !== ''
+      ? list.find((child) => String(
+        child?.studentId ??
+        child?.id ??
+        child?.childId ??
+        child?.student?.id ??
+        child?.student?.studentId ??
+        child?.student?.childId ??
+        ''
+      ) === String(selectedChildId))
+      : null
+  return selected || list[0] || null
+}
+
+const getChildSchoolId = (child) =>
+  child?.schoolId ??
+  child?.school?.id ??
+  child?.student?.schoolId ??
+  child?.student?.school?.id ??
+  child?.student?.school?.schoolId ??
+  child?.school?.schoolId ??
+  null
+
+const getChildClassId = (child) =>
+  child?.classId ??
+  child?.schoolClassId ??
+  child?.schoolClass?.id ??
+  child?.student?.classId ??
+  child?.student?.schoolClassId ??
+  child?.student?.schoolClass?.id ??
+  child?.schoolClass?.id ??
+  null
+
 const Syllabus = () => {
+  const { user, role, schoolId, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
+  const canManage = can(user, ['SYLLABUS_MANAGE', 'SYLLABUS_MANAGE_ASSIGNED', '*'])
+
   const [syllabuses, setSyllabuses] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
@@ -142,11 +185,32 @@ const Syllabus = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId =
+    roleUpper === 'STUDENT'
+      ? (schoolId ?? activeSchoolId ?? null)
+      : roleUpper === 'PARENT'
+        ? getChildSchoolId(selectedChild)
+        : null
+  const effectiveClassId =
+    roleUpper === 'STUDENT'
+      ? studentClassId ?? null
+      : roleUpper === 'PARENT'
+        ? getChildClassId(selectedChild)
+        : null
 
   const addFileRef = useRef(null)
   const editFileRef = useRef(null)
 
   const loadLookups = useCallback(async () => {
+    if (!canManage) {
+      setSchoolsLookup([])
+      setClassesLookup([])
+      setSubjectsLookup([])
+      return
+    }
     const [schools, classes, subjects] = await Promise.all([
       fetchSchoolsLookup(),
       fetchClasses(),
@@ -156,21 +220,40 @@ const Syllabus = () => {
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
-  }, [])
+  }, [canManage])
 
   const loadSyllabuses = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchSyllabuses()
+      const scopedParams = isStudentScope
+        ? (effectiveSchoolId && effectiveClassId
+            ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
+            : null)
+        : isSchoolSelectionEnabled && activeSchoolId
+          ? { schoolId: activeSchoolId }
+          : {}
+
+      if (isStudentScope && !scopedParams) {
+        setSyllabuses([])
+        setError(roleUpper === 'PARENT' && !selectedChildId ? 'Please select a child first.' : 'Unable to determine your class scope.')
+        return
+      }
+
+      const data = await fetchSyllabuses(scopedParams || {})
       setSyllabuses(Array.isArray(data) ? data.map(normalizeSyllabus) : [])
     } catch (e) {
-      setSyllabuses([])
-      setError(e?.message || 'Failed to load syllabuses')
+      if (String(e?.message || '').toLowerCase().includes('403') || String(e?.message || '').toLowerCase().includes('forbidden')) {
+        setSyllabuses([])
+        setError(isStudentScope ? 'Select a child to view syllabuses.' : 'You are not allowed to view syllabuses.')
+      } else {
+        setSyllabuses([])
+        setError(e?.message || 'Failed to load syllabuses')
+      }
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeSchoolId, effectiveClassId, effectiveSchoolId, isSchoolSelectionEnabled, isStudentScope, roleUpper, selectedChildId])
 
   useEffect(() => {
     void loadLookups()
@@ -181,19 +264,19 @@ const Syllabus = () => {
   }, [loadSyllabuses])
 
   const schoolFilterOptions = useMemo(() => {
-    const fromLookup = schoolsLookup.map((s) => s?.schoolName).filter(Boolean)
-    return Array.from(new Set(fromLookup)).sort()
-  }, [schoolsLookup])
+    const source = schoolsLookup.length > 0 ? schoolsLookup.map((s) => s?.schoolName) : syllabuses.map((row) => row?.school)
+    return Array.from(new Set(source.filter(Boolean))).sort()
+  }, [schoolsLookup, syllabuses])
 
   const classFilterOptions = useMemo(() => {
-    const fromLookup = classesLookup.map((c) => c?.className).filter(Boolean)
-    return Array.from(new Set(fromLookup)).sort()
-  }, [classesLookup])
+    const source = classesLookup.length > 0 ? classesLookup.map((c) => c?.className) : syllabuses.map((row) => row?.className)
+    return Array.from(new Set(source.filter(Boolean))).sort()
+  }, [classesLookup, syllabuses])
 
   const subjectFilterOptions = useMemo(() => {
-    const fromLookup = subjectsLookup.map((s) => s?.subject || s?.name).filter(Boolean)
-    return Array.from(new Set(fromLookup)).sort()
-  }, [subjectsLookup])
+    const source = subjectsLookup.length > 0 ? subjectsLookup.map((s) => s?.subject || s?.name) : syllabuses.map((row) => row?.subject)
+    return Array.from(new Set(source.filter(Boolean))).sort()
+  }, [subjectsLookup, syllabuses])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -266,17 +349,20 @@ const Syllabus = () => {
   }
 
   const handlePendingFilterChange = (e) => {
+    if (isStudentScope) return
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
+    if (isStudentScope) return
     setFilters(pendingFilters)
     setCurrentPage(1)
   }
 
   const handleResetFilters = () => {
+    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setCurrentPage(1)
@@ -298,6 +384,7 @@ const Syllabus = () => {
   }
 
   const openAdd = () => {
+    if (!canManage) return
     setError('')
     setAddForm(emptyForm)
     setAddSyllabusFile(null)
@@ -307,6 +394,7 @@ const Syllabus = () => {
   }
 
   const openEdit = (row) => {
+    if (!canManage) return
     setError('')
     setEditingId(row?.id ?? null)
     setEditForm({
@@ -416,6 +504,7 @@ const Syllabus = () => {
   }
 
   const handleDelete = async (id) => {
+    if (!canManage) return
     if (!id) return
     const confirmed = window.confirm('Delete this syllabus? This cannot be undone.')
     if (!confirmed) return
@@ -694,16 +783,20 @@ const Syllabus = () => {
             <span className="text-secondary-light"> / Syllabus</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Syllabus
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Syllabus
+          </button>
+        ) : (
+          <span className="text-secondary-light fw-medium">View only</span>
+        )}
       </div>
 
       {error ? (
@@ -750,18 +843,20 @@ const Syllabus = () => {
                 </ul>
               </div>
 
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
-                <span>
-                  <i className="ri-arrow-right-line"></i>
-                </span>
-              </button>
+              {!isStudentScope ? (
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  onClick={() => setIsFilterSidebarOpen(true)}
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    Filter
+                  </span>
+                  <span>
+                    <i className="ri-arrow-right-line"></i>
+                  </span>
+                </button>
+              ) : null}
 
               <div className="dropdown">
                 <button
@@ -831,31 +926,33 @@ const Syllabus = () => {
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 980 }}>
               <thead>
                 <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input
-                        type="checkbox"
-                        className="form-check-input"
-                        checked={allSelected}
-                        onChange={handleSelectAll}
-                      />
-                      <label className="form-check-label">S.L</label>
-                    </div>
-                  </th>
+                  {canManage ? (
+                    <th scope="col">
+                      <div className="form-check style-check d-flex align-items-center">
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          checked={allSelected}
+                          onChange={handleSelectAll}
+                        />
+                        <label className="form-check-label">S.L</label>
+                      </div>
+                    </th>
+                  ) : null}
                   {visibleColumns.school ? <th scope="col">School</th> : null}
                   {visibleColumns.title ? <th scope="col">Title</th> : null}
                   {visibleColumns.className ? <th scope="col">Class</th> : null}
                   {visibleColumns.subject ? <th scope="col">Subject</th> : null}
                   {visibleColumns.sessionYear ? <th scope="col">Session Year</th> : null}
                   {visibleColumns.file ? <th scope="col">File</th> : null}
-                  <th scope="col">Action</th>
+                  {canManage ? <th scope="col">Action</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={visibleColumnCount + 2}
+                      colSpan={visibleColumnCount + (canManage ? 2 : 0)}
                       className="text-center py-40 text-secondary-light"
                     >
                       Loading syllabus records...
@@ -864,7 +961,7 @@ const Syllabus = () => {
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={visibleColumnCount + 2}
+                      colSpan={visibleColumnCount + (canManage ? 2 : 0)}
                       className="text-center py-40 text-secondary-light"
                     >
                       No syllabus records found.
@@ -873,19 +970,21 @@ const Syllabus = () => {
                 ) : (
                   paginated.map((row, index) => (
                     <tr key={row.id}>
-                      <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.id)}
-                            onChange={() => handleSelectRow(row.id)}
-                          />
-                          <label className="form-check-label">
-                            {(currentPage - 1) * rowsPerPage + index + 1}
-                          </label>
-                        </div>
-                      </td>
+                      {canManage ? (
+                        <td>
+                          <div className="form-check style-check d-flex align-items-center">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={selectedRows.includes(row.id)}
+                              onChange={() => handleSelectRow(row.id)}
+                            />
+                            <label className="form-check-label">
+                              {(currentPage - 1) * rowsPerPage + index + 1}
+                            </label>
+                          </div>
+                        </td>
+                      ) : null}
                       {visibleColumns.school ? <td>{row.school}</td> : null}
                       {visibleColumns.title ? (
                         <td>
@@ -927,26 +1026,32 @@ const Syllabus = () => {
                           )}
                         </td>
                       ) : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDelete(row.id)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </td>
+                      {canManage ? (
+                        <td>
+                          <div className="d-flex align-items-center gap-10">
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleDelete(row.id)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          </div>
+                        </td>
+                      ) : (
+                        <td>
+                          <span className="text-secondary-light">Read only</span>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -1021,12 +1126,13 @@ const Syllabus = () => {
         {renderForm(editForm, setEditForm, editStep, editSyllabusFile, setEditSyllabusFile, editFileRef)}
       </WizardPopup>
 
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Syllabus"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+      {!isStudentScope ? (
+        <SlideSidebar
+          isOpen={isFilterSidebarOpen}
+          title="Filter Syllabus"
+          onClose={() => setIsFilterSidebarOpen(false)}
+          className="filter-sidebar"
+        >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label
@@ -1131,7 +1237,8 @@ const Syllabus = () => {
             </button>
           </div>
         </form>
-      </SlideSidebar>
+        </SlideSidebar>
+      ) : null}
     </div>
   )
 }

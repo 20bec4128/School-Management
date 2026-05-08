@@ -17,6 +17,8 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 
     List<Assignment> findBySchoolIdAndClassIdAndSectionId(Long schoolId, Long classId, Long sectionId);
 
+    List<Assignment> findBySchoolIdAndClassIdAndSectionIdIn(Long schoolId, Long classId, Collection<Long> sectionIds);
+
     List<Assignment> findBySubjectIdIn(Collection<Long> subjectIds);
 
     boolean existsBySchoolId(Long schoolId);

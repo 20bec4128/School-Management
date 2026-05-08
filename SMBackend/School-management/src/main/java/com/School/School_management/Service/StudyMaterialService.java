@@ -9,7 +9,7 @@ import java.util.List;
 
 public interface StudyMaterialService {
     StudyMaterialResponseDto create(StudyMaterialRequestDto dto, MultipartFile material);
-    List<StudyMaterialResponseDto> getAll();
+    List<StudyMaterialResponseDto> getAll(Long schoolId, Long classId, Long subjectId);
     StudyMaterialResponseDto update(Long id, StudyMaterialRequestDto dto, MultipartFile material);
     void delete(Long id);
 }

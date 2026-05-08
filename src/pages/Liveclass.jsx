@@ -7,6 +7,7 @@ import {
   deleteLiveClass,
   endLiveClass,
   fetchLiveClasses,
+  fetchStudentLiveClasses,
   joinLiveClass,
   leaveLiveClass,
   startLiveClass,
@@ -67,10 +68,25 @@ const statusBadge = (status) => {
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
 }
 
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected =
+    selectedChildId != null && selectedChildId !== ''
+      ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
+      : null
+  return selected || list[0] || null
+}
+
 const LiveClass = () => {
-  const { user } = useAuth()
-  const canManage = can(user, ['LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
-  const canJoin = can(user, ['LIVE_CLASS_JOIN', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
+  const { user, role, schoolId, studentClassId, studentSectionId, selectedChildId, parentChildren } = useAuth()
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
+  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
+  const effectiveSectionId = roleUpper === 'STUDENT' ? studentSectionId : roleUpper === 'PARENT' ? selectedChild?.sectionId ?? null : null
+  const canManage = !isStudentScope && can(user, ['LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
+  const canJoin = !isStudentScope && can(user, ['LIVE_CLASS_JOIN', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -105,6 +121,14 @@ const LiveClass = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const loadLookups = useCallback(async () => {
+    if (isStudentScope) {
+      setSchoolsLookup([])
+      setTeachersLookup([])
+      setClassesLookup([])
+      setSectionsLookup([])
+      setSubjectsLookup([])
+      return
+    }
     const [schools, teachers, classes, sections, subjects] = await Promise.all([
       fetchSchoolsLookup(),
       fetchTeachers(),
@@ -123,23 +147,26 @@ const LiveClass = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchLiveClasses()
+      const data = isStudentScope && effectiveClassId && effectiveSectionId
+        ? await fetchStudentLiveClasses({ classId: effectiveClassId, sectionId: effectiveSectionId })
+        : await fetchLiveClasses()
       setRows(Array.isArray(data) ? data : [])
+      if (isStudentScope) setHasSearched(true)
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load live classes')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [effectiveClassId, effectiveSectionId, isStudentScope])
 
   useEffect(() => {
     const t = setTimeout(() => {
-      void loadLookups()
+      if (!isStudentScope) void loadLookups()
       void loadRows()
     }, 0)
     return () => clearTimeout(t)
-  }, [loadLookups, loadRows])
+  }, [isStudentScope, loadLookups, loadRows])
 
   const classOptions = useMemo(() => {
     return classesLookup
@@ -178,6 +205,7 @@ const LiveClass = () => {
   }, [teachersLookup])
 
   const validateFind = () => {
+    if (isStudentScope) return {}
     const errs = {}
     if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
     if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
@@ -188,6 +216,7 @@ const LiveClass = () => {
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
+    if (isStudentScope) return
     const errs = validateFind()
     if (Object.keys(errs).length > 0) {
       setFindErrors(errs)
@@ -201,6 +230,7 @@ const LiveClass = () => {
   }
 
   const handleResetFilters = () => {
+    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setFindErrors({})
@@ -223,6 +253,12 @@ const LiveClass = () => {
   const filtered = useMemo(() => {
     if (!hasSearched) return []
     const q = search.trim().toLowerCase()
+    if (isStudentScope) {
+      return rows.filter((r) => {
+        if (!q) return true
+        return [r.teacherName, r.liveClassType, r.classDate, r.status].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    }
     return rows.filter((r) => {
       const scopeOk =
         String(r.schoolId) === String(filters.schoolId) &&
@@ -234,7 +270,7 @@ const LiveClass = () => {
       if (!q) return true
       return [r.teacherName, r.liveClassType, r.classDate, r.status].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
-  }, [rows, hasSearched, search, filters])
+  }, [rows, hasSearched, search, filters, isStudentScope])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
@@ -257,6 +293,7 @@ const LiveClass = () => {
   }
 
   const openAdd = () => {
+    if (!canManage) return
     setAddForm({ ...emptyForm, ...filters })
     setFormErrors({})
     setAddStep(0)
@@ -264,6 +301,7 @@ const LiveClass = () => {
   }
 
   const openEdit = (row) => {
+    if (!canManage) return
     setEditingId(row?.id ?? null)
     setEditForm({
       schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
@@ -286,6 +324,7 @@ const LiveClass = () => {
   }
 
   const submitAdd = async () => {
+    if (!canManage) return
     const errs = validateForm(addForm)
     if (Object.keys(errs).length > 0) {
       setFormErrors(errs)
@@ -319,6 +358,7 @@ const LiveClass = () => {
   }
 
   const submitEdit = async () => {
+    if (!canManage) return
     if (!editingId) return
     const errs = validateForm(editForm)
     if (Object.keys(errs).length > 0) {
@@ -354,6 +394,7 @@ const LiveClass = () => {
   }
 
   const handleDelete = async (row) => {
+    if (!canManage) return
     const id = row?.id
     if (!id) return
     if (!window.confirm('Delete this live class?')) return
@@ -370,6 +411,7 @@ const LiveClass = () => {
   }
 
   const handleStart = async (row) => {
+    if (!canManage) return
     try {
       setSaving(true)
       setError('')
@@ -383,6 +425,7 @@ const LiveClass = () => {
   }
 
   const handleEnd = async (row) => {
+    if (!canManage) return
     try {
       setSaving(true)
       setError('')
@@ -396,6 +439,7 @@ const LiveClass = () => {
   }
 
   const handleJoin = async (row) => {
+    if (isStudentScope) return
     try {
       setSaving(true)
       setError('')
@@ -410,6 +454,7 @@ const LiveClass = () => {
   }
 
   const handleLeave = async (row) => {
+    if (isStudentScope) return
     try {
       setSaving(true)
       setError('')
@@ -644,9 +689,11 @@ const LiveClass = () => {
               </div>
             </div>
             <div className="d-flex align-items-center gap-8 ms-auto">
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
+              {!isStudentScope ? (
+                <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                  Find
+                </button>
+              ) : null}
               {canManage ? (
                 <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
                   + Add
@@ -707,26 +754,30 @@ const LiveClass = () => {
                         </td>
                       )}
                       <td>
-                        <div className="d-flex gap-8 flex-wrap">
-                          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(r)} disabled={!canManage || saving}>
-                            Edit
-                          </button>
-                          <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
-                            Delete
-                          </button>
-                          <button type="button" className="btn btn-sm btn-primary-600" onClick={() => handleStart(r)} disabled={!canManage || saving}>
-                            Start
-                          </button>
-                          <button type="button" className="btn btn-sm btn-success-600" onClick={() => handleJoin(r)} disabled={!canJoin || saving}>
-                            Join
-                          </button>
-                          <button type="button" className="btn btn-sm btn-light border" onClick={() => handleLeave(r)} disabled={!canJoin || saving}>
-                            Leave
-                          </button>
-                          <button type="button" className="btn btn-sm btn-warning-600" onClick={() => handleEnd(r)} disabled={!canManage || saving}>
-                            End
-                          </button>
-                        </div>
+                        {isStudentScope ? (
+                          <span className="text-secondary-light">Read only</span>
+                        ) : (
+                          <div className="d-flex gap-8 flex-wrap">
+                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(r)} disabled={!canManage || saving}>
+                              Edit
+                            </button>
+                            <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
+                              Delete
+                            </button>
+                            <button type="button" className="btn btn-sm btn-primary-600" onClick={() => handleStart(r)} disabled={!canManage || saving}>
+                              Start
+                            </button>
+                            <button type="button" className="btn btn-sm btn-success-600" onClick={() => handleJoin(r)} disabled={!canJoin || saving}>
+                              Join
+                            </button>
+                            <button type="button" className="btn btn-sm btn-light border" onClick={() => handleLeave(r)} disabled={!canJoin || saving}>
+                              Leave
+                            </button>
+                            <button type="button" className="btn btn-sm btn-warning-600" onClick={() => handleEnd(r)} disabled={!canManage || saving}>
+                              End
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))

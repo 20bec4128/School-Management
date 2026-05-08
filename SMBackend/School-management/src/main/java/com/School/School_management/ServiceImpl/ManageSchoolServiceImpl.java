@@ -1,36 +1,54 @@
 package com.School.School_management.ServiceImpl;
 
 import com.School.School_management.Dto.ManageSchoolDto;
+import com.School.School_management.Dto.CreateSchoolWithAdminRequest;
+import com.School.School_management.Dto.CreateSchoolWithAdminResponse;
+import com.School.School_management.Entity.AdminUser;
 import com.School.School_management.Entity.ManageSchool;
+import com.School.School_management.Exception.ConflictException;
+import com.School.School_management.Exception.BadRequestException;
+import com.School.School_management.Repository.AdminUserRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Service.ManageSchoolService;
+import com.School.School_management.auth.CurrentUser;
+import com.School.School_management.auth.CurrentUserHolder;
 import com.School.School_management.config.UploadProperties;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class ManageSchoolServiceImpl implements ManageSchoolService {
 
     private final SchoolRepository schoolRepository;
+    private final AdminUserRepository adminUserRepository;
+    private final PasswordEncoder passwordEncoder;
 
     private final Path schoolUploadDir;
 
     public ManageSchoolServiceImpl(
             SchoolRepository schoolRepository,
+            AdminUserRepository adminUserRepository,
+            PasswordEncoder passwordEncoder,
             UploadProperties uploadProperties
     ) {
         this.schoolRepository = schoolRepository;
+        this.adminUserRepository = adminUserRepository;
+        this.passwordEncoder = passwordEncoder;
         this.schoolUploadDir = Paths.get(uploadProperties.getDir(), "schools").toAbsolutePath().normalize();
     }
 
@@ -41,6 +59,8 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
             MultipartFile frontendLogo
     ) {
         ManageSchool school = toEntity(dto);
+        CurrentUser user = CurrentUserHolder.get();
+        applyScopeOnCreate(school, user);
 
         if (adminLogo != null && !adminLogo.isEmpty()) {
             school.setAdminLogoUrl(saveFile(adminLogo));
@@ -54,10 +74,73 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
     }
 
     @Override
-    public Page<ManageSchoolDto> getAllSchools(int page, int size) {
+    @Transactional
+    public CreateSchoolWithAdminResponse createSchoolWithAdmin(
+            CreateSchoolWithAdminRequest request,
+            MultipartFile adminLogo,
+            MultipartFile frontendLogo,
+            CurrentUser user
+    ) {
+        if (request == null || request.getSchool() == null || request.getAdmin() == null) {
+            throw new BadRequestException("School and admin details are required");
+        }
+
+        String username = normalizeRequired(request.getAdmin().getUsername(), "Admin username is required");
+        String password = normalizeRequired(request.getAdmin().getPassword(), "Admin password is required");
+
+        adminUserRepository.findByUsername(username).ifPresent((existing) -> {
+            String details = String.format(
+                    " (id=%s, role=%s, headOfficeId=%s, schoolId=%s, active=%s)",
+                    existing.getId(),
+                    existing.getRole(),
+                    existing.getHeadOfficeId(),
+                    existing.getSchoolId(),
+                    existing.getActive()
+            );
+            throw new ConflictException("Admin username already exists" + details);
+        });
+
+        ManageSchool school = toEntity(request.getSchool());
+        applyScopeOnCreate(school, user);
+
+        if (adminLogo != null && !adminLogo.isEmpty()) {
+            school.setAdminLogoUrl(saveFile(adminLogo));
+        }
+        if (frontendLogo != null && !frontendLogo.isEmpty()) {
+            school.setFrontendLogoUrl(saveFile(frontendLogo));
+        }
+
+        ManageSchool savedSchool = schoolRepository.save(school);
+
+        AdminUser admin = new AdminUser();
+        admin.setUsername(username);
+        admin.setPasswordHash(passwordEncoder.encode(password));
+        admin.setRole("SCHOOL_ADMIN");
+        admin.setSchoolId(savedSchool.getId());
+        admin.setHeadOfficeId(savedSchool.getHeadOfficeId());
+        admin.setActive(Boolean.TRUE);
+
+        AdminUser savedAdmin = adminUserRepository.save(admin);
+
+        return new CreateSchoolWithAdminResponse(toDto(savedSchool), savedAdmin.getId(), savedAdmin.getUsername());
+    }
+
+    @Override
+    public Page<ManageSchoolDto> getAllSchools(int page, int size, Long headOfficeId, Long schoolId) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        return schoolRepository.findAll(pageable)
-                .map(this::toDto);
+
+        if (schoolId != null) {
+            return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                    .map(s -> new PageImpl<>(List.of(toDto(s)), pageable, 1))
+                    .orElseGet(() -> new PageImpl<>(List.of(), pageable, 0));
+        }
+
+        if (headOfficeId != null) {
+            return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(headOfficeId, pageable)
+                    .map(this::toDto);
+        }
+
+        return schoolRepository.findAll(pageable).map(this::toDto);
     }
 
     @Override
@@ -83,7 +166,7 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         school.setSchoolName(dto.getSchoolName());
         school.setSubscription(dto.getSubscription());
         school.setIsDemo(dto.getIsDemo());
-        school.setStatus(dto.getStatus());
+        school.setStatus(normalizeStatus(dto.getStatus()));
         school.setAddress(dto.getAddress());
         school.setPhone(dto.getPhone());
         school.setRegistrationDate(dto.getRegistrationDate());
@@ -109,6 +192,8 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         school.setYoutubeUrl(dto.getYoutubeUrl());
         school.setInstagramUrl(dto.getInstagramUrl());
         school.setPinterestUrl(dto.getPinterestUrl());
+        // don't allow losing linkage; for head-office admins set it if missing
+        applyScopeOnUpdate(school, CurrentUserHolder.get());
 
         if (adminLogo != null && !adminLogo.isEmpty()) {
             school.setAdminLogoUrl(saveFile(adminLogo));
@@ -153,7 +238,7 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         school.setSchoolName(dto.getSchoolName());
         school.setSubscription(dto.getSubscription());
         school.setIsDemo(dto.getIsDemo());
-        school.setStatus(dto.getStatus());
+        school.setStatus(normalizeStatus(dto.getStatus()));
         school.setAddress(dto.getAddress());
         school.setPhone(dto.getPhone());
         school.setRegistrationDate(dto.getRegistrationDate());
@@ -180,6 +265,37 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         school.setFrontendLogoUrl(dto.getFrontendLogoUrl());
         school.setAdminLogoUrl(dto.getAdminLogoUrl());
         return school;
+    }
+
+    private void applyScopeOnCreate(ManageSchool school, CurrentUser user) {
+        if (school == null || user == null) return;
+        if (user.isHeadOfficeScopedAdmin() && user.headOfficeId() != null) {
+            school.setHeadOfficeId(user.headOfficeId());
+        }
+    }
+
+    private void applyScopeOnUpdate(ManageSchool school, CurrentUser user) {
+        if (school == null || user == null) return;
+        if (user.isHeadOfficeScopedAdmin() && user.headOfficeId() != null && school.getHeadOfficeId() == null) {
+            school.setHeadOfficeId(user.headOfficeId());
+        }
+    }
+
+    private String normalizeRequired(String value, String message) {
+        if (value == null) throw new BadRequestException(message);
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) throw new BadRequestException(message);
+        return trimmed;
+    }
+
+    private String normalizeStatus(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.isEmpty()) return "ACTIVE";
+        String upper = trimmed.toUpperCase();
+        // Accept UI-friendly values like "Active"/"Inactive" by normalizing case.
+        if ("ACTIVE".equals(upper) || "INACTIVE".equals(upper)) return upper;
+        // fallback: keep upper, DB constraint will enforce allowed values
+        return upper;
     }
 
     private ManageSchoolDto toDto(ManageSchool school) {

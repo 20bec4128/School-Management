@@ -1,7 +1,11 @@
 package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.ManageSchoolDto;
+import com.School.School_management.Dto.CreateSchoolWithAdminRequest;
+import com.School.School_management.Dto.CreateSchoolWithAdminResponse;
 import com.School.School_management.Service.ManageSchoolService;
+import com.School.School_management.auth.CurrentUser;
+import com.School.School_management.auth.CurrentUserHolder;
 import com.School.School_management.auth.RequirePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
@@ -22,6 +26,16 @@ public class ManageSchoolController {
         this.objectMapper = objectMapper;
     }
 
+    @PostMapping(value = "/create-with-admin", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public CreateSchoolWithAdminResponse createSchoolWithAdmin(
+            @RequestPart("data") String data,
+            @RequestPart(value = "adminLogo", required = false) MultipartFile adminLogo,
+            @RequestPart(value = "frontendLogo", required = false) MultipartFile frontendLogo
+    ) throws Exception {
+        CreateSchoolWithAdminRequest req = objectMapper.readValue(data, CreateSchoolWithAdminRequest.class);
+        return manageSchoolService.createSchoolWithAdmin(req, adminLogo, frontendLogo, CurrentUserHolder.get());
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ManageSchoolDto createSchool(
             @RequestPart("data") String data,
@@ -38,7 +52,14 @@ public class ManageSchoolController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return manageSchoolService.getAllSchools(page, size);
+        CurrentUser user = CurrentUserHolder.get();
+        Long schoolId = null;
+        Long headOfficeId = null;
+        if (user != null) {
+            if (user.isSchoolScoped() && user.schoolId() != null) schoolId = user.schoolId();
+            if (user.isHeadOfficeScopedAdmin() && user.headOfficeId() != null) headOfficeId = user.headOfficeId();
+        }
+        return manageSchoolService.getAllSchools(page, size, headOfficeId, schoolId);
     }
 
     @GetMapping("/{id}")

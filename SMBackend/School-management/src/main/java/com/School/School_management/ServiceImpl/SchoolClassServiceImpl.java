@@ -56,6 +56,15 @@ public class SchoolClassServiceImpl implements SchoolClassService {
 
   @Override
   @Transactional(readOnly = true)
+  public List<SchoolClassDto> getAllForHeadOffice(Long headOfficeId) {
+    if (headOfficeId == null) return List.of();
+    return schoolClassRepository.findAllBySchool_HeadOfficeIdAndSchool_IsDeletedFalseOrderByIdDesc(headOfficeId).stream()
+        .map(this::toDto)
+        .toList();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public SchoolClassDto getById(Long id) {
     return toDto(findClass(id));
   }

@@ -1,174 +1,248 @@
-import '../css/topbar.css';
-import { useSidebar } from '../context/SidebarContext';
-import { useEffect, useState } from 'react';
-import ParentChildSelector from './ParentChildSelector'
+import '../css/topbar.css'
+import { useSidebar } from '../context/SidebarContext'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { normalizeRole } from '../utils/roles'
 
-const Topbar = ({ user, onLogout }) => {
-  const { toggleSidebar } = useSidebar();
-  const [theme, setTheme] = useState('light');
+const Topbar = ({ user }) => {
+  const { toggleSidebar } = useSidebar()
+  const { parentChildren, selectedChildId, setSelectedChildId } = useAuth()
+  const { activeSchoolId, setActiveSchoolId, schoolOptions, isSchoolSelectionEnabled } = useSchool()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerQuery, setPickerQuery] = useState('')
+  const pickerInputRef = useRef(null)
+  const pickerShellRef = useRef(null)
+
+  const role = normalizeRole(user?.role || user?.userRole || user?.authority)
 
   useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    const initial = saved === 'dark' || saved === 'light' ? saved : 'light';
-    setTheme(initial);
-    document.documentElement.dataset.theme = initial;
-  }, []);
+    const handler = (event) => {
+      if (event.key === 'Escape') setPickerOpen(false)
+    }
 
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem('theme', next);
-  };
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
-  const username =
-    user?.username ||
-    user?.userName ||
-    user?.name ||
-    user?.fullName ||
-    user?.email ||
-    '';
+  useEffect(() => {
+    if (!pickerOpen) return undefined
+
+    const onPointerDown = (event) => {
+      if (pickerShellRef.current && !pickerShellRef.current.contains(event.target)) {
+        setPickerOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [pickerOpen])
+
+  useEffect(() => {
+    if (pickerOpen) pickerInputRef.current?.focus?.()
+  }, [pickerOpen])
+
+  useEffect(() => {
+    setPickerOpen(false)
+    setPickerQuery('')
+  }, [role])
+
+  const selectorMode = role === 'HEAD_OFFICE_ADMIN' ? 'school' : role === 'PARENT' ? 'child' : null
+
+  const childOptions = useMemo(() => {
+    const children = Array.isArray(parentChildren) ? parentChildren : []
+    return children
+      .map((child) => {
+        const id = child?.studentId ?? child?.id ?? child?.student?.id ?? null
+        const label = child?.name ?? child?.studentName ?? child?.fullName ?? child?.student?.name ?? child?.student?.fullName ?? ''
+        return id == null ? null : { id: String(id), label, raw: child }
+      })
+      .filter(Boolean)
+  }, [parentChildren])
+
+  const schoolLabelById = useMemo(() => {
+    const map = new Map()
+    schoolOptions.forEach((school) => {
+      const id = school?.id ?? school?.schoolId ?? null
+      const label = school?.schoolName ?? school?.name ?? school?.label ?? `School ${id ?? ''}`.trim()
+      if (id != null) map.set(String(id), label)
+    })
+    return map
+  }, [schoolOptions])
+
+  const currentSelectionLabel =
+    selectorMode === 'school'
+      ? (activeSchoolId ? schoolLabelById.get(String(activeSchoolId)) : 'All schools')
+      : selectorMode === 'child'
+        ? (childOptions.find((child) => String(child.id) === String(selectedChildId))?.label || 'Select child')
+        : ''
+
+  const filteredSchools = useMemo(() => {
+    const query = pickerQuery.trim().toLowerCase()
+    return schoolOptions
+      .map((school) => {
+        const id = school?.id ?? school?.schoolId ?? null
+        if (id == null) return null
+        const label = school?.schoolName ?? school?.name ?? school?.label ?? `School ${id}`
+        return { id: String(id), label, raw: school }
+      })
+      .filter(Boolean)
+      .filter((school) => !query || school.label.toLowerCase().includes(query))
+  }, [pickerQuery, schoolOptions])
+
+  const filteredChildren = useMemo(() => {
+    const query = pickerQuery.trim().toLowerCase()
+    return childOptions.filter((child) => !query || child.label.toLowerCase().includes(query))
+  }, [childOptions, pickerQuery])
+
+  const handleSelectSchool = (schoolId) => {
+    setActiveSchoolId(schoolId)
+    setPickerOpen(false)
+    setPickerQuery('')
+  }
+
+  const handleSelectChild = (childId) => {
+    setSelectedChildId(childId)
+    setPickerOpen(false)
+    setPickerQuery('')
+  }
+
+  const renderPickerList = () => {
+    if (selectorMode === 'school') {
+      return (
+        <div className="sm-topbar__picker-list" role="listbox" aria-label="Schools">
+          <button
+            type="button"
+            className={`sm-topbar__picker-item${!activeSchoolId ? ' is-active' : ''}`}
+            onClick={() => handleSelectSchool(null)}
+          >
+            <span className="sm-topbar__picker-item-icon">
+              <i className="ri-global-line" />
+            </span>
+            <span className="sm-topbar__picker-item-copy">
+              <strong>All schools</strong>
+              <small>Show data across every school</small>
+            </span>
+          </button>
+
+          {filteredSchools.map((school) => (
+            <button
+              key={school.id}
+              type="button"
+              className={`sm-topbar__picker-item${String(activeSchoolId) === String(school.id) ? ' is-active' : ''}`}
+              onClick={() => handleSelectSchool(school.id)}
+            >
+              <span className="sm-topbar__picker-item-icon">
+                <i className="ri-school-line" />
+              </span>
+              <span className="sm-topbar__picker-item-copy">
+                <strong>{school.label}</strong>
+                <small>ID {school.id}</small>
+              </span>
+            </button>
+          ))}
+
+          {filteredSchools.length === 0 ? (
+            <div className="sm-topbar__picker-empty">No schools found.</div>
+          ) : null}
+        </div>
+      )
+    }
+
+    if (selectorMode === 'child') {
+      return (
+        <div className="sm-topbar__picker-list" role="listbox" aria-label="Children">
+          {filteredChildren.map((child) => (
+            <button
+              key={child.id}
+              type="button"
+              className={`sm-topbar__picker-item${String(selectedChildId) === String(child.id) ? ' is-active' : ''}`}
+              onClick={() => handleSelectChild(child.id)}
+            >
+              <span className="sm-topbar__picker-item-icon">
+                <i className="ri-user-3-line" />
+              </span>
+              <span className="sm-topbar__picker-item-copy">
+                <strong>{child.label || `Student ${child.id}`}</strong>
+                <small>ID {child.id}</small>
+              </span>
+            </button>
+          ))}
+
+          {filteredChildren.length === 0 ? (
+            <div className="sm-topbar__picker-empty">No child found.</div>
+          ) : null}
+        </div>
+      )
+    }
+
+    return null
+  }
 
   return (
-    <div className="navbar-header">
-      <div className="row align-items-center justify-content-between">
-
-        {/* Left side: toggle + search */}
+    <div className="navbar-header sm-topbar">
+      <div className="row align-items-center justify-content-between g-2">
         <div className="col-auto">
-          <div className="d-flex flex-wrap align-items-center gap-4">
+          <div className="d-flex flex-wrap align-items-center gap-2">
             <button type="button" className="sidebar-mobile-toggle" aria-label="Sidebar Mobile Toggler Button" onClick={toggleSidebar}>
               <iconify-icon icon="heroicons:bars-3-solid" className="icon"></iconify-icon>
             </button>
-            <form className="navbar-search">
-              <input type="text" className="bg-transparent" name="search" placeholder="Search" />
-              <iconify-icon icon="ion:search-outline" className="icon"></iconify-icon>
-            </form>
+
+            {selectorMode ? (
+              <div className="sm-topbar__search-shell" ref={pickerShellRef}>
+                <button
+                  type="button"
+                  className="sm-topbar__search-toggle"
+                  aria-label={selectorMode === 'school' ? 'Select school' : 'Select child'}
+                  aria-expanded={pickerOpen}
+                  onClick={() => setPickerOpen((prev) => !prev)}
+                >
+                  <iconify-icon icon="ri-search-line" className="text-primary-light text-xl"></iconify-icon>
+                </button>
+
+                <div className={`sm-topbar__search ${pickerOpen ? 'is-open' : ''}`}>
+                  <div className="sm-topbar__search-header">
+                    <div className="sm-topbar__search-title">
+                      <strong>{selectorMode === 'school' ? 'Select School' : 'Select Child'}</strong>
+                      <span>{currentSelectionLabel || 'Choose from the list'}</span>
+                    </div>
+                    <button type="button" className="sm-topbar__search-close" aria-label="Close selector" onClick={() => setPickerOpen(false)}>
+                      <iconify-icon icon="ri-close-line" />
+                    </button>
+                  </div>
+
+                  <div className="sm-topbar__search-input-wrap">
+                    <iconify-icon icon="ri-search-line" className="sm-topbar__search-input-icon" />
+                    <input
+                      ref={pickerInputRef}
+                      type="text"
+                      className="bg-transparent"
+                      name="search"
+                      placeholder={selectorMode === 'school' ? 'Search schools' : 'Search child'}
+                      value={pickerQuery}
+                      onChange={(e) => setPickerQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {isSchoolSelectionEnabled || selectorMode === 'child' ? renderPickerList() : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
-        {/* Right side: theme toggle, language, notifications */}
         <div className="col-auto">
-          <div className="d-flex flex-wrap align-items-center gap-3">
-
-            {/* Dark/Light mode toggle */}
-            <button
-              type="button"
-              data-theme-toggle=""
-              className="w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center"
-              aria-label="Dark & Light Mode Button"
-              onClick={toggleTheme}
-            >
-              <iconify-icon icon={theme === 'dark' ? 'ri:sun-line' : 'ri:moon-line'} className="text-primary-light text-xl"></iconify-icon>
-            </button>
-
-            {/* Language dropdown */}
-            <div className="dropdown d-inline-block">
-              <button
-                className="has-indicator w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center"
-                type="button"
-                data-bs-toggle="dropdown"
-                aria-label="Language Change Button"
-              >
-                <img src="https://flagcdn.com/w40/us.png" alt="flag" className="w-24 h-24 object-fit-cover rounded-circle" />
-              </button>
-              <div className="dropdown-menu to-top dropdown-menu-sm">
-                <div className="py-12 px-16 radius-8 bg-primary-50 mb-16 d-flex align-items-center justify-content-between gap-2">
-                  <h6 className="text-lg text-primary-light fw-semibold mb-0">Choose Your Language</h6>
-                </div>
-                <div className="max-h-400-px overflow-y-auto scroll-sm pe-8">
-                  {[
-                    { id: 'english', flag: 'https://flagcdn.com/w40/us.png', label: 'English' },
-                    { id: 'japan',   flag: 'https://flagcdn.com/w40/jp.png', label: 'Japan' },
-                    { id: 'france',  flag: 'https://flagcdn.com/w40/fr.png', label: 'France' },
-                    { id: 'germany', flag: 'https://flagcdn.com/w40/de.png', label: 'Germany' },
-                    { id: 'korea',   flag: 'https://flagcdn.com/w40/kr.png', label: 'South Korea' },
-                    { id: 'bangladesh', flag: 'https://flagcdn.com/w40/bd.png', label: 'Bangladesh' },
-                    { id: 'india',   flag: 'https://flagcdn.com/w40/in.png', label: 'India' },
-                    { id: 'canada',  flag: 'https://flagcdn.com/w40/ca.png', label: 'Canada' },
-                  ].map(({ id, flag, label }) => (
-                    <div key={id} className="form-check style-check d-flex align-items-center justify-content-between mb-16">
-                      <label className="form-check-label line-height-1 fw-medium text-secondary-light" htmlFor={id}>
-                        <span className="text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3">
-                          <img
-                            src={flag}
-                            alt={label}
-                            className="w-36-px h-36-px bg-success-subtle text-success-main rounded-circle flex-shrink-0"
-                          />
-                          <span className="text-md fw-semibold mb-0">{label}</span>
-                        </span>
-                      </label>
-                      <input className="form-check-input" type="radio" name="language" id={id} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Notification dropdown */}
-            <div className="dropdown">
-              <button
-                className="has-indicator w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center position-relative"
-                type="button"
-                data-bs-toggle="dropdown"
-                aria-label="Notification Button"
-              >
-                <iconify-icon icon="iconoir:bell" className="text-primary-light text-xl"></iconify-icon>
-                <span className="w-8-px h-8-px bg-danger-600 position-absolute end-0 top-0 rounded-circle mt-2 me-2"></span>
-              </button>
-              <div className="dropdown-menu to-top dropdown-menu-lg p-0">
-                <div className="m-16 py-12 px-16 radius-8 bg-primary-50 mb-16 d-flex align-items-center justify-content-between gap-2">
-                  <h6 className="text-lg text-primary-light fw-semibold mb-0">Notifications</h6>
-                  <span className="text-primary-600 fw-semibold text-lg w-40-px h-40-px rounded-circle bg-base d-flex justify-content-center align-items-center">05</span>
-                </div>
-                <div className="max-h-400-px overflow-y-auto scroll-sm pe-4">
-                  <a href="#" className="px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between">
-                    <div className="text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3">
-                      <span className="w-44-px h-44-px bg-success-subtle text-success-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0">
-                        <iconify-icon icon="bitcoin-icons:verify-outline" className="icon text-xxl"></iconify-icon>
-                      </span>
-                      <div>
-                        <h6 className="text-md fw-semibold mb-4">Congratulations</h6>
-                        <p className="mb-0 text-sm text-secondary-light text-w-200-px">Your profile has been Verified.</p>
-                      </div>
-                    </div>
-                    <span className="text-sm text-secondary-light flex-shrink-0">23 Mins ago</span>
-                  </a>
-                  <a href="#" className="px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between bg-neutral-50">
-                    <div className="text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3">
-                      <span className="w-44-px h-44-px bg-success-subtle text-success-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0">
-                        <img src="/assets/images/notification/profile-1.png" alt="Ronald" />
-                      </span>
-                      <div>
-                        <h6 className="text-md fw-semibold mb-4">Ronald Richards</h6>
-                        <p className="mb-0 text-sm text-secondary-light text-w-200-px">You can stitch between artboards</p>
-                      </div>
-                    </div>
-                    <span className="text-sm text-secondary-light flex-shrink-0">23 Mins ago</span>
-                  </a>
-                  <a href="#" className="px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between">
-                    <div className="text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3">
-                      <span className="w-44-px h-44-px bg-info-subtle text-info-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0">AM</span>
-                      <div>
-                        <h6 className="text-md fw-semibold mb-4">Arlene McCoy</h6>
-                        <p className="mb-0 text-sm text-secondary-light text-w-200-px">Invite you to prototyping</p>
-                      </div>
-                    </div>
-                    <span className="text-sm text-secondary-light flex-shrink-0">23 Mins ago</span>
-                  </a>
-                </div>
-                <div className="text-center py-12 px-16">
-                  <a href="#" className="text-primary-600 fw-semibold text-md hover-underline">See All Notifications</a>
-                </div>
-              </div>
-            </div>
-
-            <ParentChildSelector />
-          </div>
+          <a href="#" className="sm-topbar__brand sm-topbar__brand--right" aria-label="School Management">
+            <img src="/assets/images/logo-icon.png" alt="School Management" className="sm-topbar__logo" />
+          </a>
         </div>
-
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default Topbar;
+export default Topbar

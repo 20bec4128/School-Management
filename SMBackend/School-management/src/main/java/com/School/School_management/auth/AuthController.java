@@ -14,10 +14,12 @@ import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Repository.TeacherRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -149,6 +151,16 @@ public class AuthController {
                     body.put("schoolId", schoolId);
                     putSchoolName(body, schoolId);
                 }
+                if (s.getSchoolClass() != null && s.getSchoolClass().getId() != null) {
+                    body.put("classId", s.getSchoolClass().getId());
+                    body.put("className", s.getSchoolClass().getClassName());
+                }
+                if (s.getSchoolSection() != null && s.getSchoolSection().getId() != null) {
+                    body.put("sectionId", s.getSchoolSection().getId());
+                    body.put("sectionName", s.getSchoolSection().getName());
+                } else if (s.getSection() != null) {
+                    body.put("section", s.getSection());
+                }
             });
             return;
         }
@@ -176,8 +188,18 @@ public class AuthController {
                             schoolRepository.findByIdAndIsDeletedFalse(schoolId)
                                     .ifPresent((school) -> c.put("schoolName", school.getSchoolName()));
                         }
-                        if (s.getClassName() != null) c.put("className", s.getClassName());
-                        if (s.getSection() != null) c.put("section", s.getSection());
+                        if (s.getSchoolClass() != null) {
+                            c.put("classId", s.getSchoolClass().getId());
+                            c.put("className", s.getSchoolClass().getClassName());
+                        } else if (s.getClassName() != null) {
+                            c.put("className", s.getClassName());
+                        }
+                        if (s.getSchoolSection() != null) {
+                            c.put("sectionId", s.getSchoolSection().getId());
+                            c.put("sectionName", s.getSchoolSection().getName());
+                        } else if (s.getSection() != null) {
+                            c.put("section", s.getSection());
+                        }
                         children.add(c);
                     }
                 }
@@ -421,6 +443,9 @@ public class AuthController {
     }
 
     private String[] permissionsFor(String role, Long schoolId, Long headOfficeId) {
+        String normalizedRole = role == null ? null : role.trim().toUpperCase();
+        boolean isStudentOrParent = "STUDENT".equals(normalizedRole) || "PARENT".equals(normalizedRole);
+        boolean isHeadOfficeScopedAdmin = "ADMIN".equals(normalizedRole) && headOfficeId != null && schoolId == null;
         Long effectiveSchoolId = schoolId;
         if (effectiveSchoolId == null && headOfficeId != null) {
             effectiveSchoolId = schoolRepository
@@ -433,7 +458,60 @@ public class AuthController {
                     .map(s -> s.getId())
                     .orElse(null);
         }
-        return permissionsFor(role, effectiveSchoolId);
+        String[] base = permissionsFor(role, effectiveSchoolId);
+        Set<String> merged = new HashSet<>();
+        for (String p : base) {
+            if (p != null && !p.isBlank()) merged.add(p);
+        }
+
+        if (isStudentOrParent) {
+            merged.addAll(Set.of(
+                    "CLASS_ROUTINE_VIEW",
+                    "SUBJECT_VIEW_OWN",
+                    "SUBJECT_VIEW_CHILD",
+                    "SYLLABUS_VIEW_OWN",
+                    "SYLLABUS_VIEW_CHILD",
+                    "STUDY_MATERIAL_VIEW_OWN",
+                    "STUDY_MATERIAL_VIEW_CHILD",
+                    "LIVE_CLASS_JOIN",
+                    "LIVE_CLASS_VIEW_OWN",
+                    "LIVE_CLASS_VIEW_CHILD",
+                    "ASSIGNMENT_VIEW_OWN",
+                    "ASSIGNMENT_VIEW_CHILD",
+                    "ASSIGNMENT_SUBMIT",
+                    "SUBMISSION_VIEW_OWN",
+                    "SUBMISSION_VIEW_CHILD",
+                    "LESSON_VIEW_OWN",
+                    "LESSON_VIEW_CHILD",
+                    "TOPIC_VIEW_OWN",
+                    "TOPIC_VIEW_CHILD",
+                    "LESSON_PLAN_VIEW_OWN",
+                    "LESSON_PLAN_VIEW_CHILD"
+            ));
+        }
+
+        if (!isHeadOfficeScopedAdmin) {
+            return merged.stream().sorted().toArray(String[]::new);
+        }
+        merged.addAll(Set.of(
+                "LESSON_MANAGE",
+                "LESSON_MANAGE_ASSIGNED",
+                "LESSON_VIEW_OWN",
+                "LESSON_VIEW_CHILD",
+                "SYLLABUS_MANAGE",
+                "SYLLABUS_MANAGE_ASSIGNED",
+                "TOPIC_MANAGE",
+                "TOPIC_MANAGE_ASSIGNED",
+                "TOPIC_VIEW_OWN",
+                "TOPIC_VIEW_CHILD",
+                "LESSON_PLAN_MANAGE",
+                "LESSON_PLAN_MANAGE_ASSIGNED",
+                "LESSON_PLAN_VIEW_OWN",
+                "LESSON_PLAN_VIEW_CHILD",
+                "CLASS_ROUTINE_VIEW",
+                "CLASS_ROUTINE_MANAGE"
+        ));
+        return merged.stream().sorted().toArray(String[]::new);
     }
 
     private void putSchoolName(Map<String, Object> body, Long schoolId) {

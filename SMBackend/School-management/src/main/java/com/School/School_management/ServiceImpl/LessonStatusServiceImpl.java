@@ -55,8 +55,8 @@ public class LessonStatusServiceImpl implements LessonStatusService {
 
     @Override
     public LessonStatusPageDataDto pageData(Long schoolId, Long classId, Long subjectId, String academicYear) {
-        if (schoolId == null || classId == null || subjectId == null) {
-            throw new BadRequestException("schoolId, classId and subjectId are required");
+        if (schoolId == null || classId == null) {
+            throw new BadRequestException("schoolId and classId are required");
         }
 
         Long effectiveSchoolId = schoolGuard.schoolIdForRead(CurrentUserHolder.get(), schoolId);

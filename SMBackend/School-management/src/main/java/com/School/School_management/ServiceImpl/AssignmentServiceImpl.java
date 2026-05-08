@@ -18,6 +18,8 @@ import com.School.School_management.Exception.NotFoundException;
 import com.School.School_management.config.UploadProperties;
 import com.School.School_management.Repository.AssignmentRepository;
 import com.School.School_management.Repository.ParentStudentRepository;
+import com.School.School_management.Repository.SchoolClassRepository;
+import com.School.School_management.Repository.SchoolSectionRepository;
 import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Repository.SubjectRepository;
 import com.School.School_management.Service.AssignmentService;
@@ -35,6 +37,8 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final SubjectRepository subjectRepository;
     private final StudentRepository studentRepository;
     private final ParentStudentRepository parentStudentRepository;
+    private final SchoolClassRepository schoolClassRepository;
+    private final SchoolSectionRepository schoolSectionRepository;
     private final Path assignmentUploadDir;
 
     public AssignmentServiceImpl(
@@ -42,12 +46,16 @@ public class AssignmentServiceImpl implements AssignmentService {
             SubjectRepository subjectRepository,
             StudentRepository studentRepository,
             ParentStudentRepository parentStudentRepository,
+            SchoolClassRepository schoolClassRepository,
+            SchoolSectionRepository schoolSectionRepository,
             UploadProperties uploadProperties
     ) {
         this.assignmentRepository = assignmentRepository;
         this.subjectRepository = subjectRepository;
         this.studentRepository = studentRepository;
         this.parentStudentRepository = parentStudentRepository;
+        this.schoolClassRepository = schoolClassRepository;
+        this.schoolSectionRepository = schoolSectionRepository;
         this.assignmentUploadDir = Paths.get(uploadProperties.getDir(), "assignments").toAbsolutePath().normalize();
     }
 
@@ -61,7 +69,9 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
         if (user.isRole("TEACHER")) {
             ensureTeacherOwnsSubject(user.teacherId(), dto.getSubjectId());
+            ensureSubjectMatchesClass(dto.getSubjectId(), dto.getClassId());
         }
+        ensureSectionMatchesClass(dto.getSchoolId(), dto.getClassId(), dto.getSectionId());
 
         Assignment assignment = new Assignment();
 
@@ -100,16 +110,20 @@ public class AssignmentServiceImpl implements AssignmentService {
             );
         }
         if (user.isRole("PARENT")) {
-            Set<Long> subjectIds = new HashSet<>();
+            if (user.parentId() == null) return List.of();
+            Set<Long> assignmentIds = new HashSet<>();
             for (Long sid : parentStudentRepository.findStudentIdsByParentId(user.parentId())) {
                 studentRepository.findById(sid).ifPresent((s) -> {
-                    if (s.getSchoolClass() != null) {
-                        // Assignments are class/section scoped in this backend.
-                    }
+                    Long schoolId = s.getSchool() == null ? null : s.getSchool().getId();
+                    Long classId = s.getSchoolClass() == null ? null : s.getSchoolClass().getId();
+                    Long sectionId = s.getSchoolSection() == null ? null : s.getSchoolSection().getId();
+                    if (schoolId == null || classId == null || sectionId == null) return;
+                    assignmentRepository.findBySchoolIdAndClassIdAndSectionId(schoolId, classId, sectionId)
+                            .forEach((a) -> assignmentIds.add(a.getId()));
                 });
             }
-            // Best-effort: parents can fetch assignments via other child-specific endpoints later.
-            return List.of();
+            if (assignmentIds.isEmpty()) return List.of();
+            return assignmentRepository.findAllById(assignmentIds).stream().toList();
         }
         return List.of();
     }
@@ -130,7 +144,9 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
         if (user.isRole("TEACHER")) {
             ensureTeacherOwnsSubject(user.teacherId(), dto.getSubjectId());
+            ensureSubjectMatchesClass(dto.getSubjectId(), dto.getClassId());
         }
+        ensureSectionMatchesClass(dto.getSchoolId(), dto.getClassId(), dto.getSectionId());
 
         Assignment assignment = getAssignmentById(id);
 
@@ -155,6 +171,42 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .map(s -> s.getTeacher() != null && teacherId.equals(s.getTeacher().getId()))
                 .orElse(false);
         if (!ok) throw new ForbiddenException();
+    }
+
+    private void ensureSubjectMatchesClass(Long subjectId, Long classId) {
+        if (subjectId == null || classId == null) return;
+        boolean ok = subjectRepository.findById(subjectId)
+                .map(s -> s.getSchoolClass() != null && classId.equals(s.getSchoolClass().getId()))
+                .orElse(false);
+        if (!ok) throw new ForbiddenException();
+    }
+
+    private void ensureSectionMatchesClass(Long schoolId, Long classId, Long sectionId) {
+        if (schoolId == null || classId == null || sectionId == null) return;
+        boolean ok = schoolSectionRepository.existsByIdAndSchool_IdAndSchoolClass_Id(sectionId, schoolId, classId);
+        if (!ok) throw new ForbiddenException();
+    }
+
+    @Override
+    public List<Assignment> getAssignmentsForStudent(Long studentId) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        if (user.isRole("STUDENT")) {
+            studentId = user.studentId();
+        } else if (user.isRole("PARENT")) {
+            if (user.parentId() == null) throw new ForbiddenException();
+            if (!parentStudentRepository.findStudentIdsByParentId(user.parentId()).contains(studentId)) {
+                throw new NotFoundException();
+            }
+        }
+
+        Student s = studentRepository.findById(studentId).orElseThrow(NotFoundException::new);
+        Long schoolId = s.getSchool() == null ? null : s.getSchool().getId();
+        Long classId = s.getSchoolClass() == null ? null : s.getSchoolClass().getId();
+        Long sectionId = s.getSchoolSection() == null ? null : s.getSchoolSection().getId();
+        if (schoolId == null || classId == null || sectionId == null) return List.of();
+        return assignmentRepository.findBySchoolIdAndClassIdAndSectionId(schoolId, classId, sectionId);
     }
 
     private void ensureCanAccess(Assignment assignment) {

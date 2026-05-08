@@ -9,6 +9,8 @@ import org.springframework.web.multipart.MultipartFile;
 import com.School.School_management.Dto.AssignmentRequestDto;
 import com.School.School_management.Entity.Assignment;
 import com.School.School_management.Service.AssignmentService;
+import com.School.School_management.auth.CurrentUser;
+import com.School.School_management.auth.CurrentUserHolder;
 import com.School.School_management.auth.RequirePermission;
 
 @RestController
@@ -40,6 +42,16 @@ public class AssignmentController {
     @GetMapping("/{id}")
     public ResponseEntity<Assignment> getAssignmentById(@PathVariable Long id) {
         return ResponseEntity.ok(assignmentService.getAssignmentById(id));
+    }
+
+    @RequirePermission({"ASSIGNMENT_MANAGE", "ASSIGNMENT_VIEW_OWN", "ASSIGNMENT_VIEW_CHILD", "ASSIGNMENT_MANAGE_ASSIGNED", "*"})
+    @GetMapping("/student/{studentId}")
+    public ResponseEntity<List<Assignment>> getAssignmentsForStudent(@PathVariable Long studentId) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user != null && user.isRole("STUDENT") && user.studentId() != null) {
+            studentId = user.studentId();
+        }
+        return ResponseEntity.ok(assignmentService.getAssignmentsForStudent(studentId));
     }
 
     @RequirePermission({"ASSIGNMENT_MANAGE", "ASSIGNMENT_MANAGE_ASSIGNED", "*"})

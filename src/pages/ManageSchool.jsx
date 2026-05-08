@@ -3,7 +3,7 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createSchool, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
+import { createSchoolWithAdmin, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -14,6 +14,8 @@ const emptyForm = {
   subscription: 'Standard',
   isDemo: 'No',
   status: 'Active',
+  adminUsername: '',
+  adminPassword: '',
   address: '',
   phone: '',
   registrationDate: '',
@@ -80,6 +82,8 @@ const FIELD_ICONS = {
   'Pinterest URL': 'ri-pinterest-line',
   'Frontend Logo': 'ri-image-line',
   'Admin Logo': 'ri-image-2-line',
+  'School Admin Username': 'ri-user-3-line',
+  'School Admin Password': 'ri-lock-password-line',
 }
 
 const columnOptions = [
@@ -102,10 +106,26 @@ const onlineAdmissionOptions = ['Yes', 'No']
 const examResultOptions = ['Average of All Exam', 'Highest Mark', 'Lowest Mark', 'Grade Only']
 
 const getStatusBadge = (status) => {
-  if (status === 'Active') {
+  const v = String(status || '').trim().toUpperCase()
+  if (v === 'ACTIVE' || status === 'Active') {
     return <span className="bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm">Active</span>
   }
   return <span className="bg-danger-100 text-danger-600 px-12 py-4 radius-4 fw-medium text-sm">Inactive</span>
+}
+
+const toUiStatus = (status) => {
+  const v = String(status || '').trim().toUpperCase()
+  if (v === 'ACTIVE') return 'Active'
+  if (v === 'INACTIVE') return 'Inactive'
+  return status || 'Active'
+}
+
+const toApiStatus = (status) => {
+  const v = String(status || '').trim().toUpperCase()
+  if (v === 'ACTIVE' || v === 'INACTIVE') return v
+  if (String(status || '').trim() === 'Active') return 'ACTIVE'
+  if (String(status || '').trim() === 'Inactive') return 'INACTIVE'
+  return v || 'ACTIVE'
 }
 
 const getIsDemoBadge = (isDemo) => {
@@ -288,7 +308,7 @@ const ManageSchool = () => {
       schoolName: row.schoolName || '',
       subscription: row.subscription || 'Standard',
       isDemo: row.isDemo || 'No',
-      status: row.status || 'Active',
+      status: toUiStatus(row.status),
       address: row.address || '',
       phone: row.phone || '',
       registrationDate: row.registrationDate || '',
@@ -328,14 +348,17 @@ const ManageSchool = () => {
     setError('')
     try {
       const data = await fetchSchoolsPage(currentPage - 1, rowsPerPage)
+      const normalizeRows = (rows) =>
+        (Array.isArray(rows) ? rows : []).map((r) => ({ ...r, status: toUiStatus(r?.status) }))
+
       if (Array.isArray(data)) {
-        setSchools(data)
+        setSchools(normalizeRows(data))
         setTotalElements(data.length)
         const nextTotalPages = 1
         setTotalPages(nextTotalPages)
         setCurrentPage((prev) => (prev > nextTotalPages ? nextTotalPages : prev))
       } else {
-        setSchools(Array.isArray(data?.content) ? data.content : [])
+        setSchools(normalizeRows(Array.isArray(data?.content) ? data.content : []))
         setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
         const nextTotalPages = Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1)
         setTotalPages(nextTotalPages)
@@ -365,7 +388,7 @@ const ManageSchool = () => {
     schoolName: form.schoolName || '',
     subscription: form.subscription || 'Standard',
     isDemo: form.isDemo || 'No',
-    status: form.status || 'Active',
+    status: toApiStatus(form.status),
     address: form.address || '',
     phone: form.phone || '',
     registrationDate: form.registrationDate || '',
@@ -396,8 +419,18 @@ const ManageSchool = () => {
     setSaving(true)
     setError('')
     try {
+      if (!String(addForm.adminUsername || '').trim() || !String(addForm.adminPassword || '').trim()) {
+        setError('School admin username and password are required')
+        return
+      }
       const payload = buildSchoolPayload(addForm)
-      await createSchool(payload, addForm)
+      await createSchoolWithAdmin(
+        {
+          school: payload,
+          admin: { username: addForm.adminUsername || '', password: addForm.adminPassword || '' },
+        },
+        addForm,
+      )
       setIsAddOpen(false)
       setAddForm(emptyForm)
       setAddStep(0)
@@ -546,6 +579,32 @@ const ManageSchool = () => {
                   ))}
                 </select>
               </FormField>
+
+              {setter === setAddForm ? (
+                <>
+                  <FormField label="School Admin Username" required full>
+                    <input
+                      type="text"
+                      className="avm-input"
+                      id="adminUsername"
+                      placeholder="School admin username"
+                      value={form.adminUsername || ''}
+                      onChange={handleChange(setter)}
+                    />
+                  </FormField>
+
+                  <FormField label="School Admin Password" required full>
+                    <input
+                      type="password"
+                      className="avm-input"
+                      id="adminPassword"
+                      placeholder="School admin password"
+                      value={form.adminPassword || ''}
+                      onChange={handleChange(setter)}
+                    />
+                  </FormField>
+                </>
+              ) : null}
 
               <FormField label="Address" required full>
                 <textarea

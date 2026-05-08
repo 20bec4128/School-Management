@@ -24,7 +24,7 @@ public class LessonStatusController {
     public LessonStatusPageDataDto pageData(
             @RequestParam Long schoolId,
             @RequestParam Long classId,
-            @RequestParam Long subjectId,
+            @RequestParam(required = false) Long subjectId,
             @RequestParam(required = false) String academicYear
     ) {
         return service.pageData(schoolId, classId, subjectId, academicYear);
@@ -42,4 +42,3 @@ public class LessonStatusController {
         return service.updateLesson(request);
     }
 }
-

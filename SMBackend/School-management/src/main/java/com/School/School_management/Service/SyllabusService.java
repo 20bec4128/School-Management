@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface SyllabusService {
 
-    List<SyllabusResponseDto> getAllSyllabuses();
+    List<SyllabusResponseDto> getAllSyllabuses(Long schoolId, Long classId);
 
     SyllabusResponseDto getSyllabusById(Long id);
 

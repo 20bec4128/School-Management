@@ -5,6 +5,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createClass, deleteClass, fetchClasses, updateClass } from '../apis/classesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -72,6 +73,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Class = () => {
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [classes, setClasses] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
@@ -111,7 +113,7 @@ const Class = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchClasses()
+      const data = await fetchClasses({ schoolId: isSchoolSelectionEnabled ? activeSchoolId : undefined })
       setClasses(Array.isArray(data) ? data : [])
     } catch (e) {
       setClasses([])
@@ -119,7 +121,7 @@ const Class = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeSchoolId, isSchoolSelectionEnabled])
 
   useEffect(() => {
     void loadLookups()

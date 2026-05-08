@@ -9,6 +9,8 @@ public interface SchoolSectionService {
 
   List<SchoolSectionDto> getAll(Long schoolId, Long classId);
 
+  List<SchoolSectionDto> getAllForHeadOffice(Long headOfficeId, Long classId);
+
   SchoolSectionDto getById(Long id);
 
   SchoolSectionDto update(Long id, SchoolSectionDto dto);

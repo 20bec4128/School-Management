@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createSubmission, deleteSubmission, evaluateSubmission, fetchSubmissions } from '../apis/submissionsApi'
-import { fetchAssignments } from '../apis/assignmentsApi'
+import { createSubmission, deleteSubmission, evaluateSubmission, fetchSubmissions, fetchSubmissionsForAssignment, fetchSubmissionsForStudent, updateSubmission } from '../apis/submissionsApi'
+import { fetchAssignments, fetchAssignmentsForStudent } from '../apis/assignmentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
@@ -135,6 +135,14 @@ const Submission = () => {
   const [addFile, setAddFile] = useState(null)
   const addFileRef = useRef(null)
 
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editSubmissionId, setEditSubmissionId] = useState(null)
+  const [editForm, setEditForm] = useState(emptyForm)
+  const [editFile, setEditFile] = useState(null)
+  const [editExistingFileName, setEditExistingFileName] = useState('')
+  const [editStep, setEditStep] = useState(0)
+  const editFileRef = useRef(null)
+
   const [isEvalOpen, setIsEvalOpen] = useState(false)
   const [evalId, setEvalId] = useState(null)
   const [evalForm, setEvalForm] = useState({ marks: '', feedback: '' })
@@ -144,20 +152,34 @@ const Submission = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
+  const hasSearchResults = hasSearched || fixedStudentId != null
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const loadLookups = useCallback(async () => {
-    const [schools, classes] = await Promise.all([fetchSchoolsLookup(), fetchClasses()])
+    const shouldLoadAdminLookups = fixedStudentId == null
+    const [schools, classes, sections] = await Promise.all([
+      shouldLoadAdminLookups ? fetchSchoolsLookup().catch(() => []) : Promise.resolve([]),
+      shouldLoadAdminLookups ? fetchClasses().catch(() => []) : Promise.resolve([]),
+      shouldLoadAdminLookups ? fetchSections().catch(() => []) : Promise.resolve([]),
+    ])
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
-  }, [])
+    setSectionsLookup(Array.isArray(sections) ? sections : [])
+  }, [fixedStudentId])
 
   const loadRows = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [subs, asgs] = await Promise.all([fetchSubmissions(), fetchAssignments()])
+      const [subs, asgs] = await Promise.all([
+        fixedStudentId != null
+          ? fetchSubmissionsForStudent(fixedStudentId)
+          : filters.assignmentId && filters.assignmentId !== 'Select' && roleUpper === 'TEACHER'
+            ? fetchSubmissionsForAssignment(filters.assignmentId)
+            : fetchSubmissions(),
+        fixedStudentId != null ? fetchAssignmentsForStudent(fixedStudentId) : fetchAssignments(),
+      ])
       setRows(Array.isArray(subs) ? subs : [])
       setAssignments(Array.isArray(asgs) ? asgs : [])
     } catch (e) {
@@ -167,16 +189,22 @@ const Submission = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fixedStudentId, filters.assignmentId, roleUpper])
 
   useEffect(() => {
     void loadLookups()
     void loadRows()
   }, [loadLookups, loadRows])
 
-  const schoolNameById = useMemo(() => new Map(schoolsLookup.map((s) => [String(s.id), s.name])), [schoolsLookup])
+  useEffect(() => {
+    // For teachers, load submissions when assignment filter changes
+    if (roleUpper !== 'TEACHER') return
+    void loadRows()
+  }, [roleUpper, filters.assignmentId, loadRows])
+
+  const schoolNameById = useMemo(() => new Map(schoolsLookup.map((s) => [String(s.id), s.schoolName || s.name])), [schoolsLookup])
   const classNameById = useMemo(() => new Map(classesLookup.map((c) => [String(c.id), c.className])), [classesLookup])
-  const sectionNameById = useMemo(() => new Map(sectionsLookup.map((s) => [String(s.id), s.sectionName])), [sectionsLookup])
+  const sectionNameById = useMemo(() => new Map(sectionsLookup.map((s) => [String(s.id), s.name || s.sectionName])), [sectionsLookup])
   const studentNameById = useMemo(() => {
     const map = new Map()
     for (const s of studentsLookup) map.set(String(s.id || s.studentId), s.name || s.fullName || s.studentName || s.email || String(s.id || s.studentId))
@@ -289,7 +317,7 @@ const Submission = () => {
   }
 
   const filtered = useMemo(() => {
-    if (!hasSearched) return []
+    if (!hasSearchResults) return []
     const q = search.trim().toLowerCase()
     return rows
       .map((r) => ({
@@ -314,7 +342,7 @@ const Submission = () => {
           .toLowerCase()
           .includes(q)
       })
-  }, [hasSearched, rows, filters, search, schoolNameById, classNameById, sectionNameById, studentNameById, assignmentTitleById, fixedStudentId])
+  }, [hasSearchResults, rows, filters, search, schoolNameById, classNameById, sectionNameById, studentNameById, assignmentTitleById, fixedStudentId])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
@@ -335,6 +363,7 @@ const Submission = () => {
   }
 
   const openAdd = () => {
+    if (roleUpper === 'PARENT') return
     const initial = { ...emptyForm }
     if (fixedStudentId) initial.studentId = String(fixedStudentId)
     setAddForm(initial)
@@ -344,12 +373,46 @@ const Submission = () => {
     setIsAddOpen(true)
   }
 
+  const openEdit = (row) => {
+    if (!row) return
+    setEditSubmissionId(row.id)
+    setEditForm({
+      schoolId: row.schoolId ? String(row.schoolId) : 'Select',
+      classId: row.classId ? String(row.classId) : 'Select',
+      sectionId: row.sectionId ? String(row.sectionId) : 'Select',
+      studentId: row.studentId ? String(row.studentId) : 'Select',
+      assignmentId: row.assignmentId ? String(row.assignmentId) : 'Select',
+      note: row.note || '',
+    })
+    setEditFile(null)
+    setEditExistingFileName(String(row.fileUrl || '').split('/').filter(Boolean).pop() || '')
+    if (editFileRef.current) editFileRef.current.value = ''
+    setEditStep(0)
+    setIsEditOpen(true)
+    if (row?.schoolId && row?.classId) {
+      void fetchSections({ schoolId: String(row.schoolId), classId: String(row.classId) })
+        .then((secs) => setSectionsLookup(Array.isArray(secs) ? secs : []))
+        .catch(() => setSectionsLookup([]))
+    }
+    if (row?.schoolId && row?.classId && row?.sectionId) {
+      void fetchStudentsByClassSection({
+        schoolId: String(row.schoolId),
+        classId: String(row.classId),
+        sectionId: String(row.sectionId),
+      })
+        .then((students) => setStudentsLookup(Array.isArray(students) ? students : []))
+        .catch(() => setStudentsLookup([]))
+    }
+  }
+
   const validateAdd = () => {
     const errs = {}
-    if (addForm.schoolId === 'Select') errs.schoolId = 'School is required.'
-    if (addForm.classId === 'Select') errs.classId = 'Class is required.'
-    if (addForm.sectionId === 'Select') errs.sectionId = 'Section is required.'
-    if (!fixedStudentId && addForm.studentId === 'Select') errs.studentId = 'Student is required.'
+    if (!fixedStudentId) {
+      if (addForm.schoolId === 'Select') errs.schoolId = 'School is required.'
+      if (addForm.classId === 'Select') errs.classId = 'Class is required.'
+      if (addForm.sectionId === 'Select') errs.sectionId = 'Section is required.'
+      if (addForm.studentId === 'Select') errs.studentId = 'Student is required.'
+    }
     if (addForm.assignmentId === 'Select') errs.assignmentId = 'Assignment is required.'
     if (!addFile) errs.file = 'Submission file is required.'
     return errs
@@ -364,19 +427,44 @@ const Submission = () => {
     setSaving(true)
     setError('')
     try {
-      const payload = {
-        schoolId: Number(addForm.schoolId),
-        classId: Number(addForm.classId),
-        sectionId: Number(addForm.sectionId),
-        studentId: fixedStudentId ? Number(fixedStudentId) : Number(addForm.studentId),
-        assignmentId: Number(addForm.assignmentId),
-        note: addForm.note || null,
-      }
+      const payload = fixedStudentId
+        ? { assignmentId: Number(addForm.assignmentId), note: addForm.note || null }
+        : {
+            schoolId: Number(addForm.schoolId),
+            classId: Number(addForm.classId),
+            sectionId: Number(addForm.sectionId),
+            studentId: Number(addForm.studentId),
+            assignmentId: Number(addForm.assignmentId),
+            note: addForm.note || null,
+          }
       await createSubmission(payload, addFile)
       setIsAddOpen(false)
       await loadRows()
     } catch (e) {
       setError(e?.message || 'Failed to submit assignment')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveEdit = async () => {
+    if (!editSubmissionId) return
+    setSaving(true)
+    setError('')
+    try {
+      const payload = {
+        schoolId: Number(editForm.schoolId),
+        classId: Number(editForm.classId),
+        sectionId: Number(editForm.sectionId),
+        studentId: Number(editForm.studentId),
+        assignmentId: Number(editForm.assignmentId),
+        note: editForm.note || null,
+      }
+      await updateSubmission(editSubmissionId, payload, editFile)
+      setIsEditOpen(false)
+      await loadRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to update submission')
     } finally {
       setSaving(false)
     }
@@ -425,104 +513,126 @@ const Submission = () => {
     }
   }
 
-  const renderAddForm = () => (
+  const renderSubmissionForm = (form, setter, file, setFile, fileRef, mode = 'add') => {
+    const isEditMode = mode === 'edit'
+    const isStudentScope = fixedStudentId != null
+    const currentAssignmentOptions = isStudentScope ? assignments : assignmentOptions
+
+    return (
     <div className="avm-grid">
-      <FormField label="School Name" required>
-        <select
-          className="form-select avm-input ps-44"
-          id="schoolId"
-          value={addForm.schoolId}
-          onChange={(e) => setAddForm((prev) => ({ ...prev, schoolId: e.target.value, classId: 'Select', sectionId: 'Select', assignmentId: 'Select', studentId: fixedStudentId ? String(fixedStudentId) : 'Select' }))}
-        >
-          <option value="Select">Select</option>
-          {schoolsLookup.map((s) => (
-            <option key={s.id} value={String(s.id)}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      {!isStudentScope ? (
+        <>
+          <FormField label="School Name" required>
+            <select
+              className="form-select avm-input ps-44"
+              id="schoolId"
+              value={form.schoolId}
+              onChange={(e) => setter((prev) => ({ ...prev, schoolId: e.target.value, classId: 'Select', sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))}
+              disabled={isEditMode}
+            >
+              <option value="Select">Select</option>
+              {schoolsLookup.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
 
-      <FormField label="Class" required>
-        <select
-          className="form-select avm-input ps-44"
-          id="classId"
-          value={addForm.classId}
-          onChange={async (e) => {
-            const value = e.target.value
-            setAddForm((prev) => ({ ...prev, classId: value, sectionId: 'Select', assignmentId: 'Select', studentId: fixedStudentId ? String(fixedStudentId) : 'Select' }))
-            try {
-              if (addForm.schoolId !== 'Select' && value !== 'Select') {
-                const secs = await fetchSections({ schoolId: addForm.schoolId, classId: value })
-                setSectionsLookup(Array.isArray(secs) ? secs : [])
-              } else {
-                setSectionsLookup([])
-              }
-            } catch {
-              setSectionsLookup([])
-            }
-          }}
-          disabled={addForm.schoolId === 'Select'}
-        >
-          <option value="Select">Select</option>
-          {classesLookup.filter((c) => String(c.schoolId) === String(addForm.schoolId)).map((c) => (
-            <option key={c.id} value={String(c.id)}>
-              {c.className}
-            </option>
-          ))}
-        </select>
-      </FormField>
+          <FormField label="Class" required>
+            <select
+              className="form-select avm-input ps-44"
+              id="classId"
+              value={form.classId}
+              onChange={async (e) => {
+                const value = e.target.value
+                setter((prev) => ({ ...prev, classId: value, sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))
+                try {
+                  if (form.schoolId !== 'Select' && value !== 'Select') {
+                    const secs = await fetchSections({ schoolId: form.schoolId, classId: value })
+                    setSectionsLookup(Array.isArray(secs) ? secs : [])
+                  } else {
+                    setSectionsLookup([])
+                  }
+                } catch {
+                  setSectionsLookup([])
+                }
+              }}
+              disabled={form.schoolId === 'Select' || isEditMode}
+            >
+              <option value="Select">Select</option>
+              {classesLookup.filter((c) => String(c.schoolId) === String(form.schoolId)).map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.className}
+                </option>
+              ))}
+            </select>
+          </FormField>
 
-      <FormField label="Section" required>
-        <select
-          className="form-select avm-input ps-44"
-          id="sectionId"
-          value={addForm.sectionId}
-          onChange={async (e) => {
-            const value = e.target.value
-            setAddForm((prev) => ({ ...prev, sectionId: value, assignmentId: 'Select', studentId: fixedStudentId ? String(fixedStudentId) : 'Select' }))
-            try {
-              if (addForm.schoolId !== 'Select' && addForm.classId !== 'Select' && value !== 'Select') {
-                const students = await fetchStudentsByClassSection({ schoolId: addForm.schoolId, classId: addForm.classId, sectionId: value })
-                setStudentsLookup(Array.isArray(students) ? students : [])
-              } else {
-                setStudentsLookup([])
-              }
-            } catch {
-              setStudentsLookup([])
-            }
-          }}
-          disabled={addForm.classId === 'Select'}
-        >
-          <option value="Select">Select</option>
-          {sectionsLookup.filter((s) => String(s.schoolId) === String(addForm.schoolId) && String(s.classId) === String(addForm.classId)).map((s) => (
-            <option key={s.id} value={String(s.id)}>
-              {s.sectionName}
-            </option>
-          ))}
-        </select>
-      </FormField>
+          <FormField label="Section" required>
+            <select
+              className="form-select avm-input ps-44"
+              id="sectionId"
+              value={form.sectionId}
+              onChange={async (e) => {
+                const value = e.target.value
+                setter((prev) => ({ ...prev, sectionId: value, assignmentId: 'Select', studentId: 'Select' }))
+                try {
+                  if (form.schoolId !== 'Select' && form.classId !== 'Select' && value !== 'Select') {
+                    const students = await fetchStudentsByClassSection({ schoolId: form.schoolId, classId: form.classId, sectionId: value })
+                    setStudentsLookup(Array.isArray(students) ? students : [])
+                  } else {
+                    setStudentsLookup([])
+                  }
+                } catch {
+                  setStudentsLookup([])
+                }
+              }}
+              disabled={form.classId === 'Select' || isEditMode}
+            >
+              <option value="Select">Select</option>
+              {sectionsLookup.filter((s) => String(s.schoolId) === String(form.schoolId) && String(s.classId) === String(form.classId)).map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.sectionName}
+                </option>
+              ))}
+            </select>
+          </FormField>
 
-      <FormField label="Student" required>
-        {fixedStudentId ? (
-          <input className="form-control avm-input ps-44" value={`Student #${fixedStudentId}`} disabled />
-        ) : (
-          <select className="form-select avm-input ps-44" id="studentId" value={addForm.studentId} onChange={(e) => setAddForm((prev) => ({ ...prev, studentId: e.target.value }))} disabled={addForm.sectionId === 'Select'}>
-            <option value="Select">Select</option>
-            {studentsLookup.map((s) => (
-              <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
-                {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
-              </option>
-            ))}
-          </select>
-        )}
-      </FormField>
+          <FormField label="Student" required>
+            <select
+              className="form-select avm-input ps-44"
+              id="studentId"
+              value={form.studentId}
+              onChange={(e) => setter((prev) => ({ ...prev, studentId: e.target.value }))}
+              disabled={form.sectionId === 'Select' || isEditMode}
+            >
+              <option value="Select">Select</option>
+              {studentsLookup.map((s) => (
+                <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
+                  {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </>
+      ) : null}
 
       <FormField label="Assignment" required>
-        <select className="form-select avm-input ps-44" id="assignmentId" value={addForm.assignmentId} onChange={(e) => setAddForm((prev) => ({ ...prev, assignmentId: e.target.value }))} disabled={addForm.sectionId === 'Select'}>
+        <select
+          className="form-select avm-input ps-44"
+          id="assignmentId"
+          value={form.assignmentId}
+          onChange={(e) => setter((prev) => ({ ...prev, assignmentId: e.target.value }))}
+          disabled={isEditMode || (!isStudentScope && form.sectionId === 'Select')}
+        >
           <option value="Select">Select</option>
-          {assignments
-            .filter((a) => String(a.schoolId) === String(addForm.schoolId) && String(a.classId) === String(addForm.classId) && String(a.sectionId) === String(addForm.sectionId))
+          {currentAssignmentOptions
+            .filter((a) =>
+              !isStudentScope
+                ? String(a.schoolId) === String(form.schoolId) && String(a.classId) === String(form.classId) && String(a.sectionId) === String(form.sectionId)
+                : true
+            )
             .map((a) => (
               <option key={a.id} value={String(a.id)}>
                 {a.title}
@@ -533,21 +643,34 @@ const Submission = () => {
 
       <FormField label="Submission" required full noIcon>
         <div className="d-flex align-items-center gap-2">
-          <input ref={addFileRef} type="file" accept={ACCEPTED_DOC_TYPES} className="form-control" onChange={(e) => setAddFile(e.target.files?.[0] || null)} />
-          {addFile ? <span className="text-muted small">{addFile.name}</span> : <span className="text-muted small">{ACCEPTED_DOC_LABEL}</span>}
+          <input ref={fileRef} type="file" accept={ACCEPTED_DOC_TYPES} className="form-control" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          {file ? (
+            <span className="text-muted small">{file.name}</span>
+          ) : isEditMode && editExistingFileName ? (
+            <span className="text-muted small">Current file: {editExistingFileName}</span>
+          ) : (
+            <span className="text-muted small">{ACCEPTED_DOC_LABEL}</span>
+          )}
         </div>
       </FormField>
 
       <FormField label="Note" full>
-        <textarea className="form-control avm-input ps-44" id="note" value={addForm.note} onChange={(e) => setAddForm((prev) => ({ ...prev, note: e.target.value }))} rows={3} placeholder="Optional note" />
+        <textarea className="form-control avm-input ps-44" id="note" value={form.note} onChange={(e) => setter((prev) => ({ ...prev, note: e.target.value }))} rows={3} placeholder="Optional note" />
       </FormField>
     </div>
-  )
+    )
+  }
 
   if (!canView) return <div className="dashboard-main-body text-muted">No access.</div>
 
   return (
     <div className="dashboard-main-body">
+      {roleUpper === 'PARENT' && !selectedChildId ? (
+        <div className="alert alert-info mb-3">Select a child from the top bar to view submissions.</div>
+      ) : null}
+      {roleUpper === 'TEACHER' && (!filters.assignmentId || filters.assignmentId === 'Select') ? (
+        <div className="alert alert-info mb-3">Use Find and select an Assignment to view submissions.</div>
+      ) : null}
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h5 className="mb-0">Submission</h5>
@@ -559,7 +682,7 @@ const Submission = () => {
             Find
           </button>
           {canSubmit ? (
-            <button type="button" className="btn btn-primary" onClick={openAdd} disabled={!hasSearched || (roleUpper === 'PARENT' && !fixedStudentId)}>
+            <button type="button" className="btn btn-primary" onClick={openAdd} disabled={(!hasSearchResults && !fixedStudentId) || roleUpper === 'PARENT'}>
               Submit
             </button>
           ) : null}
@@ -575,8 +698,8 @@ const Submission = () => {
         <div className="card-body">
           <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div className="d-flex align-items-center gap-2">
-              <input className="form-control" style={{ minWidth: 260 }} placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} disabled={!hasSearched} />
-              <button type="button" className="btn btn-outline-secondary" onClick={handleResetFilters} disabled={!hasSearched}>
+              <input className="form-control" style={{ minWidth: 260 }} placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} disabled={!hasSearchResults} />
+              <button type="button" className="btn btn-outline-secondary" onClick={handleResetFilters} disabled={!hasSearchResults}>
                 Reset
               </button>
             </div>
@@ -596,7 +719,7 @@ const Submission = () => {
                   ))}
                 </ul>
               </div>
-              <select className="form-select" style={{ width: 110 }} value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))} disabled={!hasSearched}>
+              <select className="form-select" style={{ width: 110 }} value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))} disabled={!hasSearchResults}>
                 {[5, 10, 20, 50].map((n) => (
                   <option key={n} value={n}>
                     {n}/page
@@ -611,7 +734,7 @@ const Submission = () => {
               <thead>
                 <tr>
                   <th style={{ width: 34 }}>
-                    <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearched || loading} />
+                    <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearchResults || loading} />
                   </th>
                   {visibleColumns.schoolName ? <th>School</th> : null}
                   {visibleColumns.assignmentTitle ? <th>Assignment</th> : null}
@@ -631,7 +754,7 @@ const Submission = () => {
                       Loading...
                     </td>
                   </tr>
-                ) : !hasSearched ? (
+                ) : !hasSearchResults ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center text-muted">
                       Use Find to select School/Class/Section/Assignment (and Student when applicable).
@@ -663,6 +786,11 @@ const Submission = () => {
                       {visibleColumns.marks ? <td>{row.marks == null ? '-' : row.marks}</td> : null}
                       <td>
                         <div className="d-flex gap-2">
+                          {roleUpper === 'STUDENT' && fixedStudentId ? (
+                            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => openEdit(row)}>
+                              Edit
+                            </button>
+                          ) : null}
                           {canEvaluate ? (
                             <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEvaluate(row)}>
                               Evaluate
@@ -684,13 +812,13 @@ const Submission = () => {
 
           <div className="d-flex align-items-center justify-content-between mt-3">
             <div className="text-muted small">
-              Page {hasSearched ? currentPage : 1} of {hasSearched ? totalPages : 1}
+              Page {hasSearchResults ? currentPage : 1} of {hasSearchResults ? totalPages : 1}
             </div>
             <div className="d-flex align-items-center gap-2">
-              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearched || currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearchResults || currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
                 Prev
               </button>
-              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearched || currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearchResults || currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
                 Next
               </button>
             </div>
@@ -699,7 +827,11 @@ const Submission = () => {
       </div>
 
       <WizardPopup title="Submit Assignment" isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} steps={STEPS} currentStep={addStep} setCurrentStep={setAddStep} onSave={saveAdd} saving={saving}>
-        {renderAddForm()}
+        {renderSubmissionForm(addForm, setAddForm, addFile, setAddFile, addFileRef, 'add')}
+      </WizardPopup>
+
+      <WizardPopup title="Edit Submission" isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} steps={STEPS} currentStep={editStep} setCurrentStep={setEditStep} onSave={saveEdit} saving={saving}>
+        {renderSubmissionForm(editForm, setEditForm, editFile, setEditFile, editFileRef, 'edit')}
       </WizardPopup>
 
       <WizardPopup title="Evaluate Submission" isOpen={isEvalOpen} onClose={() => setIsEvalOpen(false)} steps={['Evaluate']} currentStep={0} setCurrentStep={() => {}} onSave={saveEvaluate} saving={saving}>
@@ -721,7 +853,7 @@ const Submission = () => {
               <option value="Select">Select</option>
               {schoolsLookup.map((s) => (
                 <option key={s.id} value={String(s.id)}>
-                  {s.name}
+                  {s.schoolName || s.name}
                 </option>
               ))}
             </select>

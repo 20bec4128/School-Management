@@ -4,12 +4,14 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Dto.StudentDto;
 import com.School.School_management.Service.StudentService;
+import com.School.School_management.auth.RequirePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/students")
+@RequirePermission({"STUDENT_MANAGE", "*"})
 public class StudentController {
 
     private final StudentService studentService;

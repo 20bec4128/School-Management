@@ -12,6 +12,8 @@ public interface SubmissionService {
 
     Submission createSubmission(SubmissionRequestDto dto, MultipartFile file);
 
+    Submission updateSubmission(Long id, SubmissionRequestDto dto, MultipartFile file);
+
     List<Submission> getAllSubmissions();
 
     Submission getSubmissionById(Long id);

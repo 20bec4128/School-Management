@@ -12,7 +12,14 @@ public interface ManageSchoolService {
             MultipartFile frontendLogo
     );
 
-    Page<ManageSchoolDto> getAllSchools(int page, int size);
+    com.School.School_management.Dto.CreateSchoolWithAdminResponse createSchoolWithAdmin(
+            com.School.School_management.Dto.CreateSchoolWithAdminRequest request,
+            MultipartFile adminLogo,
+            MultipartFile frontendLogo,
+            com.School.School_management.auth.CurrentUser user
+    );
+
+    Page<ManageSchoolDto> getAllSchools(int page, int size, Long headOfficeId, Long schoolId);
 
     ManageSchoolDto getSchoolById(Long id);
 

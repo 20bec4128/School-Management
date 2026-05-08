@@ -902,12 +902,12 @@ const ClassRoutine = () => {
                 <div className="col-12 col-xl-5">
                   <div className="card h-100 border">
                     <div className="card-body">
-                      <div className="d-flex align-items-start justify-content-between gap-12 mb-16">
+                      <div className="d-flex flex-wrap align-items-start justify-content-between gap-12 mb-16 cr-month-calendar__header">
                         <div>
                           <div className="text-secondary-light text-sm fw-medium">Month Calendar</div>
                           <h4 className="fw-semibold mb-0 text-primary-light">{monthLabel(calendarMonth)}</h4>
                         </div>
-                        <div className="d-flex align-items-center gap-8">
+                        <div className="d-flex align-items-center gap-8 cr-month-calendar__actions">
                           <button type="button" className="btn btn-sm btn-light border" onClick={() => setCalendarMonth((m) => shiftMonth(m, -1))}>
                             <i className="ri-arrow-left-s-line" />
                           </button>
@@ -928,57 +928,50 @@ const ClassRoutine = () => {
                         </div>
                       </div>
 
-                      <div
-                        className="d-grid gap-8 text-center"
-                        style={{
-                          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                        }}
-                      >
-                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label) => (
-                          <div key={label} className="text-secondary-light fw-semibold py-4">
-                            {label}
+                      <div className="cr-month-calendar__viewport">
+                        <div className="cr-month-calendar__surface">
+                          <div className="d-grid gap-8 text-center cr-month-calendar__week">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label) => (
+                              <div key={label} className="text-secondary-light fw-semibold py-4">
+                                {label}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
 
-                      <div
-                        className="d-grid gap-8"
-                        style={{
-                          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                        }}
-                      >
-                        {monthCalendar.flatMap((week, weekIndex) =>
-                          week.map((cell, dayIndex) => {
-                            if (!cell) {
-                              return <div key={`empty-${weekIndex}-${dayIndex}`} className="radius-8 border border-transparent" style={{ minHeight: 54 }} />
-                            }
-                            const today = getTodayDate()
-                            const isSelected = isSameCalendarDay(cell.date, selectedDate)
-                            const isToday = isSameCalendarDay(cell.date, today)
-                            return (
-                              <button
-                                key={cell.date.toISOString()}
-                                type="button"
-                                className={`text-start radius-8 border p-8 ${
-                                  isSelected ? 'btn-primary-600 text-white border-primary-600' : 'bg-white'
-                                }`}
-                                style={{ minHeight: 54 }}
-                                onClick={() => {
-                                  setSelectedDate(cell.date)
-                                  setCalendarMonth(startOfMonth(cell.date))
-                                }}
-                              >
-                                <div className="d-flex align-items-center justify-content-between gap-8">
-                                  <span className={`fw-semibold ${isSelected ? 'text-white' : 'text-primary-light'}`}>{cell.day}</span>
-                                  {cell.hasRoutine ? <span className={`radius-999 ${isSelected ? 'bg-white' : 'bg-primary-100'}`} style={{ width: 8, height: 8 }} /> : null}
-                                </div>
-                                <div className={`text-sm ${isSelected ? 'text-white' : isToday ? 'text-primary-600' : 'text-secondary-light'}`}>
-                                  {cell.date.toLocaleDateString(undefined, { weekday: 'short' })}
-                                </div>
-                              </button>
-                            )
-                          }),
-                        )}
+                          <div className="d-grid gap-8 cr-month-calendar__grid">
+                            {monthCalendar.flatMap((week, weekIndex) =>
+                              week.map((cell, dayIndex) => {
+                                if (!cell) {
+                                  return <div key={`empty-${weekIndex}-${dayIndex}`} className="cr-month-calendar__day is-empty radius-8 border border-transparent" />
+                                }
+                                const today = getTodayDate()
+                                const isSelected = isSameCalendarDay(cell.date, selectedDate)
+                                const isToday = isSameCalendarDay(cell.date, today)
+                                return (
+                                  <button
+                                    key={cell.date.toISOString()}
+                                    type="button"
+                                    className={`cr-month-calendar__day text-start radius-8 border p-8 ${
+                                      isSelected ? 'btn-primary-600 text-white border-primary-600' : 'bg-white'
+                                    }`}
+                                    onClick={() => {
+                                      setSelectedDate(cell.date)
+                                      setCalendarMonth(startOfMonth(cell.date))
+                                    }}
+                                  >
+                                    <div className="d-flex align-items-center justify-content-between gap-8">
+                                      <span className={`fw-semibold ${isSelected ? 'text-white' : 'text-primary-light'}`}>{cell.day}</span>
+                                      {cell.hasRoutine ? <span className={`radius-999 ${isSelected ? 'bg-white' : 'bg-primary-100'}`} style={{ width: 8, height: 8 }} /> : null}
+                                    </div>
+                                    <div className={`text-sm ${isSelected ? 'text-white' : isToday ? 'text-primary-600' : 'text-secondary-light'}`}>
+                                      {cell.date.toLocaleDateString(undefined, { weekday: 'short' })}
+                                    </div>
+                                  </button>
+                                )
+                              }),
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

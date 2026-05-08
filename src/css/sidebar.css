@@ -6,7 +6,7 @@
   width: 15.625rem;
   height: 100vh;
   background-color: var(--white);
-  z-index: 3;
+  z-index: 1045;
 }
 
 @media (min-width: 1200px) {
@@ -142,8 +142,25 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 2;
+  z-index: 1040;
   cursor: pointer;
+}
+
+.sidebar-close-btn {
+  position: absolute;
+  top: 0.75rem;
+  inset-inline-end: 0.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--text-primary-light);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1046;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
 /* Fix submenu dot overlapping text (circle-icon has a big white box-shadow in the theme) */

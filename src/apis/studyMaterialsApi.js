@@ -24,8 +24,13 @@ const buildUpsertFormData = (payload, file) => {
   return fd
 }
 
-export const fetchStudyMaterials = async () => {
-  const res = await apiFetch(STUDY_MATERIALS_API_BASE, { headers: { Accept: 'application/json' } })
+export const fetchStudyMaterials = async ({ schoolId, classId, subjectId } = {}) => {
+  const query = new URLSearchParams()
+  if (schoolId != null && schoolId !== '') query.set('schoolId', String(schoolId))
+  if (classId != null && classId !== '') query.set('classId', String(classId))
+  if (subjectId != null && subjectId !== '') query.set('subjectId', String(subjectId))
+  const url = query.toString() ? `${STUDY_MATERIALS_API_BASE}?${query.toString()}` : STUDY_MATERIALS_API_BASE
+  const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()
   return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []

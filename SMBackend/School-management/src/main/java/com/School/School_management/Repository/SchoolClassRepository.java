@@ -8,6 +8,8 @@ public interface SchoolClassRepository extends JpaRepository<SchoolClass, Long> 
 
   List<SchoolClass> findAllBySchool_IdOrderByIdDesc(Long schoolId);
 
+  List<SchoolClass> findAllBySchool_HeadOfficeIdAndSchool_IsDeletedFalseOrderByIdDesc(Long headOfficeId);
+
   boolean existsByIdAndSchool_Id(Long id, Long schoolId);
 
   boolean existsByIdAndSchool_IdAndClassTeacher_Id(Long id, Long schoolId, Long classTeacherId);

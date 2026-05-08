@@ -56,6 +56,15 @@ const getFileIcon = (fileName) => {
   return 'ri-file-line'
 }
 
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected =
+    selectedChildId != null && selectedChildId !== ''
+      ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
+      : null
+  return selected || list[0] || null
+}
+
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
   return (
@@ -91,8 +100,13 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const StudyMaterial = () => {
-  const { user } = useAuth()
-  const canManage = can(user, ['STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'])
+  const { user, role, schoolId, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
+  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
+  const canManage = !isStudentScope && can(user, ['STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'])
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -139,23 +153,28 @@ const StudyMaterial = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchStudyMaterials()
+      const data = await fetchStudyMaterials(
+        isStudentScope && effectiveSchoolId && effectiveClassId
+          ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
+          : {},
+      )
       setRows(Array.isArray(data) ? data : [])
+      if (isStudentScope) setHasSearched(true)
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load study materials')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
 
   useEffect(() => {
     const t = setTimeout(() => {
-      void loadLookups()
+      if (canManage) void loadLookups()
       void loadRows()
     }, 0)
     return () => clearTimeout(t)
-  }, [loadLookups, loadRows])
+  }, [canManage, loadLookups, loadRows])
 
   const classOptions = useMemo(() => {
     return classesLookup
@@ -176,6 +195,7 @@ const StudyMaterial = () => {
   }, [subjectsLookup, pendingFilters.schoolId, pendingFilters.classId])
 
   const validateFind = () => {
+    if (isStudentScope) return {}
     const errs = {}
     if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
     if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
@@ -185,6 +205,7 @@ const StudyMaterial = () => {
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
+    if (isStudentScope) return
     const errs = validateFind()
     if (Object.keys(errs).length > 0) {
       setFindErrors(errs)
@@ -199,6 +220,7 @@ const StudyMaterial = () => {
   }
 
   const handleResetFilters = () => {
+    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setFindErrors({})
@@ -221,6 +243,12 @@ const StudyMaterial = () => {
   const filtered = useMemo(() => {
     if (!hasSearched) return []
     const q = search.trim().toLowerCase()
+    if (isStudentScope) {
+      return rows.filter((r) => {
+        if (!q) return true
+        return [r.title, r.description, r.fileName].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    }
     const list = rows.filter((r) => {
       const matchesScope =
         String(r.schoolId) === String(filters.schoolId) &&
@@ -231,7 +259,7 @@ const StudyMaterial = () => {
       return [r.title, r.description, r.fileName].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
     return list
-  }, [rows, hasSearched, search, filters])
+  }, [rows, hasSearched, search, filters, isStudentScope])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -252,6 +280,7 @@ const StudyMaterial = () => {
   }
 
   const openAdd = () => {
+    if (!canManage) return
     setAddForm({ ...emptyForm, ...filters })
     setAddFile(null)
     if (addFileRef.current) addFileRef.current.value = ''
@@ -260,6 +289,7 @@ const StudyMaterial = () => {
   }
 
   const openEdit = (row) => {
+    if (!canManage) return
     setEditingId(row?.id ?? null)
     setEditForm({
       schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
@@ -286,6 +316,7 @@ const StudyMaterial = () => {
   const [formErrors, setFormErrors] = useState({})
 
   const submitAdd = async () => {
+    if (!canManage) return
     const errs = validateForm(addForm)
     if (Object.keys(errs).length > 0) {
       setFormErrors(errs)
@@ -314,6 +345,7 @@ const StudyMaterial = () => {
   }
 
   const submitEdit = async () => {
+    if (!canManage) return
     if (!editingId) return
     const errs = validateForm(editForm)
     if (Object.keys(errs).length > 0) {
@@ -345,6 +377,7 @@ const StudyMaterial = () => {
   }
 
   const handleDelete = async (row) => {
+    if (!canManage) return
     const id = row?.id
     if (!id) return
     if (!window.confirm(`Delete study material "${row?.title || id}"?`)) return
@@ -495,9 +528,11 @@ const StudyMaterial = () => {
             </div>
 
             <div className="d-flex align-items-center gap-8 ms-auto">
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
+              {!isStudentScope ? (
+                <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                  Find
+                </button>
+              ) : null}
               {canManage ? (
                 <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
                   + Add
@@ -510,42 +545,46 @@ const StudyMaterial = () => {
             <table className="table mb-0">
               <thead>
                 <tr>
-                  <th style={{ width: 48 }}>
-                    <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearched || loading} />
-                  </th>
+                  {canManage ? (
+                    <th style={{ width: 48 }}>
+                      <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearched || loading} />
+                    </th>
+                  ) : null}
                   {visibleColumns.school && <th>School</th>}
                   {visibleColumns.className && <th>Class</th>}
                   {visibleColumns.subjectName && <th>Subject</th>}
                   {visibleColumns.title && <th>Title</th>}
                   {visibleColumns.fileName && <th>File</th>}
-                  <th style={{ width: 160 }}>Action</th>
+                  {canManage ? <th style={{ width: 160 }}>Action</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 2} className="text-center py-24 text-secondary-light">
+                    <td colSpan={visibleColumnCount + (canManage ? 2 : 0)} className="text-center py-24 text-secondary-light">
                       Loading...
                     </td>
                   </tr>
                 ) : !hasSearched ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 2} className="text-center py-24 text-secondary-light">
-                      Use <strong>Find</strong> to select School, Class and Subject.
+                    <td colSpan={visibleColumnCount + (canManage ? 2 : 0)} className="text-center py-24 text-secondary-light">
+                      {isStudentScope ? 'Loading your class materials...' : 'Use Find to select School, Class and Subject.'}
                     </td>
                   </tr>
                 ) : paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 2} className="text-center py-24 text-secondary-light">
+                    <td colSpan={visibleColumnCount + (canManage ? 2 : 0)} className="text-center py-24 text-secondary-light">
                       No materials found.
                     </td>
                   </tr>
                 ) : (
                   paginated.map((r) => (
                     <tr key={r.id}>
-                      <td>
-                        <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
-                      </td>
+                      {canManage ? (
+                        <td>
+                          <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
+                        </td>
+                      ) : null}
                       {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
                       {visibleColumns.className && <td>{r.className || r.classId}</td>}
                       {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
@@ -562,16 +601,18 @@ const StudyMaterial = () => {
                           )}
                         </td>
                       )}
-                      <td>
-                        <div className="d-flex gap-8">
-                          <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={!canManage || saving}>
-                            Edit
-                          </button>
-                          <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+                      {canManage ? (
+                        <td>
+                          <div className="d-flex gap-8">
+                            <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={!canManage || saving}>
+                              Edit
+                            </button>
+                            <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -613,37 +654,42 @@ const StudyMaterial = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="780px"
-        open={isAddOpen}
-        title="Add Study Material"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={submitAdd}
-        submitLabel={saving ? 'Saving...' : 'Save'}
-      >
-        {renderEntryForm(addForm, setAddForm, addFileRef, setAddFile)}
-      </WizardPopup>
+      {canManage ? (
+        <>
+          <WizardPopup
+            modalWidth="780px"
+            open={isAddOpen}
+            title="Add Study Material"
+            steps={STEPS}
+            step={addStep}
+            onClose={() => setIsAddOpen(false)}
+            onBack={() => setAddStep((s) => Math.max(0, s - 1))}
+            onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
+            onSubmit={submitAdd}
+            submitLabel={saving ? 'Saving...' : 'Save'}
+          >
+            {renderEntryForm(addForm, setAddForm, addFileRef, setAddFile)}
+          </WizardPopup>
 
-      <WizardPopup
-        modalWidth="780px"
-        open={isEditOpen}
-        title="Edit Study Material"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={submitEdit}
-        submitLabel={saving ? 'Updating...' : 'Update'}
-      >
-        {renderEntryForm(editForm, setEditForm, editFileRef, setEditFile)}
-      </WizardPopup>
+          <WizardPopup
+            modalWidth="780px"
+            open={isEditOpen}
+            title="Edit Study Material"
+            steps={STEPS}
+            step={editStep}
+            onClose={() => setIsEditOpen(false)}
+            onBack={() => setEditStep((s) => Math.max(0, s - 1))}
+            onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
+            onSubmit={submitEdit}
+            submitLabel={saving ? 'Updating...' : 'Update'}
+          >
+            {renderEntryForm(editForm, setEditForm, editFileRef, setEditFile)}
+          </WizardPopup>
+        </>
+      ) : null}
 
-      <SlideSidebar isOpen={isFindSidebarOpen} title="Find Study Material" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
+      {!isStudentScope ? (
+        <SlideSidebar isOpen={isFindSidebarOpen} title="Find Study Material" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
@@ -701,7 +747,8 @@ const StudyMaterial = () => {
             </button>
           </div>
         </form>
-      </SlideSidebar>
+        </SlideSidebar>
+      ) : null}
     </div>
   )
 }

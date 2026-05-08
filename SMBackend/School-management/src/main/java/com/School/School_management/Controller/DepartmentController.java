@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.DepartmentDto;
 import com.School.School_management.Service.DepartmentService;
+import com.School.School_management.auth.RequirePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/departments")
+@RequirePermission({"DEPARTMENT_MANAGE", "*"})
 public class DepartmentController {
 
     private final DepartmentService departmentService;

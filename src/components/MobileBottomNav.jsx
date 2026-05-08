@@ -1,88 +1,50 @@
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../context/useAuth'
+import { normalizeRole } from '../utils/roles'
+import MobileProfileDrawer from './MobileProfileDrawer'
+import { getMobileNavigationConfig } from './mobileNavigationConfig'
 
-const tabs = [
-  {
-    key: 'dashboard',
-    labelKey: 'bottomnav.dashboard',
-    icon: 'ri:home-5-line',
-  },
-  {
-    key: 'manage-teacher',
-    labelKey: 'bottomnav.teachers',
-    icon: 'ri:user-star-line',
-  },
-  {
-    key: 'student-list',
-    labelKey: 'bottomnav.students',
-    icon: 'ri:group-line',
-  },
-]
+const themeState = () => {
+  if (typeof window === 'undefined') return 'light'
+  const saved = localStorage.getItem('theme')
+  return saved === 'dark' || saved === 'light' ? saved : document.documentElement.dataset.theme || 'light'
+}
 
-const LANGUAGES = [
-  { id: 'en', flag: 'https://flagcdn.com/w40/us.png', label: 'English' },
-  { id: 'ja', flag: 'https://flagcdn.com/w40/jp.png', label: 'Japan' },
-  { id: 'fr', flag: 'https://flagcdn.com/w40/fr.png', label: 'France' },
-  { id: 'de', flag: 'https://flagcdn.com/w40/de.png', label: 'Germany' },
-  { id: 'ko', flag: 'https://flagcdn.com/w40/kr.png', label: 'South Korea' },
-  { id: 'bn', flag: 'https://flagcdn.com/w40/bd.png', label: 'Bangladesh' },
-  { id: 'hi', flag: 'https://flagcdn.com/w40/in.png', label: 'India' },
-  { id: 'en-CA', flag: 'https://flagcdn.com/w40/ca.png', label: 'Canada' },
-]
-
-const NOTIFICATIONS = [
-  {
-    id: 'verified',
-    title: 'Congratulations',
-    body: 'Your profile has been Verified.',
-    time: '23 Mins ago',
-    icon: { type: 'icon', name: 'bitcoin-icons:verify-outline', bg: 'success' },
-  },
-  {
-    id: 'ronald',
-    title: 'Ronald Richards',
-    body: 'You can stitch between artboards',
-    time: '23 Mins ago',
-    icon: { type: 'img', src: '/assets/images/notification/profile-1.png', bg: 'success' },
-  },
-  {
-    id: 'arlene',
-    title: 'Arlene McCoy',
-    body: 'Invite you to prototyping',
-    time: '23 Mins ago',
-    icon: { type: 'text', value: 'AM', bg: 'info' },
-  },
-]
-
-const MobileBottomNav = ({ currentPage, onNavigate, onQuickAddStudent, onLogout }) => {
-  const { t, i18n } = useTranslation()
-  const [isMoreOpen, setIsMoreOpen] = useState(false)
-  const [moreView, setMoreView] = useState('main') // main | language | notifications
-  const [theme, setTheme] = useState('light')
-
-  const handleNavigate = (page) => {
-    setIsMoreOpen(false)
-    setMoreView('main')
-    onNavigate(page)
-  }
+const MobileBottomNav = ({ currentPage, onNavigate, onLogout }) => {
+  const { user, role } = useAuth()
+  const [activePanel, setActivePanel] = useState('none') // none | profile | actions
+  const [theme, setTheme] = useState(themeState)
 
   useEffect(() => {
-    if (!isMoreOpen) return
+    const saved = themeState()
+    setTheme(saved)
+    document.documentElement.dataset.theme = saved
+  }, [])
+
+  useEffect(() => {
+    if (activePanel === 'none') return undefined
 
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') setIsMoreOpen(false)
+      if (event.key === 'Escape') setActivePanel('none')
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isMoreOpen])
+  }, [activePanel])
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    const initialTheme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light'
-    setTheme(initialTheme)
-    document.documentElement.dataset.theme = initialTheme
-  }, [])
+    if (activePanel === 'none') return undefined
+
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [activePanel])
+
+  const nav = useMemo(() => getMobileNavigationConfig({ user, role }), [role, user])
+
+  const roleLabel = normalizeRole(role || user?.role || user?.userRole || user?.authority).replaceAll('_', ' ')
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark'
@@ -91,196 +53,201 @@ const MobileBottomNav = ({ currentPage, onNavigate, onQuickAddStudent, onLogout 
     localStorage.setItem('theme', next)
   }
 
+  const handleNavigate = (page) => {
+    if (!page) return
+    setActivePanel('none')
+    onNavigate?.(page)
+  }
+
+  const handleQuickAction = (page) => {
+    if (!page) return
+    setActivePanel('none')
+    onNavigate?.(page)
+  }
+
+  const visibleTabs = nav.tabs.filter(Boolean).slice(0, 5)
+  const profileTab = visibleTabs.find((tab) => tab.key === 'profile')
+  const tabs = visibleTabs.filter((tab) => tab.key !== 'profile')
+  const hasFab = nav.quickActions.length > 0
+  const isProfileOpen = activePanel === 'profile'
+  const isActionsOpen = activePanel === 'actions'
+
+  const visibleActionTabs = nav.quickActions.slice(0, 4)
+  const centerAction = nav.centerAction
+  const leftTabs = centerAction ? tabs.slice(0, 2) : tabs
+  const rightTabs = centerAction ? visibleTabs.slice(-2) : visibleTabs.filter((tab) => tab.key === 'profile')
+
   return (
-    <nav className="mobile-bottom-nav" aria-label="Quick mobile navigation">
-      {isMoreOpen ? (
+    <nav
+      className={`mobile-bottom-nav is-${nav.accent}`}
+      data-mobile-nav-role={nav.accent}
+      aria-label="Mobile navigation"
+    >
+      {isActionsOpen ? (
         <button
           type="button"
           className="mobile-bottom-nav__backdrop"
-          aria-label="Close menu"
-          onClick={() => {
-            setIsMoreOpen(false)
-            setMoreView('main')
-          }}
+          aria-label="Close mobile menu"
+          onClick={() => setActivePanel('none')}
         />
       ) : null}
 
-      <div className="mobile-bottom-nav__stack">
-        <div className={`mobile-bottom-nav__sheet${isMoreOpen ? ' is-open' : ''}`} role="menu">
-          {moreView !== 'main' ? (
-            <button
-              type="button"
-              className="mobile-bottom-nav__sheet-item"
-              role="menuitem"
-              onClick={() => setMoreView('main')}
-            >
-              <iconify-icon icon="ri:arrow-left-line" className="mobile-bottom-nav__sheet-icon"></iconify-icon>
-              <span>{t('common.back')}</span>
-            </button>
-          ) : null}
+      <div className="mobile-bottom-nav__dock">
+        <div className="mobile-bottom-nav__surface">
+          <div className="mobile-bottom-nav__glow" />
+          <div
+            className={`mobile-bottom-nav__inner${centerAction ? ' has-center-action' : ''}`}
+            style={{
+              gridTemplateColumns: centerAction
+                ? 'repeat(5, minmax(0, 1fr))'
+                : `repeat(${Math.max(1, tabs.length + (profileTab ? 1 : 0))}, minmax(0, 1fr))`,
+            }}
+          >
+            {leftTabs.map((tab) => {
+              const isActive = currentPage === tab.page
 
-          {moreView === 'main' ? (
-            <>
-              <button
-                type="button"
-                className="mobile-bottom-nav__sheet-item"
-                role="menuitem"
-                onClick={toggleTheme}
-              >
-                <iconify-icon
-                  icon={theme === 'dark' ? 'ri:sun-line' : 'ri:moon-line'}
-                  className="mobile-bottom-nav__sheet-icon"
-                ></iconify-icon>
-                <span>{t('common.theme')}</span>
-              </button>
-
-              { <button
-                type="button"
-                className="mobile-bottom-nav__sheet-item"
-                role="menuitem"
-                onClick={() => setMoreView('language')}
-              >
-                <iconify-icon icon="ri:translate-2" className="mobile-bottom-nav__sheet-icon"></iconify-icon>
-                <span>{t('common.language')}</span>
-              </button> }
-
-              <button
-                type="button"
-                className="mobile-bottom-nav__sheet-item"
-                role="menuitem"
-                onClick={() => setMoreView('notifications')}
-              >
-                <iconify-icon icon="iconoir:bell" className="mobile-bottom-nav__sheet-icon"></iconify-icon>
-                <span>{t('common.notifications')}</span>
-              </button>
-
-              <div className="mobile-bottom-nav__sheet-divider" role="separator" aria-hidden="true" />
-
-              <button
-                type="button"
-                className="mobile-bottom-nav__sheet-item"
-                role="menuitem"
-                onClick={() => setIsMoreOpen(false)}
-              >
-                <iconify-icon icon="ri:user-3-line" className="mobile-bottom-nav__sheet-icon"></iconify-icon>
-                <span>{t('common.profile')}</span>
-              </button>
-
-              <button
-                type="button"
-                className="mobile-bottom-nav__sheet-item"
-                role="menuitem"
-                onClick={() => setIsMoreOpen(false)}
-              >
-                <iconify-icon icon="ri:settings-3-line" className="mobile-bottom-nav__sheet-icon"></iconify-icon>
-                <span>{t('common.settings')}</span>
-              </button>
-
-              <button
-                type="button"
-                className="mobile-bottom-nav__sheet-item mobile-bottom-nav__sheet-item--danger"
-                role="menuitem"
-                onClick={() => {
-                  setIsMoreOpen(false)
-                  setMoreView('main')
-                  onLogout?.()
-                }}
-              >
-                <iconify-icon icon="ri:shut-down-line" className="mobile-bottom-nav__sheet-icon"></iconify-icon>
-                <span>{t('common.logout')}</span>
-              </button>
-            </>
-          ) : null}
-
-          {moreView === 'language' ? (
-            <div className="mobile-bottom-nav__sheet-scroll" role="none">
-              {LANGUAGES.map((lang) => (
+              return (
                 <button
-                  key={lang.id}
+                  key={tab.key}
                   type="button"
-                  className={`mobile-bottom-nav__sheet-item${(i18n.language || 'en').toLowerCase().startsWith(lang.id.toLowerCase()) ? ' is-selected' : ''}`}
-                  role="menuitem"
-                  onClick={() => {
-                    i18n.changeLanguage(lang.id)
-                    setMoreView('main')
-                  }}
+                  className={`mobile-bottom-nav__item${isActive ? ' is-active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => handleNavigate(tab.page)}
                 >
-                  <img src={lang.flag} alt={lang.label} className="mobile-bottom-nav__sheet-flag" />
-                  <span>{lang.label}</span>
-                  {(i18n.language || 'en').toLowerCase().startsWith(lang.id.toLowerCase()) ? (
-                    <iconify-icon icon="ri:check-line" className="mobile-bottom-nav__sheet-check" />
-                  ) : null}
+                  <span className="mobile-bottom-nav__icon-wrap">
+                    <i className={tab.icon} />
+                    {tab.badgeCount > 0 ? (
+                      <span className="mobile-bottom-nav__badge">{tab.badgeCount > 9 ? '9+' : tab.badgeCount}</span>
+                    ) : null}
+                  </span>
+                  <span className="mobile-bottom-nav__label">{tab.label}</span>
+                </button>
+              )
+            })}
+
+            {centerAction ? (
+              <button
+                type="button"
+                className={`mobile-bottom-nav__item mobile-bottom-nav__item--center${isActionsOpen ? ' is-active' : ''}`}
+                aria-expanded={isActionsOpen}
+                onClick={() => setActivePanel((prev) => (prev === 'actions' ? 'none' : 'actions'))}
+              >
+                <span className="mobile-bottom-nav__icon-wrap mobile-bottom-nav__icon-wrap--center">
+                  <span className="mobile-bottom-nav__plus" aria-hidden="true">+</span>
+                </span>
+                <span className="mobile-bottom-nav__label">{centerAction.label}</span>
+              </button>
+            ) : null}
+
+            {rightTabs.map((tab) => {
+              const isActive = currentPage === tab.page
+
+              if (tab.key === 'profile') {
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={`mobile-bottom-nav__item mobile-bottom-nav__item--profile${isProfileOpen ? ' is-active' : ''}`}
+                    aria-expanded={isProfileOpen}
+                    onClick={() => setActivePanel((prev) => (prev === 'profile' ? 'none' : 'profile'))}
+                  >
+                    <span className="mobile-bottom-nav__icon-wrap">
+                      <i className={tab.icon} />
+                      {tab.badgeCount > 0 ? (
+                        <span className="mobile-bottom-nav__badge">{tab.badgeCount > 9 ? '9+' : tab.badgeCount}</span>
+                      ) : null}
+                    </span>
+                    <span className="mobile-bottom-nav__label">{tab.label}</span>
+                  </button>
+                )
+              }
+
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`mobile-bottom-nav__item${isActive ? ' is-active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => handleNavigate(tab.page)}
+                >
+                  <span className="mobile-bottom-nav__icon-wrap">
+                    <i className={tab.icon} />
+                    {tab.badgeCount > 0 ? (
+                      <span className="mobile-bottom-nav__badge">{tab.badgeCount > 9 ? '9+' : tab.badgeCount}</span>
+                    ) : null}
+                  </span>
+                  <span className="mobile-bottom-nav__label">{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {centerAction && isActionsOpen ? (
+            <div className="mobile-bottom-nav__actions mobile-bottom-nav__actions--center is-open">
+              {visibleActionTabs.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className="mobile-bottom-nav__action"
+                  onClick={() => handleQuickAction(action.page)}
+                >
+                  <span className="mobile-bottom-nav__action-icon">
+                    <i className={action.icon} />
+                  </span>
+                  <span>
+                    <strong>{action.label}</strong>
+                  </span>
                 </button>
               ))}
             </div>
           ) : null}
 
-          {moreView === 'notifications' ? (
-            <div className="mobile-bottom-nav__sheet-scroll" role="none">
-              {NOTIFICATIONS.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  className="mobile-bottom-nav__sheet-item mobile-bottom-nav__sheet-item--notification"
-                  role="menuitem"
-                  onClick={() => setIsMoreOpen(false)}
-                >
-                  <span className={`mobile-bottom-nav__notif-icon mobile-bottom-nav__notif-icon--${n.icon.bg}`}>
-                    {n.icon.type === 'icon' ? (
-                      <iconify-icon icon={n.icon.name} className="mobile-bottom-nav__sheet-icon" />
-                    ) : null}
-                    {n.icon.type === 'img' ? <img src={n.icon.src} alt="" /> : null}
-                    {n.icon.type === 'text' ? <span className="mobile-bottom-nav__notif-text">{n.icon.value}</span> : null}
-                  </span>
-                  <span className="mobile-bottom-nav__notif-body">
-                    <span className="mobile-bottom-nav__notif-title">{n.title}</span>
-                    <span className="mobile-bottom-nav__notif-desc">{n.body}</span>
-                  </span>
-                  <span className="mobile-bottom-nav__notif-time">{n.time}</span>
-                </button>
-              ))}
+          {!centerAction && hasFab ? (
+            <div className="mobile-bottom-nav__fab-zone">
+              <button
+                type="button"
+                className={`mobile-bottom-nav__fab${isActionsOpen ? ' is-open' : ''}`}
+                aria-label="Create action menu"
+                aria-expanded={isActionsOpen}
+                onClick={() => setActivePanel((prev) => (prev === 'actions' ? 'none' : 'actions'))}
+              >
+                <i className={isActionsOpen ? 'ri-close-line' : 'ri-add-line'} />
+              </button>
+
+              <div className={`mobile-bottom-nav__actions${isActionsOpen ? ' is-open' : ''}`}>
+                {visibleActionTabs.map((action) => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className="mobile-bottom-nav__action"
+                    onClick={() => handleQuickAction(action.page)}
+                  >
+                    <span className="mobile-bottom-nav__action-icon">
+                      <i className={action.icon} />
+                    </span>
+                    <span>
+                      <strong>{action.label}</strong>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>
-
-        <button
-          type="button"
-          className="mobile-bottom-nav__fab"
-          aria-label="Add Student"
-          onClick={() => onQuickAddStudent?.()}
-        >
-          <iconify-icon icon="ri:add-line" className="mobile-bottom-nav__fab-icon" />
-        </button>
-
-        <div className="mobile-bottom-nav__inner">
-        {tabs.map((tab) => {
-          const isActive = currentPage === tab.key
-
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              className={`mobile-bottom-nav__item${isActive ? ' is-active' : ''}`}
-              aria-current={isActive ? 'page' : undefined}
-              onClick={() => handleNavigate(tab.key)}
-            >
-              <iconify-icon icon={tab.icon} className="mobile-bottom-nav__icon"></iconify-icon>
-              <span>{t(tab.labelKey)}</span>
-            </button>
-          )
-        })}
-
-        <button
-          type="button"
-          className={`mobile-bottom-nav__item mobile-bottom-nav__item--more${isMoreOpen ? ' is-active' : ''}`}
-          aria-expanded={isMoreOpen}
-          onClick={() => setIsMoreOpen((prev) => !prev)}
-        >
-          <iconify-icon icon="ri:menu-2-line" className="mobile-bottom-nav__icon"></iconify-icon>
-          <span>{t('bottomnav.more')}</span>
-        </button>
       </div>
-      </div>
+
+      <MobileProfileDrawer
+        open={isProfileOpen}
+        onClose={() => setActivePanel('none')}
+        title={roleLabel}
+        subtitle={user?.name || user?.fullName || user?.username || user?.email || 'Mobile profile'}
+        accent={nav.accent}
+        items={nav.profileItems}
+        onNavigate={handleNavigate}
+        onLogout={onLogout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
     </nav>
   )
 }

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
+import MobileBottomNav from './components/MobileBottomNav'
 import { SidebarProvider } from './context/SidebarContext'
+import { SchoolProvider } from './context/SchoolContext'
 import Login from './pages/Login'
 import AppRoute from './AppRoute'
 import { useAuth } from './context/useAuth'
@@ -58,21 +60,24 @@ function App() {
   }
 
   return (
-    <SidebarProvider>
-      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={logout} />
+    <SchoolProvider user={user}>
+      <SidebarProvider>
+        <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={logout} />
 
-      <main className="dashboard-main">
-        <Topbar user={user} onLogout={logout} />
-        <AppRoute
-          currentPage={currentPage}
-          user={user}
-          role={role}
-          parentChildren={parentChildren}
-          selectedChildId={selectedChildId}
-          onNavigate={setCurrentPage}
-        />
-      </main>
-    </SidebarProvider>
+        <main className="dashboard-main">
+          <Topbar user={user} />
+          <AppRoute
+            currentPage={currentPage}
+            user={user}
+            role={role}
+            parentChildren={parentChildren}
+            selectedChildId={selectedChildId}
+            onNavigate={setCurrentPage}
+          />
+        </main>
+        <MobileBottomNav currentPage={currentPage} onNavigate={setCurrentPage} onLogout={logout} />
+      </SidebarProvider>
+    </SchoolProvider>
   )
 }
 

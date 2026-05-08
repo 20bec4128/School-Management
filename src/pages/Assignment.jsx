@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createAssignment, deleteAssignment, fetchAssignments, updateAssignment } from '../apis/assignmentsApi'
+import { createAssignment, deleteAssignment, fetchAssignments, fetchAssignmentsForStudent, updateAssignment } from '../apis/assignmentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
@@ -161,8 +161,17 @@ const NotificationToggle = ({ id, label, icon, checked, onChange }) => (
 )
 
 const Assignment = () => {
-  const { user } = useAuth()
+  const { user, role, studentId, selectedChildId } = useAuth()
+
+  const roleUpper = String(role || '').toUpperCase()
+  const fixedStudentId =
+    roleUpper === 'STUDENT'
+      ? studentId
+      : roleUpper === 'PARENT'
+        ? selectedChildId
+        : null
   const canManage = can(user, ['ASSIGNMENT_MANAGE', 'ASSIGNMENT_MANAGE_ASSIGNED', '*'])
+  const isReadOnly = fixedStudentId != null
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -197,21 +206,32 @@ const Assignment = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
+  const hasSearchResults = hasSearched || fixedStudentId != null
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const loadLookups = useCallback(async () => {
-    const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+    const shouldLoadAdminLookups = fixedStudentId == null
+    const [schools, classes, sections, subjects] = await Promise.all([
+      shouldLoadAdminLookups ? fetchSchoolsLookup().catch(() => []) : Promise.resolve([]),
+      shouldLoadAdminLookups ? fetchClasses().catch(() => []) : Promise.resolve([]),
+      shouldLoadAdminLookups ? fetchSections().catch(() => []) : Promise.resolve([]),
+      fetchSubjects().catch(() => []),
+    ])
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
+    setSectionsLookup(Array.isArray(sections) ? sections : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
-  }, [])
+  }, [fixedStudentId])
 
   const loadRows = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchAssignments()
+      const data =
+        fixedStudentId != null
+          ? await fetchAssignmentsForStudent(fixedStudentId)
+          : await fetchAssignments()
       setRows(Array.isArray(data) ? data : [])
     } catch (e) {
       setRows([])
@@ -219,7 +239,7 @@ const Assignment = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fixedStudentId])
 
   useEffect(() => {
     void loadLookups()
@@ -339,7 +359,7 @@ const Assignment = () => {
   }, [subjectsLookup])
 
   const filtered = useMemo(() => {
-    if (!hasSearched) return []
+    if (!hasSearchResults) return []
     const q = search.trim().toLowerCase()
     return rows
       .map((r) => ({
@@ -361,7 +381,7 @@ const Assignment = () => {
           .toLowerCase()
           .includes(q)
       })
-  }, [hasSearched, rows, filters, search, schoolNameById, classNameById, sectionNameById, subjectNameById])
+  }, [hasSearchResults, rows, filters, search, schoolNameById, classNameById, sectionNameById, subjectNameById])
 
   const statusOptions = useMemo(() => {
     const set = new Set()
@@ -396,6 +416,7 @@ const Assignment = () => {
   }
 
   const openAdd = () => {
+    if (isReadOnly) return
     setAddForm(emptyForm)
     setAddFile(null)
     if (addFileRef.current) addFileRef.current.value = ''
@@ -404,6 +425,7 @@ const Assignment = () => {
   }
 
   const openEdit = (row) => {
+    if (isReadOnly) return
     setEditingId(row.id)
     setEditForm({
       schoolId: row.schoolId ? String(row.schoolId) : 'Select',
@@ -421,6 +443,11 @@ const Assignment = () => {
     if (editFileRef.current) editFileRef.current.value = ''
     setEditStep(0)
     setIsEditOpen(true)
+    if (row?.schoolId && row?.classId) {
+      void fetchSections({ schoolId: String(row.schoolId), classId: String(row.classId) })
+        .then((secs) => setSectionsLookup(Array.isArray(secs) ? secs : []))
+        .catch(() => setSectionsLookup([]))
+    }
   }
 
   const validateForm = (form) => {
@@ -489,7 +516,7 @@ const Assignment = () => {
   }
 
   const handleDelete = async (row) => {
-    if (!canManage) return
+    if (!canManage || isReadOnly) return
     const yes = window.confirm(`Delete assignment "${row.title}"?`)
     if (!yes) return
     setSaving(true)
@@ -653,7 +680,7 @@ const Assignment = () => {
           <button type="button" className="btn btn-outline-secondary" onClick={() => setIsFindSidebarOpen(true)}>
             Find
           </button>
-          {canManage ? (
+          {canManage && !isReadOnly ? (
             <button type="button" className="btn btn-primary" onClick={openAdd}>
               Add Assignment
             </button>
@@ -665,10 +692,15 @@ const Assignment = () => {
 
       <div className="card">
         <div className="card-body">
+          {roleUpper === 'PARENT' && !selectedChildId ? (
+            <div className="alert alert-info mb-3">
+              Select a child from the top bar to view assignments.
+            </div>
+          ) : null}
           <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div className="d-flex align-items-center gap-2">
-              <input className="form-control" style={{ minWidth: 260 }} placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} disabled={!hasSearched} />
-              <button type="button" className="btn btn-outline-secondary" onClick={handleResetFilters} disabled={!hasSearched}>
+              <input className="form-control" style={{ minWidth: 260 }} placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} disabled={!hasSearchResults} />
+              <button type="button" className="btn btn-outline-secondary" onClick={handleResetFilters} disabled={!hasSearchResults}>
                 Reset
               </button>
             </div>
@@ -688,7 +720,7 @@ const Assignment = () => {
                   ))}
                 </ul>
               </div>
-              <select className="form-select" style={{ width: 110 }} value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))} disabled={!hasSearched}>
+              <select className="form-select" style={{ width: 110 }} value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))} disabled={!hasSearchResults}>
                 {[5, 10, 20, 50].map((n) => (
                   <option key={n} value={n}>
                     {n}/page
@@ -703,7 +735,7 @@ const Assignment = () => {
               <thead>
                 <tr>
                   <th style={{ width: 34 }}>
-                    <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearched || loading} />
+                    <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearchResults || loading} />
                   </th>
                   {visibleColumns.schoolName ? <th>School</th> : null}
                   {visibleColumns.title ? <th>Title</th> : null}
@@ -724,7 +756,7 @@ const Assignment = () => {
                       Loading...
                     </td>
                   </tr>
-                ) : !hasSearched ? (
+                ) : !hasSearchResults ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center text-muted">
                       Use Find to select School/Class/Section/Subject.
@@ -791,13 +823,13 @@ const Assignment = () => {
 
           <div className="d-flex align-items-center justify-content-between mt-3">
             <div className="text-muted small">
-              Page {hasSearched ? currentPage : 1} of {hasSearched ? totalPages : 1}
+              Page {hasSearchResults ? currentPage : 1} of {hasSearchResults ? totalPages : 1}
             </div>
             <div className="d-flex align-items-center gap-2">
-              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearched || currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearchResults || currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
                 Prev
               </button>
-              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearched || currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearchResults || currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
                 Next
               </button>
             </div>

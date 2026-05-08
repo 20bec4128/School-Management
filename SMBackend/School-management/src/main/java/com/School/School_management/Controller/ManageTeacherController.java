@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.ManageTeacherDto;
 import com.School.School_management.Service.ManageTeacherService;
+import com.School.School_management.auth.RequirePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.springframework.http.MediaType;
@@ -10,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/teachers")
+@RequirePermission({"TEACHER_MANAGE", "*"})
 public class ManageTeacherController {
 
     private final ManageTeacherService manageTeacherService;

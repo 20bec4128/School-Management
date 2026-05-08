@@ -33,6 +33,16 @@ public class SubmissionController {
         return ResponseEntity.ok(submissionService.createSubmission(dto, file));
     }
 
+    @RequirePermission({"ASSIGNMENT_SUBMIT", "*"})
+    @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+    public ResponseEntity<Submission> updateSubmission(
+            @PathVariable Long id,
+            @RequestPart("data") SubmissionRequestDto dto,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+
+        return ResponseEntity.ok(submissionService.updateSubmission(id, dto, file));
+    }
+
     @RequirePermission({"SUBMISSION_MANAGE", "SUBMISSION_VIEW_ASSIGNED", "*"})
     @GetMapping
     public ResponseEntity<List<Submission>> getAllSubmissions() {

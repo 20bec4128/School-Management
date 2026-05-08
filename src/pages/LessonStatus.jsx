@@ -5,6 +5,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 import FindEmptyState from '../components/FindEmptyState'
 
@@ -23,14 +24,14 @@ const emptyFilters = {
   subjectId: 'Select',
 }
 
-const readCurrentUser = () => {
-  try {
-    const raw = localStorage.getItem('sm_user')
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+const DEFAULT_ACADEMIC_YEAR = ACADEMIC_YEAR_OPTIONS[0]
+
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected = selectedChildId != null && selectedChildId !== ''
+    ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
+    : null
+  return selected || list[0] || null
 }
 
 const statusMeta = (status) => {
@@ -46,6 +47,7 @@ const canCompleteLesson = (lesson) => {
 }
 
 const LessonStatus = () => {
+  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user } = useAuth()
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -64,7 +66,19 @@ const LessonStatus = () => {
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
 
-  const user = readCurrentUser()
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId = roleUpper === 'STUDENT'
+    ? schoolId
+    : roleUpper === 'PARENT'
+      ? selectedChild?.schoolId ?? null
+      : null
+  const effectiveClassId = roleUpper === 'STUDENT'
+    ? studentClassId
+    : roleUpper === 'PARENT'
+      ? selectedChild?.classId ?? null
+      : null
   const canManageLessonStatus = can(user, ['LESSON_PLAN_MANAGE', 'LESSON_PLAN_MANAGE_ASSIGNED', '*'])
 
   useEffect(() => {
@@ -73,6 +87,29 @@ const LessonStatus = () => {
       try {
         setLoading(true)
         setError('')
+        if (isStudentScope) {
+          if (!effectiveSchoolId || !effectiveClassId) {
+            if (!ignore) {
+              setSchoolsLookup([])
+              setClassesLookup([])
+              setSubjectsLookup([])
+              setLoading(false)
+            }
+            return
+          }
+          const nextFilters = {
+            schoolId: String(effectiveSchoolId),
+            academicYear: DEFAULT_ACADEMIC_YEAR,
+            classId: String(effectiveClassId),
+            subjectId: 'Select',
+          }
+          setPendingFilters(nextFilters)
+          setFilters(nextFilters)
+          setHasSearched(true)
+          setIsFindSidebarOpen(false)
+          await reloadPageData(nextFilters)
+          return
+        }
         const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
         if (ignore) return
         setSchoolsLookup(Array.isArray(schools) ? schools : [])
@@ -88,7 +125,7 @@ const LessonStatus = () => {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
 
   const filteredLessons = useMemo(() => {
     if (!hasSearched) return []
@@ -133,6 +170,7 @@ const LessonStatus = () => {
 
   const handleApplyFilters = async (e) => {
     e.preventDefault()
+    if (isStudentScope) return
     const errs = validateFind()
     if (Object.keys(errs).length > 0) {
       setFindErrors(errs)
@@ -155,6 +193,7 @@ const LessonStatus = () => {
   }
 
   const handleResetFilters = () => {
+    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setFindErrors({})
@@ -264,16 +303,18 @@ const LessonStatus = () => {
         <div className="card-body p-0">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFindSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Find</span>
-                <span>
-                  <i className="ri-arrow-right-line"></i>
-                </span>
-              </button>
+              {!isStudentScope ? (
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  onClick={() => setIsFindSidebarOpen(true)}
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Find</span>
+                  <span>
+                    <i className="ri-arrow-right-line"></i>
+                  </span>
+                </button>
+              ) : null}
             </div>
 
             <div className="position-relative">
@@ -443,12 +484,13 @@ const LessonStatus = () => {
               </div>
             </div>
           </div>
-      <SlideSidebar
-        isOpen={isFindSidebarOpen}
-        title="Find Lesson Status"
-        onClose={() => setIsFindSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+      {!isStudentScope ? (
+        <SlideSidebar
+          isOpen={isFindSidebarOpen}
+          title="Find Lesson Status"
+          onClose={() => setIsFindSidebarOpen(false)}
+          className="filter-sidebar"
+        >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
@@ -542,8 +584,9 @@ const LessonStatus = () => {
               Apply
             </button>
           </div>
-        </form>
-      </SlideSidebar>
+          </form>
+        </SlideSidebar>
+      ) : null}
     </div>
   )
 }

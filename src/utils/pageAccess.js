@@ -5,11 +5,17 @@ import { getRouteAccessRule } from '../constants/pageAccess'
 const studentAllowedPages = new Set([
   'dashboard',
   'class-routine',
+  'subject',
   'syllabus',
   'study-material',
   'live-class',
   'assignment',
   'submission',
+  'lesson',
+  'topic',
+  'lesson-timeline',
+  'lesson-status',
+  'lesson-plan',
 ])
 
 const schoolAdminAllowedPages = new Set([

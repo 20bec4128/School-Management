@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.SyllabusResponseDto;
 import com.School.School_management.Service.SyllabusService;
+import com.School.School_management.auth.RequirePermission;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -31,16 +32,22 @@ public class SyllabusController {
         this.syllabusRepository = syllabusRepository;
     }
 
+    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "SYLLABUS_VIEW_OWN", "SYLLABUS_VIEW_CHILD", "*"})
     @GetMapping
-    public List<SyllabusResponseDto> getAllSyllabuses() {
-        return syllabusService.getAllSyllabuses();
+    public List<SyllabusResponseDto> getAllSyllabuses(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) Long classId
+    ) {
+        return syllabusService.getAllSyllabuses(schoolId, classId);
     }
 
+    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "SYLLABUS_VIEW_OWN", "SYLLABUS_VIEW_CHILD", "*"})
     @GetMapping("/{id}")
     public SyllabusResponseDto getSyllabusById(@PathVariable Long id) {
         return syllabusService.getSyllabusById(id);
     }
 
+    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "*"})
     @PostMapping(consumes = "multipart/form-data")
     public SyllabusResponseDto createSyllabus(
             @RequestParam Long schoolId,
@@ -62,6 +69,7 @@ public class SyllabusController {
         );
     }
 
+    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "*"})
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
     public SyllabusResponseDto updateSyllabus(
             @PathVariable Long id,
@@ -85,12 +93,14 @@ public class SyllabusController {
         );
     }
 
+    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "*"})
     @DeleteMapping("/{id}")
     public String deleteSyllabus(@PathVariable Long id) {
         syllabusService.deleteSyllabus(id);
         return "Syllabus deleted successfully";
     }
 
+    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "SYLLABUS_VIEW_OWN", "SYLLABUS_VIEW_CHILD", "*"})
     @GetMapping("/{id}/file")
     public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
         try {

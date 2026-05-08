@@ -59,6 +59,17 @@ public class SchoolSectionServiceImpl implements SchoolSectionService {
 
   @Override
   @Transactional(readOnly = true)
+  public List<SchoolSectionDto> getAllForHeadOffice(Long headOfficeId, Long classId) {
+    if (headOfficeId == null) return List.of();
+    // Note: classId filtering across a head office would require class ids to be unique per head office,
+    // which is not guaranteed. For now, ignore classId when "all schools" is selected.
+    return schoolSectionRepository.findAllBySchool_HeadOfficeIdAndSchool_IsDeletedFalseOrderByIdDesc(headOfficeId).stream()
+        .map(this::toDto)
+        .toList();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public SchoolSectionDto getById(Long id) {
     return toDto(findSection(id));
   }

@@ -32,9 +32,39 @@ export const fetchSubmissions = async () => {
   return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
+export const fetchSubmissionsForStudent = async (studentId) => {
+  const res = await apiFetch(`${SUBMISSIONS_API_BASE}/student/${encodeURIComponent(String(studentId))}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (res.status === 403) return []
+  if (!res.ok) throw new Error(await readApiError(res))
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+}
+
+export const fetchSubmissionsForAssignment = async (assignmentId) => {
+  const res = await apiFetch(`${SUBMISSIONS_API_BASE}/assignment/${encodeURIComponent(String(assignmentId))}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (res.status === 403) return []
+  if (!res.ok) throw new Error(await readApiError(res))
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+}
+
 export const createSubmission = async (payload, file) => {
   const res = await apiFetch(SUBMISSIONS_API_BASE, {
     method: 'POST',
+    body: buildCreateFormData(payload, file),
+  })
+  if (res.status === 403) throw new Error('Forbidden')
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
+export const updateSubmission = async (id, payload, file) => {
+  const res = await apiFetch(`${SUBMISSIONS_API_BASE}/${id}`, {
+    method: 'PUT',
     body: buildCreateFormData(payload, file),
   })
   if (res.status === 403) throw new Error('Forbidden')

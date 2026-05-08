@@ -13,6 +13,8 @@ public interface AssignmentService {
 
     List<Assignment> getAllAssignments();
 
+    List<Assignment> getAssignmentsForStudent(Long studentId);
+
     Assignment getAssignmentById(Long id);
 
     Assignment updateAssignment(Long id, AssignmentRequestDto dto, MultipartFile file);

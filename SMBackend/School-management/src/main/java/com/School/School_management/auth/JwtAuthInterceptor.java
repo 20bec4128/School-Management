@@ -6,6 +6,7 @@ import com.School.School_management.Repository.SchoolRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -94,7 +95,14 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
                     .orElse(null);
         }
 
-        Set<String> permissions = rbacService.permissionsFor(effectivePermRole, permissionSchoolId);
+        Set<String> permissions = new HashSet<>(rbacService.permissionsFor(effectivePermRole, permissionSchoolId));
+        // Head-office scoped admins should have full access to the Lesson Plan module by default.
+        if ("ADMIN".equalsIgnoreCase(roleName) && headOfficeId != null && claims.schoolId() == null) {
+            permissions.addAll(defaultLessonPlanPermissions());
+        }
+        if ("STUDENT".equalsIgnoreCase(roleName) || "PARENT".equalsIgnoreCase(roleName)) {
+            permissions.addAll(defaultStudentAcademicPermissions());
+        }
         if (headOfficeId != null) {
             boolean inactive = headOfficeRepository.findById(headOfficeId)
                     .map(ho -> "INACTIVE".equalsIgnoreCase(ho.getStatus()))
@@ -154,6 +162,53 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    private Set<String> defaultLessonPlanPermissions() {
+        return Set.of(
+                "LESSON_MANAGE",
+                "LESSON_MANAGE_ASSIGNED",
+                "LESSON_VIEW_OWN",
+                "LESSON_VIEW_CHILD",
+                "SYLLABUS_MANAGE",
+                "SYLLABUS_MANAGE_ASSIGNED",
+                "TOPIC_MANAGE",
+                "TOPIC_MANAGE_ASSIGNED",
+                "TOPIC_VIEW_OWN",
+                "TOPIC_VIEW_CHILD",
+                "LESSON_PLAN_MANAGE",
+                "LESSON_PLAN_MANAGE_ASSIGNED",
+                "LESSON_PLAN_VIEW_OWN",
+                "LESSON_PLAN_VIEW_CHILD",
+                "CLASS_ROUTINE_VIEW",
+                "CLASS_ROUTINE_MANAGE"
+        );
+    }
+
+    private Set<String> defaultStudentAcademicPermissions() {
+        return Set.of(
+                "CLASS_ROUTINE_VIEW",
+                "SUBJECT_VIEW_OWN",
+                "SUBJECT_VIEW_CHILD",
+                "SYLLABUS_VIEW_OWN",
+                "SYLLABUS_VIEW_CHILD",
+                "STUDY_MATERIAL_VIEW_OWN",
+                "STUDY_MATERIAL_VIEW_CHILD",
+                "LIVE_CLASS_JOIN",
+                "LIVE_CLASS_VIEW_OWN",
+                "LIVE_CLASS_VIEW_CHILD",
+                "ASSIGNMENT_VIEW_OWN",
+                "ASSIGNMENT_VIEW_CHILD",
+                "ASSIGNMENT_SUBMIT",
+                "SUBMISSION_VIEW_OWN",
+                "SUBMISSION_VIEW_CHILD",
+                "LESSON_VIEW_OWN",
+                "LESSON_VIEW_CHILD",
+                "TOPIC_VIEW_OWN",
+                "TOPIC_VIEW_CHILD",
+                "LESSON_PLAN_VIEW_OWN",
+                "LESSON_PLAN_VIEW_CHILD"
+        );
     }
 
     @Override

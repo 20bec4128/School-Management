@@ -5,6 +5,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 import FindEmptyState from '../components/FindEmptyState'
 
@@ -17,19 +18,20 @@ const emptyFilters = {
   subjectId: 'Select',
 }
 
-const readCurrentUser = () => {
-  try {
-    const raw = localStorage.getItem('sm_user')
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+const DEFAULT_ACADEMIC_YEAR = ACADEMIC_YEAR_OPTIONS[0]
+
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected = selectedChildId != null && selectedChildId !== ''
+    ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
+    : null
+  return selected || list[0] || null
 }
 
 const toDateInputValue = (d) => (d ? String(d) : '')
 
 const LessonTimeline = () => {
+  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user } = useAuth()
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -49,7 +51,19 @@ const LessonTimeline = () => {
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
 
-  const user = readCurrentUser()
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId = roleUpper === 'STUDENT'
+    ? schoolId
+    : roleUpper === 'PARENT'
+      ? selectedChild?.schoolId ?? null
+      : null
+  const effectiveClassId = roleUpper === 'STUDENT'
+    ? studentClassId
+    : roleUpper === 'PARENT'
+      ? selectedChild?.classId ?? null
+      : null
   const canManageTimeline = can(user, ['LESSON_PLAN_MANAGE', 'LESSON_PLAN_MANAGE_ASSIGNED', '*'])
 
   useEffect(() => {
@@ -58,6 +72,31 @@ const LessonTimeline = () => {
       try {
         setLoading(true)
         setError('')
+        if (isStudentScope) {
+          if (!effectiveSchoolId || !effectiveClassId) {
+            if (!ignore) {
+              setSchoolsLookup([])
+              setClassesLookup([])
+              setSubjectsLookup([])
+              setLoading(false)
+            }
+            return
+          }
+          const nextFilters = {
+            schoolId: String(effectiveSchoolId),
+            academicYear: DEFAULT_ACADEMIC_YEAR,
+            classId: String(effectiveClassId),
+            subjectId: 'Select',
+          }
+          const nextLessonId = await reloadLessons(nextFilters)
+          if (ignore) return
+          setPendingFilters(nextFilters)
+          setFilters(nextFilters)
+          setHasSearched(true)
+          setIsFindSidebarOpen(false)
+          await reloadTopics(nextLessonId, nextFilters)
+          return
+        }
         const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
         if (ignore) return
         setSchoolsLookup(Array.isArray(schools) ? schools : [])
@@ -73,7 +112,7 @@ const LessonTimeline = () => {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
 
   const classOptions = useMemo(() => {
     return classesLookup
@@ -139,6 +178,7 @@ const LessonTimeline = () => {
 
   const handleApplyFilters = async (e) => {
     e.preventDefault()
+    if (isStudentScope) return
     const errs = validateFind()
     if (Object.keys(errs).length > 0) {
       setFindErrors(errs)
@@ -165,6 +205,7 @@ const LessonTimeline = () => {
   }
 
   const handleResetFilters = () => {
+    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setFindErrors({})
@@ -300,9 +341,11 @@ const LessonTimeline = () => {
             </div>
 
             <div className="d-flex align-items-center gap-8 ms-auto">
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
+              {!isStudentScope ? (
+                <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                  Find
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -480,7 +523,8 @@ const LessonTimeline = () => {
             </div>
           </div>
         </div>
-      <SlideSidebar isOpen={isFindSidebarOpen} title="Find Lesson Timeline" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
+      {!isStudentScope ? (
+        <SlideSidebar isOpen={isFindSidebarOpen} title="Find Lesson Timeline" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
@@ -575,7 +619,8 @@ const LessonTimeline = () => {
             </button>
           </div>
         </form>
-      </SlideSidebar>
+        </SlideSidebar>
+      ) : null}
     </div>
   )
 }

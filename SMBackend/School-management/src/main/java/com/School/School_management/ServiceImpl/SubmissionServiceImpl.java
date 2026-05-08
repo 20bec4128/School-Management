@@ -162,6 +162,38 @@ public class SubmissionServiceImpl implements SubmissionService {
     }
 
     @Override
+    public Submission updateSubmission(Long id, SubmissionRequestDto dto, MultipartFile file) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+        if (!user.isRole("STUDENT") || user.studentId() == null) throw new ForbiddenException();
+
+        Submission submission = submissionRepository.findById(id).orElseThrow(NotFoundException::new);
+        if (!user.studentId().equals(submission.getStudentId())) throw new NotFoundException();
+
+        if (dto != null && dto.getAssignmentId() != null && !dto.getAssignmentId().equals(submission.getAssignmentId())) {
+            throw new ForbiddenException();
+        }
+
+        if (dto != null && dto.getNote() != null) {
+            submission.setNote(dto.getNote());
+        } else if (dto != null) {
+            submission.setNote(null);
+        }
+
+        if (file != null && !file.isEmpty()) {
+            submission.setFileUrl(saveFile(file));
+        }
+
+        // Resubmitting should move the review back to pending.
+        submission.setEvaluate("Pending");
+        submission.setMarks(null);
+        submission.setFeedback(null);
+        submission.setSubmittedAt(LocalDateTime.now());
+
+        return submissionRepository.save(submission);
+    }
+
+    @Override
     public void deleteSubmission(Long id) {
         Submission submission = getSubmissionById(id);
         submissionRepository.delete(submission);

@@ -8,6 +8,8 @@ public interface SchoolSectionRepository extends JpaRepository<SchoolSection, Lo
 
   List<SchoolSection> findAllBySchool_IdOrderByIdDesc(Long schoolId);
 
+  List<SchoolSection> findAllBySchool_HeadOfficeIdAndSchool_IsDeletedFalseOrderByIdDesc(Long headOfficeId);
+
   List<SchoolSection> findAllBySchoolClass_IdOrderByIdDesc(Long classId);
 
   List<SchoolSection> findAllBySchool_IdAndSchoolClass_IdOrderByIdDesc(Long schoolId, Long classId);

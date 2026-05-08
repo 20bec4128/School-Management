@@ -35,8 +35,12 @@ public class StudyMaterialController {
 
     @RequirePermission({"STUDY_MATERIAL_MANAGE", "STUDY_MATERIAL_VIEW_OWN", "STUDY_MATERIAL_VIEW_CHILD", "STUDY_MATERIAL_MANAGE_ASSIGNED", "*"})
     @GetMapping
-    public List<StudyMaterialResponseDto> getAll() {
-        return service.getAll();
+    public List<StudyMaterialResponseDto> getAll(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Long subjectId
+    ) {
+        return service.getAll(schoolId, classId, subjectId);
     }
 
     @RequirePermission({"STUDY_MATERIAL_MANAGE", "STUDY_MATERIAL_MANAGE_ASSIGNED", "*"})

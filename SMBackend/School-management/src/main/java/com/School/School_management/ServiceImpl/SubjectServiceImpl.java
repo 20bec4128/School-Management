@@ -6,12 +6,21 @@ import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Entity.Subject;
 import com.School.School_management.Entity.SchoolClass;
 import com.School.School_management.Entity.ManageTeacher;
+import com.School.School_management.Entity.Student;
 import com.School.School_management.Repository.SchoolClassRepository;
 import com.School.School_management.Repository.SchoolRepository;
+import com.School.School_management.Repository.ParentStudentRepository;
+import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Repository.SubjectRepository;
 import com.School.School_management.Repository.TeacherRepository;
 import com.School.School_management.Service.SubjectService;
+import com.School.School_management.auth.CurrentUser;
+import com.School.School_management.auth.CurrentUserHolder;
+import com.School.School_management.Exception.ForbiddenException;
+import com.School.School_management.Exception.NotFoundException;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,24 +32,33 @@ public class SubjectServiceImpl implements SubjectService {
     private final SchoolRepository schoolRepository;
     private final SchoolClassRepository schoolClassRepository;
     private final TeacherRepository teacherRepository;
+    private final StudentRepository studentRepository;
+    private final ParentStudentRepository parentStudentRepository;
 
     public SubjectServiceImpl(
             SubjectRepository subjectRepository,
             SchoolRepository schoolRepository,
             SchoolClassRepository schoolClassRepository,
-            TeacherRepository teacherRepository
+            TeacherRepository teacherRepository,
+            StudentRepository studentRepository,
+            ParentStudentRepository parentStudentRepository
     ) {
         this.subjectRepository = subjectRepository;
         this.schoolRepository = schoolRepository;
         this.schoolClassRepository = schoolClassRepository;
         this.teacherRepository = teacherRepository;
+        this.studentRepository = studentRepository;
+        this.parentStudentRepository = parentStudentRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<SubjectResponseDto> getAllSubjects() {
-        return subjectRepository.findAll()
-                .stream()
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        return subjectRepository.findAll().stream()
+                .filter(subject -> canAccess(user, subject))
                 .map(this::mapToResponseDto)
                 .toList();
     }
@@ -50,6 +68,9 @@ public class SubjectServiceImpl implements SubjectService {
     public SubjectResponseDto getSubjectById(Long id) {
         Subject subject = subjectRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Subject not found with id: " + id));
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+        if (!canAccess(user, subject)) throw new NotFoundException();
 
         return mapToResponseDto(subject);
     }
@@ -107,6 +128,39 @@ public class SubjectServiceImpl implements SubjectService {
         subject.setAuthor(requestDto.getAuthor());
         subject.setType(requestDto.getType());
         subject.setNote(requestDto.getNote());
+    }
+
+    private boolean canAccess(CurrentUser user, Subject subject) {
+        if (user == null || subject == null) return false;
+        if (user.isSuperAdmin() || user.adminId() != null) return true;
+        if (user.isRole("TEACHER")) {
+            return subject.getTeacher() != null && user.teacherId() != null && user.teacherId().equals(subject.getTeacher().getId());
+        }
+        if (user.isRole("STUDENT")) {
+            Student student = studentRepository.findById(user.studentId()).orElseThrow(NotFoundException::new);
+            Long schoolId = student.getSchool() == null ? null : student.getSchool().getId();
+            Long classId = student.getSchoolClass() == null ? null : student.getSchoolClass().getId();
+            return schoolId != null && classId != null
+                    && subject.getSchool() != null
+                    && subject.getSchoolClass() != null
+                    && schoolId.equals(subject.getSchool().getId())
+                    && classId.equals(subject.getSchoolClass().getId());
+        }
+        if (user.isRole("PARENT")) {
+            Set<Long> childIds = new HashSet<>(parentStudentRepository.findStudentIdsByParentId(user.parentId()));
+            if (childIds.isEmpty()) return false;
+            for (Long childId : childIds) {
+                Student child = studentRepository.findById(childId).orElse(null);
+                if (child == null || child.getSchool() == null || child.getSchoolClass() == null) continue;
+                if (subject.getSchool() != null && subject.getSchoolClass() != null
+                        && child.getSchool().getId().equals(subject.getSchool().getId())
+                        && child.getSchoolClass().getId().equals(subject.getSchoolClass().getId())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
     }
 
     private SubjectResponseDto mapToResponseDto(Subject subject) {

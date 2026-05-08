@@ -226,10 +226,19 @@ public class SchoolRbacController {
         if (effectiveSchoolId == null) throw new BadRequestException("schoolId is required");
 
         List<String> perms = req == null || req.permissions() == null ? List.of() : req.permissions();
-        if ("SCHOOL_ADMIN".equals(normalizedRole) && (perms == null || !perms.contains("SCHOOL_RBAC_MANAGE"))) {
+        if ("SCHOOL_ADMIN".equals(normalizedRole)) {
             // Prevent locking out school admins from managing school RBAC.
-            perms = new ArrayList<>(perms == null ? List.of() : perms);
-            perms.add("SCHOOL_RBAC_MANAGE");
+            if (perms == null || !perms.contains("SCHOOL_RBAC_MANAGE")) {
+                perms = new ArrayList<>(perms == null ? List.of() : perms);
+                perms.add("SCHOOL_RBAC_MANAGE");
+            }
+            // If edited by a super admin (or any '*' owner), default to "all permissions" except head-office ones.
+            if (user != null && (user.isSuperAdmin() || (user.permissions() != null && user.permissions().contains("*")))) {
+                perms = jdbcTemplate.queryForList(
+                        "SELECT code FROM permissions WHERE upper(code) NOT LIKE 'HEAD_OFFICE_%' ORDER BY code",
+                        String.class
+                );
+            }
         }
 
         List<String> normalizedPerms = normalizeAndValidatePerms(user, perms);

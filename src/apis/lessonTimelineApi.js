@@ -19,10 +19,10 @@ const readApiError = async (res) => {
 
 export const fetchLessonTimelines = async ({ schoolId, academicYear, classId, subjectId } = {}) => {
   const qs = new URLSearchParams()
-  qs.set('schoolId', String(schoolId))
-  qs.set('academicYear', String(academicYear))
-  qs.set('classId', String(classId))
-  qs.set('subjectId', String(subjectId))
+  if (schoolId != null && schoolId !== '' && schoolId !== 'Select') qs.set('schoolId', String(schoolId))
+  if (academicYear != null && academicYear !== '' && academicYear !== 'Select') qs.set('academicYear', String(academicYear))
+  if (classId != null && classId !== '' && classId !== 'Select') qs.set('classId', String(classId))
+  if (subjectId != null && subjectId !== '' && subjectId !== 'Select') qs.set('subjectId', String(subjectId))
   const res = await apiFetch(`${BASE}/lessons?${qs.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()
@@ -30,10 +30,10 @@ export const fetchLessonTimelines = async ({ schoolId, academicYear, classId, su
 
 export const fetchTopicTimelinesForLesson = async ({ lessonId, schoolId, academicYear, classId, subjectId } = {}) => {
   const qs = new URLSearchParams()
-  qs.set('schoolId', String(schoolId))
-  qs.set('academicYear', String(academicYear))
-  qs.set('classId', String(classId))
-  qs.set('subjectId', String(subjectId))
+  if (schoolId != null && schoolId !== '' && schoolId !== 'Select') qs.set('schoolId', String(schoolId))
+  if (academicYear != null && academicYear !== '' && academicYear !== 'Select') qs.set('academicYear', String(academicYear))
+  if (classId != null && classId !== '' && classId !== 'Select') qs.set('classId', String(classId))
+  if (subjectId != null && subjectId !== '' && subjectId !== 'Select') qs.set('subjectId', String(subjectId))
   const res = await apiFetch(`${BASE}/lessons/${encodeURIComponent(String(lessonId))}/topics?${qs.toString()}`, {
     headers: { Accept: 'application/json' },
   })
@@ -63,12 +63,11 @@ export const updateTopicTimeline = async ({ topicId, startDate, endDate }) => {
 
 export const fetchLessonPlanView = async ({ schoolId, academicYear, classId, subjectId } = {}) => {
   const qs = new URLSearchParams()
-  qs.set('schoolId', String(schoolId))
-  qs.set('academicYear', String(academicYear))
-  qs.set('classId', String(classId))
-  qs.set('subjectId', String(subjectId))
+  if (schoolId != null && schoolId !== '' && schoolId !== 'Select') qs.set('schoolId', String(schoolId))
+  if (academicYear != null && academicYear !== '' && academicYear !== 'Select') qs.set('academicYear', String(academicYear))
+  if (classId != null && classId !== '' && classId !== 'Select') qs.set('classId', String(classId))
+  if (subjectId != null && subjectId !== '' && subjectId !== 'Select') qs.set('subjectId', String(subjectId))
   const res = await apiFetch(`${BASE}/plan-view?${qs.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()
 }
-
