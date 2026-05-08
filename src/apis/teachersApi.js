@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 const TEACHERS_API_BASE = '/api/teachers'
 
 export const readApiError = async (res) => {
@@ -24,7 +26,7 @@ const buildUpsertFormData = (payload, form) => {
 }
 
 export const fetchTeachers = async () => {
-  const res = await fetch(TEACHERS_API_BASE, {
+  const res = await apiFetch(TEACHERS_API_BASE, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
@@ -33,7 +35,7 @@ export const fetchTeachers = async () => {
 }
 
 export const createTeacher = async (payload, form) => {
-  const res = await fetch(TEACHERS_API_BASE, {
+  const res = await apiFetch(TEACHERS_API_BASE, {
     method: 'POST',
     body: buildUpsertFormData(payload, form),
   })
@@ -42,7 +44,7 @@ export const createTeacher = async (payload, form) => {
 }
 
 export const updateTeacher = async (teacherId, payload, form) => {
-  const res = await fetch(`${TEACHERS_API_BASE}/${teacherId}`, {
+  const res = await apiFetch(`${TEACHERS_API_BASE}/${teacherId}`, {
     method: 'PUT',
     body: buildUpsertFormData(payload, form),
   })
@@ -51,7 +53,7 @@ export const updateTeacher = async (teacherId, payload, form) => {
 }
 
 export const deleteTeacher = async (teacherId) => {
-  const res = await fetch(`${TEACHERS_API_BASE}/${teacherId}`, { method: 'DELETE' })
+  const res = await apiFetch(`${TEACHERS_API_BASE}/${teacherId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

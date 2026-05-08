@@ -286,12 +286,6 @@ const LessonTimeline = () => {
       <div className="card h-100">
         <div className="card-body p-0">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20 border-bottom">
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
-            </div>
-
             <div className="position-relative">
               <input
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
@@ -303,6 +297,12 @@ const LessonTimeline = () => {
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
               </span>
+            </div>
+
+            <div className="d-flex align-items-center gap-8 ms-auto">
+              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                Find
+              </button>
             </div>
           </div>
 

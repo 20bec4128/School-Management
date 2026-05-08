@@ -4,13 +4,20 @@ package com.School.School_management.Service;
 import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Dto.StudentDto;
 import com.School.School_management.Entity.ManageSchool;
+import com.School.School_management.Entity.Parent;
+import com.School.School_management.Entity.ParentStudent;
+import com.School.School_management.Entity.ParentStudentKey;
 import com.School.School_management.Entity.SchoolClass;
 import com.School.School_management.Entity.SchoolSection;
 import com.School.School_management.Entity.Student;
 import com.School.School_management.Exception.StudentNotFoundException;
+import com.School.School_management.Repository.ParentRepository;
+import com.School.School_management.Repository.ParentStudentRepository;
 import com.School.School_management.Repository.SchoolClassRepository;
 import com.School.School_management.Repository.SchoolSectionRepository;
 import com.School.School_management.Repository.StudentRepository;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,15 +30,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudentService {
 
     private final StudentRepository studentRepository;
+    private final ParentRepository parentRepository;
+    private final ParentStudentRepository parentStudentRepository;
     private final SchoolClassRepository schoolClassRepository;
     private final SchoolSectionRepository schoolSectionRepository;
     private final PasswordEncoder passwordEncoder;
 
     public StudentService(StudentRepository studentRepository,
+                          ParentRepository parentRepository,
+                          ParentStudentRepository parentStudentRepository,
                           SchoolClassRepository schoolClassRepository,
                           SchoolSectionRepository schoolSectionRepository,
                           PasswordEncoder passwordEncoder) {
         this.studentRepository = studentRepository;
+        this.parentRepository = parentRepository;
+        this.parentStudentRepository = parentStudentRepository;
         this.schoolClassRepository = schoolClassRepository;
         this.schoolSectionRepository = schoolSectionRepository;
         this.passwordEncoder = passwordEncoder;
@@ -129,8 +142,9 @@ public class StudentService {
         student.setHealthCondition(request.getHealthCondition());
         student.setOtherInfo(request.getOtherInfo());
         student.setDeleted(false);
-        
+
         Student saved = studentRepository.save(student);
+        syncParentLink(saved, request, true);
         return toResponse(saved);
     }
 
@@ -195,8 +209,9 @@ public class StudentService {
         }
         student.setHealthCondition(request.getHealthCondition());
         student.setOtherInfo(request.getOtherInfo());
-        
+
         Student updated = studentRepository.save(student);
+        syncParentLink(updated, request, false);
         return toResponse(updated);
     }
 
@@ -255,6 +270,7 @@ public class StudentService {
         response.setPreviousClass(entity.getPreviousClass());
         response.setTransferCertificateUrl(entity.getTransferCertificateUrl());
         response.setUsername(entity.getUsername());
+        response.setParentUsername(resolveParentUsername(entity.getId()));
         response.setHealthCondition(entity.getHealthCondition());
         response.setOtherInfo(entity.getOtherInfo());
         response.setPhotoUrl(entity.getPhotoUrl());
@@ -309,5 +325,90 @@ public class StudentService {
         return schoolSection.getName() != null && !schoolSection.getName().isBlank()
             ? schoolSection.getName()
             : fallback;
+    }
+
+    private void syncParentLink(Student student, StudentDto.Request request, boolean isCreate) {
+        String parentUsername = normalize(request.getParentUsername());
+        String parentPassword = normalize(request.getParentPassword());
+
+        if (!isCreate && parentUsername == null && parentPassword == null) {
+            return;
+        }
+        if (parentUsername == null) {
+            throw new IllegalArgumentException("Parent mobile is required");
+        }
+
+        String normalizedParentUsername = normalizePhoneUsername(parentUsername);
+        Parent parent = findParentByFlexibleUsername(normalizedParentUsername).orElse(null);
+        if (parent == null) {
+            if (parentPassword == null) {
+                throw new IllegalArgumentException("Parent password is required");
+            }
+            parent = new Parent();
+            parent.setSchoolId(student.getSchool() != null ? student.getSchool().getId() : request.getSchoolId());
+            parent.setUsername(normalizedParentUsername);
+            parent.setPhone(normalizedParentUsername);
+            parent.setName(resolveParentName(request));
+            parent.setPasswordHash(passwordEncoder.encode(parentPassword));
+            parent.setActive(Boolean.TRUE);
+            parent = parentRepository.save(parent);
+        } else {
+            if (parentPassword != null) {
+                parent.setPasswordHash(passwordEncoder.encode(parentPassword));
+            }
+            parent.setUsername(normalizedParentUsername);
+            parent.setPhone(normalizedParentUsername);
+            if (parent.getSchoolId() == null && student.getSchool() != null) {
+                parent.setSchoolId(student.getSchool().getId());
+            }
+            parent = parentRepository.save(parent);
+        }
+
+        if (!isCreate) {
+            parentStudentRepository.deleteByStudentId(student.getId());
+        }
+        parentStudentRepository.save(new ParentStudent(new ParentStudentKey(parent.getId(), student.getId())));
+    }
+
+    private String resolveParentName(StudentDto.Request request) {
+        if (request == null) return null;
+        if (request.getFatherName() != null && !request.getFatherName().isBlank()) return request.getFatherName();
+        if (request.getMotherName() != null && !request.getMotherName().isBlank()) return request.getMotherName();
+        if (request.getName() != null && !request.getName().isBlank()) return request.getName() + " Parent";
+        return null;
+    }
+
+    private String resolveParentUsername(Long studentId) {
+        if (studentId == null) return null;
+        List<Long> parentIds = parentStudentRepository.findParentIdsByStudentId(studentId);
+        if (parentIds == null || parentIds.isEmpty()) return null;
+        return parentRepository.findById(parentIds.get(0))
+                .map(Parent::getUsername)
+                .orElse(null);
+    }
+
+    private String normalize(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizePhoneUsername(String value) {
+        String trimmed = normalize(value);
+        if (trimmed == null) return null;
+        String compact = trimmed.replaceAll("[\\s\\-()]+", "");
+        if (compact.startsWith("+")) return compact;
+        String digits = compact.replaceAll("\\D", "");
+        if (digits.length() == 10) return "+91" + digits;
+        return digits.isEmpty() ? null : digits;
+    }
+
+    private Optional<Parent> findParentByFlexibleUsername(String username) {
+        String normalized = normalizePhoneUsername(username);
+        if (normalized == null) return Optional.empty();
+        return parentRepository.findAll().stream()
+                .filter(parent -> Boolean.TRUE.equals(parent.getActive()))
+                .filter(parent -> normalized.equals(normalizePhoneUsername(parent.getUsername())))
+                .findFirst();
     }
 }

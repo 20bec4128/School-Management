@@ -168,7 +168,12 @@ const Topic = () => {
     let ignore = false
     const run = async () => {
       try {
-        await loadLessonsLookup(pendingFilters)
+        await loadLessonsLookup({
+          schoolId: pendingFilters.schoolId,
+          academicYear: pendingFilters.academicYear,
+          classId: pendingFilters.classId,
+          subjectId: pendingFilters.subjectId,
+        })
       } catch {
         if (!ignore) setLessonsLookup([])
       }
@@ -653,15 +658,6 @@ const Topic = () => {
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex flex-wrap align-items-center justify-content-between gap-12 p-20">
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
-              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
-                + Add
-              </button>
-            </div>
-
             <div className="d-flex flex-wrap align-items-center gap-8">
               <div className="position-relative">
                 <input
@@ -714,6 +710,15 @@ const Topic = () => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="d-flex align-items-center gap-8 ms-auto">
+              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                Find
+              </button>
+              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                + Add
+              </button>
             </div>
           </div>
 

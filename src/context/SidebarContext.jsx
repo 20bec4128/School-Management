@@ -10,6 +10,7 @@ export const SidebarProvider = ({ children }) => {
 
   const openSidebar   = () => setIsOpen(true);
   const closeSidebar  = () => setIsOpen(false);
+  const closeForNavigation = () => setIsOpen(false);
 
   // Hamburger: on mobile toggles open/close, on desktop toggles collapse
   const toggleSidebar = () => {
@@ -21,7 +22,7 @@ export const SidebarProvider = ({ children }) => {
   };
 
   return (
-    <SidebarContext.Provider value={{ isOpen, isCollapsed, openSidebar, closeSidebar, toggleSidebar }}>
+    <SidebarContext.Provider value={{ isOpen, isCollapsed, openSidebar, closeSidebar, closeForNavigation, toggleSidebar }}>
       {children}
     </SidebarContext.Provider>
   );

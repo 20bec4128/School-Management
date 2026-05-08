@@ -56,6 +56,8 @@ const emptyForm = {
   transferCertificate: null,
   username: '',
   password: '',
+  parentUsername: '',
+  parentPassword: '',
   healthCondition: '',
   otherInfo: '',
   photo: null,
@@ -104,6 +106,10 @@ const FIELD_ICONS = {
   'Permanent Address': 'ri-home-4-line',
   Username: 'ri-at-line',
   Password: 'ri-lock-2-line',
+  'Student Username': 'ri-at-line',
+  'Student Password': 'ri-lock-2-line',
+  'Parent Mobile': 'ri-smartphone-line',
+  'Parent Password': 'ri-lock-password-line',
   'Health Condition': 'ri-heart-add-line',
   'Other Info': 'ri-information-line',
 }
@@ -161,25 +167,27 @@ const buildPayload = (form) => ({
   previousClass: form.previousClass || null,
   username: form.username,
   password: form.password || null,
+  parentUsername: form.parentUsername || null,
+  parentPassword: form.parentPassword || null,
   healthCondition: form.healthCondition || null,
   otherInfo: form.otherInfo || null,
 })
 
-const getClassOptionValue = (item) => item?.numericName || item?.className || item?.name || String(item?.id ?? '')
+const getClassOptionValue = (item) => String(item?.id ?? item?.classId ?? item?.numericName ?? item?.className ?? item?.name ?? '')
 const getClassOptionLabel = (item) => item?.className || item?.numericName || item?.name || String(item?.id ?? '')
-const getSectionOptionValue = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
+const getSectionOptionValue = (item) => String(item?.id ?? item?.sectionId ?? item?.name ?? item?.sectionName ?? item?.section ?? '')
 const getSectionOptionLabel = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
 
 const findMatchingClassOption = (value, classOptions) =>
   classOptions.find((item) =>
-    [item?.className, item?.numericName, item?.name, String(item?.id ?? '')].some(
+    [String(item?.id ?? ''), item?.className, item?.numericName, item?.name].some(
       (candidate) => String(candidate) === String(value),
     ),
   )
 
 const findMatchingSectionOption = (value, sectionOptions) =>
   sectionOptions.find((item) =>
-    [item?.name, item?.sectionName, item?.section, String(item?.id ?? '')].some(
+    [String(item?.id ?? ''), item?.name, item?.sectionName, item?.section].some(
       (candidate) => String(candidate) === String(value),
     ),
   )
@@ -316,6 +324,8 @@ const StudentList = ({ onNavigate }) => {
   const [editStep, setEditStep] = useState(0)
   const [isAddPasswordVisible, setIsAddPasswordVisible] = useState(false)
   const [isEditPasswordVisible, setIsEditPasswordVisible] = useState(false)
+  const [isAddParentPasswordVisible, setIsAddParentPasswordVisible] = useState(false)
+  const [isEditParentPasswordVisible, setIsEditParentPasswordVisible] = useState(false)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
@@ -466,6 +476,7 @@ const StudentList = ({ onNavigate }) => {
   const openAdd = () => {
     setAddForm(emptyForm)
     setIsAddPasswordVisible(false)
+    setIsAddParentPasswordVisible(false)
     setAddPreviews({ fatherPhoto: null, motherPhoto: null, transferCertificate: null, photo: null })
     setAddStep(0)
     setSubmitError(null)
@@ -519,11 +530,14 @@ const StudentList = ({ onNavigate }) => {
       transferCertificate: null,
       username: row.username || '',
       password: '',
+      parentUsername: row.parentUsername || '',
+      parentPassword: '',
       healthCondition: row.healthCondition || '',
       otherInfo: row.otherInfo || '',
       photo: null,
     })
     setIsEditPasswordVisible(false)
+    setIsEditParentPasswordVisible(false)
     setEditPreviews({
       fatherPhoto: row.fatherPhotoUrl || null,
       motherPhoto: row.motherPhotoUrl || null,
@@ -606,7 +620,17 @@ const StudentList = ({ onNavigate }) => {
   )
 
   const renderForm = (
-    form, setter, step, previews, refs, setPreviewState, isPasswordVisible, setIsPasswordVisible, lookups,
+    form,
+    setter,
+    step,
+    previews,
+    refs,
+    setPreviewState,
+    isPasswordVisible,
+    setIsPasswordVisible,
+    isParentPasswordVisible,
+    setIsParentPasswordVisible,
+    lookups,
   ) => (
     <>
       {step === 0 ? (
@@ -688,6 +712,33 @@ const StudentList = ({ onNavigate }) => {
 
             <FormField label="National ID">
               <input type="text" className="avm-input" id="nationalId" placeholder="National ID" value={form.nationalId} onChange={handleChange(setter)} />
+            </FormField>
+
+            <FormField label="Student Username" required>
+              <input type="text" className="avm-input" id="username" placeholder="Student Username" value={form.username} onChange={handleChange(setter)} />
+            </FormField>
+
+            <FormField label="Student Password" required>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={isPasswordVisible ? 'text' : 'password'}
+                  className="avm-input"
+                  id="password"
+                  placeholder="Student Password"
+                  value={form.password}
+                  onChange={handleChange(setter)}
+                  style={{ paddingRight: '2.75rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordVisible((prev) => !prev)}
+                  aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                  className="border-0 bg-transparent text-secondary-light"
+                  style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', lineHeight: 1 }}
+                >
+                  <i className={isPasswordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
+                </button>
+              </div>
             </FormField>
           </div>
         </>
@@ -888,35 +939,47 @@ const StudentList = ({ onNavigate }) => {
             )}
           </div>
 
-          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Other Information</p>
+          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Parent Login</p>
           <div className="avm-grid">
-            <FormField label="Username" required>
-              <input type="text" className="avm-input" id="username" placeholder="Username" value={form.username} onChange={handleChange(setter)} />
-            </FormField>
+            <PhoneField
+              id="parentUsername"
+              label="Parent Mobile"
+              value={form.parentUsername}
+              onChange={(v) => setter((prev) => ({ ...prev, parentUsername: v }))}
+            />
 
-            <FormField label="Password" required>
+            <FormField label="Parent Password">
               <div style={{ position: 'relative' }}>
                 <input
-                  type={isPasswordVisible ? 'text' : 'password'}
+                  type={isParentPasswordVisible ? 'text' : 'password'}
                   className="avm-input"
-                  id="password"
-                  placeholder="Password"
-                  value={form.password}
+                  id="parentPassword"
+                  placeholder="Parent Password"
+                  value={form.parentPassword}
                   onChange={handleChange(setter)}
                   style={{ paddingRight: '2.75rem' }}
                 />
                 <button
                   type="button"
-                  onClick={() => setIsPasswordVisible((prev) => !prev)}
-                  aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                  onClick={() => setIsParentPasswordVisible((prev) => !prev)}
+                  aria-label={isParentPasswordVisible ? 'Hide password' : 'Show password'}
                   className="border-0 bg-transparent text-secondary-light"
                   style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', lineHeight: 1 }}
                 >
-                  <i className={isPasswordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
+                  <i className={isParentPasswordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
                 </button>
               </div>
             </FormField>
 
+            <div className="avm-field full">
+              <div className="text-secondary-light text-sm">
+                Parent mobile is used as the login username. If the mobile already exists, saving the student will link this child to the existing parent account.
+              </div>
+            </div>
+          </div>
+
+          <p className="avm-section-title" style={{ marginTop: '1.5rem' }}>Other Information</p>
+          <div className="avm-grid">
             <FormField label="Health Condition" full>
               <input type="text" className="avm-input" id="healthCondition" placeholder="Health Condition" value={form.healthCondition} onChange={handleChange(setter)} />
             </FormField>
@@ -1188,7 +1251,7 @@ const StudentList = ({ onNavigate }) => {
         {renderForm(
           addForm, setAddForm, addStep, addPreviews,
           { fatherPhotoRef: addFatherPhotoRef, motherPhotoRef: addMotherPhotoRef, transferCertificateRef: addTransferCertificateRef, studentPhotoRef: addStudentPhotoRef },
-          setAddPreviews, isAddPasswordVisible, setIsAddPasswordVisible, addLookups,
+          setAddPreviews, isAddPasswordVisible, setIsAddPasswordVisible, isAddParentPasswordVisible, setIsAddParentPasswordVisible, addLookups,
         )}
       </WizardPopup>
 
@@ -1208,7 +1271,7 @@ const StudentList = ({ onNavigate }) => {
         {renderForm(
           editForm, setEditForm, editStep, editPreviews,
           { fatherPhotoRef: editFatherPhotoRef, motherPhotoRef: editMotherPhotoRef, transferCertificateRef: editTransferCertificateRef, studentPhotoRef: editStudentPhotoRef },
-          setEditPreviews, isEditPasswordVisible, setIsEditPasswordVisible, editLookups,
+          setEditPreviews, isEditPasswordVisible, setIsEditPasswordVisible, isEditParentPasswordVisible, setIsEditParentPasswordVisible, editLookups,
         )}
       </WizardPopup>
 

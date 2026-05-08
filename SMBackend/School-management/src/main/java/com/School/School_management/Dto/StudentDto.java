@@ -46,6 +46,8 @@ public class StudentDto {
         private String previousClass;
         private String username;
         private String password;
+        private String parentUsername;
+        private String parentPassword;
         private String healthCondition;
         private String otherInfo;
 
@@ -172,6 +174,12 @@ public class StudentDto {
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
 
+        public String getParentUsername() { return parentUsername; }
+        public void setParentUsername(String parentUsername) { this.parentUsername = parentUsername; }
+
+        public String getParentPassword() { return parentPassword; }
+        public void setParentPassword(String parentPassword) { this.parentPassword = parentPassword; }
+
         public String getHealthCondition() { return healthCondition; }
         public void setHealthCondition(String healthCondition) { this.healthCondition = healthCondition; }
 
@@ -225,6 +233,7 @@ public class StudentDto {
         private String previousClass;
         private String transferCertificateUrl;
         private String username;
+        private String parentUsername;
         private String healthCondition;
         private String otherInfo;
         private String photoUrl;
@@ -363,6 +372,9 @@ public class StudentDto {
 
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
+
+        public String getParentUsername() { return parentUsername; }
+        public void setParentUsername(String parentUsername) { this.parentUsername = parentUsername; }
 
         public String getHealthCondition() { return healthCondition; }
         public void setHealthCondition(String healthCondition) { this.healthCondition = healthCondition; }

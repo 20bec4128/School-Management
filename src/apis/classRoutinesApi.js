@@ -20,9 +20,10 @@ const readApiError = async (res) => {
 const unwrapCollection = (data) =>
   Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 
-export const fetchClassRoutines = async ({ schoolId } = {}) => {
+export const fetchClassRoutines = async ({ schoolId, studentId } = {}) => {
   const qs = new URLSearchParams()
   if (schoolId != null && schoolId !== '') qs.set('schoolId', String(schoolId))
+  if (studentId != null && studentId !== '') qs.set('studentId', String(studentId))
   const url = qs.toString() ? `${CLASS_ROUTINES_API_BASE}?${qs.toString()}` : CLASS_ROUTINES_API_BASE
   const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))

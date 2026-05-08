@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 const CLASS_LECTURES_API_BASE = '/api/class-lectures'
 
 const readApiError = async (res) => {
@@ -19,7 +21,7 @@ const unwrapCollection = (data) =>
   Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 
 export const fetchClassLectures = async () => {
-  const res = await fetch(CLASS_LECTURES_API_BASE, {
+  const res = await apiFetch(CLASS_LECTURES_API_BASE, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
@@ -28,7 +30,7 @@ export const fetchClassLectures = async () => {
 }
 
 export const createClassLecture = async (payload) => {
-  const res = await fetch(CLASS_LECTURES_API_BASE, {
+  const res = await apiFetch(CLASS_LECTURES_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -38,7 +40,7 @@ export const createClassLecture = async (payload) => {
 }
 
 export const updateClassLecture = async (id, payload) => {
-  const res = await fetch(`${CLASS_LECTURES_API_BASE}/${id}`, {
+  const res = await apiFetch(`${CLASS_LECTURES_API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -48,7 +50,7 @@ export const updateClassLecture = async (id, payload) => {
 }
 
 export const deleteClassLecture = async (id) => {
-  const res = await fetch(`${CLASS_LECTURES_API_BASE}/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`${CLASS_LECTURES_API_BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

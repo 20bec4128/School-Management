@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 
 const getChildId = (c) => c?.studentId ?? c?.id ?? c?.student?.id ?? null
 const getChildName = (c) => c?.name ?? c?.studentName ?? c?.fullName ?? c?.student?.name ?? c?.student?.fullName ?? ''
@@ -35,4 +35,3 @@ export default function ParentChildSelector() {
     </div>
   )
 }
-

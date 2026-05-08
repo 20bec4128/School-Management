@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 const DEPARTMENTS_API_BASE = '/api/departments'
 
 const readApiError = async (res) => {
@@ -16,7 +18,7 @@ const readApiError = async (res) => {
 }
 
 export const fetchAllDepartments = async () => {
-  const res = await fetch(`${DEPARTMENTS_API_BASE}/all`, {
+  const res = await apiFetch(`${DEPARTMENTS_API_BASE}/all`, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
@@ -28,7 +30,7 @@ export const fetchDepartmentsPage = async (page, size) => {
     page: String(Math.max(page, 0)),
     size: String(size),
   })
-  const res = await fetch(`${DEPARTMENTS_API_BASE}?${query.toString()}`, {
+  const res = await apiFetch(`${DEPARTMENTS_API_BASE}?${query.toString()}`, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
@@ -36,7 +38,7 @@ export const fetchDepartmentsPage = async (page, size) => {
 }
 
 export const createDepartment = async (payload) => {
-  const res = await fetch(DEPARTMENTS_API_BASE, {
+  const res = await apiFetch(DEPARTMENTS_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -46,7 +48,7 @@ export const createDepartment = async (payload) => {
 }
 
 export const updateDepartment = async (departmentId, payload) => {
-  const res = await fetch(`${DEPARTMENTS_API_BASE}/${departmentId}`, {
+  const res = await apiFetch(`${DEPARTMENTS_API_BASE}/${departmentId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -56,7 +58,7 @@ export const updateDepartment = async (departmentId, payload) => {
 }
 
 export const deleteDepartment = async (departmentId) => {
-  const res = await fetch(`${DEPARTMENTS_API_BASE}/${departmentId}`, { method: 'DELETE' })
+  const res = await apiFetch(`${DEPARTMENTS_API_BASE}/${departmentId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

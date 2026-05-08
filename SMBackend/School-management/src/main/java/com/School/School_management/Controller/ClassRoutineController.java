@@ -3,13 +3,19 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.ClassRoutineDto;
 import com.School.School_management.Exception.BadRequestException;
 import com.School.School_management.Exception.ForbiddenException;
+import com.School.School_management.Exception.NotFoundException;
+import com.School.School_management.Repository.ParentStudentRepository;
 import com.School.School_management.Repository.SchoolClassRepository;
+import com.School.School_management.Repository.StudentRepository;
+import com.School.School_management.Entity.Student;
 import com.School.School_management.Service.ClassRoutineService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
 import com.School.School_management.auth.RequirePermission;
 import com.School.School_management.auth.SchoolGuard;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,14 +34,20 @@ public class ClassRoutineController {
     private final ClassRoutineService service;
     private final SchoolGuard schoolGuard;
     private final SchoolClassRepository schoolClassRepository;
+    private final StudentRepository studentRepository;
+    private final ParentStudentRepository parentStudentRepository;
 
     public ClassRoutineController(
             ClassRoutineService service,
             SchoolGuard schoolGuard,
-            SchoolClassRepository schoolClassRepository) {
+            SchoolClassRepository schoolClassRepository,
+            StudentRepository studentRepository,
+            ParentStudentRepository parentStudentRepository) {
         this.service = service;
         this.schoolGuard = schoolGuard;
         this.schoolClassRepository = schoolClassRepository;
+        this.studentRepository = studentRepository;
+        this.parentStudentRepository = parentStudentRepository;
     }
 
     @RequirePermission({"CLASS_ROUTINE_MANAGE", "*"})
@@ -49,10 +61,44 @@ public class ClassRoutineController {
 
     @RequirePermission({"CLASS_ROUTINE_VIEW", "CLASS_ROUTINE_MANAGE", "*"})
     @GetMapping
-    public List<ClassRoutineDto> getAll(@RequestParam(required = false) Long schoolId) {
+    @Transactional(readOnly = true)
+    public List<ClassRoutineDto> getAll(@RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long studentId) {
         CurrentUser user = CurrentUserHolder.get();
         Long effectiveSchoolId = schoolGuard.schoolIdForRead(user, schoolId);
-        return service.getAll(effectiveSchoolId);
+        List<ClassRoutineDto> rows = service.getAll(effectiveSchoolId);
+        if (user != null && user.isRole("STUDENT")) {
+            if (user.studentId() == null) throw new ForbiddenException("Student profile is required");
+            Student student = studentRepository.findById(user.studentId())
+                    .orElseThrow(() -> new NotFoundException("Student not found"));
+            if (student.getSchoolClass() == null || student.getSchoolSection() == null) {
+                return List.of();
+            }
+            Long classId = student.getSchoolClass().getId();
+            Long sectionId = student.getSchoolSection().getId();
+            return rows.stream()
+                    .filter(dto -> Objects.equals(dto.getClassId(), classId) && Objects.equals(dto.getSectionId(), sectionId))
+                    .toList();
+        }
+        if (user != null && user.isRole("PARENT")) {
+            if (user.parentId() == null) throw new ForbiddenException("Parent profile is required");
+            Long effectiveStudentId = studentId;
+            if (effectiveStudentId == null) return List.of();
+            List<Long> childStudentIds = parentStudentRepository.findStudentIdsByParentId(user.parentId());
+            if (childStudentIds == null || !childStudentIds.contains(effectiveStudentId)) {
+                throw new ForbiddenException("Parent can view only their own children");
+            }
+            Student student = studentRepository.findById(effectiveStudentId)
+                    .orElseThrow(() -> new NotFoundException("Student not found"));
+            if (student.getSchoolClass() == null || student.getSchoolSection() == null) {
+                return List.of();
+            }
+            Long classId = student.getSchoolClass().getId();
+            Long sectionId = student.getSchoolSection().getId();
+            return rows.stream()
+                    .filter(dto -> Objects.equals(dto.getClassId(), classId) && Objects.equals(dto.getSectionId(), sectionId))
+                    .toList();
+        }
+        return rows;
     }
 
     @RequirePermission({"CLASS_ROUTINE_VIEW", "CLASS_ROUTINE_MANAGE", "*"})

@@ -18,7 +18,7 @@ import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { can } from '../utils/permissions'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 
 const STEPS = ['Basic Info']
@@ -134,8 +134,11 @@ const LiveClass = () => {
   }, [])
 
   useEffect(() => {
-    void loadLookups()
-    void loadRows()
+    const t = setTimeout(() => {
+      void loadLookups()
+      void loadRows()
+    }, 0)
+    return () => clearTimeout(t)
   }, [loadLookups, loadRows])
 
   const classOptions = useMemo(() => {
@@ -618,16 +621,6 @@ const LiveClass = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
             <div className="d-flex align-items-center gap-8">
-              {canManage ? (
-                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
-                  + Add
-                </button>
-              ) : null}
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
-            </div>
-            <div className="d-flex align-items-center gap-8">
               <div className="position-relative">
                 <input className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} disabled={!hasSearched} onChange={(e) => setSearch(e.target.value)} />
                 <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
@@ -650,109 +643,121 @@ const LiveClass = () => {
                 </ul>
               </div>
             </div>
+            <div className="d-flex align-items-center gap-8 ms-auto">
+              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                Find
+              </button>
+              {canManage ? (
+                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                  + Add
+                </button>
+              ) : null}
+            </div>
           </div>
 
-          {!hasSearched ? (
-            <div className="px-20 py-40 text-center text-secondary-light">
-              Use <strong>Find</strong> to select School, Class, Section and Subject.
-            </div>
-          ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
-          ) : (
-            <>
-              <div className="table-responsive">
-                <table className="table mb-0">
-                  <thead>
-                    <tr>
-                      {visibleColumns.school && <th>School</th>}
-                      {visibleColumns.className && <th>Class</th>}
-                      {visibleColumns.sectionName && <th>Section</th>}
-                      {visibleColumns.subjectName && <th>Subject</th>}
-                      {visibleColumns.teacherName && <th>Teacher</th>}
-                      {visibleColumns.classDate && <th>Date</th>}
-                      {visibleColumns.startTime && <th>Start</th>}
-                      {visibleColumns.endTime && <th>End</th>}
-                      {visibleColumns.status && <th>Status</th>}
-                      <th style={{ width: 280 }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="text-center py-24 text-secondary-light">
-                          No live classes found.
+          <div className="table-responsive">
+            <table className="table mb-0">
+              <thead>
+                <tr>
+                  {visibleColumns.school && <th>School</th>}
+                  {visibleColumns.className && <th>Class</th>}
+                  {visibleColumns.sectionName && <th>Section</th>}
+                  {visibleColumns.subjectName && <th>Subject</th>}
+                  {visibleColumns.teacherName && <th>Teacher</th>}
+                  {visibleColumns.classDate && <th>Date</th>}
+                  {visibleColumns.startTime && <th>Start</th>}
+                  {visibleColumns.endTime && <th>End</th>}
+                  {visibleColumns.status && <th>Status</th>}
+                  <th style={{ width: 280 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : !hasSearched ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
+                      Use <strong>Find</strong> to select School, Class, Section and Subject.
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
+                      No live classes found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((r) => (
+                    <tr key={r.id}>
+                      {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
+                      {visibleColumns.className && <td>{r.className || r.classId}</td>}
+                      {visibleColumns.sectionName && <td>{r.sectionName || r.sectionId}</td>}
+                      {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
+                      {visibleColumns.teacherName && <td>{r.teacherName || r.teacherId}</td>}
+                      {visibleColumns.classDate && <td>{r.classDate}</td>}
+                      {visibleColumns.startTime && <td>{String(r.startTime || '').slice(0, 5)}</td>}
+                      {visibleColumns.endTime && <td>{String(r.endTime || '').slice(0, 5)}</td>}
+                      {visibleColumns.status && (
+                        <td>
+                          <span className={statusBadge(r.status)}>{r.status}</span>
                         </td>
-                      </tr>
-                    ) : (
-                      paginated.map((r) => (
-                        <tr key={r.id}>
-                          {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
-                          {visibleColumns.className && <td>{r.className || r.classId}</td>}
-                          {visibleColumns.sectionName && <td>{r.sectionName || r.sectionId}</td>}
-                          {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
-                          {visibleColumns.teacherName && <td>{r.teacherName || r.teacherId}</td>}
-                          {visibleColumns.classDate && <td>{r.classDate}</td>}
-                          {visibleColumns.startTime && <td>{String(r.startTime || '').slice(0, 5)}</td>}
-                          {visibleColumns.endTime && <td>{String(r.endTime || '').slice(0, 5)}</td>}
-                          {visibleColumns.status && (
-                            <td>
-                              <span className={statusBadge(r.status)}>{r.status}</span>
-                            </td>
-                          )}
-                          <td>
-                            <div className="d-flex gap-8 flex-wrap">
-                              <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(r)} disabled={!canManage || saving}>
-                                Edit
-                              </button>
-                              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
-                                Delete
-                              </button>
-                              <button type="button" className="btn btn-sm btn-primary-600" onClick={() => handleStart(r)} disabled={!canManage || saving}>
-                                Start
-                              </button>
-                              <button type="button" className="btn btn-sm btn-success-600" onClick={() => handleJoin(r)} disabled={!canJoin || saving}>
-                                Join
-                              </button>
-                              <button type="button" className="btn btn-sm btn-light border" onClick={() => handleLeave(r)} disabled={!canJoin || saving}>
-                                Leave
-                              </button>
-                              <button type="button" className="btn btn-sm btn-warning-600" onClick={() => handleEnd(r)} disabled={!canManage || saving}>
-                                End
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      )}
+                      <td>
+                        <div className="d-flex gap-8 flex-wrap">
+                          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(r)} disabled={!canManage || saving}>
+                            Edit
+                          </button>
+                          <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
+                            Delete
+                          </button>
+                          <button type="button" className="btn btn-sm btn-primary-600" onClick={() => handleStart(r)} disabled={!canManage || saving}>
+                            Start
+                          </button>
+                          <button type="button" className="btn btn-sm btn-success-600" onClick={() => handleJoin(r)} disabled={!canJoin || saving}>
+                            Join
+                          </button>
+                          <button type="button" className="btn btn-sm btn-light border" onClick={() => handleLeave(r)} disabled={!canJoin || saving}>
+                            Leave
+                          </button>
+                          <button type="button" className="btn btn-sm btn-warning-600" onClick={() => handleEnd(r)} disabled={!canManage || saving}>
+                            End
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-              <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
-                <div className="d-flex align-items-center gap-8">
-                  <span className="text-secondary-light">Rows per page:</span>
-                  <select className="form-select form-select-sm" style={{ width: 90 }} value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                    {[5, 10, 20, 50].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="d-flex align-items-center gap-8">
-                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                    Prev
-                  </button>
-                  <span className="text-secondary-light text-sm">
-                    Page {currentPage} / {totalPages}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                    Next
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+          <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
+            <div className="d-flex align-items-center gap-8">
+              <span className="text-secondary-light">Rows per page:</span>
+              <select className="form-select form-select-sm" style={{ width: 90 }} value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
+                {[5, 10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="d-flex align-items-center gap-8">
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={!hasSearched || currentPage === 1}>
+                Prev
+              </button>
+              <span className="text-secondary-light text-sm">
+                Page {hasSearched ? currentPage : 1} / {hasSearched ? totalPages : 1}
+              </span>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={!hasSearched || currentPage === totalPages}>
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -857,4 +862,3 @@ const LiveClass = () => {
 }
 
 export default LiveClass
-

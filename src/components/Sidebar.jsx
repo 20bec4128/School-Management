@@ -301,40 +301,40 @@ const menuSections = [
   //     },
   //   ],
   // },
-//   {
-//     title: 'Human Resource (HR)',
-//     items: [
-//       {
-//         title: 'Human Resource',
-//         icon: 'ri:team-line',
-//         submenu: [
-//           { label: 'Manage Destination', href: '#', page: 'manage-designation' },
-//           { label: 'Manage Employees', href: '#',page: 'manage-employee' },
+  {
+    title: 'Human Resource (HR)',
+    items: [
+      {
+        title: 'Human Resource',
+        icon: 'ri:team-line',
+        submenu: [
+          { label: 'Manage Destination', href: '#', page: 'manage-designation' },
+          { label: 'Manage Employees', href: '#',page: 'manage-employee' },
         
-//         ],
-//       },
-//       {
-//         title: 'Manage Leave',
-//         icon: 'ri:calendar-todo-line',
-//         submenu: [
-//           { label: 'Leave Type', href: '#', page: 'leave-type' },
-//           { label: 'Leave Application', href: '#',page: 'leave-application' },
-//           { label: 'Waiting Application', href: '#',page: 'waiting-application' },
-//           { label: 'Approved Application', href: '#',page: 'approved-application' },
-//           { label: 'Declined Application', href: '#',page: 'declined-application' },
-//         ],
-//       },
-//       {
-//         title: 'Payroll',
-//         icon: 'ri:money-dollar-circle-line',
-//         submenu: [
-//           { label: 'Salary Grade', href: '#', page: 'salary-grade' },
-//           { label: 'Salary Payment', href: '#',page: 'salary-payment' },
-//           { label: 'Salary History', href: '#', page: 'salary-history' },
-//         ],
-//       },
-//     ],
-//   },
+        ],
+      },
+      // {
+      //   title: 'Manage Leave',
+      //   icon: 'ri:calendar-todo-line',
+      //   submenu: [
+      //     { label: 'Leave Type', href: '#', page: 'leave-type' },
+      //     { label: 'Leave Application', href: '#',page: 'leave-application' },
+      //     { label: 'Waiting Application', href: '#',page: 'waiting-application' },
+      //     { label: 'Approved Application', href: '#',page: 'approved-application' },
+      //     { label: 'Declined Application', href: '#',page: 'declined-application' },
+      //   ],
+      // },
+      // {
+      //   title: 'Payroll',
+      //   icon: 'ri:money-dollar-circle-line',
+      //   submenu: [
+      //     { label: 'Salary Grade', href: '#', page: 'salary-grade' },
+      //     { label: 'Salary Payment', href: '#',page: 'salary-payment' },
+      //     { label: 'Salary History', href: '#', page: 'salary-history' },
+      //   ],
+      // },
+    ],
+  },
 //   {
 //     title: 'Finance & Accounts',
 //     items: [

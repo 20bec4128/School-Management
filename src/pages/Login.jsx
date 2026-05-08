@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import '../css/login.css'
 
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import loginPageImg from '../assets/login_page.png'
 
 const IconUser = (props) => (

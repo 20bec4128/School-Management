@@ -9,11 +9,18 @@ import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { can } from '../utils/permissions'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
-
 const STEPS = ['Basic Info']
 const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const viewModes = [
+  { key: 'day', label: 'Day' },
+  { key: 'week', label: 'Week' },
+]
+const teacherScopeModes = [
+  { key: 'class', label: 'My Class Routines' },
+  { key: 'own', label: 'My Routines' },
+]
 
 const emptyForm = {
   schoolId: 'Select',
@@ -56,9 +63,73 @@ const dayBadgeColor = (day) => {
   return `${map[day] || 'bg-neutral-100 text-secondary-light'} px-12 py-4 radius-4 fw-medium text-sm`
 }
 
+const parseTimeToMinutes = (time) => {
+  if (!time || typeof time !== 'string') return Number.MAX_SAFE_INTEGER
+  const [hours, minutes] = time.split(':').map((part) => Number(part))
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return Number.MAX_SAFE_INTEGER
+  return hours * 60 + minutes
+}
+
+const formatWeekCellTime = (startTime, endTime) => {
+  const start = startTime || '--:--'
+  const end = endTime || '--:--'
+  return `${start} - ${end}`
+}
+
+const getTeacherId = (user, teacherContext) => {
+  const candidate =
+    user?.teacherId ??
+    user?.teacher?.id ??
+    user?.teacherContext?.id ??
+    user?.teacherContext?.teacherId ??
+    teacherContext?.id ??
+    teacherContext?.teacherId ??
+    null
+  return candidate == null ? null : String(candidate)
+}
+
+const getChildId = (child) => {
+  const candidate = child?.studentId ?? child?.id ?? child?.student?.id ?? null
+  return candidate == null ? null : String(candidate)
+}
+
+const getTodayDate = () => new Date()
+
+const getWeekdayNameFromDate = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 'Monday'
+  return dayOptions[(date.getDay() + 6) % 7]
+}
+
+const isSameCalendarDay = (a, b) => {
+  if (!(a instanceof Date) || !(b instanceof Date)) return false
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1)
+const shiftMonth = (date, delta) => new Date(date.getFullYear(), date.getMonth() + delta, 1)
+const monthLabel = (date) =>
+  date.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  })
+
 const ClassRoutine = () => {
-  const { user, schoolId } = useAuth()
+  const { user, schoolId, role, teacherContext, selectedChildId, parentChildren } = useAuth()
   const canManage = can(user, ['CLASS_ROUTINE_MANAGE', '*'])
+  const normalizedRole = String(role || '').toUpperCase()
+  const isTeacher = normalizedRole === 'TEACHER'
+  const isStudent = normalizedRole === 'STUDENT'
+  const isParent = normalizedRole === 'PARENT'
+  const isReadOnlyViewer = isStudent || isParent
+  const defaultSchoolFilter = schoolId != null ? String(schoolId) : 'Select'
+  const currentTeacherId = getTeacherId(user, teacherContext)
+  const effectiveChildId = useMemo(() => {
+    if (!isParent) return null
+    if (selectedChildId != null && String(selectedChildId).trim() !== '') return String(selectedChildId)
+    const children = Array.isArray(parentChildren) ? parentChildren : []
+    if (children.length === 1) return getChildId(children[0])
+    return null
+  }, [isParent, parentChildren, selectedChildId])
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -67,13 +138,17 @@ const ClassRoutine = () => {
   const [sectionsLookup, setSectionsLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [viewMode, setViewMode] = useState('day')
+  const [teacherScope, setTeacherScope] = useState('class')
+  const [selectedDate, setSelectedDate] = useState(() => getTodayDate())
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(getTodayDate()))
 
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -86,15 +161,22 @@ const ClassRoutine = () => {
 
   const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(() => ({
-    schoolId: schoolId != null ? String(schoolId) : 'Select',
+    schoolId: defaultSchoolFilter,
   }))
   const [filters, setFilters] = useState(() => ({
-    schoolId: schoolId != null ? String(schoolId) : 'Select',
+    schoolId: defaultSchoolFilter,
   }))
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+
+  const assignedClassIds = useMemo(() => {
+    if (!isTeacher || !currentTeacherId) return []
+    return (Array.isArray(classesLookup) ? classesLookup : [])
+      .filter((c) => c?.id != null && String(c?.teacherId ?? '') === currentTeacherId)
+      .map((c) => String(c.id))
+  }, [classesLookup, currentTeacherId, isTeacher])
 
   const loadLookups = useCallback(async () => {
     const [schools, teachers, classes, sections, subjects] = await Promise.all([
@@ -111,11 +193,17 @@ const ClassRoutine = () => {
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
   }, [])
 
-  const loadRows = useCallback(async (effectiveSchoolId) => {
+  const loadRows = useCallback(async (effectiveSchoolId, effectiveStudentId) => {
+    if (effectiveSchoolId == null || effectiveSchoolId === '' || effectiveSchoolId === 'Select') {
+      setRows([])
+      setLoading(false)
+      setError('')
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      const data = await fetchClassRoutines({ schoolId: effectiveSchoolId })
+      const data = await fetchClassRoutines({ schoolId: effectiveSchoolId, studentId: effectiveStudentId })
       setRows(Array.isArray(data) ? data : [])
     } catch (e) {
       setRows([])
@@ -126,12 +214,18 @@ const ClassRoutine = () => {
   }, [])
 
   useEffect(() => {
-    void loadLookups()
-    if (filters.schoolId !== 'Select') {
-      void loadRows(filters.schoolId)
-      setHasSearched(true)
-    }
-  }, [loadLookups]) // eslint-disable-line react-hooks/exhaustive-deps
+    const t = setTimeout(() => {
+      void loadLookups()
+    }, 0)
+    return () => clearTimeout(t)
+  }, [loadLookups])
+
+  useEffect(() => {
+    const shouldLoad = filters.schoolId !== 'Select' && (!isParent || effectiveChildId != null)
+    if (!shouldLoad) return
+    void loadRows(filters.schoolId, effectiveChildId)
+    setHasSearched(true)
+  }, [effectiveChildId, filters.schoolId, isParent, loadRows])
 
   const validateFind = () => {
     const errs = {}
@@ -151,27 +245,129 @@ const ClassRoutine = () => {
     setHasSearched(true)
     setIsFindSidebarOpen(false)
     setCurrentPage(1)
-    await loadRows(pendingFilters.schoolId)
+    await loadRows(pendingFilters.schoolId, effectiveChildId)
   }
+
+  const scopedRows = useMemo(() => {
+    if (!hasSearched) return []
+    if (!isTeacher) return rows
+    if (teacherScope === 'own') {
+      return rows.filter((r) => String(r?.teacherId ?? '') === currentTeacherId)
+    }
+    return rows.filter((r) => assignedClassIds.includes(String(r?.classId ?? '')))
+  }, [assignedClassIds, currentTeacherId, hasSearched, isTeacher, rows, teacherScope])
 
   const filtered = useMemo(() => {
     if (!hasSearched) return []
     const q = search.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter((r) =>
+    if (!q) return scopedRows
+    return scopedRows.filter((r) =>
       [r?.className, r?.sectionName, r?.subjectName, r?.teacherName, r?.day, r?.startTime, r?.endTime, r?.roomNo]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
         .includes(q),
     )
-  }, [rows, hasSearched, search])
+  }, [hasSearched, scopedRows, search])
+
+  const selectedDayLabel = useMemo(() => getWeekdayNameFromDate(selectedDate), [selectedDate])
+
+  const selectedDayRows = useMemo(() => {
+    if (!hasSearched) return []
+    return filtered
+      .filter((r) => String(r?.day || '') === selectedDayLabel)
+      .slice()
+      .sort((a, b) => {
+        const startDiff = parseTimeToMinutes(a?.startTime) - parseTimeToMinutes(b?.startTime)
+        if (startDiff !== 0) return startDiff
+        return parseTimeToMinutes(a?.endTime) - parseTimeToMinutes(b?.endTime)
+      })
+  }, [filtered, hasSearched, selectedDayLabel])
+
+  const monthCalendar = useMemo(() => {
+    const year = calendarMonth.getFullYear()
+    const month = calendarMonth.getMonth()
+    const firstDayIndex = new Date(year, month, 1).getDay()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const cells = []
+
+    for (let i = 0; i < firstDayIndex; i += 1) {
+      cells.push(null)
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(year, month, day)
+      cells.push({
+        date,
+        day,
+        hasRoutine: filtered.some((row) => String(row?.day || '') === getWeekdayNameFromDate(date)),
+      })
+    }
+
+    while (cells.length % 7 !== 0) {
+      cells.push(null)
+    }
+
+    const weeks = []
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7))
+    }
+
+    return weeks
+  }, [calendarMonth, filtered])
+
+  const weekMatrix = useMemo(() => {
+    if (!hasSearched) return []
+
+    const slotMap = new Map()
+    filtered.forEach((row) => {
+      const day = row?.day
+      if (!dayOptions.includes(day)) return
+      const slotKey = `${row?.startTime || ''}__${row?.endTime || ''}`
+      if (!slotMap.has(slotKey)) {
+        slotMap.set(slotKey, {
+          startTime: row?.startTime || '',
+          endTime: row?.endTime || '',
+          cells: new Map(),
+        })
+      }
+      const slot = slotMap.get(slotKey)
+      if (!slot.cells.has(day)) {
+        slot.cells.set(day, [])
+      }
+      slot.cells.get(day).push(row)
+    })
+
+    return Array.from(slotMap.values())
+      .sort((a, b) => {
+        const startDiff = parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+        if (startDiff !== 0) return startDiff
+        return parseTimeToMinutes(a.endTime) - parseTimeToMinutes(b.endTime)
+      })
+      .map((slot) => ({
+        ...slot,
+        cells: dayOptions.reduce((acc, day) => {
+          acc[day] = (slot.cells.get(day) || []).slice()
+          return acc
+        }, {}),
+      }))
+  }, [filtered, hasSearched])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
+
+  const isDayView = viewMode === 'day'
+
+  const getVisiblePages = () => {
+    const maxButtons = 5
+    if (totalPages <= maxButtons) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    if (currentPage <= 3) return [1, 2, 3, 4, 5]
+    if (currentPage >= totalPages - 2) return [totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    return [currentPage - 2, currentPage - 1, currentPage, currentPage + 1, currentPage + 2]
+  }
 
   const teacherOptions = useMemo(() => {
     return (Array.isArray(teachersLookup) ? teachersLookup : [])
@@ -194,7 +390,11 @@ const ClassRoutine = () => {
   }
 
   const openAdd = () => {
-    setAddForm({ ...emptyForm, schoolId: filters.schoolId })
+    setAddForm({
+      ...emptyForm,
+      schoolId: filters.schoolId,
+      teacherId: currentTeacherId || emptyForm.teacherId,
+    })
     setFormErrors({})
     setIsAddOpen(true)
     setAddStep(0)
@@ -239,7 +439,7 @@ const ClassRoutine = () => {
         roomNo: addForm.roomNo || null,
       })
       setIsAddOpen(false)
-      await loadRows(filters.schoolId)
+    await loadRows(addForm.schoolId, effectiveChildId)
     } catch (e) {
       setError(e?.message || 'Failed to create routine')
     } finally {
@@ -271,11 +471,31 @@ const ClassRoutine = () => {
       })
       setIsEditOpen(false)
       setEditingId(null)
-      await loadRows(filters.schoolId)
+      await loadRows(editForm.schoolId, effectiveChildId)
     } catch (e) {
       setError(e?.message || 'Failed to update routine')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleResetFilters = () => {
+    const resetFilters = { schoolId: defaultSchoolFilter }
+    setPendingFilters(resetFilters)
+    setFilters(resetFilters)
+    setFindErrors({})
+    setSearch('')
+    setCurrentPage(1)
+    const today = getTodayDate()
+    setSelectedDate(today)
+    setCalendarMonth(startOfMonth(today))
+    if (defaultSchoolFilter !== 'Select') {
+      setHasSearched(true)
+      void loadRows(defaultSchoolFilter, effectiveChildId)
+    } else {
+      setHasSearched(false)
+      setRows([])
+      setLoading(false)
     }
   }
 
@@ -286,7 +506,7 @@ const ClassRoutine = () => {
       setSaving(true)
       setError('')
       await deleteClassRoutine(row.id, { schoolId: filters.schoolId })
-      await loadRows(filters.schoolId)
+      await loadRows(row.schoolId ?? filters.schoolId, effectiveChildId)
     } catch (e) {
       setError(e?.message || 'Failed to delete routine')
     } finally {
@@ -297,6 +517,7 @@ const ClassRoutine = () => {
   const renderEntryForm = (form, setForm) => {
     const localClassOptions = classesLookup
       .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
+      .filter((c) => !isTeacher || !currentTeacherId || String(c.teacherId ?? '') === currentTeacherId)
       .slice()
       .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
 
@@ -396,13 +617,25 @@ const ClassRoutine = () => {
           <label className="avm-label">
             Teacher <span className="req"> *</span>
           </label>
-          <select id="teacherId" className={`form-control form-select${formErrors.teacherId ? ' is-invalid' : ''}`} value={form.teacherId} onChange={onChange} disabled={saving}>
-            <option value="Select">--Select Teacher--</option>
-            {teacherOptions.map((t) => (
-              <option key={t.id} value={String(t.id)}>
-                {t.name}
-              </option>
-            ))}
+          <select
+            id="teacherId"
+            className={`form-control form-select${formErrors.teacherId ? ' is-invalid' : ''}`}
+            value={isTeacher && currentTeacherId ? currentTeacherId : form.teacherId}
+            onChange={onChange}
+            disabled={saving || (isTeacher && !!currentTeacherId)}
+          >
+            {isTeacher && currentTeacherId ? (
+              <option value={currentTeacherId}>{user?.teacherName || user?.name || 'Myself'}</option>
+            ) : (
+              <>
+                <option value="Select">--Select Teacher--</option>
+                {teacherOptions.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
           {formErrors.teacherId ? <div className="text-danger-600 text-sm mt-4">{formErrors.teacherId}</div> : null}
         </div>
@@ -456,6 +689,28 @@ const ClassRoutine = () => {
             <span className="text-secondary-light"> / Class Routine</span>
           </div>
         </div>
+        <div className="d-flex align-items-center gap-8">
+          <div className="btn-group" role="tablist" aria-label="Class routine view mode">
+            {viewModes.map((mode) => (
+              <button
+                key={mode.key}
+                type="button"
+                className={viewMode === mode.key ? 'btn btn-primary-600' : 'btn btn-light border'}
+                onClick={() => {
+                  setViewMode(mode.key)
+                  setCurrentPage(1)
+                  if (mode.key === 'day') {
+                    const today = getTodayDate()
+                    setSelectedDate(today)
+                    setCalendarMonth(startOfMonth(today))
+                  }
+                }}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {error ? (
@@ -466,129 +721,425 @@ const ClassRoutine = () => {
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
-            <div className="d-flex align-items-center gap-8">
-              {canManage ? (
-                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving || !hasSearched}>
-                  + Add
-                </button>
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-12 p-20">
+            <div className="d-flex flex-wrap align-items-center gap-8">
+              {isTeacher ? (
+                <div className="btn-group" role="tablist" aria-label="Teacher routine scope">
+                  {teacherScopeModes.map((mode) => (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      className={teacherScope === mode.key ? 'btn btn-primary-600' : 'btn btn-light border'}
+                      onClick={() => {
+                        setTeacherScope(mode.key)
+                        setCurrentPage(1)
+                      }}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
               ) : null}
-              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                Find
-              </button>
-            </div>
-            <div className="d-flex align-items-center gap-8">
               <div className="position-relative">
-                <input className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} disabled={!hasSearched} onChange={(e) => setSearch(e.target.value)} />
+                <input
+                  className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
+                  placeholder="Search..."
+                  value={search}
+                  disabled={!hasSearched}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
                 <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                   <i className="ri-search-line"></i>
                 </span>
               </div>
-              <div className="dropdown">
-                <button className="btn btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  Columns ({visibleColumnCount})
-                </button>
-                <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
-                  {columnOptions.map((col) => (
-                    <li key={col.key} className="dropdown-item">
-                      <label className="d-flex align-items-center gap-8 m-0">
-                        <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
-                        <span>{col.label}</span>
-                      </label>
-                    </li>
+              <button
+                type="button"
+                className="btn btn-light border"
+                onClick={handleResetFilters}
+                disabled={!hasSearched || saving}
+              >
+                Reset
+              </button>
+              {isDayView ? (
+                <div className="dropdown">
+                  <button className="btn btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Columns ({visibleColumnCount})
+                  </button>
+                  <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
+                    {columnOptions.map((col) => (
+                      <li key={col.key} className="dropdown-item">
+                        <label className="d-flex align-items-center gap-8 m-0">
+                          <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                          <span>{col.label}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {isDayView ? (
+                <select
+                  className="form-select"
+                  style={{ width: 120 }}
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  disabled={!hasSearched}
+                >
+                  {[5, 10, 20, 50].map((n) => (
+                    <option key={n} value={n}>
+                      {n}/page
+                    </option>
                   ))}
-                </ul>
-              </div>
+                </select>
+              ) : null}
+            </div>
+
+            <div className="d-flex align-items-center gap-8 ms-auto">
+              <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                Find
+              </button>
+              {canManage ? (
+                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                  + Add
+                </button>
+              ) : null}
             </div>
           </div>
 
-          {!hasSearched ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Use <strong>Find</strong> to select School.</div>
-          ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
-          ) : (
-            <>
-              <div className="table-responsive">
-                <table className="table mb-0">
-                  <thead>
-                    <tr>
-                      {visibleColumns.school && <th>School</th>}
-                      {visibleColumns.className && <th>Class</th>}
-                      {visibleColumns.sectionName && <th>Section</th>}
-                      {visibleColumns.subjectName && <th>Subject</th>}
-                      {visibleColumns.teacherName && <th>Teacher</th>}
-                      {visibleColumns.day && <th>Day</th>}
-                      {visibleColumns.startTime && <th>Start</th>}
-                      {visibleColumns.endTime && <th>End</th>}
-                      {visibleColumns.roomNo && <th>Room</th>}
-                      <th style={{ width: 160 }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="text-center py-24 text-secondary-light">
-                          No routines found.
-                        </td>
-                      </tr>
-                    ) : (
-                      paginated.map((r) => (
-                        <tr key={r.id}>
-                          {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
-                          {visibleColumns.className && <td>{r.className || r.classId}</td>}
-                          {visibleColumns.sectionName && <td>{r.sectionName || r.sectionId}</td>}
-                          {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
-                          {visibleColumns.teacherName && <td>{r.teacherName || r.teacherId}</td>}
-                          {visibleColumns.day && (
-                            <td>
-                              <span className={dayBadgeColor(r.day)}>{r.day}</span>
-                            </td>
-                          )}
-                          {visibleColumns.startTime && <td>{r.startTime}</td>}
-                          {visibleColumns.endTime && <td>{r.endTime}</td>}
-                          {visibleColumns.roomNo && <td>{r.roomNo || '-'}</td>}
-                          <td>
-                            <div className="d-flex gap-8">
-                              <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={!canManage || saving}>
-                                Edit
-                              </button>
-                              <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+          <div className="table-responsive">
+            {isDayView ? (
+              <div className="row g-16 p-20">
+                <div className="col-12 col-xl-7">
+                  <div className="card h-100 border">
+                    <div className="card-body">
+                      <div className="d-flex flex-wrap align-items-start justify-content-between gap-12 mb-16">
+                        <div>
+                          <div className="text-secondary-light text-sm fw-medium">Today&apos;s Schedule</div>
+                          <h4 className="fw-semibold mb-2 text-primary-light">{selectedDayLabel}</h4>
+                          <div className="text-secondary-light text-sm">{selectedDate.toLocaleDateString()}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-light border"
+                          onClick={() => {
+                            const today = getTodayDate()
+                            setSelectedDate(today)
+                            setCalendarMonth(startOfMonth(today))
+                          }}
+                          disabled={!hasSearched}
+                        >
+                          Today
+                        </button>
+                      </div>
 
-              <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
-                <div className="d-flex align-items-center gap-8">
-                  <span className="text-secondary-light">Rows per page:</span>
-                  <select className="form-select form-select-sm" style={{ width: 90 }} value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                    {[5, 10, 20, 50].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
+                      {loading ? (
+                        <div className="text-center py-24 text-secondary-light">Loading...</div>
+                      ) : !hasSearched ? (
+                        <div className="text-center py-24 text-secondary-light">
+                          Use <strong>Find</strong> to select School to load class routines.
+                        </div>
+                      ) : selectedDayRows.length === 0 ? (
+                        <div className="text-center py-24 text-secondary-light">No routines found for {selectedDayLabel}.</div>
+                      ) : (
+                        <div className="d-grid gap-12">
+                          {selectedDayRows.map((r) => (
+                            <div key={r.id} className="radius-8 border p-12 bg-neutral-50">
+                              <div className="d-flex align-items-start justify-content-between gap-10">
+                                <div className="flex-grow-1">
+                                  <div className="d-flex align-items-center justify-content-between gap-10">
+                                    <div className="fw-semibold text-primary-light">{r.subjectName || r.subjectId || 'Subject'}</div>
+                                    <span className="bg-primary-100 text-primary-600 px-12 py-4 radius-4 fw-medium text-sm">
+                                      {formatWeekCellTime(r.startTime, r.endTime)}
+                                    </span>
+                                  </div>
+                                  {!isReadOnlyViewer ? (
+                                    <div className="text-sm text-secondary-light mt-4">
+                                      Class: {r.className || r.classId}
+                                      {r.sectionName || r.sectionId ? ` | Section: ${r.sectionName || r.sectionId}` : ''}
+                                    </div>
+                                  ) : null}
+                                  <div className="text-sm text-secondary-light">
+                                    Teacher: {r.teacherName || r.teacherId}
+                                    {r.roomNo ? ` | Room: ${r.roomNo}` : ''}
+                                  </div>
+                                </div>
+                                {!isReadOnlyViewer ? (
+                                  <div className="d-flex align-items-center gap-6 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                      onClick={() => openEdit(r)}
+                                      disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                      aria-label="Edit routine"
+                                      title="Edit"
+                                    >
+                                      <i className="ri-pencil-line" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                      onClick={() => handleDelete(r)}
+                                      disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                      aria-label="Delete routine"
+                                      title="Delete"
+                                    >
+                                      <i className="ri-delete-bin-line" aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="d-flex align-items-center gap-8">
-                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                    Prev
-                  </button>
-                  <span className="text-secondary-light text-sm">
-                    Page {currentPage} / {totalPages}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                    Next
-                  </button>
+
+                <div className="col-12 col-xl-5">
+                  <div className="card h-100 border">
+                    <div className="card-body">
+                      <div className="d-flex align-items-start justify-content-between gap-12 mb-16">
+                        <div>
+                          <div className="text-secondary-light text-sm fw-medium">Month Calendar</div>
+                          <h4 className="fw-semibold mb-0 text-primary-light">{monthLabel(calendarMonth)}</h4>
+                        </div>
+                        <div className="d-flex align-items-center gap-8">
+                          <button type="button" className="btn btn-sm btn-light border" onClick={() => setCalendarMonth((m) => shiftMonth(m, -1))}>
+                            <i className="ri-arrow-left-s-line" />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-light border"
+                            onClick={() => {
+                              const today = getTodayDate()
+                              setSelectedDate(today)
+                              setCalendarMonth(startOfMonth(today))
+                            }}
+                          >
+                            Today
+                          </button>
+                          <button type="button" className="btn btn-sm btn-light border" onClick={() => setCalendarMonth((m) => shiftMonth(m, 1))}>
+                            <i className="ri-arrow-right-s-line" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        className="d-grid gap-8 text-center"
+                        style={{
+                          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                        }}
+                      >
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label) => (
+                          <div key={label} className="text-secondary-light fw-semibold py-4">
+                            {label}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        className="d-grid gap-8"
+                        style={{
+                          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                        }}
+                      >
+                        {monthCalendar.flatMap((week, weekIndex) =>
+                          week.map((cell, dayIndex) => {
+                            if (!cell) {
+                              return <div key={`empty-${weekIndex}-${dayIndex}`} className="radius-8 border border-transparent" style={{ minHeight: 54 }} />
+                            }
+                            const today = getTodayDate()
+                            const isSelected = isSameCalendarDay(cell.date, selectedDate)
+                            const isToday = isSameCalendarDay(cell.date, today)
+                            return (
+                              <button
+                                key={cell.date.toISOString()}
+                                type="button"
+                                className={`text-start radius-8 border p-8 ${
+                                  isSelected ? 'btn-primary-600 text-white border-primary-600' : 'bg-white'
+                                }`}
+                                style={{ minHeight: 54 }}
+                                onClick={() => {
+                                  setSelectedDate(cell.date)
+                                  setCalendarMonth(startOfMonth(cell.date))
+                                }}
+                              >
+                                <div className="d-flex align-items-center justify-content-between gap-8">
+                                  <span className={`fw-semibold ${isSelected ? 'text-white' : 'text-primary-light'}`}>{cell.day}</span>
+                                  {cell.hasRoutine ? <span className={`radius-999 ${isSelected ? 'bg-white' : 'bg-primary-100'}`} style={{ width: 8, height: 8 }} /> : null}
+                                </div>
+                                <div className={`text-sm ${isSelected ? 'text-white' : isToday ? 'text-primary-600' : 'text-secondary-light'}`}>
+                                  {cell.date.toLocaleDateString(undefined, { weekday: 'short' })}
+                                </div>
+                              </button>
+                            )
+                          }),
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </>
-          )}
+            ) : (
+              <table className="table table-bordered align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 130 }}>Time / Day</th>
+                    {dayOptions.map((day) => (
+                      <th key={day} style={{ minWidth: 180 }}>
+                        {day}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={dayOptions.length + 1} className="text-center py-24 text-secondary-light">
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : !hasSearched ? (
+                    <tr>
+                      <td colSpan={dayOptions.length + 1} className="text-center py-24 text-secondary-light">
+                        Use <strong>Find</strong> to select School to load class routines.
+                      </td>
+                    </tr>
+                  ) : weekMatrix.length === 0 ? (
+                    <tr>
+                      <td colSpan={dayOptions.length + 1} className="text-center py-24 text-secondary-light">
+                        No routines found.
+                      </td>
+                    </tr>
+                  ) : (
+                    weekMatrix.map((slot) => (
+                      <tr key={`${slot.startTime}-${slot.endTime}`}>
+                        <td className="fw-semibold text-primary-light">{formatWeekCellTime(slot.startTime, slot.endTime)}</td>
+                        {dayOptions.map((day) => {
+                          const cellRows = slot.cells[day] || []
+                          return (
+                            <td key={`${slot.startTime}-${slot.endTime}-${day}`} style={{ verticalAlign: 'top' }}>
+                              {cellRows.length === 0 ? (
+                                <span className="text-secondary-light">---</span>
+                              ) : (
+                                <div className="d-grid gap-8">
+                                  {cellRows.map((r) => (
+                                    <div key={r.id} className="radius-8 border p-8 bg-neutral-50">
+                                      <div className="d-flex align-items-start justify-content-between gap-8">
+                                        <div className="flex-grow-1">
+                                          <div className="d-flex align-items-center justify-content-between gap-8">
+                                            <div className="fw-semibold text-primary-light">{r.subjectName || r.subjectId || 'Subject'}</div>
+                                            {!isReadOnlyViewer ? (
+                                              <div className="d-flex align-items-center gap-6 flex-shrink-0">
+                                              <button
+                                                type="button"
+                                                className="btn btn-primary-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                                onClick={() => openEdit(r)}
+                                                disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                                aria-label="Edit routine"
+                                                title="Edit"
+                                              >
+                                                <i className="ri-pencil-line" aria-hidden="true" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btn btn-danger-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                                onClick={() => handleDelete(r)}
+                                                disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                                aria-label="Delete routine"
+                                                title="Delete"
+                                              >
+                                                <i className="ri-delete-bin-line" aria-hidden="true" />
+                                              </button>
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                          {!isReadOnlyViewer ? (
+                                            <div className="text-sm text-secondary-light">
+                                              {r.className || r.classId}
+                                              {r.sectionName || r.sectionId ? ` | ${r.sectionName || r.sectionId}` : ''}
+                                            </div>
+                                          ) : null}
+                                          <div className="text-sm text-secondary-light">
+                                            {r.teacherName || r.teacherId}
+                                            {r.roomNo ? ` | Room ${r.roomNo}` : ''}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="d-none">
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-primary-600 d-inline-flex align-items-center justify-content-center"
+                                          onClick={() => openEdit(r)}
+                                          disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                          aria-label="Edit routine"
+                                          title="Edit"
+                                        >
+                                          <i className="ri-pencil-line" aria-hidden="true" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-danger-600 d-inline-flex align-items-center justify-content-center"
+                                          onClick={() => handleDelete(r)}
+                                          disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                          aria-label="Delete routine"
+                                          title="Delete"
+                                        >
+                                          <i className="ri-delete-bin-line" aria-hidden="true" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {isDayView ? (
+            <div className="d-flex align-items-center justify-content-end p-20 flex-wrap gap-16">
+              <div className="d-flex align-items-center gap-8">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={!hasSearched || currentPage === 1}
+                >
+                  Prev
+                </button>
+                {getVisiblePages().map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                    onClick={() => setCurrentPage(p)}
+                    disabled={!hasSearched}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={!hasSearched || currentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -633,4 +1184,3 @@ const ClassRoutine = () => {
 }
 
 export default ClassRoutine
-

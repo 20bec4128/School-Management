@@ -9,7 +9,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsByClassSection } from '../apis/studentsApi'
 import { can } from '../utils/permissions'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 
 const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.txt,.jpg,.jpeg,.png'
@@ -606,31 +606,45 @@ const Submission = () => {
             </div>
           </div>
 
-          {!hasSearched ? (
-            <div className="text-muted">Use Find to select School/Class/Section/Assignment (and Student when applicable).</div>
-          ) : loading ? (
-            <div className="text-muted">Loading...</div>
-          ) : (
-            <div className="table-responsive">
-              <table className="table table-striped align-middle">
-                <thead>
+          <div className="table-responsive">
+            <table className="table table-striped align-middle">
+              <thead>
+                <tr>
+                  <th style={{ width: 34 }}>
+                    <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearched || loading} />
+                  </th>
+                  {visibleColumns.schoolName ? <th>School</th> : null}
+                  {visibleColumns.assignmentTitle ? <th>Assignment</th> : null}
+                  {visibleColumns.className ? <th>Class</th> : null}
+                  {visibleColumns.sectionName ? <th>Section</th> : null}
+                  {visibleColumns.studentName ? <th>Student</th> : null}
+                  {visibleColumns.submittedAt ? <th>Submitted At</th> : null}
+                  {visibleColumns.evaluate ? <th>Evaluate</th> : null}
+                  {visibleColumns.marks ? <th>Marks</th> : null}
+                  <th style={{ width: 170 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
                   <tr>
-                    <th style={{ width: 34 }}>
-                      <input type="checkbox" checked={allSelected} onChange={handleSelectAll} />
-                    </th>
-                    {visibleColumns.schoolName ? <th>School</th> : null}
-                    {visibleColumns.assignmentTitle ? <th>Assignment</th> : null}
-                    {visibleColumns.className ? <th>Class</th> : null}
-                    {visibleColumns.sectionName ? <th>Section</th> : null}
-                    {visibleColumns.studentName ? <th>Student</th> : null}
-                    {visibleColumns.submittedAt ? <th>Submitted At</th> : null}
-                    {visibleColumns.evaluate ? <th>Evaluate</th> : null}
-                    {visibleColumns.marks ? <th>Marks</th> : null}
-                    <th style={{ width: 170 }}>Action</th>
+                    <td colSpan={visibleColumnCount + 2} className="text-center text-muted">
+                      Loading...
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {paginated.map((row) => (
+                ) : !hasSearched ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center text-muted">
+                      Use Find to select School/Class/Section/Assignment (and Student when applicable).
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center text-muted">
+                      No submissions found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((row) => (
                     <tr key={row.id}>
                       <td>
                         <input type="checkbox" checked={selectedRows.includes(row.id)} onChange={() => handleSelectRow(row.id)} />
@@ -662,34 +676,25 @@ const Submission = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                  {paginated.length === 0 ? (
-                    <tr>
-                      <td colSpan={20} className="text-center text-muted">
-                        No submissions found.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-          {hasSearched ? (
-            <div className="d-flex align-items-center justify-content-between mt-3">
-              <div className="text-muted small">
-                Page {currentPage} of {totalPages}
-              </div>
-              <div className="d-flex align-items-center gap-2">
-                <button type="button" className="btn btn-sm btn-outline-secondary" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
-                  Prev
-                </button>
-                <button type="button" className="btn btn-sm btn-outline-secondary" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
-                  Next
-                </button>
-              </div>
+          <div className="d-flex align-items-center justify-content-between mt-3">
+            <div className="text-muted small">
+              Page {hasSearched ? currentPage : 1} of {hasSearched ? totalPages : 1}
             </div>
-          ) : null}
+            <div className="d-flex align-items-center gap-2">
+              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearched || currentPage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                Prev
+              </button>
+              <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSearched || currentPage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -804,4 +809,3 @@ const Submission = () => {
 }
 
 export default Submission
-

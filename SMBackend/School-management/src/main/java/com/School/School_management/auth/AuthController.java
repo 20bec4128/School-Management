@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -143,9 +144,10 @@ public class AuthController {
                 body.put("userId", s.getId());
                 body.put("studentId", s.getId());
                 body.put("name", s.getName());
-                if (s.getSchool() != null) {
-                    body.put("schoolId", s.getSchool().getId());
-                    body.put("schoolName", s.getSchool().getSchoolName());
+                Long schoolId = s.getSchool() == null ? null : s.getSchool().getId();
+                if (schoolId != null) {
+                    body.put("schoolId", schoolId);
+                    putSchoolName(body, schoolId);
                 }
             });
             return;
@@ -168,9 +170,11 @@ public class AuthController {
                         c.put("id", s.getId());
                         c.put("studentId", s.getId());
                         c.put("name", s.getName());
-                        if (s.getSchool() != null) {
-                            c.put("schoolId", s.getSchool().getId());
-                            c.put("schoolName", s.getSchool().getSchoolName());
+                        Long schoolId = s.getSchool() == null ? null : s.getSchool().getId();
+                        if (schoolId != null) {
+                            c.put("schoolId", schoolId);
+                            schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                                    .ifPresent((school) -> c.put("schoolName", school.getSchoolName()));
                         }
                         if (s.getClassName() != null) c.put("className", s.getClassName());
                         if (s.getSection() != null) c.put("section", s.getSection());
@@ -192,6 +196,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
         String username = req == null ? null : normalize(req.username());
         String password = req == null ? null : req.password();
@@ -249,6 +254,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> me(HttpServletRequest request) {
         String token = readBearer(request);
         if (token == null) return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
@@ -344,13 +350,13 @@ public class AuthController {
             return new AuthResult(username, Role.STUDENT.name(), null, headOfficeId, schoolId, null, student.get().getId(), null, student.get().getName());
         }
 
-        Optional<Parent> parent = parentRepository.findByUsername(username);
+        Optional<Parent> parent = findParentByFlexibleUsername(username);
         if (parent.isPresent() && Boolean.TRUE.equals(parent.get().getActive())) {
-            if (passwordEncoder.matches(password, parent.get().getPasswordHash())) {
+            if (isValidParentPassword(password, parent.get().getPasswordHash())) {
                 Parent p = parent.get();
                 Long schoolId = p.getSchoolId();
                 Long headOfficeId = resolveHeadOfficeIdFromSchool(schoolId);
-                return new AuthResult(username, Role.PARENT.name(), null, headOfficeId, schoolId, null, null, p.getId(), p.getName());
+                return new AuthResult(p.getUsername(), Role.PARENT.name(), null, headOfficeId, schoolId, null, null, p.getId(), p.getName());
             }
         }
 
@@ -373,10 +379,38 @@ public class AuthController {
         return false;
     }
 
+    private boolean isValidParentPassword(String raw, String stored) {
+        if (raw == null || stored == null) return false;
+        String trimmed = stored.trim();
+        if (trimmed.isEmpty()) return false;
+        if (trimmed.startsWith("$2")) return passwordEncoder.matches(raw, trimmed);
+        if (trimmed.startsWith("{bcrypt}")) return passwordEncoder.matches(raw, trimmed.substring("{bcrypt}".length()));
+        return trimmed.equals(raw);
+    }
+
     private String normalize(String input) {
         if (input == null) return null;
         String trimmed = input.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizePhoneUsername(String value) {
+        String trimmed = normalize(value);
+        if (trimmed == null) return null;
+        String compact = trimmed.replaceAll("[\\s\\-()]+", "");
+        if (compact.startsWith("+")) return compact;
+        String digits = compact.replaceAll("\\D", "");
+        if (digits.length() == 10) return "+91" + digits;
+        return digits.isEmpty() ? null : digits;
+    }
+
+    private Optional<Parent> findParentByFlexibleUsername(String username) {
+        String normalized = normalizePhoneUsername(username);
+        if (normalized == null) return Optional.empty();
+        return parentRepository.findAll().stream()
+                .filter(parent -> Boolean.TRUE.equals(parent.getActive()))
+                .filter(parent -> normalized.equals(normalizePhoneUsername(parent.getUsername())))
+                .findFirst();
     }
 
     private String[] permissionsFor(String role, Long schoolId) {

@@ -1,12 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { login as loginApi, logout as logoutApi, me as meApi } from '../apis/authApi'
 import { getToken, setToken } from '../apis/apiClient'
 import { normalizeRole } from '../utils/roles'
+import { AuthContext } from './authContext'
 
 const USER_KEY = 'sm_user'
 const CHILD_KEY = 'sm_selected_child_id'
-
-const AuthContext = createContext(null)
 
 const readJson = (key) => {
   try {
@@ -115,7 +114,16 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshMe()
+  }, [refreshMe])
+
+  useEffect(() => {
+    const handler = () => {
+      void refreshMe()
+    }
+    window.addEventListener('sm:auth-refresh', handler)
+    return () => window.removeEventListener('sm:auth-refresh', handler)
   }, [refreshMe])
 
   const login = useCallback(async ({ username, password, remember = true }) => {
@@ -181,8 +189,4 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
-}
+// useAuth moved to `src/context/useAuth.js` (Fast Refresh rule compliance).
