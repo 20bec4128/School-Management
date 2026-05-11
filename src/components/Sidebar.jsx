@@ -14,11 +14,11 @@ const menuSections = [
         icon: 'ri:dashboard-line',
         page: 'dashboard',
         submenu: [
-          { label: 'School', href: '#' },
-          { label: 'Teacher', href: '#' },
-          { label: 'Student', href: '#' },          
-          { label: 'Parent', href: '#' },
-          { label: 'LMS', href: '#' },
+          { label: 'School', href: '#', page: 'school-admin-dashboard' },
+          { label: 'Teacher', href: '#', page: 'teacher-dashboard' },
+          { label: 'Student', href: '#', page: 'student-dashboard' },
+          { label: 'Parent', href: '#', page: 'parent-dashboard' },
+          { label: 'LMS', href: '#', page: 'dashboard' },
         ],
       },
       // {
@@ -149,7 +149,7 @@ const menuSections = [
       {
         title: 'Manage Student',
         icon: 'ri:group-line',
-        perm: 'STUDENT_MANAGE',
+        perm: 'STUDENT_TYPE_MANAGE',
         submenu: [
           { label: 'Student Type', href: '#',page: 'student-type' },
           { label: 'Student List', href: '#', page: 'student-list' },
@@ -826,8 +826,10 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
   const isStudent = role === 'STUDENT'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const isTeacher = role === 'TEACHER'
   const studentAllowedPages = new Set([
     'dashboard',
+    'student-dashboard',
     'class-routine',
     'subject',
     'syllabus',
@@ -843,6 +845,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   ])
   const schoolAdminAllowedPages = new Set([
     'dashboard',
+    'school-admin-dashboard',
     'teacher-department',
     'user-role-acl',
     'class',
@@ -851,18 +854,46 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     'manage-teacher',
     'student-list',
     'student-type',
+    'online-admission',
     'student-activity',
     'syllabus',
     'study-material',
     'live-class',
     'assignment',
     'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+    'class-routine',
+  ])
+  const teacherVisiblePages = new Set([
+    'teacher-dashboard',
+    'student-type',
+    'student-list',
+    'online-admission',
+    'class',
+    'section',
+    'subject',
+    'syllabus',
+    'study-material',
+    'live-class',
+    'assignment',
+    'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+    'class-routine',
   ])
 
   const canOpenPage = (page) => {
     if (!page) return true
     if (isStudent) return studentAllowedPages.has(page)
     if (isSchoolAdmin) return schoolAdminAllowedPages.has(page)
+    if (isTeacher) return teacherVisiblePages.has(page)
     return true
   }
 
@@ -906,18 +937,17 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
         </button>
 
         <div>
-          <div className="sidebar-logo d-flex align-items-center justify-content-center">
-            <a href="#">
+          <div className="sidebar-logo d-flex align-items-center justify-content-between">
+            <a href="#" className="sidebar-logo__brand">
               <img src="/assets/images/logo.png" alt="site logo" className="light-logo" />
               <img src="/assets/images/logo-light.png" alt="site logo" className="dark-logo" />
               <img src="/assets/images/logo-icon.png" alt="site logo" className="logo-icon" />
             </a>
             <button
               type="button"
-              className="text-xxl d-xl-flex d-none line-height-1 sidebar-toggle text-neutral-500"
+              className="sidebar-collapse-btn text-xxl d-xl-flex d-none line-height-1 text-neutral-500"
               aria-label="Collapse Sidebar"
               onClick={toggleSidebar}
-              style={{ position: 'absolute', right: '1rem' }}
             >
               <iconify-icon icon="ri:contract-left-line"></iconify-icon>
             </button>

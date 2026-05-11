@@ -1,6 +1,5 @@
-import Dashboard from './Dashboard'
+import RoleDashboard from './RoleDashboard'
 
 export default function SuperAdminDashboard() {
-  return <Dashboard />
+  return <RoleDashboard variant="superAdmin" />
 }
-

@@ -1,8 +1,7 @@
-import Dashboard from './Dashboard'
+import RoleDashboard from './RoleDashboard'
 
 const HeadOfficeDashboard = () => {
-  return <Dashboard />
+  return <RoleDashboard variant="headOffice" />
 }
 
 export default HeadOfficeDashboard
-

@@ -156,7 +156,7 @@ const getChildClassId = (child) =>
   null
 
 const Syllabus = () => {
-  const { user, role, schoolId, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const { user, role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren } = useAuth()
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const canManage = can(user, ['SYLLABUS_MANAGE', 'SYLLABUS_MANAGE_ASSIGNED', '*'])
 
@@ -186,6 +186,7 @@ const Syllabus = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const roleUpper = String(role || '').toUpperCase()
+  const isTeacherScope = roleUpper === 'TEACHER'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const effectiveSchoolId =
@@ -200,6 +201,20 @@ const Syllabus = () => {
       : roleUpper === 'PARENT'
         ? getChildClassId(selectedChild)
         : null
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : schoolId ? String(schoolId) : ''
+  const resolvedSchoolName = schoolName || ''
+  const resolvedSchoolLabel = resolvedSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
+  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((row) => [String(row?.id), row]))
+    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
+      byId.set(String(resolvedSchoolId), {
+        id: resolvedSchoolId,
+        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
   const addFileRef = useRef(null)
   const editFileRef = useRef(null)
@@ -211,12 +226,14 @@ const Syllabus = () => {
       setSubjectsLookup([])
       return
     }
-    const [schools, classes, subjects] = await Promise.all([
+    const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
       fetchSchoolsLookup(),
       fetchClasses(),
       fetchSubjects(),
     ])
-
+    const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
+    const classes = classesResult.status === 'fulfilled' ? classesResult.value : []
+    const subjects = subjectsResult.status === 'fulfilled' ? subjectsResult.value : []
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
@@ -232,7 +249,9 @@ const Syllabus = () => {
             : null)
         : isSchoolSelectionEnabled && activeSchoolId
           ? { schoolId: activeSchoolId }
-          : {}
+          : resolvedSchoolId
+            ? { schoolId: resolvedSchoolId }
+            : {}
 
       if (isStudentScope && !scopedParams) {
         setSyllabuses([])
@@ -253,7 +272,7 @@ const Syllabus = () => {
     } finally {
       setLoading(false)
     }
-  }, [activeSchoolId, effectiveClassId, effectiveSchoolId, isSchoolSelectionEnabled, isStudentScope, roleUpper, selectedChildId])
+  }, [activeSchoolId, effectiveClassId, effectiveSchoolId, isSchoolSelectionEnabled, isStudentScope, resolvedSchoolId, roleUpper, selectedChildId])
 
   useEffect(() => {
     void loadLookups()
@@ -262,6 +281,12 @@ const Syllabus = () => {
   useEffect(() => {
     void loadSyllabuses()
   }, [loadSyllabuses])
+
+  useEffect(() => {
+    if (!isTeacherScope || !resolvedSchoolId) return
+    setPendingFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
+    setFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
+  }, [isTeacherScope, resolvedSchoolId, resolvedSchoolLabel])
 
   const schoolFilterOptions = useMemo(() => {
     const source = schoolsLookup.length > 0 ? schoolsLookup.map((s) => s?.schoolName) : syllabuses.map((row) => row?.school)
@@ -332,6 +357,7 @@ const Syllabus = () => {
   }
 
   const handleSchoolChange = (setter) => (e) => {
+    if (isTeacherScope) return
     const schoolId = e.target.value
     setter((prev) => ({ ...prev, schoolId, classId: '', subjectId: '' }))
   }
@@ -350,6 +376,7 @@ const Syllabus = () => {
 
   const handlePendingFilterChange = (e) => {
     if (isStudentScope) return
+    if (isTeacherScope && e.target.id === 'school') return
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
@@ -357,14 +384,17 @@ const Syllabus = () => {
   const handleApplyFilters = (e) => {
     e.preventDefault()
     if (isStudentScope) return
-    setFilters(pendingFilters)
+    setFilters(isTeacherScope ? { ...pendingFilters, school: resolvedSchoolLabel } : pendingFilters)
     setCurrentPage(1)
   }
 
   const handleResetFilters = () => {
     if (isStudentScope) return
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const next = isTeacherScope
+      ? { ...emptyFilters, school: resolvedSchoolLabel || 'Select' }
+      : emptyFilters
+    setPendingFilters(next)
+    setFilters(next)
     setCurrentPage(1)
   }
 
@@ -386,7 +416,7 @@ const Syllabus = () => {
   const openAdd = () => {
     if (!canManage) return
     setError('')
-    setAddForm(emptyForm)
+    setAddForm(resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
     setAddSyllabusFile(null)
     setAddStep(0)
     if (addFileRef.current) addFileRef.current.value = ''
@@ -398,7 +428,7 @@ const Syllabus = () => {
     setError('')
     setEditingId(row?.id ?? null)
     setEditForm({
-      schoolId: row?.schoolId || '',
+      schoolId: row?.schoolId || resolvedSchoolId,
       classId: row?.classId || '',
       subjectId: row?.subjectId || '',
       title: row?.title || '',
@@ -554,19 +584,29 @@ const Syllabus = () => {
               </div>
 
               <FormField label="School Name" required full>
-                <select
-                  className="avm-select"
-                  id="schoolId"
-                  value={form.schoolId}
-                  onChange={handleSchoolChange(setter)}
-                >
-                  <option value="">--Select School--</option>
-                  {schoolsLookup.map((school) => (
-                    <option key={school.id} value={String(school.id)}>
-                      {school.schoolName}
-                    </option>
-                  ))}
-                </select>
+                {isTeacherScope ? (
+                  <input
+                    className="avm-input"
+                    value={resolvedSchoolLabel}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                ) : (
+                  <select
+                    className="avm-select"
+                    id="schoolId"
+                    value={form.schoolId}
+                    onChange={handleSchoolChange(setter)}
+                    disabled={saving || isSchoolLocked}
+                  >
+                    <option value="">--Select School--</option>
+                    {effectiveSchoolsLookup.map((school) => (
+                      <option key={school.id} value={String(school.id)}>
+                        {school.schoolName}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </FormField>
 
               <FormField label="Title" required full>
@@ -1141,19 +1181,28 @@ const Syllabus = () => {
             >
               School
             </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolFilterOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            {isTeacherScope ? (
+              <input
+                id="school"
+                className="form-control"
+                value={resolvedSchoolLabel}
+                readOnly
+              />
+            ) : (
+              <select
+                id="school"
+                className="form-control form-select"
+                value={pendingFilters.school}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select School</option>
+                {schoolFilterOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>

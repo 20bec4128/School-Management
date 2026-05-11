@@ -9,6 +9,7 @@ import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.txt'
@@ -161,15 +162,49 @@ const NotificationToggle = ({ id, label, icon, checked, onChange }) => (
 )
 
 const Assignment = () => {
-  const { user, role, studentId, selectedChildId } = useAuth()
+  const {
+    user,
+    role,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    studentId,
+    selectedChildId,
+    parentChildren,
+  } = useAuth()
+  const { activeSchoolId } = useSchool()
 
   const roleUpper = String(role || '').toUpperCase()
+  const selectedChild = useMemo(() => {
+    const list = Array.isArray(parentChildren) ? parentChildren : []
+    if (selectedChildId == null || selectedChildId === '') return null
+    return (
+      list.find((child) =>
+        [child?.studentId ?? child?.id ?? child?.student?.id ?? '', child?.student?.studentId ?? ''].some(
+          (candidate) => String(candidate) === String(selectedChildId),
+        ),
+      ) || null
+    )
+  }, [parentChildren, selectedChildId])
   const fixedStudentId =
     roleUpper === 'STUDENT'
       ? studentId
       : roleUpper === 'PARENT'
-        ? selectedChildId
+        ? selectedChildId || null
         : null
+  const scopeSchoolId = activeSchoolId
+    ? String(activeSchoolId)
+    : roleUpper === 'PARENT'
+      ? selectedChild?.schoolId != null
+        ? String(selectedChild.schoolId)
+        : ''
+      : authSchoolId != null
+        ? String(authSchoolId)
+        : ''
+  const scopeSchoolName = activeSchoolId
+    ? ''
+    : roleUpper === 'PARENT'
+      ? selectedChild?.schoolName || selectedChild?.school?.schoolName || selectedChild?.school?.name || ''
+      : authSchoolName || ''
   const canManage = can(user, ['ASSIGNMENT_MANAGE', 'ASSIGNMENT_MANAGE_ASSIGNED', '*'])
   const isReadOnly = fixedStudentId != null
 
@@ -205,84 +240,146 @@ const Assignment = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
-  const [hasSearched, setHasSearched] = useState(false)
-  const hasSearchResults = hasSearched || fixedStudentId != null
+  const [hasSearched, setHasSearched] = useState(true)
+  const hasSearchResults = true
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const loadLookups = useCallback(async () => {
-    const shouldLoadAdminLookups = fixedStudentId == null
     const [schools, classes, sections, subjects] = await Promise.all([
-      shouldLoadAdminLookups ? fetchSchoolsLookup().catch(() => []) : Promise.resolve([]),
-      shouldLoadAdminLookups ? fetchClasses().catch(() => []) : Promise.resolve([]),
-      shouldLoadAdminLookups ? fetchSections().catch(() => []) : Promise.resolve([]),
+      fetchSchoolsLookup().catch(() => []),
+      fetchClasses({ schoolId: scopeSchoolId || undefined }).catch(() => []),
+      fetchSections({ schoolId: scopeSchoolId || undefined }).catch(() => []),
       fetchSubjects().catch(() => []),
     ])
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSectionsLookup(Array.isArray(sections) ? sections : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
-  }, [fixedStudentId])
+  }, [scopeSchoolId])
 
   const loadRows = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      if (roleUpper === 'PARENT' && !fixedStudentId) {
+        setRows([])
+        return
+      }
       const data =
         fixedStudentId != null
           ? await fetchAssignmentsForStudent(fixedStudentId)
-          : await fetchAssignments()
+          : await fetchAssignments(scopeSchoolId ? { schoolId: scopeSchoolId } : undefined)
       setRows(Array.isArray(data) ? data : [])
+      setHasSearched(true)
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load assignments')
     } finally {
       setLoading(false)
     }
-  }, [fixedStudentId])
+  }, [fixedStudentId, roleUpper, scopeSchoolId])
 
   useEffect(() => {
     void loadLookups()
     void loadRows()
   }, [loadLookups, loadRows])
 
+  useEffect(() => {
+    const nextFilters = scopeSchoolId ? { ...emptyFilters, schoolId: scopeSchoolId } : emptyFilters
+    setPendingFilters(nextFilters)
+    setFilters(nextFilters)
+    setFindErrors({})
+    setSearch('')
+    setCurrentPage(1)
+    setSelectedRows([])
+  }, [scopeSchoolId])
+
+  const schoolNameById = useMemo(() => {
+    const map = new Map()
+    for (const school of schoolsLookup) {
+      const id = school?.id ?? school?.schoolId ?? null
+      const name = school?.schoolName || school?.name || school?.label || ''
+      if (id != null && name) map.set(String(id), name)
+    }
+    if (scopeSchoolId && !map.has(String(scopeSchoolId))) {
+      map.set(String(scopeSchoolId), scopeSchoolName || `School ${scopeSchoolId}`)
+    }
+    return map
+  }, [scopeSchoolId, scopeSchoolName, schoolsLookup])
+
+  const classNameById = useMemo(() => {
+    const map = new Map()
+    for (const cls of classesLookup) {
+      const id = cls?.id ?? cls?.classId ?? null
+      const name = cls?.className || cls?.name || cls?.label || ''
+      if (id != null && name) map.set(String(id), name)
+    }
+    return map
+  }, [classesLookup])
+
+  const sectionNameById = useMemo(() => {
+    const map = new Map()
+    for (const section of sectionsLookup) {
+      const id = section?.id ?? section?.sectionId ?? null
+      const name = section?.sectionName || section?.name || section?.label || ''
+      if (id != null && name) map.set(String(id), name)
+    }
+    return map
+  }, [sectionsLookup])
+
+  const subjectNameById = useMemo(() => {
+    const map = new Map()
+    for (const subject of subjectsLookup) {
+      const id = subject?.id ?? subject?.subjectId ?? null
+      const name = subject?.name || subject?.subjectName || subject?.label || ''
+      if (id != null && name) map.set(String(id), name)
+    }
+    return map
+  }, [subjectsLookup])
+
+  const displayRows = useMemo(() => {
+    return rows.map((row) => ({
+      ...row,
+      schoolName: row?.schoolName || schoolNameById.get(String(row?.schoolId)) || (row?.schoolId != null ? `School ${row.schoolId}` : ''),
+      className: row?.className || classNameById.get(String(row?.classId)) || (row?.classId != null ? `Class ${row.classId}` : ''),
+      sectionName: row?.sectionName || sectionNameById.get(String(row?.sectionId)) || (row?.sectionId != null ? `Section ${row.sectionId}` : ''),
+      subjectName: row?.subjectName || subjectNameById.get(String(row?.subjectId)) || (row?.subjectId != null ? `Subject ${row.subjectId}` : ''),
+    }))
+  }, [classNameById, rows, schoolNameById, sectionNameById, subjectNameById])
+
+  const effectiveSchoolFilterId = pendingFilters.schoolId !== 'Select' ? pendingFilters.schoolId : scopeSchoolId
+
   const classOptions = useMemo(() => {
     return classesLookup
-      .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
+      .filter((c) => !effectiveSchoolFilterId || String(c.schoolId) === String(effectiveSchoolFilterId))
       .slice()
       .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
-  }, [classesLookup, pendingFilters.schoolId])
+  }, [classesLookup, effectiveSchoolFilterId])
 
   const sectionOptions = useMemo(() => {
     return sectionsLookup
       .filter((s) => {
-        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
+        if (effectiveSchoolFilterId && String(s.schoolId) !== String(effectiveSchoolFilterId)) return false
         if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
         return true
       })
       .slice()
       .sort((a, b) => String(a.sectionName || '').localeCompare(String(b.sectionName || '')))
-  }, [sectionsLookup, pendingFilters.schoolId, pendingFilters.classId])
+  }, [effectiveSchoolFilterId, pendingFilters.classId, sectionsLookup])
 
   const subjectOptions = useMemo(() => {
     return subjectsLookup
       .filter((s) => {
-        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
+        if (effectiveSchoolFilterId && String(s.schoolId) !== String(effectiveSchoolFilterId)) return false
         if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
         return true
       })
       .slice()
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-  }, [subjectsLookup, pendingFilters.schoolId, pendingFilters.classId])
+  }, [effectiveSchoolFilterId, pendingFilters.classId, subjectsLookup])
 
-  const validateFind = () => {
-    const errs = {}
-    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
-    if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
-    if (pendingFilters.sectionId === 'Select') errs.sectionId = 'Section is required.'
-    if (pendingFilters.subjectId === 'Select') errs.subjectId = 'Subject is required.'
-    return errs
-  }
+  const validateFind = () => ({})
 
   const handlePendingFilterChange = async (e) => {
     const { id, value } = e.target
@@ -300,6 +397,9 @@ const Assignment = () => {
         if (nextSchoolId !== 'Select' && nextClassId !== 'Select') {
           const secs = await fetchSections({ schoolId: nextSchoolId, classId: nextClassId })
           setSectionsLookup(Array.isArray(secs) ? secs : [])
+        } else if (nextSchoolId !== 'Select') {
+          const secs = await fetchSections({ schoolId: nextSchoolId })
+          setSectionsLookup(Array.isArray(secs) ? secs : [])
         } else {
           setSectionsLookup([])
         }
@@ -311,11 +411,6 @@ const Assignment = () => {
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
-    const errs = validateFind()
-    if (Object.keys(errs).length > 0) {
-      setFindErrors(errs)
-      return
-    }
     setFindErrors({})
     setFilters(pendingFilters)
     setHasSearched(true)
@@ -325,8 +420,9 @@ const Assignment = () => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const nextFilters = scopeSchoolId ? { ...emptyFilters, schoolId: scopeSchoolId } : emptyFilters
+    setPendingFilters(nextFilters)
+    setFilters(nextFilters)
     setFindErrors({})
     setHasSearched(false)
     setSearch('')
@@ -334,41 +430,9 @@ const Assignment = () => {
     setSelectedRows([])
   }
 
-  const schoolNameById = useMemo(() => {
-    const map = new Map()
-    for (const s of schoolsLookup) map.set(String(s.id), s.name)
-    return map
-  }, [schoolsLookup])
-
-  const classNameById = useMemo(() => {
-    const map = new Map()
-    for (const c of classesLookup) map.set(String(c.id), c.className)
-    return map
-  }, [classesLookup])
-
-  const sectionNameById = useMemo(() => {
-    const map = new Map()
-    for (const s of sectionsLookup) map.set(String(s.id), s.sectionName)
-    return map
-  }, [sectionsLookup])
-
-  const subjectNameById = useMemo(() => {
-    const map = new Map()
-    for (const s of subjectsLookup) map.set(String(s.id), s.name)
-    return map
-  }, [subjectsLookup])
-
   const filtered = useMemo(() => {
-    if (!hasSearchResults) return []
     const q = search.trim().toLowerCase()
-    return rows
-      .map((r) => ({
-        ...r,
-        schoolName: r.schoolName || schoolNameById.get(String(r.schoolId)) || '',
-        className: r.className || classNameById.get(String(r.classId)) || '',
-        sectionName: r.sectionName || sectionNameById.get(String(r.sectionId)) || '',
-        subjectName: r.subjectName || subjectNameById.get(String(r.subjectId)) || '',
-      }))
+    return displayRows
       .filter((r) => {
         if (filters.schoolId !== 'Select' && String(r.schoolId) !== String(filters.schoolId)) return false
         if (filters.classId !== 'Select' && String(r.classId) !== String(filters.classId)) return false
@@ -381,7 +445,7 @@ const Assignment = () => {
           .toLowerCase()
           .includes(q)
       })
-  }, [hasSearchResults, rows, filters, search, schoolNameById, classNameById, sectionNameById, subjectNameById])
+  }, [displayRows, filters, search])
 
   const statusOptions = useMemo(() => {
     const set = new Set()
@@ -417,7 +481,7 @@ const Assignment = () => {
 
   const openAdd = () => {
     if (isReadOnly) return
-    setAddForm(emptyForm)
+    setAddForm(scopeSchoolId ? { ...emptyForm, schoolId: scopeSchoolId } : emptyForm)
     setAddFile(null)
     if (addFileRef.current) addFileRef.current.value = ''
     setAddStep(0)
@@ -428,7 +492,7 @@ const Assignment = () => {
     if (isReadOnly) return
     setEditingId(row.id)
     setEditForm({
-      schoolId: row.schoolId ? String(row.schoolId) : 'Select',
+      schoolId: row.schoolId ? String(row.schoolId) : (scopeSchoolId || 'Select'),
       classId: row.classId ? String(row.classId) : 'Select',
       sectionId: row.sectionId ? String(row.sectionId) : 'Select',
       subjectId: row.subjectId ? String(row.subjectId) : 'Select',
@@ -533,6 +597,9 @@ const Assignment = () => {
   }
 
   const renderForm = (form, setter, file, setFile, fileRef) => {
+    const effectiveSchoolOptions = scopeSchoolId
+      ? [{ id: scopeSchoolId, schoolName: schoolNameById.get(String(scopeSchoolId)) || scopeSchoolName || `School ${scopeSchoolId}` }]
+      : schoolsLookup
     return (
       <div className="avm-grid">
         <FormField label="School Name" required>
@@ -544,11 +611,12 @@ const Assignment = () => {
               const value = e.target.value
               setter((prev) => ({ ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }))
             }}
+            disabled={Boolean(scopeSchoolId)}
           >
             <option value="Select">Select</option>
-            {schoolsLookup.map((s) => (
+            {effectiveSchoolOptions.map((s) => (
               <option key={s.id} value={String(s.id)}>
-                {s.name}
+                {s.schoolName || s.name}
               </option>
             ))}
           </select>
@@ -872,11 +940,11 @@ const Assignment = () => {
         <form onSubmit={handleApplyFilters} className="p-3">
           <div className="mb-3">
             <label className="form-label">School</label>
-            <select className="form-select" id="schoolId" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
+            <select className="form-select" id="schoolId" value={scopeSchoolId || pendingFilters.schoolId} onChange={handlePendingFilterChange} disabled={Boolean(scopeSchoolId)}>
               <option value="Select">Select</option>
               {schoolsLookup.map((s) => (
                 <option key={s.id} value={String(s.id)}>
-                  {s.name}
+                  {s.schoolName || s.name}
                 </option>
               ))}
             </select>

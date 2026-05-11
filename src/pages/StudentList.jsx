@@ -8,6 +8,8 @@ import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsPage, createStudent, updateStudent, deleteStudent } from '../apis/studentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchStudentTypesLookup } from '../apis/studentTypeApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -309,6 +311,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const StudentList = ({ onNavigate }) => {
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -335,6 +339,10 @@ const StudentList = ({ onNavigate }) => {
   const [refreshKey, setRefreshKey] = useState(0)
   const [schoolList, setSchoolList] = useState([])
   const [studentTypeOptions, setStudentTypeOptions] = useState([])
+  const resolvedSchoolId = activeSchoolId || authSchoolId || ''
+  const resolvedSchoolName = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
+  const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const isSchoolLocked = Boolean(scopedSchoolId) && role !== 'SUPER_ADMIN'
 
   const [addPreviews, setAddPreviews] = useState({
     fatherPhoto: null, motherPhoto: null, transferCertificate: null, photo: null,
@@ -361,7 +369,7 @@ const StudentList = ({ onNavigate }) => {
       setError(null)
       try {
         const res = await fetchStudentsPage(currentPage - 1, rowsPerPage, {
-          schoolId: filters.schoolId || undefined,
+          schoolId: scopedSchoolId || (filters.schoolId && filters.schoolId !== 'Select' ? filters.schoolId : undefined),
           className: filters.className !== 'Select' ? filters.className : undefined,
           section: filters.section !== 'Select' ? filters.section : undefined,
           group: filters.group !== 'Select' ? filters.group : undefined,
@@ -379,11 +387,28 @@ const StudentList = ({ onNavigate }) => {
     }
     load()
     return () => { cancelled = true }
-  }, [currentPage, rowsPerPage, filters, refreshKey])
+  }, [currentPage, rowsPerPage, filters, refreshKey, scopedSchoolId])
 
   useEffect(() => {
     fetchSchoolsLookup().then(setSchoolList).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    setCurrentPage(1)
+    setSelectedRows([])
+  }, [scopedSchoolId])
+
+  const effectiveSchoolList = useMemo(() => {
+    const list = Array.isArray(schoolList) ? schoolList.slice() : []
+    if (!scopedSchoolId) return list
+    const selected = list.find((s) => String(s?.id) === String(scopedSchoolId))
+    return selected
+      ? [selected]
+      : [{
+          id: scopedSchoolId,
+          schoolName: resolvedSchoolName || `School ${scopedSchoolId}`,
+        }]
+  }, [resolvedSchoolName, schoolList, scopedSchoolId])
 
   useEffect(() => {
     let cancelled = false
@@ -474,7 +499,10 @@ const StudentList = ({ onNavigate }) => {
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
+    setAddForm({
+      ...emptyForm,
+      school: scopedSchoolId ? String(scopedSchoolId) : '',
+    })
     setIsAddPasswordVisible(false)
     setIsAddParentPasswordVisible(false)
     setAddPreviews({ fatherPhoto: null, motherPhoto: null, transferCertificate: null, photo: null })
@@ -486,7 +514,7 @@ const StudentList = ({ onNavigate }) => {
   const openEdit = (row) => {
     setEditForm({
       id: row.id,
-      school: row.schoolId ? String(row.schoolId) : '',
+      school: row.schoolId ? String(row.schoolId) : (scopedSchoolId ? String(scopedSchoolId) : ''),
       name: row.name || '',
       admissionNo: row.admissionNo || '',
       admissionDate: row.admissionDate || '',
@@ -642,6 +670,7 @@ const StudentList = ({ onNavigate }) => {
                 className="avm-select"
                 id="school"
                 value={form.school}
+                disabled={isSchoolLocked}
                 onChange={(e) =>
                   setter((prev) => ({
                     ...prev,
@@ -652,9 +681,9 @@ const StudentList = ({ onNavigate }) => {
                     section: '',
                   }))
                 }
-              >
-                <option value="">--Select School--</option>
-                {schoolList.map((s) => (
+                >
+                  <option value="">--Select School--</option>
+                {effectiveSchoolList.map((s) => (
                   <option key={s.id} value={s.id}>{s.schoolName}</option>
                 ))}
               </select>
@@ -1284,10 +1313,16 @@ const StudentList = ({ onNavigate }) => {
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div>
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select id="schoolId" className="form-control form-select" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
+            <select
+              id="schoolId"
+              className="form-control form-select"
+              value={isSchoolLocked ? scopedSchoolId : pendingFilters.schoolId}
+              onChange={handlePendingFilterChange}
+              disabled={isSchoolLocked}
+            >
               <option value="">Select School</option>
-              {schoolOptions.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              {(isSchoolLocked ? effectiveSchoolList : schoolOptions).map((s) => (
+                <option key={s.id} value={s.id}>{s.name || s.schoolName}</option>
               ))}
             </select>
           </div>

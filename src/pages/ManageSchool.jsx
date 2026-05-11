@@ -4,6 +4,8 @@ import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createSchoolWithAdmin, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -16,6 +18,7 @@ const emptyForm = {
   status: 'Active',
   adminUsername: '',
   adminPassword: '',
+  headOfficeId: '',
   address: '',
   phone: '',
   registrationDate: '',
@@ -170,7 +173,9 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ManageSchool = () => {
+  const { role, headOfficeId: currentHeadOfficeId, headOfficeName: currentHeadOfficeName } = useAuth()
   const [schools, setSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -202,11 +207,25 @@ const ManageSchool = () => {
   const [editAdminLogoInputKey, setEditAdminLogoInputKey] = useState(0)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeScoped = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
 
   const schoolOptions = useMemo(
     () => Array.from(new Set(schools.map((item) => item.schoolName))).sort(),
     [schools],
   )
+
+  const headOfficeOptions = useMemo(() => {
+    const fromApi = Array.isArray(headOffices) ? headOffices : []
+    const normalized = fromApi
+      .map((row) => ({ id: row?.id, name: row?.name || row?.headOfficeName || '' }))
+      .filter((row) => row.id != null && row.name)
+    if (isHeadOfficeScoped && currentHeadOfficeId != null && currentHeadOfficeName) {
+      const exists = normalized.some((row) => String(row.id) === String(currentHeadOfficeId))
+      if (!exists) normalized.unshift({ id: currentHeadOfficeId, name: currentHeadOfficeName })
+    }
+    return normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [currentHeadOfficeId, currentHeadOfficeName, headOffices, isHeadOfficeScoped])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -290,7 +309,10 @@ const ManageSchool = () => {
   const openAdd = () => {
     setError('')
     setEditingSchoolId(null)
-    setAddForm(emptyForm)
+    setAddForm({
+      ...emptyForm,
+      headOfficeId: isHeadOfficeScoped && currentHeadOfficeId != null ? String(currentHeadOfficeId) : '',
+    })
     setAddFrontendLogoPreview(null)
     setAddAdminLogoPreview(null)
     setAddFrontendLogoInputKey((k) => k + 1)
@@ -332,6 +354,9 @@ const ManageSchool = () => {
       youtubeUrl: row.youtubeUrl || '',
       instagramUrl: row.instagramUrl || '',
       pinterestUrl: row.pinterestUrl || '',
+      headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : (isHeadOfficeScoped && currentHeadOfficeId != null ? String(currentHeadOfficeId) : ''),
+      adminUsername: row.adminUsername || '',
+      adminPassword: '',
       frontendLogo: null,
       adminLogo: null,
     })
@@ -375,12 +400,31 @@ const ManageSchool = () => {
     }
   }, [currentPage, rowsPerPage])
 
+  const loadHeadOffices = useCallback(async () => {
+    if (!isSuperAdmin) {
+      if (isHeadOfficeScoped && currentHeadOfficeId != null && currentHeadOfficeName) {
+        setHeadOffices([{ id: currentHeadOfficeId, name: currentHeadOfficeName }])
+      }
+      return
+    }
+    try {
+      const page = await fetchHeadOfficesPage(0, 500)
+      setHeadOffices(Array.isArray(page?.content) ? page.content : [])
+    } catch {
+      setHeadOffices([])
+    }
+  }, [currentHeadOfficeId, currentHeadOfficeName, isHeadOfficeScoped, isSuperAdmin])
+
   useEffect(() => {
     const fetchData = async () => {
       await loadSchools()
     }
     void fetchData()
   }, [currentPage, rowsPerPage, loadSchools])
+
+  useEffect(() => {
+    void loadHeadOffices()
+  }, [loadHeadOffices])
 
   const buildSchoolPayload = (form) => ({
     schoolUrl: form.schoolUrl || '',
@@ -412,17 +456,24 @@ const ManageSchool = () => {
     youtubeUrl: form.youtubeUrl || '',
     instagramUrl: form.instagramUrl || '',
     pinterestUrl: form.pinterestUrl || '',
+    headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
+    adminUsername: form.adminUsername || '',
+    adminPassword: form.adminPassword || '',
   })
 
   const handleCreateSchool = async () => {
     if (saving) return
-    setSaving(true)
     setError('')
     try {
+      if (isSuperAdmin && !addForm.headOfficeId) {
+        setError('Head office is required')
+        return
+      }
       if (!String(addForm.adminUsername || '').trim() || !String(addForm.adminPassword || '').trim()) {
         setError('School admin username and password are required')
         return
       }
+      setSaving(true)
       const payload = buildSchoolPayload(addForm)
       await createSchoolWithAdmin(
         {
@@ -580,25 +631,50 @@ const ManageSchool = () => {
                 </select>
               </FormField>
 
-              {setter === setAddForm ? (
+              <FormField label="Head Office" required full>
+                {isSuperAdmin ? (
+                  <select
+                    id="headOfficeId"
+                    className="avm-input"
+                    value={form.headOfficeId || ''}
+                    onChange={handleChange(setter)}
+                  >
+                    <option value="">--Select Head Office--</option>
+                    {headOfficeOptions.map((option) => (
+                      <option key={option.id} value={String(option.id)}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="avm-input"
+                    value={currentHeadOfficeName || 'Linked automatically'}
+                    disabled
+                  />
+                )}
+              </FormField>
+
+              {setter === setAddForm || setter === setEditForm ? (
                 <>
-                  <FormField label="School Admin Username" required full>
+                  <FormField label="School Admin Username" required={setter === setAddForm} full>
                     <input
                       type="text"
                       className="avm-input"
                       id="adminUsername"
-                      placeholder="School admin username"
+                      placeholder={setter === setAddForm ? 'School admin username' : 'Leave blank to keep current username'}
                       value={form.adminUsername || ''}
                       onChange={handleChange(setter)}
                     />
                   </FormField>
 
-                  <FormField label="School Admin Password" required full>
+                  <FormField label="School Admin Password" required={setter === setAddForm} full>
                     <input
                       type="password"
                       className="avm-input"
                       id="adminPassword"
-                      placeholder="School admin password"
+                      placeholder={setter === setAddForm ? 'School admin password' : 'Leave blank to keep current password'}
                       value={form.adminPassword || ''}
                       onChange={handleChange(setter)}
                     />

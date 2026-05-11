@@ -197,9 +197,24 @@ const routeEntries = [
   { pageKey: 'sms-setting', component: SmsSetting, permission: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
 ]
 
-const AppRoute = ({ currentPage, user, role, onNavigate }) => {
+const AppRoute = ({ currentPage, user, role, parentChildren, selectedChildId, onNavigate }) => {
   const normalizedRole = normalizeRole(role || user?.role || user?.userRole || user?.authority)
-  const entry = routeEntries.find((item) => item.pageKey === currentPage)
+  const homePage = (() => {
+    const r = normalizeRole(role || user?.role || user?.userRole || user?.authority)
+    if (r === 'SUPER_ADMIN') return 'super-admin-dashboard'
+    if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
+    if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
+    if (r === 'TEACHER') return 'teacher-dashboard'
+    if (r === 'STUDENT') return 'student-dashboard'
+    if (r === 'PARENT') {
+      const children = Array.isArray(parentChildren) ? parentChildren : []
+      if (children.length > 1 && !selectedChildId) return 'parent-child-select'
+      return 'parent-dashboard'
+    }
+    return 'dashboard'
+  })()
+  const effectivePage = currentPage === 'dashboard' ? homePage : currentPage
+  const entry = routeEntries.find((item) => item.pageKey === effectivePage)
 
   if (!entry) return <Dashboard />
 
@@ -209,7 +224,7 @@ const AppRoute = ({ currentPage, user, role, onNavigate }) => {
       ? <PageComponent onDone={() => onNavigate?.('parent-dashboard')} />
       : <PageComponent onNavigate={onNavigate} />
 
-  if (!canAccessPage(user, currentPage)) {
+  if (!canAccessPage(user, effectivePage)) {
     return <AccessDenied />
   }
 

@@ -1,6 +1,5 @@
-import Dashboard from './Dashboard'
+import RoleDashboard from './RoleDashboard'
 
 export default function ParentDashboard() {
-  return <Dashboard />
+  return <RoleDashboard variant="parent" />
 }
-

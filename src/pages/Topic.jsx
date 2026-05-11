@@ -7,6 +7,8 @@ import { fetchLessons } from '../apis/lessonsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 import FindEmptyState from '../components/FindEmptyState'
 
@@ -87,6 +89,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Topic = () => {
+  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [topics, setTopics] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
@@ -120,6 +124,19 @@ const Topic = () => {
   const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolName = authSchoolName || ''
+  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
+    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
+      byId.set(String(resolvedSchoolId), {
+        id: resolvedSchoolId,
+        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
   useEffect(() => {
     let ignore = false
@@ -127,8 +144,15 @@ const Topic = () => {
       try {
         setLoading(true)
         setError('')
-        const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+        const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
+          fetchSchoolsLookup(),
+          fetchClasses(),
+          fetchSubjects(),
+        ])
         if (ignore) return
+        const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
+        const classes = classesResult.status === 'fulfilled' ? classesResult.value : []
+        const subjects = subjectsResult.status === 'fulfilled' ? subjectsResult.value : []
         setSchoolsLookup(Array.isArray(schools) ? schools : [])
         setClassesLookup(Array.isArray(classes) ? classes : [])
         setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
@@ -301,7 +325,11 @@ const Topic = () => {
   }
 
   const openAdd = async () => {
-    const base = { ...emptyForm, ...filters }
+    const base = {
+      ...emptyForm,
+      ...filters,
+      ...(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}),
+    }
     setAddForm(base)
     setAddQueue([])
     setFormErrors({})
@@ -316,7 +344,7 @@ const Topic = () => {
 
   const openEdit = async (row) => {
     const base = {
-      schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId || 'Select',
       academicYear: row?.academicYear || 'Select',
       classId: row?.classId != null ? String(row.classId) : 'Select',
       subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
@@ -516,10 +544,10 @@ const Topic = () => {
             className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`}
             value={form.schoolId}
             onChange={onChange}
-            disabled={saving}
+            disabled={saving || isSchoolLocked}
           >
             <option value="Select">--Select School--</option>
-            {schoolsLookup.map((s) => (
+            {effectiveSchoolsLookup.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.schoolName}
               </option>

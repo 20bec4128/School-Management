@@ -41,8 +41,12 @@ const buildUpsertFormData = (payload, file) => {
   return fd
 }
 
-export const fetchAssignments = async () => {
-  const res = await apiFetch(ASSIGNMENTS_API_BASE, { headers: { Accept: 'application/json' } })
+export const fetchAssignments = async (params = {}) => {
+  const qs = new URLSearchParams()
+  if (params.schoolId != null && params.schoolId !== '') qs.set('schoolId', String(params.schoolId))
+  const url = qs.toString() ? `${ASSIGNMENTS_API_BASE}?${qs.toString()}` : ASSIGNMENTS_API_BASE
+
+  const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (res.status === 403) return []
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()

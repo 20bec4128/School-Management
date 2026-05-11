@@ -6,6 +6,8 @@ import { createLesson, deleteLesson, fetchLessons, updateLesson } from '../apis/
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 import FindEmptyState from '../components/FindEmptyState'
 
@@ -82,6 +84,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Lesson = () => {
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [lessons, setLessons] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
@@ -114,6 +118,22 @@ const Lesson = () => {
   const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const roleUpper = String(role || '').toUpperCase()
+  const isTeacherScope = roleUpper === 'TEACHER'
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolName = authSchoolName || ''
+  const resolvedSchoolLabel = resolvedSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
+  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
+    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
+      byId.set(String(resolvedSchoolId), {
+        id: resolvedSchoolId,
+        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
   useEffect(() => {
     let ignore = false
@@ -121,8 +141,15 @@ const Lesson = () => {
       try {
         setLoading(true)
         setError('')
-        const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+        const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
+          fetchSchoolsLookup(),
+          fetchClasses(),
+          fetchSubjects(),
+        ])
         if (ignore) return
+        const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
+        const classes = classesResult.status === 'fulfilled' ? classesResult.value : []
+        const subjects = subjectsResult.status === 'fulfilled' ? subjectsResult.value : []
         setSchoolsLookup(Array.isArray(schools) ? schools : [])
         setClassesLookup(Array.isArray(classes) ? classes : [])
         setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
@@ -137,6 +164,12 @@ const Lesson = () => {
       ignore = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!isTeacherScope || !resolvedSchoolId) return
+    setPendingFilters((prev) => (prev.schoolId === 'Select' ? { ...prev, schoolId: resolvedSchoolId } : prev))
+    setFilters((prev) => (prev.schoolId === 'Select' ? { ...prev, schoolId: resolvedSchoolId } : prev))
+  }, [isTeacherScope, resolvedSchoolId])
 
   const classOptions = useMemo(() => {
     return classesLookup
@@ -158,7 +191,7 @@ const Lesson = () => {
 
   const validateFind = () => {
     const errs = {}
-    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (!isTeacherScope && pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
     if (pendingFilters.academicYear === 'Select') errs.academicYear = 'Academic Year is required.'
     if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
     if (pendingFilters.subjectId === 'Select') errs.subjectId = 'Subject is required.'
@@ -168,14 +201,14 @@ const Lesson = () => {
   const loadLessons = useCallback(
     async (nextFilters) => {
       const data = await fetchLessons({
-        schoolId: nextFilters.schoolId,
+        schoolId: isTeacherScope ? resolvedSchoolId : nextFilters.schoolId,
         academicYear: nextFilters.academicYear,
         classId: nextFilters.classId,
         subjectId: nextFilters.subjectId,
       })
       setLessons(Array.isArray(data) ? data : [])
     },
-    [setLessons],
+    [isTeacherScope, resolvedSchoolId, setLessons],
   )
 
   const handleApplyFilters = async (e) => {
@@ -189,8 +222,11 @@ const Lesson = () => {
       setFindErrors({})
       setError('')
       setLoading(true)
-      await loadLessons(pendingFilters)
-      setFilters(pendingFilters)
+      const nextFilters = isTeacherScope
+        ? { ...pendingFilters, schoolId: resolvedSchoolId }
+        : pendingFilters
+      await loadLessons(nextFilters)
+      setFilters(nextFilters)
       setHasSearched(true)
       setIsFindSidebarOpen(false)
       setCurrentPage(1)
@@ -204,8 +240,11 @@ const Lesson = () => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const next = isTeacherScope
+      ? { ...emptyFilters, schoolId: resolvedSchoolId || 'Select' }
+      : emptyFilters
+    setPendingFilters(next)
+    setFilters(next)
     setFindErrors({})
     setHasSearched(false)
     setLessons([])
@@ -217,6 +256,7 @@ const Lesson = () => {
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => {
+      if (isTeacherScope && id === 'schoolId') return prev
       if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
       if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
       return { ...prev, [id]: value }
@@ -256,7 +296,11 @@ const Lesson = () => {
   }
 
   const openAdd = () => {
-    setAddForm({ ...emptyForm, ...filters })
+    setAddForm({
+      ...emptyForm,
+      ...filters,
+      ...(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}),
+    })
     setAddQueue([])
     setFormErrors({})
     setAddStep(0)
@@ -266,7 +310,7 @@ const Lesson = () => {
   const openEdit = (row) => {
     setEditingId(row?.id ?? null)
     setEditForm({
-      schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId || 'Select',
       academicYear: row?.academicYear || 'Select',
       classId: row?.classId != null ? String(row.classId) : 'Select',
       subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
@@ -280,7 +324,7 @@ const Lesson = () => {
 
   const validateEntryForm = (form) => {
     const errs = {}
-    if (!form.schoolId || form.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (!isTeacherScope && (!form.schoolId || form.schoolId === 'Select')) errs.schoolId = 'School is required.'
     if (!form.academicYear || form.academicYear === 'Select') errs.academicYear = 'Academic Year is required.'
     if (!form.classId || form.classId === 'Select') errs.classId = 'Class is required.'
     if (!form.subjectId || form.subjectId === 'Select') errs.subjectId = 'Subject is required.'
@@ -298,7 +342,7 @@ const Lesson = () => {
     setAddQueue((prev) => [
       ...prev,
       {
-        schoolId: addForm.schoolId,
+        schoolId: isTeacherScope ? resolvedSchoolId : addForm.schoolId,
         academicYear: addForm.academicYear,
         classId: addForm.classId,
         subjectId: addForm.subjectId,
@@ -318,7 +362,7 @@ const Lesson = () => {
         return
       }
       entries.push({
-        schoolId: addForm.schoolId,
+        schoolId: isTeacherScope ? resolvedSchoolId : addForm.schoolId,
         academicYear: addForm.academicYear,
         classId: addForm.classId,
         subjectId: addForm.subjectId,
@@ -337,7 +381,7 @@ const Lesson = () => {
       setError('')
       for (const entry of entries) {
         await createLesson({
-          schoolId: Number(entry.schoolId),
+          schoolId: Number(isTeacherScope ? resolvedSchoolId : entry.schoolId),
           academicYear: entry.academicYear,
           classId: Number(entry.classId),
           subjectId: Number(entry.subjectId),
@@ -368,7 +412,7 @@ const Lesson = () => {
       setError('')
       await updateLesson(editingId, {
         id: editingId,
-        schoolId: Number(editForm.schoolId),
+        schoolId: Number(isTeacherScope ? resolvedSchoolId : editForm.schoolId),
         academicYear: editForm.academicYear,
         classId: Number(editForm.classId),
         subjectId: Number(editForm.subjectId),
@@ -403,14 +447,15 @@ const Lesson = () => {
 
   const renderEntryForm = (form, setForm) => {
     const localClassOptions = classesLookup
-      .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
+      .filter((c) => isTeacherScope || !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
       .slice()
       .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
 
     const localSubjectOptions = subjectsLookup
       .filter((s) => {
-        if (!form.schoolId || form.schoolId === 'Select') return true
-        if (String(s.schoolId) !== String(form.schoolId)) return false
+        const schoolFilterId = isTeacherScope ? resolvedSchoolId : form.schoolId
+        if (!schoolFilterId || schoolFilterId === 'Select') return true
+        if (String(s.schoolId) !== String(schoolFilterId)) return false
         if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
         return true
       })
@@ -430,20 +475,28 @@ const Lesson = () => {
     return (
       <div className="avm-grid">
         <FormField label="School Name" required>
-          <select
-            id="schoolId"
-            className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`}
-            value={form.schoolId}
-            onChange={onChange}
-            disabled={saving}
-          >
-            <option value="Select">--Select School--</option>
-            {schoolsLookup.map((s) => (
-              <option key={s.id} value={String(s.id)}>
-                {s.schoolName}
-              </option>
-            ))}
-          </select>
+          {isTeacherScope ? (
+            <input
+              className="form-control ps-44"
+              value={resolvedSchoolLabel}
+              readOnly
+            />
+          ) : (
+            <select
+              id="schoolId"
+              className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`}
+              value={form.schoolId}
+              onChange={onChange}
+              disabled={saving || isSchoolLocked}
+            >
+              <option value="Select">--Select School--</option>
+              {effectiveSchoolsLookup.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.schoolName}
+                </option>
+              ))}
+            </select>
+          )}
           {formErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{formErrors.schoolId}</div> : null}
         </FormField>
 
@@ -795,19 +848,23 @@ const Lesson = () => {
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="schoolId"
-              className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`}
-              value={pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select School--</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName}
-                </option>
-              ))}
-            </select>
+            {isTeacherScope ? (
+              <input className="form-control" value={resolvedSchoolLabel} readOnly />
+            ) : (
+              <select
+                id="schoolId"
+                className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`}
+                value={pendingFilters.schoolId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select School--</option>
+                {schoolsLookup.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.schoolName}
+                  </option>
+                ))}
+              </select>
+            )}
             {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
           </div>
 

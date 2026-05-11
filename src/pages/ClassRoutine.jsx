@@ -515,6 +515,11 @@ const ClassRoutine = () => {
   }
 
   const renderEntryForm = (form, setForm) => {
+    const localTeacherOptions = teacherOptions.filter((t) => {
+      if (!form.schoolId || form.schoolId === 'Select') return true
+      return String((teachersLookup.find((teacher) => String(teacher?.id) === String(t.id))?.schoolId ?? '')) === String(form.schoolId)
+    })
+
     const localClassOptions = classesLookup
       .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
       .filter((c) => !isTeacher || !currentTeacherId || String(c.teacherId ?? '') === currentTeacherId)
@@ -544,7 +549,7 @@ const ClassRoutine = () => {
     const onChange = (e) => {
       const { id, value } = e.target
       setForm((prev) => {
-        if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }
+        if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select', teacherId: 'Select' }
         if (id === 'classId') return { ...prev, classId: value, sectionId: 'Select', subjectId: 'Select' }
         return { ...prev, [id]: value }
       })
@@ -629,7 +634,7 @@ const ClassRoutine = () => {
             ) : (
               <>
                 <option value="Select">--Select Teacher--</option>
-                {teacherOptions.map((t) => (
+                {localTeacherOptions.map((t) => (
                   <option key={t.id} value={String(t.id)}>
                     {t.name}
                   </option>

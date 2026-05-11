@@ -53,6 +53,27 @@ const pickChildren = (user) => {
   return Array.isArray(list) ? list : []
 }
 
+const pickSchoolId = (user) =>
+  user?.schoolId ??
+  user?.school?.id ??
+  user?.teacherContext?.schoolId ??
+  user?.teacherContext?.school?.id ??
+  user?.teacher?.schoolId ??
+  user?.teacher?.school?.id ??
+  null
+
+const pickSchoolName = (user) =>
+  user?.schoolName ??
+  user?.school?.schoolName ??
+  user?.school?.name ??
+  user?.teacherContext?.schoolName ??
+  user?.teacherContext?.school?.schoolName ??
+  user?.teacherContext?.school?.name ??
+  user?.teacher?.schoolName ??
+  user?.teacher?.school?.schoolName ??
+  user?.teacher?.school?.name ??
+  null
+
 export const AuthProvider = ({ children }) => {
   const [token, setTokenState] = useState(() => getToken())
   const [user, setUser] = useState(() => readJson(USER_KEY))
@@ -60,7 +81,10 @@ export const AuthProvider = ({ children }) => {
 
   const permissions = useMemo(() => pickPermissions(user), [user])
   const role = useMemo(() => normalizeRole(user?.role || user?.userRole || user?.authority), [user])
-  const schoolId = user?.schoolId ?? user?.school?.id ?? null
+  const headOfficeId = user?.headOfficeId ?? user?.headOffice?.id ?? null
+  const headOfficeName = user?.headOfficeName ?? user?.headOffice?.name ?? null
+  const schoolId = pickSchoolId(user)
+  const schoolName = pickSchoolName(user)
   const userId = user?.userId ?? user?.id ?? null
   const teacherContext = user?.teacherContext ?? user?.teacher ?? null
   const studentId = user?.studentId ?? user?.student?.id ?? null
@@ -158,7 +182,10 @@ export const AuthProvider = ({ children }) => {
       user,
       role,
       permissions,
+      headOfficeId,
+      headOfficeName,
       schoolId,
+      schoolName,
       userId,
       teacherContext,
       studentId,
@@ -177,7 +204,10 @@ export const AuthProvider = ({ children }) => {
       user,
       role,
       permissions,
+      headOfficeId,
+      headOfficeName,
       schoolId,
+      schoolName,
       userId,
       teacherContext,
       studentId,

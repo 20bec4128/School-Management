@@ -59,7 +59,26 @@
   border-block-end: 1px solid var(--neutral-200);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sidebar-logo__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.sidebar-collapse-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary-light);
 }
 
 .sidebar-menu-area {
@@ -103,7 +122,9 @@
 .sidebar-menu .sidebar-submenu {
   padding-block-start: 0.75rem;
   display: none;
-  margin-inline-start: 1.25rem;
+  margin-inline-start: 1.5rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid #dbe7ea;
 }
 
 .sidebar-menu .sidebar-menu-group-title {
@@ -167,11 +188,13 @@
 .sidebar-menu .sidebar-submenu li a {
   /* Theme sets horizontal padding to 0; keep it, but ensure there is room after the dot */
   gap: 0;
+  padding-block: 0.5rem;
 }
 
 .sidebar-submenu .circle-icon {
   margin-inline-end: 0.75rem;
   flex: 0 0 auto;
+  color: #c6d3d8;
 }
 
 /* Make section headings align with menu items */
@@ -183,5 +206,11 @@
 /* Hide sidebar menu group titles when collapsed */
 .sidebar-menu-group-title.hidden {
   display: none;
+}
+
+@media (min-width: 1200px) {
+  .sidebar-close-btn {
+    display: none;
+  }
 }
 

@@ -8,6 +8,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.txt'
@@ -100,7 +101,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const StudyMaterial = () => {
-  const { user, role, schoolId, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const { user, role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
@@ -141,9 +143,29 @@ const StudyMaterial = () => {
   const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : schoolId ? String(schoolId) : ''
+  const resolvedSchoolName = schoolName || ''
+  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
+    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
+      byId.set(String(resolvedSchoolId), {
+        id: resolvedSchoolId,
+        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
   const loadLookups = useCallback(async () => {
-    const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+    const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
+      fetchSchoolsLookup(),
+      fetchClasses(),
+      fetchSubjects(),
+    ])
+    const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
+    const classes = classesResult.status === 'fulfilled' ? classesResult.value : []
+    const subjects = subjectsResult.status === 'fulfilled' ? subjectsResult.value : []
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
@@ -156,7 +178,9 @@ const StudyMaterial = () => {
       const data = await fetchStudyMaterials(
         isStudentScope && effectiveSchoolId && effectiveClassId
           ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
-          : {},
+          : resolvedSchoolId
+            ? { schoolId: resolvedSchoolId }
+            : {},
       )
       setRows(Array.isArray(data) ? data : [])
       if (isStudentScope) setHasSearched(true)
@@ -166,7 +190,7 @@ const StudyMaterial = () => {
     } finally {
       setLoading(false)
     }
-  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
+  }, [effectiveClassId, effectiveSchoolId, isStudentScope, resolvedSchoolId])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -281,7 +305,11 @@ const StudyMaterial = () => {
 
   const openAdd = () => {
     if (!canManage) return
-    setAddForm({ ...emptyForm, ...filters })
+    setAddForm({
+      ...emptyForm,
+      ...filters,
+      ...(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}),
+    })
     setAddFile(null)
     if (addFileRef.current) addFileRef.current.value = ''
     setAddStep(0)
@@ -292,7 +320,7 @@ const StudyMaterial = () => {
     if (!canManage) return
     setEditingId(row?.id ?? null)
     setEditForm({
-      schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId || 'Select',
       classId: row?.classId != null ? String(row.classId) : 'Select',
       subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
       title: row?.title || '',
@@ -422,9 +450,9 @@ const StudyMaterial = () => {
     return (
       <div className="avm-grid">
         <FormField label="School Name" required>
-          <select id="schoolId" className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`} value={form.schoolId} onChange={onChange} disabled={saving}>
+          <select id="schoolId" className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`} value={form.schoolId} onChange={onChange} disabled={saving || isSchoolLocked}>
             <option value="Select">--Select School--</option>
-            {schoolsLookup.map((s) => (
+            {effectiveSchoolsLookup.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.schoolName}
               </option>

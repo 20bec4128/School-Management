@@ -26,6 +26,15 @@ const buildUpsertFormData = (payload, form) => {
   return fd
 }
 
+const readCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem('sm_user') || sessionStorage.getItem('sm_user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export const fetchSchoolsPage = async (page, size) => {
   const query = new URLSearchParams({
     page: String(Math.max(page, 0)),
@@ -81,6 +90,17 @@ export const fetchSchoolsLookup = async () => {
     const schoolName = row?.schoolName
     if (id == null || !schoolName) continue
     byId.set(String(id), { id, schoolName })
+  }
+
+  const currentUser = readCurrentUser()
+  const currentSchoolId = currentUser?.schoolId ?? currentUser?.school?.id ?? null
+  const currentSchoolName =
+    currentUser?.schoolName ?? currentUser?.school?.schoolName ?? currentUser?.school?.name ?? null
+  if (currentSchoolId != null) {
+    const key = String(currentSchoolId)
+    if (!byId.has(key)) {
+      byId.set(key, { id: currentSchoolId, schoolName: currentSchoolName || `School ${currentSchoolId}` })
+    }
   }
 
   return Array.from(byId.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName))

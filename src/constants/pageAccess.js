@@ -96,7 +96,7 @@ export const ROUTE_ACCESS_RULES = [
 // must have at least one of the listed permissions (or '*') to access it.
 export const PAGE_KEY_PERMISSIONS = {
   // Student management
-  'student-type': ['STUDENT_MANAGE', '*'],
+  'student-type': ['STUDENT_TYPE_MANAGE', '*'],
   'student-list': ['STUDENT_MANAGE', '*'],
   'online-admission': ['STUDENT_MANAGE', '*'],
   'student-activity': ['STUDENT_MANAGE', '*'],
