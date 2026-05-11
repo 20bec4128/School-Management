@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import { normalizeRole } from '../utils/roles'
 import MobileProfileDrawer from './MobileProfileDrawer'
@@ -14,6 +14,8 @@ const MobileBottomNav = ({ currentPage, onNavigate, onLogout }) => {
   const { user, role } = useAuth()
   const [activePanel, setActivePanel] = useState('none') // none | profile | actions
   const [theme, setTheme] = useState(themeState)
+  const [isCompact, setIsCompact] = useState(false)
+  const scrollStateRef = useRef({ lastY: 0, ticking: false })
 
   useEffect(() => {
     const saved = themeState()
@@ -31,6 +33,43 @@ const MobileBottomNav = ({ currentPage, onNavigate, onLogout }) => {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [activePanel])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const media = window.matchMedia('(max-width: 991.98px)')
+    if (!media.matches) {
+      setIsCompact(false)
+      return undefined
+    }
+
+    const updateCompactState = () => {
+      const currentY = window.scrollY || window.pageYOffset || 0
+      const lastY = scrollStateRef.current.lastY
+      const delta = currentY - lastY
+
+      if (currentY <= 8) {
+        setIsCompact(false)
+      } else if (delta > 2) {
+        setIsCompact(true)
+      } else if (delta < -2) {
+        setIsCompact(false)
+      }
+
+      scrollStateRef.current.lastY = currentY
+      scrollStateRef.current.ticking = false
+    }
+
+    const onScroll = () => {
+      if (scrollStateRef.current.ticking) return
+      scrollStateRef.current.ticking = true
+      window.requestAnimationFrame(updateCompactState)
+    }
+
+    scrollStateRef.current.lastY = window.scrollY || window.pageYOffset || 0
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   useEffect(() => {
     if (activePanel === 'none') return undefined
@@ -79,7 +118,7 @@ const MobileBottomNav = ({ currentPage, onNavigate, onLogout }) => {
 
   return (
     <nav
-      className={`mobile-bottom-nav is-${nav.accent}`}
+      className={`mobile-bottom-nav is-${nav.accent}${isCompact ? ' is-compact' : ''}`}
       data-mobile-nav-role={nav.accent}
       aria-label="Mobile navigation"
     >

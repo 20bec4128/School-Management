@@ -133,7 +133,7 @@ const ROLE_CONFIGS = {
     accent: 'parent',
     tabs: [
       makeTab('home', 'Home', 'parent-dashboard', 'ri-home-5-line'),
-      makeTab('children', 'Children', 'parent-child-select', 'ri-team-line'),
+      makeTab('children', 'Children', 'parent-dashboard', 'ri-team-line'),
       makeTab('fees', 'Fees', 'fee-collection', 'ri-bank-card-line', ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*']),
       makeTab('profile', 'Profile', null, 'ri-user-3-line'),
     ],

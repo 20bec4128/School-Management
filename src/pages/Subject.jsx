@@ -6,6 +6,7 @@ import { createSubject, deleteSubject, fetchSubjects, updateSubject } from '../a
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 
 const subjectTypeOptions = ['Core', 'Elective', 'Optional', 'Co-Curricular']
@@ -91,6 +92,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Subject = () => {
+  const { role } = useAuth()
   const [subjects, setSubjects] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
@@ -114,6 +116,8 @@ const Subject = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const roleUpper = String(role || '').toUpperCase()
+  const canAddSubject = roleUpper !== 'STUDENT' && roleUpper !== 'PARENT'
 
   const loadLookups = useCallback(async () => {
     const [schools, teachers] = await Promise.all([fetchSchoolsLookup(), fetchTeachers()])
@@ -242,6 +246,7 @@ const Subject = () => {
   }
 
   const openAdd = () => {
+    if (!canAddSubject) return
     setError('')
     setEditingId(null)
     setAddForm(emptyForm)
@@ -487,16 +492,18 @@ const Subject = () => {
             <span className="text-secondary-light"> / Subject</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Subject
-        </button>
+        {canAddSubject ? (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Subject
+          </button>
+        ) : null}
       </div>
 
       {/* Table Card */}

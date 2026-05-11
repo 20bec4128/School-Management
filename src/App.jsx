@@ -16,11 +16,7 @@ function App() {
   const homePage = useMemo(() => {
     const backendHome = user?.homePage
     if (typeof backendHome === 'string' && backendHome.trim()) {
-      if (backendHome === 'parent-dashboard' || backendHome === 'parent-child-select') {
-        const children = Array.isArray(parentChildren) ? parentChildren : []
-        if (children.length > 1 && !selectedChildId) return 'parent-child-select'
-        return 'parent-dashboard'
-      }
+      if (backendHome === 'parent-dashboard' || backendHome === 'parent-child-select') return 'parent-dashboard'
       return backendHome
     }
 
@@ -31,8 +27,6 @@ function App() {
     if (r === 'TEACHER') return 'teacher-dashboard'
     if (r === 'STUDENT') return 'student-dashboard'
     if (r === 'PARENT') {
-      const children = Array.isArray(parentChildren) ? parentChildren : []
-      if (children.length > 1 && !selectedChildId) return 'parent-child-select'
       return 'parent-dashboard'
     }
     return 'dashboard'

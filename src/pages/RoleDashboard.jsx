@@ -17,6 +17,16 @@ import widgetThree from '../../OldAssets/images/icons/teacher-widget-icon3.png'
 import courseOne from '../../OldAssets/images/icons/dashboard-icon1.png'
 import courseTwo from '../../OldAssets/images/icons/dashboard-icon2.png'
 import courseThree from '../../OldAssets/images/icons/dashboard-icon3.png'
+import lmsIconOne from '../../OldAssets/images/icons/lms-icon-1.png'
+import lmsIconTwo from '../../OldAssets/images/icons/lms-icon-2.png'
+import lmsIconThree from '../../OldAssets/images/icons/lms-icon-3.png'
+import lmsIconFour from '../../OldAssets/images/icons/lms-icon-4.png'
+import lmsBgOne from '../../OldAssets/images/icons/lms-card-gradient-bg1.png'
+import lmsBgTwo from '../../OldAssets/images/icons/lms-card-gradient-bg2.png'
+import lmsBgThree from '../../OldAssets/images/icons/lms-card-gradient-bg3.png'
+import lmsBgFour from '../../OldAssets/images/icons/lms-card-gradient-bg4.png'
+import sessionOne from '../../OldAssets/images/thumbs/session-img1.png'
+import sessionTwo from '../../OldAssets/images/thumbs/session-img2.png'
 import '../assets/css/roleDashboard.css'
 
 const defaultName = 'Learner'
@@ -96,6 +106,239 @@ const ProgressBar = ({ value, tone }) => (
     <strong style={{ color: tone }}>{value}%</strong>
   </div>
 )
+
+const LmsMetricCard = ({ icon, image, title, value, foot, tone, trend, direction = 'up', background }) => (
+  <div className="col-sm-6">
+    <div
+      className="lms-dashboard__metric-card position-relative overflow-hidden border rounded-3 h-100"
+      style={{
+        backgroundColor: '#fff',
+        backgroundImage: background ? `url(${background})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      <div className="lms-dashboard__metric-inner position-relative z-1 p-16 d-flex flex-column gap-3">
+        <div className="d-flex align-items-center gap-8">
+          <span className="lms-dashboard__metric-icon" style={{ background: `${tone}16`, color: tone }}>
+            {image ? <img src={image} alt="" /> : <i className={icon}></i>}
+          </span>
+          <span className="text-primary-light fw-medium">{title}</span>
+        </div>
+
+        <div className="d-flex align-items-end justify-content-between gap-3 flex-wrap">
+          <div>
+            <h6 className="mb-6">{value}</h6>
+            <span
+              className={`fw-medium text-md d-flex gap-6 align-items-center ${
+                direction === 'down' ? 'text-danger-600' : 'text-success-600'
+              }`}
+            >
+              <i className={`text-lg line-height-1 fw-medium ri-arrow-left-${direction === 'down' ? 'down' : 'up'}-line`}></i>
+              {trend}
+            </span>
+            <span className="text-secondary-light fw-medium mt-6 d-block">{foot}</span>
+          </div>
+          <div className="lms-dashboard__sparkline">
+            <ProgressRing value={Math.max(24, Math.min(96, Number(String(value).replace(/[^0-9]/g, '')) || 72))} color={tone} />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
+const LmsSessionCard = ({ session }) => (
+  <div className="col-sm-6">
+    <div className="border rounded-3 p-12 h-100 bg-base">
+      <div className="d-flex gap-12">
+        <div className="d-flex flex-shrink-0">
+          <img src={session.image} alt="" className="w-100 h-100 object-fit-cover rounded-3" />
+        </div>
+        <div className="align-self-center w-100">
+          <h6 className="text-md mb-0">{session.title}</h6>
+          <span className="fw-medium">{session.subject}</span>
+          <div className="mt-8 d-flex align-items-center gap-8 justify-content-between flex-wrap w-100">
+            <div className="d-flex align-items-center gap-8 text-neutral-500 fw-medium">
+              <i className="ri-calendar-2-line"></i>
+              {session.date}
+            </div>
+            <div className="d-flex align-items-center gap-8 text-neutral-500 fw-medium">
+              <i className="ri-time-line"></i>
+              {session.time}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-16 d-flex gap-12">
+        <a href="javascript:void(0)" className="btn btn-primary-600 d-flex align-items-center gap-6 px-16 flex-grow-1 justify-content-center">
+          Join Class
+        </a>
+        <a href="javascript:void(0)" className="btn btn-primary-100 d-flex align-items-center justify-content-center gap-6 p-0 w-44-px h-44-px text-primary-600 text-xl">
+          <i className="ri-chat-1-line"></i>
+        </a>
+        <a href="javascript:void(0)" className="btn btn-warning-100 d-flex align-items-center gap-6 px-16 text-warning-600 flex-grow-1 justify-content-center">
+          <i className="ri-time-line"></i>
+          Join Later
+        </a>
+      </div>
+    </div>
+  </div>
+)
+
+const LmsDashboardLayout = ({ config }) => {
+  const lms = config.lmsLayout || {}
+  const metrics = lms.metrics || []
+  const sessions = lms.sessions || []
+  const courses = lms.courses || []
+  const chartLabels = lms.chartLabels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const chartSeries = lms.chartSeries || [
+    { name: 'Earnings', color: '#0A51CE', data: [24, 30, 28, 36, 32, 40] },
+    { name: 'Enrollments', color: '#8B5CF6', data: [12, 14, 11, 18, 16, 20] },
+  ]
+
+  return (
+    <div className="dashboard-main-body role-dashboard lms-dashboard">
+      <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
+        <div>
+          <h6 className="fw-semibold mb-0">Dashboard</h6>
+          <p className="text-neutral-600 mt-4 mb-0">{config.heroNote}</p>
+        </div>
+      </div>
+
+      <div className="mt-24">
+        <div className="row gy-4">
+          <div className="col-xxl-6">
+            <div className="bg-base rounded-3 p-20 h-100">
+              <div className="row g-3">
+                {metrics.map((metric) => (
+                  <LmsMetricCard key={metric.title} {...metric} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xxl-6">
+            <div className="card h-100">
+              <div className="card-body">
+                <div className="d-flex flex-wrap align-items-center justify-content-between">
+                  <h6 className="text-lg mb-0">{lms.chartTitle}</h6>
+                  <select className="form-select bg-base form-select-sm w-auto radius-8">
+                    <option>Yearly</option>
+                    <option>Monthly</option>
+                    <option>Weekly</option>
+                    <option>Today</option>
+                  </select>
+                </div>
+                <div className="d-flex flex-wrap align-items-center gap-2 mt-8">
+                  <h6 className="mb-0">{lms.chartValue || '$27,200'}</h6>
+                  <span className="text-sm fw-semibold rounded-pill bg-success-focus text-success-main border br-success px-8 py-4 line-height-1 d-flex align-items-center gap-1">
+                    10% <iconify-icon icon="bxs:up-arrow" className="text-xs"></iconify-icon>
+                  </span>
+                  <span className="text-xs fw-medium">{lms.chartFoot || '+ $1500 Per Day'}</span>
+                </div>
+                <div className="pt-28">
+                  <BarChart labels={chartLabels} series={chartSeries} height={260} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xxl-5">
+            <div className="card h-100">
+              <div className="card-body">
+                <div className="p-20">
+                  <div className="calendar">
+                    <div className="calendar__header">
+                      <button type="button" className="calendar__arrow left">
+                        <i className="ri-arrow-left-s-line"></i>
+                      </button>
+                      <p className="display text-md text-secondary-light fw-semibold mb-0">LMS Calendar</p>
+                      <button type="button" className="calendar__arrow right">
+                        <i className="ri-arrow-right-s-line"></i>
+                      </button>
+                    </div>
+                    <div className="calendar__week week">
+                      <div className="calendar__week-text">Su</div>
+                      <div className="calendar__week-text">Mo</div>
+                      <div className="calendar__week-text">Tu</div>
+                      <div className="calendar__week-text">We</div>
+                      <div className="calendar__week-text">Th</div>
+                      <div className="calendar__week-text">Fr</div>
+                      <div className="calendar__week-text">Sa</div>
+                    </div>
+                    <div className="days"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xxl-7">
+            <div className="card h-100">
+              <div className="card-body">
+                <div className="d-flex flex-wrap align-items-center justify-content-between pb-16">
+                  <h6 className="text-lg mb-0">{lms.sessionsTitle}</h6>
+                </div>
+                <div className="row g-3">
+                  {sessions.map((session) => (
+                    <LmsSessionCard key={`${session.title}-${session.time}`} session={session} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-xxl-12">
+            <div className="card radius-12 border-0">
+              <div className="card-body">
+                <div className="d-flex flex-wrap align-items-center justify-content-between pb-16">
+                  <h6 className="text-lg mb-0">{lms.coursesTitle}</h6>
+                </div>
+                <div className="table-responsive">
+                  <table className="table align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th className="bg-neutral-100">Courses Name</th>
+                        <th className="bg-neutral-100">Instructor</th>
+                        <th className="bg-neutral-100">Students</th>
+                        <th className="bg-neutral-100">Progress</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {courses.map((course) => (
+                        <tr key={course.title}>
+                          <td>
+                            <div className="d-flex align-items-center gap-12">
+                              <img src={course.image} alt="" className="w-44-px h-44-px rounded-3 object-fit-cover" />
+                              <div>
+                                <h6 className="mb-0 text-md">{course.title}</h6>
+                                <span className="text-secondary-light text-sm">{course.copy}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{course.teacher}</td>
+                          <td>{course.students}</td>
+                          <td>
+                            <div className="d-flex align-items-center gap-12">
+                              <div className="flex-grow-1" style={{ minWidth: 120 }}>
+                                <ProgressBar value={course.progress} tone={course.tone} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const StudentDashboardLayout = ({ config }) => {
   const student = config.studentLayout || {}
@@ -324,6 +567,7 @@ const RoleDashboard = ({ variant }) => {
       teacher: 'Teacher Dashboard',
       student: 'Student Dashboard',
       parent: 'Parent Dashboard',
+      lms: 'LMS Dashboard',
     }
     const role = roleMap[variant] || 'Dashboard'
     const name =
@@ -341,6 +585,8 @@ const RoleDashboard = ({ variant }) => {
               ? 'Head Office Admin'
               : variant === 'schoolAdmin'
                 ? 'School Admin'
+                : variant === 'lms'
+                  ? 'LMS Admin'
                 : defaultName)
     const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'
 
@@ -637,20 +883,6 @@ const RoleDashboard = ({ variant }) => {
           schoolName,
         'Assigned School',
       )
-      const childClass = formatMeta(
-        selectedChild?.className ||
-          selectedChild?.schoolClassName ||
-          selectedChild?.student?.className ||
-          studentClassId,
-        'Class not set',
-      )
-      const childSection = formatMeta(
-        selectedChild?.sectionName ||
-          selectedChild?.schoolSectionName ||
-          selectedChild?.student?.sectionName ||
-          studentSectionId,
-        'Section not set',
-      )
       const childRoll = formatMeta(
         selectedChild?.rollNo ||
           selectedChild?.rollNumber ||
@@ -672,8 +904,8 @@ const RoleDashboard = ({ variant }) => {
         heroMeta: [
           { label: 'Child', value: childName },
           { label: 'School', value: school },
-          { label: 'Class', value: childClass },
-          { label: 'Section', value: childSection },
+          { label: 'Class', value: formatMeta(selectedChild?.className || selectedChild?.schoolClassName || selectedChild?.student?.className || studentClassId, 'Class not set') },
+          { label: 'Section', value: formatMeta(selectedChild?.sectionName || selectedChild?.schoolSectionName || selectedChild?.student?.sectionName || studentSectionId, 'Section not set') },
           { label: 'Roll No.', value: childRoll },
         ],
         focusLabel: 'Next update',
@@ -724,6 +956,121 @@ const RoleDashboard = ({ variant }) => {
         noticeSubtitle: 'Quick updates from your school office and teachers.',
         calendarTitle: 'Calendar',
         calendarSubtitle: 'The current month at a glance.',
+      }
+    }
+
+    if (variant === 'lms') {
+      const school = formatMeta(schoolName, 'Assigned School')
+      return {
+        role,
+        name,
+        greeting,
+        school,
+        focus: 'LMS overview',
+        workspaceLabel: 'LMS Workspace',
+        accent: '#0A51CE',
+        accent2: '#8B5CF6',
+        avatarTone: 'linear-gradient(135deg, #dbeafe, #ede9fe)',
+        heroNote: 'Manage courses, students, assignments and performance metrics in one centralized LMS Dashboard.',
+        lmsLayout: {
+          metrics: [
+            {
+              title: 'Enrolled Courses',
+              value: '500',
+              foot: 'From last month',
+              image: lmsIconOne,
+              tone: '#0A51CE',
+              trend: '43.9%',
+              direction: 'up',
+              background: lmsBgOne,
+            },
+            {
+              title: 'Total Students',
+              value: '3,570',
+              foot: 'From last month',
+              image: lmsIconTwo,
+              tone: '#7C3AED',
+              trend: '43.9%',
+              direction: 'up',
+              background: lmsBgTwo,
+            },
+            {
+              title: 'Total Courses',
+              value: '30',
+              foot: 'From last month',
+              image: lmsIconThree,
+              tone: '#F59E0B',
+              trend: '43.9%',
+              direction: 'up',
+              background: lmsBgThree,
+            },
+            {
+              title: 'Total Earnings',
+              value: '$50,000',
+              foot: 'From last month',
+              image: lmsIconFour,
+              tone: '#16A34A',
+              trend: '20.3%',
+              direction: 'down',
+              background: lmsBgFour,
+            },
+          ],
+          chartTitle: 'Earning Statistic',
+          chartValue: '$27,200',
+          chartFoot: '+ $1500 Per Day',
+          chartLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+          chartSeries: [
+            { name: 'Earnings', color: '#0A51CE', data: [24, 30, 28, 36, 32, 40] },
+            { name: 'Enrollments', color: '#8B5CF6', data: [12, 14, 11, 18, 16, 20] },
+          ],
+          sessionsTitle: 'Upcoming Sessions',
+          sessions: [
+            { image: sessionOne, title: 'Cameron Williamson', subject: 'English', date: '15 Jun 2025', time: '12:30 PM' },
+            { image: sessionTwo, title: 'Kristin Watson', subject: 'English', date: '15 Jun 2025', time: '12:30 PM' },
+          ],
+          coursesTitle: 'Recent Enrolled Courses',
+          courses: [
+            { title: 'Advanced Mathematics', copy: 'Algebra and practice sets', teacher: 'Mr. Khan', students: '124', progress: 78, tone: '#0A51CE', image: courseOne },
+            { title: 'Science Foundations', copy: 'Lab notes and weekly revision', teacher: 'Ms. Ray', students: '98', progress: 64, tone: '#8B5CF6', image: courseTwo },
+            { title: 'English Writing', copy: 'Vocabulary and essay practice', teacher: 'Mrs. Paul', students: '112', progress: 84, tone: '#16A34A', image: courseThree },
+          ],
+        },
+        heroMeta: [
+          { label: 'School', value: school },
+          { label: 'Courses', value: '30' },
+          { label: 'Students', value: '3,570' },
+          { label: 'Earnings', value: '$50,000' },
+        ],
+        focusLabel: 'Today in focus',
+        focusValue: '4 classes and 2 reviews',
+        focusNote: 'Track sessions, enrollments, and revenue from a single LMS command center.',
+        stats: [],
+        timetable: [],
+        workQueue: [],
+        notices: [],
+        chartLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        chartSeries: [
+          { name: 'Earnings', color: '#0A51CE', data: [24, 30, 28, 36, 32, 40] },
+          { name: 'Enrollments', color: '#8B5CF6', data: [12, 14, 11, 18, 16, 20] },
+        ],
+        donutSegments: [
+          { label: 'Live', value: 54, color: '#0A51CE' },
+          { label: 'Draft', value: 28, color: '#8B5CF6' },
+          { label: 'Archived', value: 18, color: '#F59E0B' },
+        ],
+        ring: { value: 88, color: '#0A51CE', label: 'Revenue' },
+        timelineTitle: 'LMS activity',
+        timelineSubtitle: 'A snapshot of courses, sessions, and teaching load.',
+        chartTitle: 'Earning Statistic',
+        chartSubtitle: 'Track revenue and enrollments throughout the week.',
+        donutTitle: 'Course mix',
+        donutSubtitle: 'See which course states need the most attention.',
+        queueTitle: 'Upcoming Sessions',
+        queueSubtitle: 'Live classes and scheduled sessions for today.',
+        noticeTitle: 'Recent Enrolled Courses',
+        noticeSubtitle: 'Courses recently added to the LMS.',
+        calendarTitle: 'Calendar',
+        calendarSubtitle: 'Plan live sessions and assessments around the month.',
       }
     }
 
@@ -919,6 +1266,10 @@ const RoleDashboard = ({ variant }) => {
 
   const initials = getInitials(config.name)
   const classBadge = config.workspaceLabel || 'Dashboard'
+
+  if (variant === 'lms') {
+    return <LmsDashboardLayout config={config} initials={initials} />
+  }
 
   if (variant === 'student') {
     return <StudentDashboardLayout config={config} initials={initials} />

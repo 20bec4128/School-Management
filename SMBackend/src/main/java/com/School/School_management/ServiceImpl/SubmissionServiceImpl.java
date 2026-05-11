@@ -96,8 +96,10 @@ public class SubmissionServiceImpl implements SubmissionService {
             return submissionRepository.findBySchoolId(user.schoolId());
         }
         if (user.isRole("TEACHER")) {
-            // No global list for teacher; require filtering by assignment.
-            return List.of();
+            if (user.schoolId() != null) {
+                return submissionRepository.findBySchoolId(user.schoolId());
+            }
+            return getTeacherSubmissions(user.teacherId());
         }
         throw new ForbiddenException();
     }
@@ -157,7 +159,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         }
         submission.setMarks(dto.getMarks());
         submission.setFeedback(dto.getFeedback());
-        submission.setEvaluate("Reviewed");
+        submission.setEvaluate("Accepted");
         return submissionRepository.save(submission);
     }
 
@@ -237,6 +239,24 @@ public class SubmissionServiceImpl implements SubmissionService {
                         .map(s -> s.getTeacher() != null && teacherId.equals(s.getTeacher().getId()))
                         .orElse(false))
                 .orElse(false);
+    }
+
+    private List<Submission> getTeacherSubmissions(Long teacherId) {
+        if (teacherId == null) return List.of();
+
+        List<Long> subjectIds = subjectRepository.findByTeacher_Id(teacherId).stream()
+                .map(s -> s.getId())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (subjectIds.isEmpty()) return List.of();
+
+        List<Long> assignmentIds = assignmentRepository.findBySubjectIdIn(subjectIds).stream()
+                .map(a -> a.getId())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (assignmentIds.isEmpty()) return List.of();
+
+        return submissionRepository.findByAssignmentIdIn(assignmentIds);
     }
 
     private String saveFile(MultipartFile file) {

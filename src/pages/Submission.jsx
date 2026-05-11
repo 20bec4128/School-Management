@@ -3,11 +3,11 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createSubmission, deleteSubmission, evaluateSubmission, fetchSubmissions, fetchSubmissionsForAssignment, fetchSubmissionsForStudent, updateSubmission } from '../apis/submissionsApi'
-import { fetchAssignments, fetchAssignmentsForStudent } from '../apis/assignmentsApi'
+import { fetchAssignmentById, fetchAssignments, fetchAssignmentsForStudent } from '../apis/assignmentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
-import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import { fetchStudentsByClassSection, fetchStudentsPage } from '../apis/studentsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
@@ -45,6 +45,67 @@ const FIELD_ICONS = {
   Note: 'ri-sticky-note-line',
 }
 
+const getChildId = (child) => child?.studentId ?? child?.id ?? child?.student?.id ?? null
+
+const getBestLabel = (...values) =>
+  values
+    .map((value) => {
+      if (value == null) return ''
+      const text = String(value).trim()
+      return text === 'null' || text === 'undefined' ? '' : text
+    })
+    .find(Boolean) || ''
+
+const getOptionLabel = (...values) => getBestLabel(...values)
+
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected =
+    selectedChildId != null && selectedChildId !== ''
+      ? list.find((child) => String(getChildId(child)) === String(selectedChildId))
+      : null
+  return selected || null
+}
+
+const getSchoolIdFromRow = (row) => row?.schoolId ?? row?.school?.id ?? row?.school?.schoolId ?? null
+const getSchoolNameFromRow = (row) => row?.schoolName ?? row?.school?.schoolName ?? row?.school?.name ?? row?.name ?? row?.label ?? ''
+const getClassIdFromRow = (row) => row?.id ?? row?.classId ?? row?.schoolClass?.id ?? row?.schoolClassId ?? null
+const getClassNameFromRow = (row) => row?.className ?? row?.name ?? row?.label ?? row?.schoolClass?.className ?? row?.schoolClass?.name ?? ''
+const getSectionIdFromRow = (row) => row?.id ?? row?.sectionId ?? row?.schoolSection?.id ?? row?.schoolSectionId ?? null
+const getSectionNameFromRow = (row) => row?.sectionName ?? row?.name ?? row?.label ?? row?.schoolSection?.sectionName ?? row?.schoolSection?.name ?? ''
+const rowMatchesSchool = (row, schoolId, schoolName = '') => {
+  const targetId = schoolId != null && schoolId !== '' ? String(schoolId) : ''
+  const targetName = String(schoolName || '').trim().toLowerCase()
+  const rowSchoolId = getSchoolIdFromRow(row)
+  const rowSchoolName = getSchoolNameFromRow(row).trim().toLowerCase()
+  return (
+    (targetId && rowSchoolId != null && String(rowSchoolId) === targetId) ||
+    (targetName && rowSchoolName && rowSchoolName === targetName)
+  )
+}
+
+const rowMatchesClass = (row, classId, className = '') => {
+  const targetId = classId != null && classId !== '' ? String(classId) : ''
+  const targetName = String(className || '').trim().toLowerCase()
+  const rowClassId = getClassIdFromRow(row)
+  const rowClassName = getClassNameFromRow(row).trim().toLowerCase()
+  return (
+    (targetId && rowClassId != null && String(rowClassId) === targetId) ||
+    (targetName && rowClassName && rowClassName === targetName)
+  )
+}
+
+const rowMatchesSection = (row, sectionId, sectionName = '') => {
+  const targetId = sectionId != null && sectionId !== '' ? String(sectionId) : ''
+  const targetName = String(sectionName || '').trim().toLowerCase()
+  const rowSectionId = getSectionIdFromRow(row)
+  const rowSectionName = getSectionNameFromRow(row).trim().toLowerCase()
+  return (
+    (targetId && rowSectionId != null && String(rowSectionId) === targetId) ||
+    (targetName && rowSectionName && rowSectionName === targetName)
+  )
+}
+
 const columnOptions = [
   { key: 'schoolName', label: 'School' },
   { key: 'assignmentTitle', label: 'Assignment' },
@@ -58,6 +119,7 @@ const columnOptions = [
 
 const evaluateBadge = (value) => {
   const v = String(value || '').toLowerCase()
+  if (v === 'accepted') return 'bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm'
   if (v === 'reviewed') return 'bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm'
   if (v === 'pending') return 'bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm'
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
@@ -98,7 +160,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Submission = () => {
-  const { user, role, studentId, selectedChildId } = useAuth()
+  const { user, role, schoolId, schoolName, teacherContext, studentClassId, studentSectionId, studentId, parentChildren, selectedChildId } = useAuth()
 
   const canSubmit = can(user, ['ASSIGNMENT_SUBMIT', '*'])
   const canView = can(user, ['SUBMISSION_MANAGE', 'SUBMISSION_VIEW_ASSIGNED', 'SUBMISSION_VIEW_OWN', 'SUBMISSION_VIEW_CHILD', '*'])
@@ -106,12 +168,94 @@ const Submission = () => {
   const canManage = can(user, ['SUBMISSION_MANAGE', 'SUBMISSION_VIEW_ASSIGNED', '*'])
 
   const roleUpper = String(role || '').toUpperCase()
+  const isTeacherScopedUser = roleUpper === 'TEACHER'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const fixedStudentId =
     roleUpper === 'STUDENT'
       ? studentId
       : roleUpper === 'PARENT'
-        ? selectedChildId
+        ? getChildId(selectedChild)
         : null
+  const isChildScopedUser = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const fixedStudentSchoolId =
+    roleUpper === 'STUDENT'
+      ? schoolId != null
+        ? String(schoolId)
+        : null
+      : roleUpper === 'PARENT'
+        ? selectedChild?.schoolId != null
+          ? String(selectedChild.schoolId)
+          : null
+        : null
+  const fixedStudentClassId =
+    roleUpper === 'STUDENT'
+      ? studentClassId != null
+        ? String(studentClassId)
+        : null
+      : roleUpper === 'PARENT'
+        ? selectedChild?.classId != null
+          ? String(selectedChild.classId)
+          : null
+        : null
+  const fixedStudentSectionId =
+    roleUpper === 'STUDENT'
+      ? studentSectionId != null
+        ? String(studentSectionId)
+        : null
+      : roleUpper === 'PARENT'
+        ? selectedChild?.sectionId != null
+          ? String(selectedChild.sectionId)
+          : null
+        : null
+  const fixedStudentName =
+    roleUpper === 'STUDENT'
+      ? getBestLabel(user?.name, user?.fullName, user?.student?.name, user?.student?.fullName, user?.studentName, user?.email, studentId)
+      : roleUpper === 'PARENT'
+        ? getBestLabel(selectedChild?.name, selectedChild?.studentName, selectedChild?.fullName, selectedChild?.student?.name, selectedChild?.student?.fullName, selectedChild?.email, fixedStudentId)
+        : ''
+  const fixedTeacherSchoolId =
+    isTeacherScopedUser
+      ? teacherContext?.schoolId != null
+        ? String(teacherContext.schoolId)
+        : schoolId != null
+          ? String(schoolId)
+          : null
+      : null
+  const fixedTeacherSchoolName = isTeacherScopedUser
+    ? getBestLabel(
+        teacherContext?.schoolName,
+        teacherContext?.school?.schoolName,
+        teacherContext?.school?.name,
+        user?.schoolName,
+        user?.school?.schoolName,
+        user?.school?.name,
+        schoolName,
+        `School ${fixedTeacherSchoolId || ''}`.trim(),
+      )
+    : ''
+  const fixedStudentScope = useMemo(
+    () =>
+      isChildScopedUser
+        ? {
+            schoolId: fixedStudentSchoolId,
+            classId: fixedStudentClassId,
+            sectionId: fixedStudentSectionId,
+            studentId: fixedStudentId != null ? String(fixedStudentId) : null,
+            studentName: fixedStudentName,
+          }
+        : null,
+    [fixedStudentClassId, fixedStudentId, fixedStudentName, fixedStudentSchoolId, fixedStudentSectionId, isChildScopedUser],
+  )
+  const fixedTeacherScope = useMemo(
+    () =>
+      isTeacherScopedUser
+        ? {
+            schoolId: fixedTeacherSchoolId,
+            schoolName: fixedTeacherSchoolName,
+          }
+        : null,
+    [fixedTeacherSchoolId, fixedTeacherSchoolName, isTeacherScopedUser],
+  )
 
   const [rows, setRows] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -146,32 +290,44 @@ const Submission = () => {
   const [isEvalOpen, setIsEvalOpen] = useState(false)
   const [evalId, setEvalId] = useState(null)
   const [evalForm, setEvalForm] = useState({ marks: '', feedback: '' })
+  const [evalRow, setEvalRow] = useState(null)
 
   const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
-  const hasSearchResults = hasSearched || fixedStudentId != null
+  const hasSearchResults = roleUpper === 'TEACHER' || hasSearched || fixedStudentId != null
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const loadLookups = useCallback(async () => {
-    const shouldLoadAdminLookups = fixedStudentId == null
-    const [schools, classes, sections] = await Promise.all([
-      shouldLoadAdminLookups ? fetchSchoolsLookup().catch(() => []) : Promise.resolve([]),
-      shouldLoadAdminLookups ? fetchClasses().catch(() => []) : Promise.resolve([]),
-      shouldLoadAdminLookups ? fetchSections().catch(() => []) : Promise.resolve([]),
+    const teacherSchoolId = isTeacherScopedUser ? fixedTeacherSchoolId : null
+    const [schools, classes, sections, students] = await Promise.all([
+      fetchSchoolsLookup().catch(() => []),
+      fetchClasses(teacherSchoolId ? { schoolId: teacherSchoolId } : undefined).catch(() => []),
+      fetchSections(teacherSchoolId ? { schoolId: teacherSchoolId } : undefined).catch(() => []),
+      teacherSchoolId
+        ? fetchStudentsPage(0, 1000, { schoolId: teacherSchoolId })
+            .then((page) => (Array.isArray(page?.content) ? page.content : Array.isArray(page?.value) ? page.value : []))
+            .catch(() => [])
+        : Promise.resolve([]),
     ])
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSectionsLookup(Array.isArray(sections) ? sections : [])
-  }, [fixedStudentId])
+    setStudentsLookup(Array.isArray(students) ? students : [])
+  }, [fixedStudentId, fixedTeacherSchoolId, isTeacherScopedUser])
 
   const loadRows = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      if (roleUpper === 'PARENT' && fixedStudentId == null) {
+        setRows([])
+        setAssignments([])
+        return
+      }
       const [subs, asgs] = await Promise.all([
         fixedStudentId != null
           ? fetchSubmissionsForStudent(fixedStudentId)
@@ -180,8 +336,28 @@ const Submission = () => {
             : fetchSubmissions(),
         fixedStudentId != null ? fetchAssignmentsForStudent(fixedStudentId) : fetchAssignments(),
       ])
-      setRows(Array.isArray(subs) ? subs : [])
-      setAssignments(Array.isArray(asgs) ? asgs : [])
+      const nextRows = Array.isArray(subs) ? subs : []
+      const nextAssignments = Array.isArray(asgs) ? asgs : []
+
+      const knownAssignmentIds = new Set(nextAssignments.map((a) => String(a?.id)).filter((id) => id && id !== 'undefined' && id !== 'null'))
+      const missingAssignmentIds = Array.from(
+        new Set(
+          nextRows
+            .map((row) => row?.assignmentId)
+            .filter((id) => id != null && !knownAssignmentIds.has(String(id)))
+            .map((id) => String(id)),
+        ),
+      )
+
+      if (missingAssignmentIds.length > 0) {
+        const missingAssignments = await Promise.all(missingAssignmentIds.map((id) => fetchAssignmentById(id).catch(() => null)))
+        for (const assignment of missingAssignments) {
+          if (assignment?.id != null) nextAssignments.push(assignment)
+        }
+      }
+
+      setRows(nextRows)
+      setAssignments(nextAssignments)
     } catch (e) {
       setRows([])
       setAssignments([])
@@ -202,9 +378,33 @@ const Submission = () => {
     void loadRows()
   }, [roleUpper, filters.assignmentId, loadRows])
 
-  const schoolNameById = useMemo(() => new Map(schoolsLookup.map((s) => [String(s.id), s.schoolName || s.name])), [schoolsLookup])
-  const classNameById = useMemo(() => new Map(classesLookup.map((c) => [String(c.id), c.className])), [classesLookup])
-  const sectionNameById = useMemo(() => new Map(sectionsLookup.map((s) => [String(s.id), s.name || s.sectionName])), [sectionsLookup])
+  const schoolNameById = useMemo(() => {
+    const map = new Map()
+    for (const school of schoolsLookup) {
+      const id = school?.id ?? school?.schoolId ?? null
+      const name = school?.schoolName || school?.name || school?.label || ''
+      if (id != null && name) map.set(String(id), name)
+    }
+    return map
+  }, [schoolsLookup])
+  const classNameById = useMemo(() => {
+    const map = new Map()
+    for (const cls of classesLookup) {
+      const id = cls?.id ?? cls?.classId ?? null
+      const name = getBestLabel(cls?.className, cls?.numericName, cls?.name, cls?.label)
+      if (id != null && name) map.set(String(id), name)
+    }
+    return map
+  }, [classesLookup])
+  const sectionNameById = useMemo(() => {
+    const map = new Map()
+    for (const section of sectionsLookup) {
+      const id = section?.id ?? section?.sectionId ?? null
+      const name = getBestLabel(section?.sectionName, section?.name, section?.label)
+      if (id != null && name) map.set(String(id), name)
+    }
+    return map
+  }, [sectionsLookup])
   const studentNameById = useMemo(() => {
     const map = new Map()
     for (const s of studentsLookup) map.set(String(s.id || s.studentId), s.name || s.fullName || s.studentName || s.email || String(s.id || s.studentId))
@@ -216,43 +416,65 @@ const Submission = () => {
     return map
   }, [assignments])
 
+  const assignmentDetailsById = useMemo(() => {
+    const map = new Map()
+    for (const a of assignments) {
+      const id = a?.id
+      if (id == null) continue
+      map.set(String(id), {
+        schoolId: a?.schoolId ?? a?.school?.id ?? a?.school?.schoolId ?? null,
+        schoolName: getBestLabel(a?.schoolName, a?.school?.schoolName, a?.school?.name, a?.school?.label),
+        classId: a?.classId ?? a?.schoolClass?.id ?? a?.schoolClassId ?? null,
+        className: getBestLabel(a?.className, a?.schoolClass?.className, a?.schoolClass?.name, a?.schoolClass?.label, a?.numericName),
+        sectionId: a?.sectionId ?? a?.schoolSection?.id ?? a?.schoolSectionId ?? null,
+        sectionName: getBestLabel(a?.sectionName, a?.schoolSection?.sectionName, a?.schoolSection?.name, a?.schoolSection?.label),
+        subjectId: a?.subjectId ?? a?.subject?.id ?? null,
+        subjectName: getBestLabel(a?.subjectName, a?.subject?.name, a?.subject?.subjectName, a?.subject?.label),
+      })
+    }
+    return map
+  }, [assignments])
+
   const classOptions = useMemo(() => {
     return classesLookup
-      .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
+      .filter((c) => pendingFilters.schoolId === 'Select' || rowMatchesSchool(c, pendingFilters.schoolId, schoolNameById.get(String(pendingFilters.schoolId))))
       .slice()
-      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
-  }, [classesLookup, pendingFilters.schoolId])
+      .sort((a, b) => getOptionLabel(a.className, a.numericName, a.name, a.label).localeCompare(getOptionLabel(b.className, b.numericName, b.name, b.label)))
+  }, [classesLookup, pendingFilters.schoolId, schoolNameById])
 
   const sectionOptions = useMemo(() => {
     return sectionsLookup
       .filter((s) => {
-        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
-        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        if (pendingFilters.schoolId !== 'Select' && !rowMatchesSchool(s, pendingFilters.schoolId, schoolNameById.get(String(pendingFilters.schoolId)))) return false
+        if (pendingFilters.classId !== 'Select' && !rowMatchesClass(s, pendingFilters.classId, classNameById.get(String(pendingFilters.classId)))) return false
         return true
       })
       .slice()
-      .sort((a, b) => String(a.sectionName || '').localeCompare(String(b.sectionName || '')))
-  }, [sectionsLookup, pendingFilters.schoolId, pendingFilters.classId])
+      .sort((a, b) => getOptionLabel(a.sectionName, a.name, a.label).localeCompare(getOptionLabel(b.sectionName, b.name, b.label)))
+  }, [sectionsLookup, pendingFilters.schoolId, pendingFilters.classId, schoolNameById, classNameById])
 
   const assignmentOptions = useMemo(() => {
     return assignments
       .filter((a) => {
-        if (pendingFilters.schoolId !== 'Select' && String(a.schoolId) !== String(pendingFilters.schoolId)) return false
-        if (pendingFilters.classId !== 'Select' && String(a.classId) !== String(pendingFilters.classId)) return false
-        if (pendingFilters.sectionId !== 'Select' && String(a.sectionId) !== String(pendingFilters.sectionId)) return false
+        if (pendingFilters.schoolId !== 'Select' && !rowMatchesSchool(a, pendingFilters.schoolId, schoolNameById.get(String(pendingFilters.schoolId)))) return false
+        if (pendingFilters.classId !== 'Select' && !rowMatchesClass(a, pendingFilters.classId, classNameById.get(String(pendingFilters.classId)))) return false
+        if (pendingFilters.sectionId !== 'Select' && !rowMatchesSection(a, pendingFilters.sectionId, sectionNameById.get(String(pendingFilters.sectionId)))) return false
         return true
       })
       .slice()
-      .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
-  }, [assignments, pendingFilters.schoolId, pendingFilters.classId, pendingFilters.sectionId])
+      .sort((a, b) => getOptionLabel(a.title, a.assignmentTitle, a.name, a.label).localeCompare(getOptionLabel(b.title, b.assignmentTitle, b.name, b.label)))
+  }, [assignments, pendingFilters.schoolId, pendingFilters.classId, pendingFilters.sectionId, schoolNameById, classNameById, sectionNameById])
 
   const validateFind = () => {
     const errs = {}
-    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
-    if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
-    if (pendingFilters.sectionId === 'Select') errs.sectionId = 'Section is required.'
+    if (roleUpper === 'TEACHER') return errs
+    if (!fixedStudentScope) {
+      if (!fixedTeacherScope && pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
+      if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
+      if (pendingFilters.sectionId === 'Select') errs.sectionId = 'Section is required.'
+    }
     if (pendingFilters.assignmentId === 'Select') errs.assignmentId = 'Assignment is required.'
-    if (!fixedStudentId && pendingFilters.studentId === 'Select') errs.studentId = 'Student is required.'
+    if (!fixedStudentScope && pendingFilters.studentId === 'Select') errs.studentId = 'Student is required.'
     return errs
   }
 
@@ -307,8 +529,32 @@ const Submission = () => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    if (fixedStudentScope) {
+      const next = {
+        schoolId: fixedStudentScope.schoolId || 'Select',
+        classId: fixedStudentScope.classId || 'Select',
+        sectionId: fixedStudentScope.sectionId || 'Select',
+        assignmentId: 'Select',
+        studentId: fixedStudentScope.studentId || 'Select',
+        evaluate: 'Select',
+      }
+      setPendingFilters(next)
+      setFilters(next)
+    } else if (fixedTeacherScope) {
+      const next = {
+        schoolId: fixedTeacherScope.schoolId || 'Select',
+        classId: 'Select',
+        sectionId: 'Select',
+        assignmentId: 'Select',
+        studentId: 'Select',
+        evaluate: 'Select',
+      }
+      setPendingFilters(next)
+      setFilters(next)
+    } else {
+      setPendingFilters(emptyFilters)
+      setFilters(emptyFilters)
+    }
     setFindErrors({})
     setHasSearched(false)
     setSearch('')
@@ -316,17 +562,52 @@ const Submission = () => {
     setSelectedRows([])
   }
 
+  useEffect(() => {
+    if (!fixedStudentScope && !fixedTeacherScope) return
+    const next = {
+      schoolId: fixedStudentScope?.schoolId || fixedTeacherScope?.schoolId || 'Select',
+      classId: fixedStudentScope?.classId || 'Select',
+      sectionId: fixedStudentScope?.sectionId || 'Select',
+      assignmentId: pendingFilters.assignmentId || 'Select',
+      studentId: fixedStudentScope?.studentId || 'Select',
+      evaluate: pendingFilters.evaluate || 'Select',
+    }
+    setPendingFilters(next)
+    setFilters((prev) => ({ ...prev, ...next }))
+  }, [fixedStudentScope, fixedTeacherScope, pendingFilters.assignmentId, pendingFilters.evaluate])
+
   const filtered = useMemo(() => {
     if (!hasSearchResults) return []
     const q = search.trim().toLowerCase()
     return rows
       .map((r) => ({
         ...r,
-        schoolName: r.schoolName || schoolNameById.get(String(r.schoolId)) || '',
-        className: r.className || classNameById.get(String(r.classId)) || '',
-        sectionName: r.sectionName || sectionNameById.get(String(r.sectionId)) || '',
-        studentName: r.studentName || studentNameById.get(String(r.studentId)) || String(r.studentId || ''),
-        assignmentTitle: r.assignmentTitle || assignmentTitleById.get(String(r.assignmentId)) || String(r.assignmentId || ''),
+        schoolName:
+          r.schoolName ||
+          assignmentDetailsById.get(String(r.assignmentId))?.schoolName ||
+          (isTeacherScopedUser ? fixedTeacherSchoolName : '') ||
+          schoolNameById.get(String(r.schoolId)) ||
+          '',
+        className:
+          r.className ||
+          assignmentDetailsById.get(String(r.assignmentId))?.className ||
+          classNameById.get(String(r.classId)) ||
+          '',
+        sectionName:
+          r.sectionName ||
+          assignmentDetailsById.get(String(r.assignmentId))?.sectionName ||
+          sectionNameById.get(String(r.sectionId)) ||
+          '',
+        studentName:
+          r.studentName ||
+          studentNameById.get(String(r.studentId)) ||
+          (isTeacherScopedUser ? getBestLabel(r.studentName, r.student?.name, r.student?.fullName) : '') ||
+          String(r.studentId || ''),
+        assignmentTitle:
+          r.assignmentTitle ||
+          assignmentTitleById.get(String(r.assignmentId)) ||
+          assignmentDetailsById.get(String(r.assignmentId))?.subjectName ||
+          String(r.assignmentId || ''),
       }))
       .filter((r) => {
         if (filters.schoolId !== 'Select' && String(r.schoolId) !== String(filters.schoolId)) return false
@@ -342,7 +623,7 @@ const Submission = () => {
           .toLowerCase()
           .includes(q)
       })
-  }, [hasSearchResults, rows, filters, search, schoolNameById, classNameById, sectionNameById, studentNameById, assignmentTitleById, fixedStudentId])
+  }, [hasSearchResults, rows, filters, search, schoolNameById, classNameById, sectionNameById, studentNameById, assignmentTitleById, fixedStudentId, assignmentDetailsById, isTeacherScopedUser, fixedTeacherSchoolName])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const paginated = useMemo(() => {
@@ -363,8 +644,25 @@ const Submission = () => {
   }
 
   const openAdd = () => {
-    if (roleUpper === 'PARENT') return
-    const initial = { ...emptyForm }
+    if (roleUpper === 'PARENT' && fixedStudentId == null) {
+      setError('Select a child first to submit assignments.')
+      return
+    }
+    const initial = {
+      ...emptyForm,
+      ...(isChildScopedUser
+        ? {
+            schoolId: fixedStudentSchoolId || 'Select',
+            classId: fixedStudentClassId || 'Select',
+            sectionId: fixedStudentSectionId || 'Select',
+            studentId: fixedStudentId ? String(fixedStudentId) : 'Select',
+          }
+        : isTeacherScopedUser
+          ? {
+              schoolId: fixedTeacherSchoolId || 'Select',
+            }
+        : {}),
+    }
     if (fixedStudentId) initial.studentId = String(fixedStudentId)
     setAddForm(initial)
     setAddFile(null)
@@ -407,7 +705,12 @@ const Submission = () => {
 
   const validateAdd = () => {
     const errs = {}
-    if (!fixedStudentId) {
+    if (isChildScopedUser) {
+      if (addForm.schoolId === 'Select') errs.schoolId = 'Unable to determine the child school.'
+      if (addForm.classId === 'Select') errs.classId = 'Unable to determine the child class.'
+      if (addForm.sectionId === 'Select') errs.sectionId = 'Unable to determine the child section.'
+      if (addForm.studentId === 'Select') errs.studentId = 'Unable to determine the child student.'
+    } else {
       if (addForm.schoolId === 'Select') errs.schoolId = 'School is required.'
       if (addForm.classId === 'Select') errs.classId = 'Class is required.'
       if (addForm.sectionId === 'Select') errs.sectionId = 'Section is required.'
@@ -427,16 +730,14 @@ const Submission = () => {
     setSaving(true)
     setError('')
     try {
-      const payload = fixedStudentId
-        ? { assignmentId: Number(addForm.assignmentId), note: addForm.note || null }
-        : {
-            schoolId: Number(addForm.schoolId),
-            classId: Number(addForm.classId),
-            sectionId: Number(addForm.sectionId),
-            studentId: Number(addForm.studentId),
-            assignmentId: Number(addForm.assignmentId),
-            note: addForm.note || null,
-          }
+      const payload = {
+        schoolId: Number(addForm.schoolId),
+        classId: Number(addForm.classId),
+        sectionId: Number(addForm.sectionId),
+        studentId: Number(addForm.studentId),
+        assignmentId: Number(addForm.assignmentId),
+        note: addForm.note || null,
+      }
       await createSubmission(payload, addFile)
       setIsAddOpen(false)
       await loadRows()
@@ -472,6 +773,7 @@ const Submission = () => {
 
   const openEvaluate = (row) => {
     setEvalId(row.id)
+    setEvalRow(row)
     setEvalForm({ marks: row.marks != null ? String(row.marks) : '', feedback: row.feedback || '' })
     setIsEvalOpen(true)
   }
@@ -488,6 +790,7 @@ const Submission = () => {
     try {
       await evaluateSubmission(evalId, { marks, feedback: evalForm.feedback || null })
       setIsEvalOpen(false)
+      setEvalRow(null)
       await loadRows()
     } catch (e) {
       setError(e?.message || 'Failed to evaluate submission')
@@ -515,108 +818,236 @@ const Submission = () => {
 
   const renderSubmissionForm = (form, setter, file, setFile, fileRef, mode = 'add') => {
     const isEditMode = mode === 'edit'
-    const isStudentScope = fixedStudentId != null
-    const currentAssignmentOptions = isStudentScope ? assignments : assignmentOptions
+    const isChildScoped = isChildScopedUser
+    const isTeacherScope = isTeacherScopedUser
+    const hasAutoScope = fixedStudentId != null || isTeacherScope
+    const isStudentScope = roleUpper === 'STUDENT'
+    const isParentScope = roleUpper === 'PARENT'
+    const currentAssignmentOptions = hasAutoScope ? assignments : assignmentOptions
+
+    const resolveLockedValue = (id, lookupMap, fallback = '') => {
+      const key = id != null ? String(id) : ''
+      return lookupMap.get(key) || fallback || key || 'Selected automatically'
+    }
 
     return (
     <div className="avm-grid">
-      {!isStudentScope ? (
+      {!isChildScoped ? (
+        isTeacherScope ? (
+          <>
+            <FormField label="School Name" required>
+              <input className="form-control avm-input ps-44" value={fixedTeacherSchoolName || schoolName || 'Selected automatically'} readOnly />
+            </FormField>
+
+            <FormField label="Class" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="classId"
+                value={form.classId}
+                onChange={async (e) => {
+                  const value = e.target.value
+                  setter((prev) => ({ ...prev, classId: value, sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))
+                  try {
+                    if (form.schoolId !== 'Select' && value !== 'Select') {
+                      const secs = await fetchSections({ schoolId: form.schoolId, classId: value })
+                      setSectionsLookup(Array.isArray(secs) ? secs : [])
+                    } else {
+                      setSectionsLookup([])
+                    }
+                  } catch {
+                    setSectionsLookup([])
+                  }
+                }}
+                disabled={isEditMode}
+              >
+                <option value="Select">Select</option>
+                {classesLookup.filter((c) => rowMatchesSchool(c, form.schoolId, fixedTeacherSchoolName)).map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.className}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Section" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="sectionId"
+                value={form.sectionId}
+                onChange={async (e) => {
+                  const value = e.target.value
+                  setter((prev) => ({ ...prev, sectionId: value, assignmentId: 'Select', studentId: 'Select' }))
+                  try {
+                    if (form.schoolId !== 'Select' && form.classId !== 'Select' && value !== 'Select') {
+                      const students = await fetchStudentsByClassSection({ schoolId: form.schoolId, classId: form.classId, sectionId: value })
+                      setStudentsLookup(Array.isArray(students) ? students : [])
+                    } else {
+                      setStudentsLookup([])
+                    }
+                  } catch {
+                    setStudentsLookup([])
+                  }
+                }}
+                disabled={form.classId === 'Select' || isEditMode}
+              >
+                <option value="Select">Select</option>
+                {sectionsLookup.filter((s) => rowMatchesSchool(s, form.schoolId, fixedTeacherSchoolName) && rowMatchesClass(s, form.classId, classNameById.get(String(form.classId)))).map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.sectionName}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Student" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="studentId"
+                value={form.studentId}
+                onChange={(e) => setter((prev) => ({ ...prev, studentId: e.target.value }))}
+                disabled={form.sectionId === 'Select' || isEditMode}
+              >
+                <option value="Select">Select</option>
+                {studentsLookup.map((s) => (
+                  <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
+                    {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </>
+        ) : (
+          <>
+            <FormField label="School Name" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="schoolId"
+                value={form.schoolId}
+                onChange={(e) => setter((prev) => ({ ...prev, schoolId: e.target.value, classId: 'Select', sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))}
+                disabled={isEditMode}
+              >
+                <option value="Select">Select</option>
+                {schoolsLookup.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Class" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="classId"
+                value={form.classId}
+                onChange={async (e) => {
+                  const value = e.target.value
+                  setter((prev) => ({ ...prev, classId: value, sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))
+                  try {
+                    if (form.schoolId !== 'Select' && value !== 'Select') {
+                      const secs = await fetchSections({ schoolId: form.schoolId, classId: value })
+                      setSectionsLookup(Array.isArray(secs) ? secs : [])
+                    } else {
+                      setSectionsLookup([])
+                    }
+                  } catch {
+                    setSectionsLookup([])
+                  }
+                }}
+                disabled={form.schoolId === 'Select' || isEditMode}
+              >
+                <option value="Select">Select</option>
+                {classesLookup.filter((c) => rowMatchesSchool(c, form.schoolId, schoolNameById.get(String(form.schoolId)))).map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.className}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Section" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="sectionId"
+                value={form.sectionId}
+                onChange={async (e) => {
+                  const value = e.target.value
+                  setter((prev) => ({ ...prev, sectionId: value, assignmentId: 'Select', studentId: 'Select' }))
+                  try {
+                    if (form.schoolId !== 'Select' && form.classId !== 'Select' && value !== 'Select') {
+                      const students = await fetchStudentsByClassSection({ schoolId: form.schoolId, classId: form.classId, sectionId: value })
+                      setStudentsLookup(Array.isArray(students) ? students : [])
+                    } else {
+                      setStudentsLookup([])
+                    }
+                  } catch {
+                    setStudentsLookup([])
+                  }
+                }}
+                disabled={form.classId === 'Select' || isEditMode}
+              >
+                <option value="Select">Select</option>
+                {sectionsLookup.filter((s) => rowMatchesSchool(s, form.schoolId, schoolNameById.get(String(form.schoolId))) && rowMatchesClass(s, form.classId, classNameById.get(String(form.classId)))).map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.sectionName}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+
+            <FormField label="Student" required>
+              <select
+                className="form-select avm-input ps-44"
+                id="studentId"
+                value={form.studentId}
+                onChange={(e) => setter((prev) => ({ ...prev, studentId: e.target.value }))}
+                disabled={form.sectionId === 'Select' || isEditMode}
+              >
+                <option value="Select">Select</option>
+                {studentsLookup.map((s) => (
+                  <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
+                    {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </>
+        )
+      ) : (
         <>
           <FormField label="School Name" required>
-            <select
-              className="form-select avm-input ps-44"
-              id="schoolId"
-              value={form.schoolId}
-              onChange={(e) => setter((prev) => ({ ...prev, schoolId: e.target.value, classId: 'Select', sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))}
-              disabled={isEditMode}
-            >
-              <option value="Select">Select</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <input
+              className="form-control avm-input ps-44"
+              value={resolveLockedValue(form.schoolId, schoolNameById, isParentScope ? getBestLabel(selectedChild?.schoolName, selectedChild?.school?.schoolName, selectedChild?.school?.name) : getBestLabel(user?.schoolName, user?.school?.schoolName, user?.school?.name))}
+              readOnly
+            />
           </FormField>
 
           <FormField label="Class" required>
-            <select
-              className="form-select avm-input ps-44"
-              id="classId"
-              value={form.classId}
-              onChange={async (e) => {
-                const value = e.target.value
-                setter((prev) => ({ ...prev, classId: value, sectionId: 'Select', assignmentId: 'Select', studentId: 'Select' }))
-                try {
-                  if (form.schoolId !== 'Select' && value !== 'Select') {
-                    const secs = await fetchSections({ schoolId: form.schoolId, classId: value })
-                    setSectionsLookup(Array.isArray(secs) ? secs : [])
-                  } else {
-                    setSectionsLookup([])
-                  }
-                } catch {
-                  setSectionsLookup([])
-                }
-              }}
-              disabled={form.schoolId === 'Select' || isEditMode}
-            >
-              <option value="Select">Select</option>
-              {classesLookup.filter((c) => String(c.schoolId) === String(form.schoolId)).map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.className}
-                </option>
-              ))}
-            </select>
+            <input
+              className="form-control avm-input ps-44"
+              value={resolveLockedValue(form.classId, classNameById, isParentScope ? getBestLabel(selectedChild?.className, selectedChild?.schoolClass?.className, selectedChild?.schoolClass?.name) : getBestLabel(user?.className, user?.student?.className, user?.student?.schoolClass?.className))}
+              readOnly
+            />
           </FormField>
 
           <FormField label="Section" required>
-            <select
-              className="form-select avm-input ps-44"
-              id="sectionId"
-              value={form.sectionId}
-              onChange={async (e) => {
-                const value = e.target.value
-                setter((prev) => ({ ...prev, sectionId: value, assignmentId: 'Select', studentId: 'Select' }))
-                try {
-                  if (form.schoolId !== 'Select' && form.classId !== 'Select' && value !== 'Select') {
-                    const students = await fetchStudentsByClassSection({ schoolId: form.schoolId, classId: form.classId, sectionId: value })
-                    setStudentsLookup(Array.isArray(students) ? students : [])
-                  } else {
-                    setStudentsLookup([])
-                  }
-                } catch {
-                  setStudentsLookup([])
-                }
-              }}
-              disabled={form.classId === 'Select' || isEditMode}
-            >
-              <option value="Select">Select</option>
-              {sectionsLookup.filter((s) => String(s.schoolId) === String(form.schoolId) && String(s.classId) === String(form.classId)).map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.sectionName}
-                </option>
-              ))}
-            </select>
+            <input
+              className="form-control avm-input ps-44"
+              value={resolveLockedValue(form.sectionId, sectionNameById, isParentScope ? getBestLabel(selectedChild?.sectionName, selectedChild?.schoolSection?.sectionName, selectedChild?.schoolSection?.name) : getBestLabel(user?.sectionName, user?.student?.sectionName, user?.student?.schoolSection?.sectionName))}
+              readOnly
+            />
           </FormField>
 
           <FormField label="Student" required>
-            <select
-              className="form-select avm-input ps-44"
-              id="studentId"
-              value={form.studentId}
-              onChange={(e) => setter((prev) => ({ ...prev, studentId: e.target.value }))}
-              disabled={form.sectionId === 'Select' || isEditMode}
-            >
-              <option value="Select">Select</option>
-              {studentsLookup.map((s) => (
-                <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
-                  {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
-                </option>
-              ))}
-            </select>
+            <input
+              className="form-control avm-input ps-44"
+              value={resolveLockedValue(form.studentId, studentNameById, isParentScope ? fixedStudentName : getBestLabel(fixedStudentName))}
+              readOnly
+            />
           </FormField>
         </>
-      ) : null}
+      )}
 
       <FormField label="Assignment" required>
         <select
@@ -624,7 +1055,7 @@ const Submission = () => {
           id="assignmentId"
           value={form.assignmentId}
           onChange={(e) => setter((prev) => ({ ...prev, assignmentId: e.target.value }))}
-          disabled={isEditMode || (!isStudentScope && form.sectionId === 'Select')}
+          disabled={isEditMode || (!hasAutoScope && form.sectionId === 'Select')}
         >
           <option value="Select">Select</option>
           {currentAssignmentOptions
@@ -668,21 +1099,18 @@ const Submission = () => {
       {roleUpper === 'PARENT' && !selectedChildId ? (
         <div className="alert alert-info mb-3">Select a child from the top bar to view submissions.</div>
       ) : null}
-      {roleUpper === 'TEACHER' && (!filters.assignmentId || filters.assignmentId === 'Select') ? (
-        <div className="alert alert-info mb-3">Use Find and select an Assignment to view submissions.</div>
-      ) : null}
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h5 className="mb-0">Submission</h5>
           <div className="text-muted small">Submit assignments and review/evaluate submissions within your scope.</div>
         </div>
 
-        <div className="d-flex align-items-center gap-2">
+      <div className="d-flex align-items-center gap-2">
           <button type="button" className="btn btn-outline-secondary" onClick={() => setIsFindSidebarOpen(true)}>
             Find
           </button>
-          {canSubmit ? (
-            <button type="button" className="btn btn-primary" onClick={openAdd} disabled={(!hasSearchResults && !fixedStudentId) || roleUpper === 'PARENT'}>
+          {canSubmit && roleUpper !== 'TEACHER' ? (
+            <button type="button" className="btn btn-primary" onClick={openAdd} disabled={!hasSearchResults || (roleUpper === 'PARENT' && fixedStudentId == null)}>
               Submit
             </button>
           ) : null}
@@ -836,8 +1264,50 @@ const Submission = () => {
 
       <WizardPopup title="Evaluate Submission" isOpen={isEvalOpen} onClose={() => setIsEvalOpen(false)} steps={['Evaluate']} currentStep={0} setCurrentStep={() => {}} onSave={saveEvaluate} saving={saving}>
         <div className="avm-grid">
+          <div className="avm-field full">
+            <label className="avm-label">Submission Context</label>
+            <div className="p-3 radius-8 border" style={{ background: '#f8fafc' }}>
+              <div className="fw-medium mb-1">
+                {getBestLabel(
+                  evalRow?.assignmentTitle,
+                  assignmentTitleById.get(String(evalRow?.assignmentId)),
+                  assignmentDetailsById.get(String(evalRow?.assignmentId))?.subjectName,
+                  'Assignment',
+                )}
+              </div>
+              <div className="text-muted small">
+                {getBestLabel(evalRow?.schoolName, schoolNameById.get(String(evalRow?.schoolId)), fixedTeacherSchoolName, 'School')} |{' '}
+                {getBestLabel(evalRow?.className, classNameById.get(String(evalRow?.classId)), 'Class')} |{' '}
+                {getBestLabel(evalRow?.sectionName, sectionNameById.get(String(evalRow?.sectionId)), 'Section')} |{' '}
+                {getBestLabel(evalRow?.studentName, studentNameById.get(String(evalRow?.studentId)), 'Student')}
+              </div>
+            </div>
+          </div>
+
+          <div className="avm-field full">
+            <label className="avm-label">Uploaded Document</label>
+            {evalRow?.fileUrl ? (
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <a className="btn btn-outline-primary btn-sm" href={evalRow.fileUrl} target="_blank" rel="noreferrer">
+                  View file
+                </a>
+                <span className="text-muted small text-break">{String(evalRow.fileUrl).split('/').filter(Boolean).pop() || evalRow.fileUrl}</span>
+              </div>
+            ) : (
+              <div className="text-muted small">No file uploaded with this submission.</div>
+            )}
+          </div>
+
           <FormField label="Marks" required>
-            <input className="form-control avm-input ps-44" value={evalForm.marks} onChange={(e) => setEvalForm((p) => ({ ...p, marks: e.target.value }))} placeholder="e.g. 10" />
+            <input
+              className="form-control avm-input ps-44"
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={evalForm.marks}
+              onChange={(e) => setEvalForm((p) => ({ ...p, marks: e.target.value }))}
+              placeholder="e.g. 10"
+            />
           </FormField>
           <FormField label="Feedback" full>
             <textarea className="form-control avm-input ps-44" value={evalForm.feedback} onChange={(e) => setEvalForm((p) => ({ ...p, feedback: e.target.value }))} rows={4} placeholder="Feedback" />
@@ -847,70 +1317,142 @@ const Submission = () => {
 
       <SlideSidebar show={isFindSidebarOpen} onClose={() => setIsFindSidebarOpen(false)} title="Find Submissions" width="420px">
         <form onSubmit={handleApplyFilters} className="p-3">
-          <div className="mb-3">
-            <label className="form-label">School</label>
-            <select className="form-select" id="schoolId" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
-              <option value="Select">Select</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName || s.name}
-                </option>
-              ))}
-            </select>
-            {findErrors.schoolId ? <div className="text-danger small mt-1">{findErrors.schoolId}</div> : null}
-          </div>
+          {fixedStudentScope ? (
+            <>
+              <div className="mb-3">
+                <label className="form-label">School</label>
+                <input className="form-control" value={getBestLabel(schoolNameById.get(String(fixedStudentScope.schoolId)), selectedChild?.schoolName, selectedChild?.school?.schoolName, selectedChild?.school?.name, user?.schoolName, user?.school?.schoolName, user?.school?.name, 'Selected automatically')} readOnly />
+              </div>
 
-          <div className="mb-3">
-            <label className="form-label">Class</label>
-            <select className="form-select" id="classId" value={pendingFilters.classId} onChange={handlePendingFilterChange} disabled={pendingFilters.schoolId === 'Select'}>
-              <option value="Select">Select</option>
-              {classOptions.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.className}
-                </option>
-              ))}
-            </select>
-            {findErrors.classId ? <div className="text-danger small mt-1">{findErrors.classId}</div> : null}
-          </div>
+              <div className="mb-3">
+                <label className="form-label">Class</label>
+                <input className="form-control" value={getBestLabel(classNameById.get(String(fixedStudentScope.classId)), selectedChild?.className, selectedChild?.schoolClass?.className, selectedChild?.schoolClass?.name, user?.className, user?.student?.className, user?.student?.schoolClass?.className, 'Selected automatically')} readOnly />
+              </div>
 
-          <div className="mb-3">
-            <label className="form-label">Section</label>
-            <select className="form-select" id="sectionId" value={pendingFilters.sectionId} onChange={handlePendingFilterChange} disabled={pendingFilters.classId === 'Select'}>
-              <option value="Select">Select</option>
-              {sectionOptions.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.sectionName}
-                </option>
-              ))}
-            </select>
-            {findErrors.sectionId ? <div className="text-danger small mt-1">{findErrors.sectionId}</div> : null}
-          </div>
+              <div className="mb-3">
+                <label className="form-label">Section</label>
+                <input className="form-control" value={getBestLabel(sectionNameById.get(String(fixedStudentScope.sectionId)), selectedChild?.sectionName, selectedChild?.schoolSection?.sectionName, selectedChild?.schoolSection?.name, user?.sectionName, user?.student?.sectionName, user?.student?.schoolSection?.sectionName, 'Selected automatically')} readOnly />
+              </div>
 
-          {!fixedStudentId ? (
-            <div className="mb-3">
-              <label className="form-label">Student</label>
-              <select className="form-select" id="studentId" value={pendingFilters.studentId} onChange={handlePendingFilterChange} disabled={pendingFilters.sectionId === 'Select'}>
-                <option value="Select">Select</option>
-                {studentsLookup.map((s) => (
-                  <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
-                    {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
-                  </option>
-                ))}
-              </select>
-              {findErrors.studentId ? <div className="text-danger small mt-1">{findErrors.studentId}</div> : null}
-            </div>
-          ) : null}
+              <div className="mb-3">
+                <label className="form-label">Student</label>
+                <input className="form-control" value={getBestLabel(fixedStudentScope.studentName, studentNameById.get(String(fixedStudentScope.studentId)), user?.name, user?.fullName, user?.student?.name, user?.student?.fullName, 'Selected automatically')} readOnly />
+              </div>
+            </>
+          ) : fixedTeacherScope ? (
+            <>
+              <div className="mb-3">
+                <label className="form-label">School</label>
+                <input className="form-control" value={fixedTeacherSchoolName || schoolName || 'Selected automatically'} readOnly />
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Class</label>
+                <select className="form-select" id="classId" value={pendingFilters.classId} onChange={handlePendingFilterChange}>
+                  <option value="Select">Select</option>
+                  {classOptions.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {getOptionLabel(c.className, c.numericName, c.name, c.label)}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.classId ? <div className="text-danger small mt-1">{findErrors.classId}</div> : null}
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Section</label>
+                <select className="form-select" id="sectionId" value={pendingFilters.sectionId} onChange={handlePendingFilterChange} disabled={pendingFilters.classId === 'Select'}>
+                  <option value="Select">Select</option>
+                  {sectionOptions.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {getOptionLabel(s.sectionName, s.name, s.label)}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.sectionId ? <div className="text-danger small mt-1">{findErrors.sectionId}</div> : null}
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Student</label>
+                <select className="form-select" id="studentId" value={pendingFilters.studentId} onChange={handlePendingFilterChange} disabled={pendingFilters.sectionId === 'Select'}>
+                  <option value="Select">Select</option>
+                  {studentsLookup.map((s) => (
+                    <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
+                      {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.studentId ? <div className="text-danger small mt-1">{findErrors.studentId}</div> : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-3">
+                <label className="form-label">School</label>
+                <select className="form-select" id="schoolId" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
+                  <option value="Select">Select</option>
+                  {schoolsLookup.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {s.schoolName || s.name}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.schoolId ? <div className="text-danger small mt-1">{findErrors.schoolId}</div> : null}
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Class</label>
+                <select className="form-select" id="classId" value={pendingFilters.classId} onChange={handlePendingFilterChange} disabled={pendingFilters.schoolId === 'Select'}>
+                  <option value="Select">Select</option>
+                  {classOptions.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {getOptionLabel(c.className, c.numericName, c.name, c.label)}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.classId ? <div className="text-danger small mt-1">{findErrors.classId}</div> : null}
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Section</label>
+                <select className="form-select" id="sectionId" value={pendingFilters.sectionId} onChange={handlePendingFilterChange} disabled={pendingFilters.classId === 'Select'}>
+                  <option value="Select">Select</option>
+                  {sectionOptions.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {getOptionLabel(s.sectionName, s.name, s.label)}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.sectionId ? <div className="text-danger small mt-1">{findErrors.sectionId}</div> : null}
+              </div>
+
+              {!fixedStudentId ? (
+                <div className="mb-3">
+                  <label className="form-label">Student</label>
+                  <select className="form-select" id="studentId" value={pendingFilters.studentId} onChange={handlePendingFilterChange} disabled={pendingFilters.sectionId === 'Select'}>
+                    <option value="Select">Select</option>
+                    {studentsLookup.map((s) => (
+                      <option key={s.id || s.studentId} value={String(s.id || s.studentId)}>
+                        {s.name || s.fullName || s.studentName || s.email || `Student #${s.id || s.studentId}`}
+                      </option>
+                    ))}
+                  </select>
+                  {findErrors.studentId ? <div className="text-danger small mt-1">{findErrors.studentId}</div> : null}
+                </div>
+              ) : null}
+            </>
+          )}
 
           <div className="mb-3">
             <label className="form-label">Assignment</label>
-            <select className="form-select" id="assignmentId" value={pendingFilters.assignmentId} onChange={handlePendingFilterChange} disabled={pendingFilters.sectionId === 'Select'}>
-              <option value="Select">Select</option>
-              {assignmentOptions.map((a) => (
-                <option key={a.id} value={String(a.id)}>
-                  {a.title}
-                </option>
-              ))}
-            </select>
+                <select className="form-select" id="assignmentId" value={pendingFilters.assignmentId} onChange={handlePendingFilterChange} disabled={pendingFilters.sectionId === 'Select'}>
+                  <option value="Select">Select</option>
+                  {assignmentOptions.map((a) => (
+                    <option key={a.id} value={String(a.id)}>
+                      {getOptionLabel(a.title, a.assignmentTitle, a.name, a.label)}
+                    </option>
+                  ))}
+                </select>
             {findErrors.assignmentId ? <div className="text-danger small mt-1">{findErrors.assignmentId}</div> : null}
           </div>
 
@@ -918,7 +1460,7 @@ const Submission = () => {
             <label className="form-label">Evaluate</label>
             <select className="form-select" id="evaluate" value={pendingFilters.evaluate} onChange={handlePendingFilterChange}>
               <option value="Select">Select</option>
-              {['Pending', 'Reviewed'].map((v) => (
+              {['Pending', 'Accepted', 'Reviewed'].map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>

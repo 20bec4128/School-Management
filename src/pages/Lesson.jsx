@@ -120,6 +120,7 @@ const Lesson = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const roleUpper = String(role || '').toUpperCase()
   const isTeacherScope = roleUpper === 'TEACHER'
+  const canAddLesson = roleUpper !== 'STUDENT' && roleUpper !== 'PARENT'
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const resolvedSchoolName = authSchoolName || ''
   const resolvedSchoolLabel = resolvedSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
@@ -296,6 +297,7 @@ const Lesson = () => {
   }
 
   const openAdd = () => {
+    if (!canAddLesson) return
     setAddForm({
       ...emptyForm,
       ...filters,
@@ -333,6 +335,7 @@ const Lesson = () => {
   }
 
   const handleAddMore = () => {
+    if (!canAddLesson) return
     const errs = validateEntryForm(addForm)
     if (Object.keys(errs).length > 0) {
       setFormErrors(errs)
@@ -354,6 +357,7 @@ const Lesson = () => {
   }
 
   const submitAdd = async () => {
+    if (!canAddLesson) return
     const entries = [...addQueue]
     if (String(addForm.lesson || '').trim()) {
       const errs = validateEntryForm(addForm)
@@ -670,9 +674,11 @@ const Lesson = () => {
               <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
                 Find
               </button>
-              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
-                + Add
-              </button>
+              {canAddLesson ? (
+                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                  + Add
+                </button>
+              ) : null}
             </div>
           </div>
 

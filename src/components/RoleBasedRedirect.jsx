@@ -11,11 +11,7 @@ const RoleBasedRedirect = ({ role, parentChildren, selectedChildId, onRedirect }
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
     if (r === 'STUDENT') return 'student-dashboard'
-    if (r === 'PARENT') {
-      const children = Array.isArray(parentChildren) ? parentChildren : []
-      if (children.length > 1 && !selectedChildId) return 'parent-child-select'
-      return 'parent-dashboard'
-    }
+    if (r === 'PARENT') return 'parent-dashboard'
     return 'dashboard'
   }, [role, parentChildren, selectedChildId])
 
@@ -27,4 +23,3 @@ const RoleBasedRedirect = ({ role, parentChildren, selectedChildId, onRedirect }
 }
 
 export default RoleBasedRedirect
-

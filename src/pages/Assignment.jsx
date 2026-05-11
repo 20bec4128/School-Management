@@ -50,6 +50,79 @@ const FIELD_ICONS = {
   Assignment: 'ri-attachment-2',
 }
 
+const getBestLabel = (...values) =>
+  values
+    .map((value) => {
+      if (value == null) return ''
+      const text = String(value).trim()
+      return text === 'null' || text === 'undefined' ? '' : text
+    })
+    .find(Boolean) || ''
+
+const getLookupId = (row, keys = ['id']) => {
+  for (const key of keys) {
+    const value = row?.[key]
+    if (value != null && value !== '') return value
+  }
+  return null
+}
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase()
+
+const getSchoolIdFromRow = (row) => row?.schoolId ?? row?.school?.id ?? row?.school?.schoolId ?? null
+const getSchoolNameFromRow = (row) => row?.schoolName ?? row?.school?.schoolName ?? row?.school?.name ?? row?.name ?? row?.label ?? ''
+const getClassIdFromRow = (row) => row?.id ?? row?.classId ?? row?.schoolClass?.id ?? row?.schoolClassId ?? null
+const getClassNameFromRow = (row) =>
+  row?.className ?? row?.numericName ?? row?.name ?? row?.label ?? row?.schoolClass?.className ?? row?.schoolClass?.name ?? ''
+const getSectionIdFromRow = (row) => row?.id ?? row?.sectionId ?? row?.schoolSection?.id ?? row?.schoolSectionId ?? null
+const getSectionNameFromRow = (row) => row?.sectionName ?? row?.name ?? row?.label ?? row?.schoolSection?.sectionName ?? row?.schoolSection?.name ?? ''
+const getSubjectIdFromRow = (row) => row?.id ?? row?.subjectId ?? null
+const getSubjectNameFromRow = (row) => row?.name ?? row?.subjectName ?? row?.label ?? ''
+
+const rowMatchesSchool = (row, schoolId, schoolName = '') => {
+  const targetId = schoolId != null && schoolId !== '' ? String(schoolId) : ''
+  const targetName = normalizeText(schoolName)
+  const rowSchoolId = getSchoolIdFromRow(row)
+  const rowSchoolName = normalizeText(getSchoolNameFromRow(row))
+  return (
+    (targetId && rowSchoolId != null && String(rowSchoolId) === targetId) ||
+    (targetName && rowSchoolName && rowSchoolName === targetName)
+  )
+}
+
+const rowMatchesClass = (row, classId, className = '') => {
+  const targetId = classId != null && classId !== '' ? String(classId) : ''
+  const targetName = normalizeText(className)
+  const rowClassId = getClassIdFromRow(row)
+  const rowClassName = normalizeText(getClassNameFromRow(row))
+  return (
+    (targetId && rowClassId != null && String(rowClassId) === targetId) ||
+    (targetName && rowClassName && rowClassName === targetName)
+  )
+}
+
+const rowMatchesSection = (row, sectionId, sectionName = '') => {
+  const targetId = sectionId != null && sectionId !== '' ? String(sectionId) : ''
+  const targetName = normalizeText(sectionName)
+  const rowSectionId = getSectionIdFromRow(row)
+  const rowSectionName = normalizeText(getSectionNameFromRow(row))
+  return (
+    (targetId && rowSectionId != null && String(rowSectionId) === targetId) ||
+    (targetName && rowSectionName && rowSectionName === targetName)
+  )
+}
+
+const rowMatchesSubject = (row, subjectId, subjectName = '') => {
+  const targetId = subjectId != null && subjectId !== '' ? String(subjectId) : ''
+  const targetName = normalizeText(subjectName)
+  const rowSubjectId = getSubjectIdFromRow(row)
+  const rowSubjectName = normalizeText(getSubjectNameFromRow(row))
+  return (
+    (targetId && rowSubjectId != null && String(rowSubjectId) === targetId) ||
+    (targetName && rowSubjectName && rowSubjectName === targetName)
+  )
+}
+
 const columnOptions = [
   { key: 'schoolName', label: 'School' },
   { key: 'className', label: 'Class' },
@@ -167,6 +240,7 @@ const Assignment = () => {
     role,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    teacherContext,
     studentId,
     selectedChildId,
     parentChildren,
@@ -191,8 +265,31 @@ const Assignment = () => {
       : roleUpper === 'PARENT'
         ? selectedChildId || null
         : null
+  const fixedTeacherSchoolId =
+    roleUpper === 'TEACHER'
+      ? teacherContext?.schoolId != null
+        ? String(teacherContext.schoolId)
+        : authSchoolId != null
+          ? String(authSchoolId)
+          : null
+      : null
+  const fixedTeacherSchoolName =
+    roleUpper === 'TEACHER'
+      ? getBestLabel(
+          teacherContext?.schoolName,
+          teacherContext?.school?.schoolName,
+          teacherContext?.school?.name,
+          user?.schoolName,
+          user?.school?.schoolName,
+          user?.school?.name,
+          authSchoolName,
+          `School ${fixedTeacherSchoolId || ''}`.trim(),
+        )
+      : ''
   const scopeSchoolId = activeSchoolId
     ? String(activeSchoolId)
+    : roleUpper === 'TEACHER'
+      ? fixedTeacherSchoolId || ''
     : roleUpper === 'PARENT'
       ? selectedChild?.schoolId != null
         ? String(selectedChild.schoolId)
@@ -202,6 +299,8 @@ const Assignment = () => {
         : ''
   const scopeSchoolName = activeSchoolId
     ? ''
+    : roleUpper === 'TEACHER'
+      ? fixedTeacherSchoolName
     : roleUpper === 'PARENT'
       ? selectedChild?.schoolName || selectedChild?.school?.schoolName || selectedChild?.school?.name || ''
       : authSchoolName || ''
@@ -248,8 +347,8 @@ const Assignment = () => {
   const loadLookups = useCallback(async () => {
     const [schools, classes, sections, subjects] = await Promise.all([
       fetchSchoolsLookup().catch(() => []),
-      fetchClasses({ schoolId: scopeSchoolId || undefined }).catch(() => []),
-      fetchSections({ schoolId: scopeSchoolId || undefined }).catch(() => []),
+      fetchClasses(scopeSchoolId ? { schoolId: scopeSchoolId } : undefined).catch(() => []),
+      fetchSections(scopeSchoolId ? { schoolId: scopeSchoolId } : undefined).catch(() => []),
       fetchSubjects().catch(() => []),
     ])
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
@@ -298,8 +397,8 @@ const Assignment = () => {
   const schoolNameById = useMemo(() => {
     const map = new Map()
     for (const school of schoolsLookup) {
-      const id = school?.id ?? school?.schoolId ?? null
-      const name = school?.schoolName || school?.name || school?.label || ''
+      const id = getLookupId(school, ['id', 'schoolId'])
+      const name = getBestLabel(school?.schoolName, school?.name, school?.label)
       if (id != null && name) map.set(String(id), name)
     }
     if (scopeSchoolId && !map.has(String(scopeSchoolId))) {
@@ -311,8 +410,8 @@ const Assignment = () => {
   const classNameById = useMemo(() => {
     const map = new Map()
     for (const cls of classesLookup) {
-      const id = cls?.id ?? cls?.classId ?? null
-      const name = cls?.className || cls?.name || cls?.label || ''
+      const id = getLookupId(cls, ['id', 'classId'])
+      const name = getBestLabel(cls?.className, cls?.numericName, cls?.name, cls?.label)
       if (id != null && name) map.set(String(id), name)
     }
     return map
@@ -321,8 +420,8 @@ const Assignment = () => {
   const sectionNameById = useMemo(() => {
     const map = new Map()
     for (const section of sectionsLookup) {
-      const id = section?.id ?? section?.sectionId ?? null
-      const name = section?.sectionName || section?.name || section?.label || ''
+      const id = getLookupId(section, ['id', 'sectionId'])
+      const name = getBestLabel(section?.sectionName, section?.name, section?.label)
       if (id != null && name) map.set(String(id), name)
     }
     return map
@@ -331,8 +430,8 @@ const Assignment = () => {
   const subjectNameById = useMemo(() => {
     const map = new Map()
     for (const subject of subjectsLookup) {
-      const id = subject?.id ?? subject?.subjectId ?? null
-      const name = subject?.name || subject?.subjectName || subject?.label || ''
+      const id = getLookupId(subject, ['id', 'subjectId'])
+      const name = getBestLabel(subject?.name, subject?.subjectName, subject?.label)
       if (id != null && name) map.set(String(id), name)
     }
     return map
@@ -352,32 +451,32 @@ const Assignment = () => {
 
   const classOptions = useMemo(() => {
     return classesLookup
-      .filter((c) => !effectiveSchoolFilterId || String(c.schoolId) === String(effectiveSchoolFilterId))
+      .filter((c) => !effectiveSchoolFilterId || rowMatchesSchool(c, effectiveSchoolFilterId, schoolNameById.get(String(effectiveSchoolFilterId))))
       .slice()
-      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
-  }, [classesLookup, effectiveSchoolFilterId])
+      .sort((a, b) => getBestLabel(a.className, a.numericName, a.name, a.label).localeCompare(getBestLabel(b.className, b.numericName, b.name, b.label)))
+  }, [classesLookup, effectiveSchoolFilterId, schoolNameById])
 
   const sectionOptions = useMemo(() => {
     return sectionsLookup
       .filter((s) => {
-        if (effectiveSchoolFilterId && String(s.schoolId) !== String(effectiveSchoolFilterId)) return false
-        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        if (effectiveSchoolFilterId && !rowMatchesSchool(s, effectiveSchoolFilterId, schoolNameById.get(String(effectiveSchoolFilterId)))) return false
+        if (pendingFilters.classId !== 'Select' && !rowMatchesClass(s, pendingFilters.classId, classNameById.get(String(pendingFilters.classId)))) return false
         return true
       })
       .slice()
-      .sort((a, b) => String(a.sectionName || '').localeCompare(String(b.sectionName || '')))
-  }, [effectiveSchoolFilterId, pendingFilters.classId, sectionsLookup])
+      .sort((a, b) => getBestLabel(a.sectionName, a.name, a.label).localeCompare(getBestLabel(b.sectionName, b.name, b.label)))
+  }, [effectiveSchoolFilterId, pendingFilters.classId, sectionsLookup, schoolNameById, classNameById])
 
   const subjectOptions = useMemo(() => {
     return subjectsLookup
       .filter((s) => {
-        if (effectiveSchoolFilterId && String(s.schoolId) !== String(effectiveSchoolFilterId)) return false
-        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        if (effectiveSchoolFilterId && !rowMatchesSchool(s, effectiveSchoolFilterId, schoolNameById.get(String(effectiveSchoolFilterId)))) return false
+        if (pendingFilters.classId !== 'Select' && !rowMatchesClass(s, pendingFilters.classId, classNameById.get(String(pendingFilters.classId)))) return false
         return true
       })
       .slice()
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-  }, [effectiveSchoolFilterId, pendingFilters.classId, subjectsLookup])
+      .sort((a, b) => getBestLabel(a.name, a.subjectName, a.label).localeCompare(getBestLabel(b.name, b.subjectName, b.label)))
+  }, [effectiveSchoolFilterId, pendingFilters.classId, subjectsLookup, schoolNameById, classNameById])
 
   const validateFind = () => ({})
 
@@ -600,26 +699,30 @@ const Assignment = () => {
     const effectiveSchoolOptions = scopeSchoolId
       ? [{ id: scopeSchoolId, schoolName: schoolNameById.get(String(scopeSchoolId)) || scopeSchoolName || `School ${scopeSchoolId}` }]
       : schoolsLookup
+    const schoolReadOnly = Boolean(scopeSchoolId)
     return (
       <div className="avm-grid">
         <FormField label="School Name" required>
-          <select
-            className="form-select avm-input ps-44"
-            id="schoolId"
-            value={form.schoolId}
-            onChange={(e) => {
-              const value = e.target.value
-              setter((prev) => ({ ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }))
-            }}
-            disabled={Boolean(scopeSchoolId)}
-          >
-            <option value="Select">Select</option>
-            {effectiveSchoolOptions.map((s) => (
-              <option key={s.id} value={String(s.id)}>
-                {s.schoolName || s.name}
-              </option>
-            ))}
-          </select>
+          {schoolReadOnly ? (
+            <input className="form-control avm-input ps-44" value={getBestLabel(scopeSchoolName, schoolNameById.get(String(scopeSchoolId)), `School ${scopeSchoolId}`)} readOnly />
+          ) : (
+            <select
+              className="form-select avm-input ps-44"
+              id="schoolId"
+              value={form.schoolId}
+              onChange={(e) => {
+                const value = e.target.value
+                setter((prev) => ({ ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }))
+              }}
+            >
+              <option value="Select">Select</option>
+              {effectiveSchoolOptions.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {getBestLabel(s.schoolName, s.name, s.label)}
+                </option>
+              ))}
+            </select>
+          )}
         </FormField>
 
         <FormField label="Class" required>
@@ -642,13 +745,11 @@ const Assignment = () => {
             disabled={form.schoolId === 'Select'}
           >
             <option value="Select">Select</option>
-            {classesLookup
-              .filter((c) => String(c.schoolId) === String(form.schoolId))
-              .map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.className}
-                </option>
-              ))}
+            {classOptions.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {getBestLabel(c.className, c.numericName, c.name, c.label)}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -661,13 +762,11 @@ const Assignment = () => {
             disabled={form.classId === 'Select'}
           >
             <option value="Select">Select</option>
-            {sectionsLookup
-              .filter((s) => String(s.schoolId) === String(form.schoolId) && String(s.classId) === String(form.classId))
-              .map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.sectionName}
-                </option>
-              ))}
+            {sectionOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {getBestLabel(s.sectionName, s.name, s.label)}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -680,13 +779,11 @@ const Assignment = () => {
             disabled={form.classId === 'Select'}
           >
             <option value="Select">Select</option>
-            {subjectsLookup
-              .filter((s) => String(s.schoolId) === String(form.schoolId) && String(s.classId) === String(form.classId))
-              .map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.name}
-                </option>
-              ))}
+            {subjectOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {getBestLabel(s.name, s.subjectName, s.label)}
+              </option>
+            ))}
           </select>
         </FormField>
 
@@ -940,53 +1037,53 @@ const Assignment = () => {
         <form onSubmit={handleApplyFilters} className="p-3">
           <div className="mb-3">
             <label className="form-label">School</label>
-            <select className="form-select" id="schoolId" value={scopeSchoolId || pendingFilters.schoolId} onChange={handlePendingFilterChange} disabled={Boolean(scopeSchoolId)}>
-              <option value="Select">Select</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName || s.name}
-                </option>
-              ))}
-            </select>
+          <select className="form-select" id="schoolId" value={scopeSchoolId || pendingFilters.schoolId} onChange={handlePendingFilterChange} disabled={Boolean(scopeSchoolId)}>
+            <option value="Select">Select</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {getBestLabel(s.schoolName, s.name, s.label)}
+              </option>
+            ))}
+          </select>
             {findErrors.schoolId ? <div className="text-danger small mt-1">{findErrors.schoolId}</div> : null}
           </div>
 
           <div className="mb-3">
             <label className="form-label">Class</label>
             <select className="form-select" id="classId" value={pendingFilters.classId} onChange={handlePendingFilterChange} disabled={pendingFilters.schoolId === 'Select'}>
-              <option value="Select">Select</option>
-              {classOptions.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.className}
-                </option>
-              ))}
-            </select>
+                  <option value="Select">Select</option>
+                  {classOptions.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {getBestLabel(c.className, c.numericName, c.name, c.label)}
+                    </option>
+                  ))}
+                </select>
             {findErrors.classId ? <div className="text-danger small mt-1">{findErrors.classId}</div> : null}
           </div>
 
           <div className="mb-3">
             <label className="form-label">Section</label>
             <select className="form-select" id="sectionId" value={pendingFilters.sectionId} onChange={handlePendingFilterChange} disabled={pendingFilters.classId === 'Select'}>
-              <option value="Select">Select</option>
-              {sectionOptions.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.sectionName}
-                </option>
-              ))}
-            </select>
+                  <option value="Select">Select</option>
+                  {sectionOptions.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {getBestLabel(s.sectionName, s.name, s.label)}
+                    </option>
+                  ))}
+                </select>
             {findErrors.sectionId ? <div className="text-danger small mt-1">{findErrors.sectionId}</div> : null}
           </div>
 
           <div className="mb-3">
             <label className="form-label">Subject</label>
             <select className="form-select" id="subjectId" value={pendingFilters.subjectId} onChange={handlePendingFilterChange} disabled={pendingFilters.classId === 'Select'}>
-              <option value="Select">Select</option>
-              {subjectOptions.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+                  <option value="Select">Select</option>
+                  {subjectOptions.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {getBestLabel(s.name, s.subjectName, s.label)}
+                    </option>
+                  ))}
+                </select>
             {findErrors.subjectId ? <div className="text-danger small mt-1">{findErrors.subjectId}</div> : null}
           </div>
 

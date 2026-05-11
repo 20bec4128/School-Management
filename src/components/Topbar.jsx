@@ -1,9 +1,9 @@
 import '../css/topbar.css'
 import { useSidebar } from '../context/SidebarContext'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { normalizeRole } from '../utils/roles'
+import ParentChildSelector from './ParentChildSelector'
 
 const notificationItems = [
   {
@@ -50,7 +50,6 @@ const readLanguage = () => {
 
 const Topbar = ({ user }) => {
   const { toggleSidebar } = useSidebar()
-  const { parentChildren, selectedChildId, setSelectedChildId } = useAuth()
   const { activeSchoolId, setActiveSchoolId, schoolOptions, isSchoolSelectionEnabled } = useSchool()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerQuery, setPickerQuery] = useState('')
@@ -67,6 +66,7 @@ const Topbar = ({ user }) => {
   const webToolbarRef = useRef(null)
 
   const role = normalizeRole(user?.role || user?.userRole || user?.authority)
+  const isParent = role === 'PARENT'
   const isWebView =
     typeof window !== 'undefined' &&
     (Boolean(window.ReactNativeWebView) || /WebView|wv/i.test(window.navigator?.userAgent || ''))
@@ -145,19 +145,8 @@ const Topbar = ({ user }) => {
     document.documentElement.dataset.theme = nextTheme
   }, [])
 
-  const selectorMode = role === 'HEAD_OFFICE_ADMIN' ? 'school' : role === 'PARENT' ? 'child' : null
+  const selectorMode = role === 'HEAD_OFFICE_ADMIN' ? 'school' : null
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
-
-  const childOptions = useMemo(() => {
-    const children = Array.isArray(parentChildren) ? parentChildren : []
-    return children
-      .map((child) => {
-        const id = child?.studentId ?? child?.id ?? child?.student?.id ?? null
-        const label = child?.name ?? child?.studentName ?? child?.fullName ?? child?.student?.name ?? child?.student?.fullName ?? ''
-        return id == null ? null : { id: String(id), label, raw: child }
-      })
-      .filter(Boolean)
-  }, [parentChildren])
 
   const schoolLabelById = useMemo(() => {
     const map = new Map()
@@ -172,14 +161,7 @@ const Topbar = ({ user }) => {
   const currentSelectionLabel =
     selectorMode === 'school'
       ? (activeSchoolId ? schoolLabelById.get(String(activeSchoolId)) : 'All schools')
-      : selectorMode === 'child'
-        ? (childOptions.find((child) => String(child.id) === String(selectedChildId))?.label || 'Select child')
-        : ''
-
-  const selectedSchoolLabel = useMemo(() => {
-    if (!activeSchoolId) return 'All schools'
-    return schoolLabelById.get(String(activeSchoolId)) || `School ${activeSchoolId}`
-  }, [activeSchoolId, schoolLabelById])
+    : ''
 
   const handleSchoolSelectChange = (event) => {
     const value = event.target.value
@@ -199,19 +181,8 @@ const Topbar = ({ user }) => {
       .filter((school) => !query || school.label.toLowerCase().includes(query))
   }, [pickerQuery, schoolOptions])
 
-  const filteredChildren = useMemo(() => {
-    const query = pickerQuery.trim().toLowerCase()
-    return childOptions.filter((child) => !query || child.label.toLowerCase().includes(query))
-  }, [childOptions, pickerQuery])
-
   const handleSelectSchool = (schoolId) => {
     setActiveSchoolId(schoolId)
-    setPickerOpen(false)
-    setPickerQuery('')
-  }
-
-  const handleSelectChild = (childId) => {
-    setSelectedChildId(childId)
     setPickerOpen(false)
     setPickerQuery('')
   }
@@ -271,33 +242,6 @@ const Topbar = ({ user }) => {
       )
     }
 
-    if (selectorMode === 'child') {
-      return (
-        <div className="sm-topbar__picker-list" role="listbox" aria-label="Children">
-          {filteredChildren.map((child) => (
-            <button
-              key={child.id}
-              type="button"
-              className={`sm-topbar__picker-item${String(selectedChildId) === String(child.id) ? ' is-active' : ''}`}
-              onClick={() => handleSelectChild(child.id)}
-            >
-              <span className="sm-topbar__picker-item-icon">
-                <i className="ri-user-3-line" />
-              </span>
-              <span className="sm-topbar__picker-item-copy">
-                <strong>{child.label || `Student ${child.id}`}</strong>
-                <small>ID {child.id}</small>
-              </span>
-            </button>
-          ))}
-
-          {filteredChildren.length === 0 ? (
-            <div className="sm-topbar__picker-empty">No child found.</div>
-          ) : null}
-        </div>
-      )
-    }
-
     return null
   }
 
@@ -327,6 +271,10 @@ const Topbar = ({ user }) => {
             })}
           </select>
         </div>
+      ) : null}
+
+      {isParent ? (
+        <ParentChildSelector showLabel={false} variant="topbar" />
       ) : null}
 
       <div className="sm-topbar__search-shell sm-topbar__search-shell--desktop">
@@ -443,82 +391,42 @@ const Topbar = ({ user }) => {
 
   return (
     <div className="navbar-header sm-topbar">
-      <div className="row align-items-center justify-content-between g-2">
-        <div className="col-auto">
-          <div className="d-flex flex-wrap align-items-center gap-2">
-            <button type="button" className="sidebar-mobile-toggle" aria-label="Sidebar Mobile Toggler Button" onClick={toggleSidebar}>
-              <iconify-icon icon="heroicons:bars-3-solid" className="icon"></iconify-icon>
-            </button>
+      <div className="sm-topbar__mobile-row">
+        <button type="button" className="sidebar-mobile-toggle" aria-label="Sidebar Mobile Toggler Button" onClick={toggleSidebar}>
+          <iconify-icon icon="heroicons:bars-3-solid" className="icon"></iconify-icon>
+        </button>
 
-            {selectorMode ? (
-              selectorMode === 'school' && isWebView ? (
-                <div className="sm-topbar__search-shell" ref={pickerShellRef}>
-                  <select
-                    className="form-select form-select-sm border border-neutral-300 radius-8 text-secondary-light"
-                    value={activeSchoolId || ''}
-                    onChange={handleSchoolSelectChange}
-                    aria-label="Select school"
-                    style={{ minWidth: 220 }}
-                  >
-                    <option value="">All schools</option>
-                    {schoolOptions.map((school) => {
-                      const id = school?.id ?? school?.schoolId ?? null
-                      if (id == null) return null
-                      const label = school?.schoolName ?? school?.name ?? school?.label ?? `School ${id}`
-                      return (
-                        <option key={String(id)} value={String(id)}>
-                          {label}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </div>
-              ) : (
-                <div className="sm-topbar__search-shell" ref={pickerShellRef}>
-                  <button
-                    type="button"
-                    className="sm-topbar__search-toggle"
-                    aria-label={selectorMode === 'school' ? 'Select school' : 'Select child'}
-                    aria-expanded={pickerOpen}
-                    onClick={() => setPickerOpen((prev) => !prev)}
-                  >
-                    <iconify-icon icon="ri-search-line" className="text-primary-light text-xl"></iconify-icon>
-                  </button>
+        <div className="sm-topbar__mobile-actions">
+          {selectorMode ? (
+            selectorMode === 'school' && isWebView ? (
+              <div className="sm-topbar__search-shell sm-topbar__search-shell--mobile" ref={pickerShellRef}>
+                <select
+                  className="form-select form-select-sm border border-neutral-300 radius-8 text-secondary-light sm-topbar__mobile-select"
+                  value={activeSchoolId || ''}
+                  onChange={handleSchoolSelectChange}
+                  aria-label="Select school"
+                >
+                  <option value="">All schools</option>
+                  {schoolOptions.map((school) => {
+                    const id = school?.id ?? school?.schoolId ?? null
+                    if (id == null) return null
+                    const label = school?.schoolName ?? school?.name ?? school?.label ?? `School ${id}`
+                    return (
+                      <option key={String(id)} value={String(id)}>
+                        {label}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            ) : null
+          ) : isParent ? (
+            <ParentChildSelector showLabel={false} variant="topbar" />
+          ) : null}
 
-                  <div className={`sm-topbar__search ${pickerOpen ? 'is-open' : ''}`}>
-                    <div className="sm-topbar__search-header">
-                      <div className="sm-topbar__search-title">
-                        <strong>{selectorMode === 'school' ? 'Select School' : 'Select Child'}</strong>
-                        <span>{currentSelectionLabel || 'Choose from the list'}</span>
-                      </div>
-                      <button type="button" className="sm-topbar__search-close" aria-label="Close selector" onClick={() => setPickerOpen(false)}>
-                        <iconify-icon icon="ri-close-line" />
-                      </button>
-                    </div>
-
-                    <div className="sm-topbar__search-input-wrap">
-                      <iconify-icon icon="ri-search-line" className="sm-topbar__search-input-icon" />
-                      <input
-                        ref={pickerInputRef}
-                        type="text"
-                        className="bg-transparent"
-                        name="search"
-                        placeholder={selectorMode === 'school' ? 'Search schools' : 'Search child'}
-                        value={pickerQuery}
-                        onChange={(e) => setPickerQuery(e.target.value)}
-                      />
-                    </div>
-
-                    {isSchoolSelectionEnabled || selectorMode === 'child' ? renderPickerList() : null}
-                  </div>
-                </div>
-              )
-            ) : null}
-
-            <a href="#" className="sm-topbar__brand sm-topbar__brand--right sm-topbar__brand--mobile" aria-label="School Management">
-              <img src="/assets/images/logo-icon.png" alt="School Management" className="sm-topbar__logo" />
-            </a>
-          </div>
+          <a href="#" className="sm-topbar__brand sm-topbar__brand--right sm-topbar__brand--mobile" aria-label="School Management">
+            <img src="/assets/images/logo-icon.png" alt="School Management" className="sm-topbar__logo" />
+          </a>
         </div>
       </div>
     </div>

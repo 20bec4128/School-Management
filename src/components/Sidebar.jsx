@@ -13,13 +13,6 @@ const menuSections = [
         title: 'Dashboard',
         icon: 'ri:dashboard-line',
         page: 'dashboard',
-        submenu: [
-          { label: 'School', href: '#', page: 'school-admin-dashboard' },
-          { label: 'Teacher', href: '#', page: 'teacher-dashboard' },
-          { label: 'Student', href: '#', page: 'student-dashboard' },
-          { label: 'Parent', href: '#', page: 'parent-dashboard' },
-          { label: 'LMS', href: '#', page: 'dashboard' },
-        ],
       },
       // {
       //   title: 'Theme',
@@ -824,6 +817,15 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     user?.email ||
     'User';
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
+  const dashboardByRole = {
+    SUPER_ADMIN: { page: 'super-admin-dashboard', label: 'Dashboard' },
+    HEAD_OFFICE_ADMIN: { page: 'head-office-dashboard', label: 'Dashboard' },
+    SCHOOL_ADMIN: { page: 'school-admin-dashboard', label: 'Dashboard' },
+    TEACHER: { page: 'teacher-dashboard', label: 'Teacher Dashboard' },
+    STUDENT: { page: 'student-dashboard', label: 'Student Dashboard' },
+    PARENT: { page: 'parent-dashboard', label: 'Parent Dashboard' },
+  }
+  const roleDashboard = dashboardByRole[role] || { page: 'dashboard', label: 'Dashboard' }
   const isStudent = role === 'STUDENT'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const isTeacher = role === 'TEACHER'
@@ -888,12 +890,34 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     'lesson-plan',
     'class-routine',
   ])
+  const parentVisiblePages = new Set([
+    'parent-dashboard',
+    'dashboard',
+    'class-routine',
+    'student-attendance',
+    'exam-result',
+    'mark-sheet',
+    'result-card',
+    'fee-collection',
+    'subject',
+    'syllabus',
+    'study-material',
+    'live-class',
+    'assignment',
+    'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+  ])
 
   const canOpenPage = (page) => {
     if (!page) return true
     if (isStudent) return studentAllowedPages.has(page)
     if (isSchoolAdmin) return schoolAdminAllowedPages.has(page)
     if (isTeacher) return teacherVisiblePages.has(page)
+    if (role === 'PARENT') return parentVisiblePages.has(page)
     return true
   }
 
@@ -924,7 +948,6 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   if (onNavigate) {
     onNavigate(page);
   }
-  closeForNavigation();
 };
 
   return (
@@ -1019,7 +1042,19 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
               .map((section) => ({
                 ...section,
                 items: section.items
+                  .map((item) => {
+                    if (section.title === 'Core System' && item.title === 'Dashboard') {
+                      return {
+                        ...item,
+                        title: roleDashboard.label,
+                        page: roleDashboard.page,
+                        submenu: undefined,
+                      }
+                    }
+                    return item
+                  })
                   .filter((item) => {
+                    if (role === 'PARENT' && item.page && !canOpenPage(item.page)) return false
                     if (!isStudent && !isSchoolAdmin) return true
                     if (item.page && canOpenPage(item.page)) return true
                     if (Array.isArray(item.submenu)) {
@@ -1032,6 +1067,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                     ...item,
                     submenu: Array.isArray(item.submenu)
                       ? item.submenu.filter((sub) => canOpenPage(sub.page) && (!sub.perm || can(user, sub.perm)))
+                        .filter((sub) => !(role === 'PARENT' && ['class', 'section'].includes(sub?.page)))
                       : item.submenu,
                   }))
                   .filter((item) => {

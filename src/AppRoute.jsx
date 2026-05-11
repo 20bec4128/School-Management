@@ -6,7 +6,7 @@ import SchoolAdminDashboard from './pages/SchoolAdminDashboard'
 import TeacherDashboard from './pages/TeacherDashboard'
 import StudentDashboard from './pages/StudentDashboard'
 import ParentDashboard from './pages/ParentDashboard'
-import ParentChildSelect from './pages/ParentChildSelect'
+import LmsDashboard from './pages/LmsDashboard'
 import HeadOffices from './pages/HeadOffices'
 import UserRoleAcl from './pages/UserRoleAcl'
 import TeacherDepartment from './pages/TeacherDepartment'
@@ -107,7 +107,7 @@ const routeEntries = [
   { pageKey: 'teacher-dashboard', component: TeacherDashboard, allowedRoles: ['TEACHER'] },
   { pageKey: 'student-dashboard', component: StudentDashboard, allowedRoles: ['STUDENT'] },
   { pageKey: 'parent-dashboard', component: ParentDashboard, allowedRoles: ['PARENT'] },
-  { pageKey: 'parent-child-select', component: ParentChildSelect, allowedRoles: ['PARENT'] },
+  { pageKey: 'lms-dashboard', component: LmsDashboard },
   { pageKey: 'user-role-acl', component: UserRoleAcl, permission: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*'] },
   { pageKey: 'teacher-department', component: TeacherDepartment },
   { pageKey: 'student-list', component: StudentList },
@@ -206,11 +206,7 @@ const AppRoute = ({ currentPage, user, role, parentChildren, selectedChildId, on
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
     if (r === 'STUDENT') return 'student-dashboard'
-    if (r === 'PARENT') {
-      const children = Array.isArray(parentChildren) ? parentChildren : []
-      if (children.length > 1 && !selectedChildId) return 'parent-child-select'
-      return 'parent-dashboard'
-    }
+    if (r === 'PARENT') return 'parent-dashboard'
     return 'dashboard'
   })()
   const effectivePage = currentPage === 'dashboard' ? homePage : currentPage
@@ -219,10 +215,7 @@ const AppRoute = ({ currentPage, user, role, parentChildren, selectedChildId, on
   if (!entry) return <Dashboard />
 
   const PageComponent = entry.component
-  const content =
-    entry.pageKey === 'parent-child-select'
-      ? <PageComponent onDone={() => onNavigate?.('parent-dashboard')} />
-      : <PageComponent onNavigate={onNavigate} />
+  const content = <PageComponent onNavigate={onNavigate} />
 
   if (!canAccessPage(user, effectivePage)) {
     return <AccessDenied />

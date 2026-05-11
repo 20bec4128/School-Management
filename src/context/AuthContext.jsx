@@ -152,6 +152,26 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('sm:auth-refresh', handler)
   }, [refreshMe])
 
+  useEffect(() => {
+    if (role !== 'PARENT') return
+
+    const children = Array.isArray(parentChildren) ? parentChildren : []
+    if (children.length === 0) {
+      if (selectedChildId != null) setSelectedChildId(null)
+      return
+    }
+
+    const selectedExists = selectedChildId != null && children.some((child) => {
+      const childId = child?.studentId ?? child?.id ?? child?.student?.id ?? null
+      return String(childId) === String(selectedChildId)
+    })
+
+    if (selectedExists) return
+
+    const firstChildId = children[0]?.studentId ?? children[0]?.id ?? children[0]?.student?.id ?? null
+    if (firstChildId != null) setSelectedChildId(firstChildId)
+  }, [parentChildren, role, selectedChildId, setSelectedChildId])
+
   const login = useCallback(async ({ username, password, remember = true }) => {
     const result = await loginApi(username, password)
     const jwt = result?.token || result?.accessToken || result?.jwt || null

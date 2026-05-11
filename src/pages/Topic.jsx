@@ -89,7 +89,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Topic = () => {
-  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { schoolId: authSchoolId, schoolName: authSchoolName, role } = useAuth()
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [topics, setTopics] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -127,6 +127,7 @@ const Topic = () => {
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const resolvedSchoolName = authSchoolName || ''
   const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const canAddTopics = role !== 'STUDENT' && role !== 'PARENT'
   const effectiveSchoolsLookup = useMemo(() => {
     const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
     if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
@@ -325,6 +326,7 @@ const Topic = () => {
   }
 
   const openAdd = async () => {
+    if (!canAddTopics) return
     const base = {
       ...emptyForm,
       ...filters,
@@ -744,9 +746,11 @@ const Topic = () => {
               <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
                 Find
               </button>
-              <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
-                + Add
-              </button>
+              {canAddTopics ? (
+                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                  + Add
+                </button>
+              ) : null}
             </div>
           </div>
 

@@ -10,7 +10,7 @@ export const PAGE_GROUPS = [
       'teacher-dashboard',
       'student-dashboard',
       'parent-dashboard',
-      'parent-child-select',
+      'lms-dashboard',
     ],
   },
   {

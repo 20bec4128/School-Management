@@ -66,6 +66,29 @@ const schoolScopedAllowedPages = new Set([
   'class-routine',
 ])
 
+const parentAllowedPages = new Set([
+  'dashboard',
+  'parent-dashboard',
+  'parent-child-select',
+  'class-routine',
+  'student-attendance',
+  'exam-result',
+  'mark-sheet',
+  'result-card',
+  'fee-collection',
+  'subject',
+  'syllabus',
+  'study-material',
+  'live-class',
+  'assignment',
+  'submission',
+  'lesson',
+  'topic',
+  'lesson-timeline',
+  'lesson-status',
+  'lesson-plan',
+])
+
 export const canAccessPage = (user, pageKey) => {
   if (!pageKey) return true
 
@@ -79,6 +102,8 @@ export const canAccessPage = (user, pageKey) => {
   if (pageKey === 'student-type' && studentTypeAllowedRoles.has(role)) {
     return true
   }
+
+  if (role === 'PARENT') return parentAllowedPages.has(pageKey)
 
   const rule = getRouteAccessRule(pageKey)
   if (rule?.permissions?.length && !can(user, rule.permissions)) return false

@@ -4,6 +4,24 @@
     z-index: 20;
   }
 
+  .sm-topbar__mobile-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .sm-topbar__mobile-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    min-width: 0;
+    margin-left: auto;
+  }
+
   .sm-topbar__logo {
     width: 2.55rem;
     height: 2.55rem;
@@ -16,6 +34,62 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .sm-topbar__mobile-select {
+    min-width: 8.5rem;
+    max-width: 11rem;
+  }
+
+  .sm-topbar__select-shell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    height: 2.35rem;
+    padding-inline: 0.7rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--white) 82%, var(--primary-50));
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  }
+
+  .sm-topbar__select-shell--child {
+    min-width: 8.25rem;
+    max-width: 10.75rem;
+  }
+
+  .sm-topbar__select-icon {
+    color: var(--text-secondary-light);
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .sm-topbar__select-input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary-light);
+    font-size: 0.84rem;
+    font-weight: 700;
+    padding: 0;
+    padding-right: 1.05rem;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 0.25rem) 55%, calc(100% - 0rem) 55%;
+    background-size: 0.34rem 0.34rem, 0.34rem 0.34rem;
+    background-repeat: no-repeat;
+  }
+
+  .sm-topbar__select-input:focus {
+    outline: none;
+    box-shadow: none;
   }
 
   .sm-topbar__search-shell {
@@ -211,7 +285,8 @@
   }
 
   .sm-topbar__brand--mobile {
-    display: none !important;
+    display: inline-flex !important;
+    flex: 0 0 auto;
   }
 
   .sm-topbar__desktop-tools {
@@ -242,6 +317,10 @@
     gap: 0.5rem;
     min-width: 11rem;
     max-width: 15rem;
+  }
+
+  .sm-topbar__select-shell--child {
+    min-width: 12rem;
   }
 
   .sm-topbar__select-icon,
