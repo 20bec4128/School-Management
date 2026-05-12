@@ -6,6 +6,8 @@ import { createSection, deleteSection, fetchSections, updateSection } from '../a
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -75,6 +77,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Section = () => {
+  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [sections, setSections] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
@@ -98,9 +102,35 @@ const Section = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolName = authSchoolName || ''
+  const scopedSchoolId = isSchoolSelectionEnabled && activeSchoolId ? String(activeSchoolId) : resolvedSchoolId
+  const isSchoolLocked = (!isSchoolSelectionEnabled && !!resolvedSchoolId) || (!!activeSchoolId && isSchoolSelectionEnabled)
+
+  const scopedSections = useMemo(() => {
+    if (!isSchoolSelectionEnabled || !activeSchoolId) return sections
+    return sections.filter((row) => String(row?.schoolId) === String(activeSchoolId))
+  }, [activeSchoolId, isSchoolSelectionEnabled, sections])
+
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
+    if (scopedSchoolId && !byId.has(String(scopedSchoolId))) {
+      byId.set(String(scopedSchoolId), {
+        id: scopedSchoolId,
+        schoolName: resolvedSchoolName || `School ${scopedSchoolId}`,
+      })
+    }
+    if (isSchoolSelectionEnabled && activeSchoolId) {
+      const selected = byId.get(String(activeSchoolId))
+      return selected ? [selected] : [{ id: activeSchoolId, schoolName: resolvedSchoolName || `School ${activeSchoolId}` }]
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [activeSchoolId, isSchoolSelectionEnabled, resolvedSchoolName, schoolsLookup, scopedSchoolId])
 
   const loadLookups = useCallback(async () => {
-    const [schools, teachers] = await Promise.all([fetchSchoolsLookup(), fetchTeachers()])
+    const [schoolsResult, teachersResult] = await Promise.allSettled([fetchSchoolsLookup(), fetchTeachers()])
+    const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
+    const teachers = teachersResult.status === 'fulfilled' ? teachersResult.value : []
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     const teacherRows = Array.isArray(teachers) ? teachers : []
     setTeachersLookup(
@@ -115,7 +145,9 @@ const Section = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchSections()
+      const data = await fetchSections({
+        schoolId: scopedSchoolId || undefined,
+      })
       setSections(Array.isArray(data) ? data : [])
     } catch (e) {
       setSections([])
@@ -123,7 +155,7 @@ const Section = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [scopedSchoolId])
 
   const loadClassesForSchool = useCallback(async (schoolId) => {
     if (!schoolId) {
@@ -142,24 +174,29 @@ const Section = () => {
     void loadSections()
   }, [loadSections])
 
+  useEffect(() => {
+    setCurrentPage(1)
+    setSelectedRows([])
+  }, [scopedSchoolId])
+
   const schoolOptions = useMemo(() => {
-    const fromRows = sections.map((r) => r?.schoolName).filter(Boolean)
+    const fromRows = scopedSections.map((r) => r?.schoolName).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
-  }, [sections])
+  }, [scopedSections])
 
   const teacherFilterOptions = useMemo(() => {
-    const fromRows = sections.map((r) => r?.teacherName).filter(Boolean)
+    const fromRows = scopedSections.map((r) => r?.teacherName).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
-  }, [sections])
+  }, [scopedSections])
 
   const classFilterOptions = useMemo(() => {
-    const fromRows = sections.map((r) => r?.className).filter(Boolean)
+    const fromRows = scopedSections.map((r) => r?.className).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
-  }, [sections])
+  }, [scopedSections])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return sections.filter((r) => {
+    return scopedSections.filter((r) => {
       const matchesSearch =
         !q ||
         [r?.schoolName, r?.name, r?.className, r?.teacherName, r?.note]
@@ -173,7 +210,7 @@ const Section = () => {
         filters.classTeacher === 'Select' || r.teacherName === filters.classTeacher
       return matchesSearch && matchesSchool && matchesClass && matchesTeacher
     })
-  }, [sections, search, filters])
+  }, [scopedSections, search, filters])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -228,16 +265,16 @@ const Section = () => {
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(emptyForm)
+    setAddForm(resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
-    void loadClassesForSchool('')
+    void loadClassesForSchool(resolvedSchoolId)
   }
 
   const openEdit = (row) => {
     setError('')
     setEditingId(row?.id ?? null)
-    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
+    const schoolId = row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId
     void loadClassesForSchool(schoolId)
     setEditForm({
       schoolId,
@@ -334,9 +371,10 @@ const Section = () => {
             id="schoolId"
             value={form.schoolId}
             onChange={handleSchoolChange(setter)}
+            disabled={saving || isSchoolLocked}
           >
             <option value="">--Select School--</option>
-            {schoolsLookup.map((s) => (
+            {effectiveSchoolsLookup.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.schoolName}
               </option>

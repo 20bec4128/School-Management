@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 const SUBJECTS_API_BASE = '/api/subjects'
 
 const readApiError = async (res) => {
@@ -16,14 +18,14 @@ const readApiError = async (res) => {
 }
 
 export const fetchSubjects = async () => {
-  const res = await fetch(SUBJECTS_API_BASE, { headers: { Accept: 'application/json' } })
+  const res = await apiFetch(SUBJECTS_API_BASE, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()
   return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 }
 
 export const createSubject = async (payload) => {
-  const res = await fetch(SUBJECTS_API_BASE, {
+  const res = await apiFetch(SUBJECTS_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -33,7 +35,7 @@ export const createSubject = async (payload) => {
 }
 
 export const updateSubject = async (id, payload) => {
-  const res = await fetch(`${SUBJECTS_API_BASE}/${id}`, {
+  const res = await apiFetch(`${SUBJECTS_API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -43,7 +45,7 @@ export const updateSubject = async (id, payload) => {
 }
 
 export const deleteSubject = async (id) => {
-  const res = await fetch(`${SUBJECTS_API_BASE}/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`${SUBJECTS_API_BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

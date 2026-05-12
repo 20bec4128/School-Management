@@ -6,7 +6,7 @@
   width: 15.625rem;
   height: 100vh;
   background-color: var(--white);
-  z-index: 3;
+  z-index: 1045;
 }
 
 @media (min-width: 1200px) {
@@ -59,7 +59,26 @@
   border-block-end: 1px solid var(--neutral-200);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sidebar-logo__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.sidebar-collapse-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary-light);
 }
 
 .sidebar-menu-area {
@@ -103,7 +122,9 @@
 .sidebar-menu .sidebar-submenu {
   padding-block-start: 0.75rem;
   display: none;
-  margin-inline-start: 1.25rem;
+  margin-inline-start: 1.5rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid #dbe7ea;
 }
 
 .sidebar-menu .sidebar-menu-group-title {
@@ -142,19 +163,38 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 2;
+  z-index: 1040;
   cursor: pointer;
+}
+
+.sidebar-close-btn {
+  position: absolute;
+  top: 0.75rem;
+  inset-inline-end: 0.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--text-primary-light);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1046;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
 /* Fix submenu dot overlapping text (circle-icon has a big white box-shadow in the theme) */
 .sidebar-menu .sidebar-submenu li a {
   /* Theme sets horizontal padding to 0; keep it, but ensure there is room after the dot */
   gap: 0;
+  padding-block: 0.5rem;
 }
 
 .sidebar-submenu .circle-icon {
   margin-inline-end: 0.75rem;
   flex: 0 0 auto;
+  color: #c6d3d8;
 }
 
 /* Make section headings align with menu items */
@@ -166,5 +206,11 @@
 /* Hide sidebar menu group titles when collapsed */
 .sidebar-menu-group-title.hidden {
   display: none;
+}
+
+@media (min-width: 1200px) {
+  .sidebar-close-btn {
+    display: none;
+  }
 }
 

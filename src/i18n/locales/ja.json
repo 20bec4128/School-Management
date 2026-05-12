@@ -1,0 +1,19 @@
+{
+  "common.search": "検索",
+  "common.back": "戻る",
+  "common.theme": "テーマ",
+  "common.language": "言語",
+  "common.notifications": "通知",
+  "common.profile": "プロフィール",
+  "common.settings": "設定",
+  "common.logout": "ログアウト",
+
+  "topbar.choose_language": "言語を選択してください",
+  "topbar.see_all_notifications": "すべての通知を見る",
+
+  "bottomnav.dashboard": "ダッシュボード",
+  "bottomnav.attendance": "出席",
+  "bottomnav.teachers": "教師",
+  "bottomnav.students": "学生",
+  "bottomnav.more": "その他"
+}

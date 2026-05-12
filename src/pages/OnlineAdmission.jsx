@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const students = [
@@ -74,6 +76,8 @@ const statusBadgeClass = (status) => {
 const STEPS = ['Basic']
 
 const StudentStatusList = () => {
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -91,9 +95,19 @@ const StudentStatusList = () => {
   })
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const roleUpper = String(role || '').toUpperCase()
+  const isTeacherScope = roleUpper === 'TEACHER'
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolLabel = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
 
   const schoolOptions = useMemo(() => Array.from(new Set(students.map((item) => item.school))), [])
   const classOptions = useMemo(() => Array.from(new Set(students.map((item) => item.className))), [])
+
+  useEffect(() => {
+    if (!isTeacherScope || !resolvedSchoolLabel) return
+    setPendingFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
+    setFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
+  }, [isTeacherScope, resolvedSchoolLabel])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -136,6 +150,7 @@ const StudentStatusList = () => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
+    if (isTeacherScope && id === 'school') return
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
@@ -147,8 +162,11 @@ const StudentStatusList = () => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const next = isTeacherScope
+      ? { ...emptyFilters, school: resolvedSchoolLabel || 'Select' }
+      : emptyFilters
+    setPendingFilters(next)
+    setFilters(next)
     setCurrentPage(1)
   }
 
@@ -159,7 +177,7 @@ const StudentStatusList = () => {
 
   const openEdit = (row) => {
     setEditForm({
-      school: row.school,
+      school: isTeacherScope ? (resolvedSchoolLabel || row.school) : row.school,
       name: row.name,
       className: row.className,
       status: row.status,
@@ -466,13 +484,17 @@ const StudentStatusList = () => {
           <div className="avm-grid">
             <div className="avm-field">
               <label className="avm-label">School</label>
-              <input
-                type="text"
-                id="school"
-                className="avm-input"
-                value={editForm.school}
-                onChange={handleEditChange}
-              />
+              {isTeacherScope ? (
+                <input type="text" className="avm-input" value={resolvedSchoolLabel || editForm.school} readOnly />
+              ) : (
+                <input
+                  type="text"
+                  id="school"
+                  className="avm-input"
+                  value={editForm.school}
+                  onChange={handleEditChange}
+                />
+              )}
             </div>
 
             <div className="avm-field">
@@ -530,19 +552,23 @@ const StudentStatusList = () => {
             <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
             </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            {isTeacherScope ? (
+              <input type="text" className="form-control" value={resolvedSchoolLabel} readOnly />
+            ) : (
+              <select
+                id="school"
+                className="form-control form-select"
+                value={pendingFilters.school}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select School</option>
+                {schoolOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>

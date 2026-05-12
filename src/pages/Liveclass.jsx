@@ -1,128 +1,59 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import {
+  createLiveClass,
+  deleteLiveClass,
+  endLiveClass,
+  fetchLiveClasses,
+  fetchStudentLiveClasses,
+  joinLiveClass,
+  leaveLiveClass,
+  startLiveClass,
+  updateLiveClass,
+} from '../apis/liveClassesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSections } from '../apis/sectionsApi'
+import { fetchSubjects } from '../apis/subjectsApi'
+import { fetchTeachers } from '../apis/teachersApi'
+import { can } from '../utils/permissions'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 
-const liveClasses = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    className: 'Class 10',
-    section: 'A',
-    subject: 'Mathematics',
-    teacher: 'Mr. John Smith',
-    classDate: '2024-04-10',
-    startTime: '09:00 AM',
-    endTime: '10:00 AM',
-    status: 'Scheduled',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    className: 'Class 11',
-    section: 'B',
-    subject: 'Physics',
-    teacher: 'Mr. David Kim',
-    classDate: '2024-04-11',
-    startTime: '11:00 AM',
-    endTime: '12:00 PM',
-    status: 'Live',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    className: 'Class 9',
-    section: 'A',
-    subject: 'English',
-    teacher: 'Ms. Sarah Connor',
-    classDate: '2024-04-08',
-    startTime: '01:15 PM',
-    endTime: '02:15 PM',
-    status: 'Completed',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    className: 'Class 12',
-    section: 'A',
-    subject: 'Computer Science',
-    teacher: 'Mr. Robert Ashford',
-    classDate: '2024-04-12',
-    startTime: '02:30 PM',
-    endTime: '03:30 PM',
-    status: 'Scheduled',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    className: 'Class 11',
-    section: 'A',
-    subject: 'Biology',
-    teacher: 'Ms. Patricia Nguyen',
-    classDate: '2024-04-07',
-    startTime: '10:00 AM',
-    endTime: '11:00 AM',
-    status: 'Cancelled',
-  },
-]
-
-const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-const sectionOptions = ['A', 'B', 'C', 'D']
-const subjectOptions = [
-  'Mathematics', 'Physics', 'Chemistry', 'Biology',
-  'English', 'Computer Science', 'History', 'Geography',
-]
-const teacherOptions = [
-  'Mr. John Smith', 'Ms. Sarah Connor', 'Mr. David Kim',
-  'Ms. Linda Morrison', 'Mr. Robert Ashford', 'Ms. Patricia Nguyen',
-]
-const liveClassTypeOptions = ['Zoom', 'Google Meet', 'Microsoft Teams', 'YouTube Live', 'Custom Link']
-const statusOptions = ['Scheduled', 'Live', 'Completed', 'Cancelled']
+const STEPS = ['Basic Info']
 
 const emptyForm = {
-  school: '',
-  className: '',
-  section: '',
-  subject: '',
-  teacher: '',
-  liveClassType: '',
+  schoolId: 'Select',
+  classId: 'Select',
+  sectionId: 'Select',
+  subjectId: 'Select',
+  teacherId: 'Select',
+  liveClassType: 'Zoom',
+  meetingLink: '',
   classDate: '',
   startTime: '',
   endTime: '',
   note: '',
   sendNotification: false,
+  status: 'Scheduled',
 }
 
 const emptyFilters = {
-  school: 'Select',
-  className: 'Select',
-  section: 'Select',
-  subject: 'Select',
+  schoolId: 'Select',
+  classId: 'Select',
+  sectionId: 'Select',
+  subjectId: 'Select',
   status: 'Select',
-}
-
-const STEPS = ['Basic Info', 'Schedule & Notes']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Class: 'ri-building-line',
-  Section: 'ri-layout-grid-line',
-  Subject: 'ri-book-open-line',
-  Teacher: 'ri-user-3-line',
-  'Live Class Type': 'ri-live-line',
-  'Class Date': 'ri-calendar-2-line',
-  'Start Time': 'ri-time-line',
-  'End Time': 'ri-time-line',
-  Note: 'ri-sticky-note-line',
 }
 
 const columnOptions = [
   { key: 'school', label: 'School' },
   { key: 'className', label: 'Class' },
-  { key: 'section', label: 'Section' },
-  { key: 'subject', label: 'Subject' },
-  { key: 'teacher', label: 'Teacher' },
+  { key: 'sectionName', label: 'Section' },
+  { key: 'subjectName', label: 'Subject' },
+  { key: 'teacherName', label: 'Teacher' },
   { key: 'classDate', label: 'Class Date' },
   { key: 'startTime', label: 'Start Time' },
   { key: 'endTime', label: 'End Time' },
@@ -137,553 +68,716 @@ const statusBadge = (status) => {
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
 }
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected =
+    selectedChildId != null && selectedChildId !== ''
+      ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
+      : null
+  return selected || list[0] || null
 }
 
 const LiveClass = () => {
+  const { user, role, schoolId, studentClassId, studentSectionId, selectedChildId, parentChildren } = useAuth()
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
+  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
+  const effectiveSectionId = roleUpper === 'STUDENT' ? studentSectionId : roleUpper === 'PARENT' ? selectedChild?.sectionId ?? null : null
+  const canManage = !isStudentScope && can(user, ['LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
+  const canJoin = !isStudentScope && can(user, ['LIVE_CLASS_JOIN', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
+
+  const [rows, setRows] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [teachersLookup, setTeachersLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [sectionsLookup, setSectionsLookup] = useState([])
+  const [subjectsLookup, setSubjectsLookup] = useState([])
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRows, setSelectedRows] = useState([])
+
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
+
+  const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [findErrors, setFindErrors] = useState({})
+  const [hasSearched, setHasSearched] = useState(false)
+
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(liveClasses.map((r) => r.school))),
-    [],
-  )
+  const loadLookups = useCallback(async () => {
+    if (isStudentScope) {
+      setSchoolsLookup([])
+      setTeachersLookup([])
+      setClassesLookup([])
+      setSectionsLookup([])
+      setSubjectsLookup([])
+      return
+    }
+    const [schools, teachers, classes, sections, subjects] = await Promise.all([
+      fetchSchoolsLookup(),
+      fetchTeachers(),
+      fetchClasses(),
+      fetchSections(),
+      fetchSubjects(),
+    ])
+    setSchoolsLookup(Array.isArray(schools) ? schools : [])
+    setTeachersLookup(Array.isArray(teachers) ? teachers : [])
+    setClassesLookup(Array.isArray(classes) ? classes : [])
+    setSectionsLookup(Array.isArray(sections) ? sections : [])
+    setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
+  }, [])
+
+  const loadRows = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = isStudentScope && effectiveClassId && effectiveSectionId
+        ? await fetchStudentLiveClasses({ classId: effectiveClassId, sectionId: effectiveSectionId })
+        : await fetchLiveClasses()
+      setRows(Array.isArray(data) ? data : [])
+      if (isStudentScope) setHasSearched(true)
+    } catch (e) {
+      setRows([])
+      setError(e?.message || 'Failed to load live classes')
+    } finally {
+      setLoading(false)
+    }
+  }, [effectiveClassId, effectiveSectionId, isStudentScope])
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!isStudentScope) void loadLookups()
+      void loadRows()
+    }, 0)
+    return () => clearTimeout(t)
+  }, [isStudentScope, loadLookups, loadRows])
+
+  const classOptions = useMemo(() => {
+    return classesLookup
+      .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
+      .slice()
+      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
+  }, [classesLookup, pendingFilters.schoolId])
+
+  const sectionOptions = useMemo(() => {
+    return sectionsLookup
+      .filter((s) => {
+        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
+        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+  }, [sectionsLookup, pendingFilters.schoolId, pendingFilters.classId])
+
+  const subjectOptions = useMemo(() => {
+    return subjectsLookup
+      .filter((s) => {
+        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
+        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+  }, [subjectsLookup, pendingFilters.schoolId, pendingFilters.classId])
+
+  const teacherOptions = useMemo(() => {
+    return (Array.isArray(teachersLookup) ? teachersLookup : [])
+      .map((t) => ({ id: t?.id, name: t?.name }))
+      .filter((t) => t.id != null && t.name)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [teachersLookup])
+
+  const validateFind = () => {
+    if (isStudentScope) return {}
+    const errs = {}
+    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
+    if (pendingFilters.sectionId === 'Select') errs.sectionId = 'Section is required.'
+    if (pendingFilters.subjectId === 'Select') errs.subjectId = 'Subject is required.'
+    return errs
+  }
+
+  const handleApplyFilters = (e) => {
+    e.preventDefault()
+    if (isStudentScope) return
+    const errs = validateFind()
+    if (Object.keys(errs).length > 0) {
+      setFindErrors(errs)
+      return
+    }
+    setFindErrors({})
+    setFilters(pendingFilters)
+    setHasSearched(true)
+    setIsFindSidebarOpen(false)
+    setCurrentPage(1)
+  }
+
+  const handleResetFilters = () => {
+    if (isStudentScope) return
+    setPendingFilters(emptyFilters)
+    setFilters(emptyFilters)
+    setFindErrors({})
+    setHasSearched(false)
+    setSearch('')
+    setCurrentPage(1)
+  }
+
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target
+    setPendingFilters((prev) => {
+      if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }
+      if (id === 'classId') return { ...prev, classId: value, sectionId: 'Select', subjectId: 'Select' }
+      if (id === 'sectionId') return { ...prev, sectionId: value }
+      return { ...prev, [id]: value }
+    })
+    setFindErrors((prev) => ({ ...prev, [id]: '' }))
+  }
 
   const filtered = useMemo(() => {
+    if (!hasSearched) return []
     const q = search.trim().toLowerCase()
-    return liveClasses.filter((r) => {
-      const matchesSearch =
-        !q ||
-        [r.school, r.className, r.section, r.subject, r.teacher, r.classDate, r.status]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesClass = filters.className === 'Select' || r.className === filters.className
-      const matchesSection = filters.section === 'Select' || r.section === filters.section
-      const matchesSubject = filters.subject === 'Select' || r.subject === filters.subject
-      const matchesStatus = filters.status === 'Select' || r.status === filters.status
-      return matchesSearch && matchesSchool && matchesClass && matchesSection && matchesSubject && matchesStatus
+    if (isStudentScope) {
+      return rows.filter((r) => {
+        if (!q) return true
+        return [r.teacherName, r.liveClassType, r.classDate, r.status].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    }
+    return rows.filter((r) => {
+      const scopeOk =
+        String(r.schoolId) === String(filters.schoolId) &&
+        String(r.classId) === String(filters.classId) &&
+        String(r.sectionId) === String(filters.sectionId) &&
+        String(r.subjectId) === String(filters.subjectId) &&
+        (filters.status === 'Select' || String(r.status) === String(filters.status))
+      if (!scopeOk) return false
+      if (!q) return true
+      return [r.teacherName, r.liveClassType, r.classDate, r.status].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
-  }, [search, filters])
+  }, [rows, hasSearched, search, filters, isStudentScope])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
-  }
-
-  const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value, type, checked } = e.target
-    setter((prev) => ({ ...prev, [id]: type === 'checkbox' ? checked : value }))
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
-    setFilters(pendingFilters)
-    setCurrentPage(1)
-  }
-
-  const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setCurrentPage(1)
+  const validateForm = (form) => {
+    const errs = {}
+    if (!form.schoolId || form.schoolId === 'Select') errs.schoolId = 'School is required.'
+    if (!form.classId || form.classId === 'Select') errs.classId = 'Class is required.'
+    if (!form.sectionId || form.sectionId === 'Select') errs.sectionId = 'Section is required.'
+    if (!form.subjectId || form.subjectId === 'Select') errs.subjectId = 'Subject is required.'
+    if (!form.teacherId || form.teacherId === 'Select') errs.teacherId = 'Teacher is required.'
+    if (!form.classDate) errs.classDate = 'Class date is required.'
+    if (!form.startTime) errs.startTime = 'Start time is required.'
+    if (!form.endTime) errs.endTime = 'End time is required.'
+    if (!String(form.liveClassType || '').trim()) errs.liveClassType = 'Live class type is required.'
+    return errs
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
+    if (!canManage) return
+    setAddForm({ ...emptyForm, ...filters })
+    setFormErrors({})
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    if (!canManage) return
+    setEditingId(row?.id ?? null)
     setEditForm({
-      school: row.school,
-      className: row.className,
-      section: row.section,
-      subject: row.subject,
-      teacher: row.teacher,
-      liveClassType: '',
-      classDate: row.classDate,
-      startTime: row.startTime,
-      endTime: row.endTime,
-      note: '',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : 'Select',
+      classId: row?.classId != null ? String(row.classId) : 'Select',
+      sectionId: row?.sectionId != null ? String(row.sectionId) : 'Select',
+      subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
+      teacherId: row?.teacherId != null ? String(row.teacherId) : 'Select',
+      liveClassType: row?.liveClassType || 'Zoom',
+      meetingLink: row?.meetingLink || '',
+      classDate: row?.classDate || '',
+      startTime: row?.startTime ? String(row.startTime).slice(0, 5) : '',
+      endTime: row?.endTime ? String(row.endTime).slice(0, 5) : '',
+      note: row?.note || '',
       sendNotification: false,
+      status: row?.status || 'Scheduled',
     })
+    setFormErrors({})
     setEditStep(0)
     setIsEditOpen(true)
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
+  const submitAdd = async () => {
+    if (!canManage) return
+    const errs = validateForm(addForm)
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs)
+      return
+    }
+    try {
+      setSaving(true)
+      setError('')
+      await createLiveClass({
+        schoolId: Number(addForm.schoolId),
+        classId: Number(addForm.classId),
+        sectionId: Number(addForm.sectionId),
+        subjectId: Number(addForm.subjectId),
+        teacherId: Number(addForm.teacherId),
+        liveClassType: addForm.liveClassType,
+        meetingLink: addForm.meetingLink || null,
+        classDate: addForm.classDate,
+        startTime: addForm.startTime,
+        endTime: addForm.endTime,
+        note: addForm.note || null,
+        sendNotification: !!addForm.sendNotification,
+        status: addForm.status || 'Scheduled',
+      })
+      setIsAddOpen(false)
+      await loadRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to create live class')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const renderForm = (form, setter, step) => (
-    <>
-      <p className="avm-section-title">{STEPS[step]}</p>
+  const submitEdit = async () => {
+    if (!canManage) return
+    if (!editingId) return
+    const errs = validateForm(editForm)
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs)
+      return
+    }
+    try {
+      setSaving(true)
+      setError('')
+      await updateLiveClass(editingId, {
+        schoolId: Number(editForm.schoolId),
+        classId: Number(editForm.classId),
+        sectionId: Number(editForm.sectionId),
+        subjectId: Number(editForm.subjectId),
+        teacherId: Number(editForm.teacherId),
+        liveClassType: editForm.liveClassType,
+        meetingLink: editForm.meetingLink || null,
+        classDate: editForm.classDate,
+        startTime: editForm.startTime,
+        endTime: editForm.endTime,
+        note: editForm.note || null,
+        sendNotification: !!editForm.sendNotification,
+        status: editForm.status || 'Scheduled',
+      })
+      setIsEditOpen(false)
+      setEditingId(null)
+      await loadRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to update live class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    if (!canManage) return
+    const id = row?.id
+    if (!id) return
+    if (!window.confirm('Delete this live class?')) return
+    try {
+      setSaving(true)
+      setError('')
+      await deleteLiveClass(id)
+      await loadRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to delete live class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleStart = async (row) => {
+    if (!canManage) return
+    try {
+      setSaving(true)
+      setError('')
+      await startLiveClass(row.id)
+      await loadRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to start live class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEnd = async (row) => {
+    if (!canManage) return
+    try {
+      setSaving(true)
+      setError('')
+      await endLiveClass(row.id)
+      await loadRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to end live class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleJoin = async (row) => {
+    if (isStudentScope) return
+    try {
+      setSaving(true)
+      setError('')
+      const res = await joinLiveClass(row.id)
+      const url = res?.meetingRoomUrl || res?.url || res?.meetingLink || row.meetingLink
+      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      setError(e?.message || 'Failed to join live class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLeave = async (row) => {
+    if (isStudentScope) return
+    try {
+      setSaving(true)
+      setError('')
+      await leaveLiveClass(row.id)
+    } catch (e) {
+      setError(e?.message || 'Failed to leave live class')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const renderEntryForm = (form, setForm) => {
+    const localClassOptions = classesLookup
+      .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
+      .slice()
+      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
+
+    const localSectionOptions = sectionsLookup
+      .filter((s) => {
+        if (!form.schoolId || form.schoolId === 'Select') return true
+        if (String(s.schoolId) !== String(form.schoolId)) return false
+        if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+
+    const localSubjectOptions = subjectsLookup
+      .filter((s) => {
+        if (!form.schoolId || form.schoolId === 'Select') return true
+        if (String(s.schoolId) !== String(form.schoolId)) return false
+        if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+
+    const onChange = (e) => {
+      const { id, value, type, checked } = e.target
+      setForm((prev) => {
+        if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', sectionId: 'Select', subjectId: 'Select' }
+        if (id === 'classId') return { ...prev, classId: value, sectionId: 'Select', subjectId: 'Select' }
+        return { ...prev, [id]: type === 'checkbox' ? checked : value }
+      })
+      setFormErrors((prev) => ({ ...prev, [id]: '' }))
+    }
+
+    return (
       <div className="avm-grid">
+        <div className="avm-field">
+          <label className="avm-label">
+            School Name <span className="req"> *</span>
+          </label>
+          <select id="schoolId" className={`form-control form-select${formErrors.schoolId ? ' is-invalid' : ''}`} value={form.schoolId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select School--</option>
+            {schoolsLookup.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
+          </select>
+          {formErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{formErrors.schoolId}</div> : null}
+        </div>
 
-        {step === 0 && (
-          <>
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="school"
-                value={form.school}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select School--</option>
-                <option>Windsor Park High School</option>
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Class <span className="req"> *</span>
+          </label>
+          <select id="classId" className={`form-control form-select${formErrors.classId ? ' is-invalid' : ''}`} value={form.classId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Class--</option>
+            {localClassOptions.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.className}
+              </option>
+            ))}
+          </select>
+          {formErrors.classId ? <div className="text-danger-600 text-sm mt-4">{formErrors.classId}</div> : null}
+        </div>
 
-            <FormField label="Class" required>
-              <select
-                className="avm-select"
-                id="className"
-                value={form.className}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {classOptions.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Section <span className="req"> *</span>
+          </label>
+          <select id="sectionId" className={`form-control form-select${formErrors.sectionId ? ' is-invalid' : ''}`} value={form.sectionId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Section--</option>
+            {localSectionOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.sectionId ? <div className="text-danger-600 text-sm mt-4">{formErrors.sectionId}</div> : null}
+        </div>
 
-            <FormField label="Section" required>
-              <select
-                className="avm-select"
-                id="section"
-                value={form.section}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {sectionOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Subject <span className="req"> *</span>
+          </label>
+          <select id="subjectId" className={`form-control form-select${formErrors.subjectId ? ' is-invalid' : ''}`} value={form.subjectId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Subject--</option>
+            {localSubjectOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{formErrors.subjectId}</div> : null}
+        </div>
 
-            <FormField label="Subject" required>
-              <select
-                className="avm-select"
-                id="subject"
-                value={form.subject}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {subjectOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Teacher <span className="req"> *</span>
+          </label>
+          <select id="teacherId" className={`form-control form-select${formErrors.teacherId ? ' is-invalid' : ''}`} value={form.teacherId} onChange={onChange} disabled={saving}>
+            <option value="Select">--Select Teacher--</option>
+            {teacherOptions.map((t) => (
+              <option key={t.id} value={String(t.id)}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {formErrors.teacherId ? <div className="text-danger-600 text-sm mt-4">{formErrors.teacherId}</div> : null}
+        </div>
 
-            <FormField label="Teacher" required>
-              <select
-                className="avm-select"
-                id="teacher"
-                value={form.teacher}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {teacherOptions.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Live Class Type <span className="req"> *</span>
+          </label>
+          <input id="liveClassType" className={`form-control${formErrors.liveClassType ? ' is-invalid' : ''}`} value={form.liveClassType} onChange={onChange} disabled={saving} />
+          {formErrors.liveClassType ? <div className="text-danger-600 text-sm mt-4">{formErrors.liveClassType}</div> : null}
+        </div>
 
-            <FormField label="Live Class Type" required full>
-              <select
-                className="avm-select"
-                id="liveClassType"
-                value={form.liveClassType}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                {liveClassTypeOptions.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </FormField>
-          </>
-        )}
+        <div className="avm-field full">
+          <label className="avm-label">Meeting Link</label>
+          <input id="meetingLink" className="form-control" value={form.meetingLink} onChange={onChange} disabled={saving} placeholder="https://..." />
+        </div>
 
-        {step === 1 && (
-          <>
-            <FormField label="Class Date" required full>
-              <input
-                type="date"
-                className="avm-input"
-                id="classDate"
-                value={form.classDate}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Class Date <span className="req"> *</span>
+          </label>
+          <input id="classDate" type="date" className={`form-control${formErrors.classDate ? ' is-invalid' : ''}`} value={form.classDate} onChange={onChange} disabled={saving} />
+          {formErrors.classDate ? <div className="text-danger-600 text-sm mt-4">{formErrors.classDate}</div> : null}
+        </div>
 
-            <FormField label="Start Time" required>
-              <input
-                type="time"
-                className="avm-input"
-                id="startTime"
-                value={form.startTime}
-                onChange={handleChange(setter)}
-                placeholder="1:15 PM"
-              />
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            Start Time <span className="req"> *</span>
+          </label>
+          <input id="startTime" type="time" className={`form-control${formErrors.startTime ? ' is-invalid' : ''}`} value={form.startTime} onChange={onChange} disabled={saving} />
+          {formErrors.startTime ? <div className="text-danger-600 text-sm mt-4">{formErrors.startTime}</div> : null}
+        </div>
 
-            <FormField label="End Time" required>
-              <input
-                type="time"
-                className="avm-input"
-                id="endTime"
-                value={form.endTime}
-                onChange={handleChange(setter)}
-                placeholder="1:15 PM"
-              />
-            </FormField>
+        <div className="avm-field">
+          <label className="avm-label">
+            End Time <span className="req"> *</span>
+          </label>
+          <input id="endTime" type="time" className={`form-control${formErrors.endTime ? ' is-invalid' : ''}`} value={form.endTime} onChange={onChange} disabled={saving} />
+          {formErrors.endTime ? <div className="text-danger-600 text-sm mt-4">{formErrors.endTime}</div> : null}
+        </div>
 
-            <FormField label="Note" full>
-              <textarea
-                rows={4}
-                className="avm-input avm-textarea"
-                id="note"
-                placeholder="Note"
-                value={form.note}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
+        <div className="avm-field full">
+          <label className="avm-label">Status</label>
+          <select id="status" className="form-control form-select" value={form.status} onChange={onChange} disabled={saving}>
+            {['Scheduled', 'Live', 'Completed', 'Cancelled'].map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
 
-            <div className="avm-field full">
-              <label className="avm-label">Send Notification</label>
-              <label className="d-flex align-items-center gap-10 cursor-pointer">
-                <input
-                  type="checkbox"
-                  id="sendNotification"
-                  checked={form.sendNotification}
-                  onChange={handleChange(setter)}
-                  className="form-check-input mt-0"
-                />
-                <span className="text-primary-light fw-medium">Send Notification</span>
-              </label>
-            </div>
-          </>
-        )}
+        <div className="avm-field full">
+          <label className="avm-label">Note</label>
+          <textarea id="note" className="form-control" rows={3} value={form.note} onChange={onChange} disabled={saving} />
+        </div>
+
+        <div className="avm-field full">
+          <label className="d-flex align-items-center gap-8">
+            <input id="sendNotification" type="checkbox" checked={!!form.sendNotification} onChange={onChange} disabled={saving} />
+            <span className="text-secondary-light">Send Notification</span>
+          </label>
+        </div>
       </div>
-    </>
-  )
+    )
+  }
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Live Class</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Live Class</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Live Class
-        </button>
       </div>
 
-      {/* Table Card */}
+      {error ? (
+        <div className="card mb-16">
+          <div className="card-body px-20 py-12 text-danger-600">{error}</div>
+        </div>
+      ) : null}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-            <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                </ul>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
+            <div className="d-flex align-items-center gap-8">
+              <div className="position-relative">
+                <input className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} disabled={!hasSearched} onChange={(e) => setSearch(e.target.value)} />
+                <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                  <i className="ri-search-line"></i>
+                </span>
               </div>
-
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
-                <span><i className="ri-arrow-right-line"></i></span>
-              </button>
-
-              {/* Columns */}
               <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                <button className="btn btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  Columns ({visibleColumnCount})
                 </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  {columnOptions.map((column) => (
-                    <li key={column.key}>
-                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
-                        {column.label}
+                <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
+                  {columnOptions.map((col) => (
+                    <li key={col.key} className="dropdown-item">
+                      <label className="d-flex align-items-center gap-8 m-0">
+                        <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                        <span>{col.label}</span>
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
-
-              {/* Rows per page */}
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-              >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
             </div>
-
-            {/* Search */}
-            <div className="position-relative">
-              <input
-                type="text"
-                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search live classes..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
-              />
-              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                <i className="ri-search-line"></i>
-              </span>
+            <div className="d-flex align-items-center gap-8 ms-auto">
+              {!isStudentScope ? (
+                <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
+                  Find
+                </button>
+              ) : null}
+              {canManage ? (
+                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
+                  + Add
+                </button>
+              ) : null}
             </div>
           </div>
 
-          {/* Table */}
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1000 }}>
+          <div className="table-responsive">
+            <table className="table mb-0">
               <thead>
                 <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
-                      <label className="form-check-label">S.L</label>
-                    </div>
-                  </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.className ? <th scope="col">Class</th> : null}
-                  {visibleColumns.section ? <th scope="col">Section</th> : null}
-                  {visibleColumns.subject ? <th scope="col">Subject</th> : null}
-                  {visibleColumns.teacher ? <th scope="col">Teacher</th> : null}
-                  {visibleColumns.classDate ? <th scope="col">Class Date</th> : null}
-                  {visibleColumns.startTime ? <th scope="col">Start Time</th> : null}
-                  {visibleColumns.endTime ? <th scope="col">End Time</th> : null}
-                  {visibleColumns.status ? <th scope="col">Status</th> : null}
-                  <th scope="col">Action</th>
+                  {visibleColumns.school && <th>School</th>}
+                  {visibleColumns.className && <th>Class</th>}
+                  {visibleColumns.sectionName && <th>Section</th>}
+                  {visibleColumns.subjectName && <th>Subject</th>}
+                  {visibleColumns.teacherName && <th>Teacher</th>}
+                  {visibleColumns.classDate && <th>Date</th>}
+                  {visibleColumns.startTime && <th>Start</th>}
+                  {visibleColumns.endTime && <th>End</th>}
+                  {visibleColumns.status && <th>Status</th>}
+                  <th style={{ width: 280 }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : !hasSearched ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
+                      Use <strong>Find</strong> to select School, Class, Section and Subject.
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-24 text-secondary-light">
                       No live classes found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((r) => (
+                    <tr key={r.id}>
+                      {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
+                      {visibleColumns.className && <td>{r.className || r.classId}</td>}
+                      {visibleColumns.sectionName && <td>{r.sectionName || r.sectionId}</td>}
+                      {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
+                      {visibleColumns.teacherName && <td>{r.teacherName || r.teacherId}</td>}
+                      {visibleColumns.classDate && <td>{r.classDate}</td>}
+                      {visibleColumns.startTime && <td>{String(r.startTime || '').slice(0, 5)}</td>}
+                      {visibleColumns.endTime && <td>{String(r.endTime || '').slice(0, 5)}</td>}
+                      {visibleColumns.status && (
+                        <td>
+                          <span className={statusBadge(r.status)}>{r.status}</span>
+                        </td>
+                      )}
                       <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
-                          />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.className ? (
-                        <td className="fw-medium text-primary-light">{row.className}</td>
-                      ) : null}
-                      {visibleColumns.section ? (
-                        <td>
-                          <span className="bg-primary-100 text-primary-600 px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.section}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.subject ? (
-                        <td>
-                          <span className="bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.subject}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.teacher ? <td>{row.teacher}</td> : null}
-                      {visibleColumns.classDate ? <td>{row.classDate}</td> : null}
-                      {visibleColumns.startTime ? (
-                        <td>
-                          <span className="d-flex align-items-center gap-4">
-                            <i className="ri-time-line text-secondary-light text-sm"></i>
-                            {row.startTime}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.endTime ? (
-                        <td>
-                          <span className="d-flex align-items-center gap-4">
-                            <i className="ri-time-line text-secondary-light text-sm"></i>
-                            {row.endTime}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.status ? (
-                        <td>
-                          <span className={statusBadge(row.status)}>
-                            {row.status === 'Live' && (
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  width: 6,
-                                  height: 6,
-                                  borderRadius: '50%',
-                                  background: 'currentColor',
-                                  marginRight: 5,
-                                  verticalAlign: 'middle',
-                                  animation: 'pulse 1.5s infinite',
-                                }}
-                              />
-                            )}
-                            {row.status}
-                          </span>
-                        </td>
-                      ) : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
+                        {isStudentScope ? (
+                          <span className="text-secondary-light">Read only</span>
+                        ) : (
+                          <div className="d-flex gap-8 flex-wrap">
+                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(r)} disabled={!canManage || saving}>
+                              Edit
+                            </button>
+                            <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
+                              Delete
+                            </button>
+                            <button type="button" className="btn btn-sm btn-primary-600" onClick={() => handleStart(r)} disabled={!canManage || saving}>
+                              Start
+                            </button>
+                            <button type="button" className="btn btn-sm btn-success-600" onClick={() => handleJoin(r)} disabled={!canJoin || saving}>
+                              Join
+                            </button>
+                            <button type="button" className="btn btn-sm btn-light border" onClick={() => handleLeave(r)} disabled={!canJoin || saving}>
+                              Leave
+                            </button>
+                            <button type="button" className="btn btn-sm btn-warning-600" onClick={() => handleEnd(r)} disabled={!canManage || saving}>
+                              End
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -692,37 +786,25 @@ const LiveClass = () => {
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
+          <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
             <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
+              <span className="text-secondary-light">Rows per page:</span>
+              <select className="form-select form-select-sm" style={{ width: 90 }} value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
+                {[5, 10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="d-flex align-items-center gap-8">
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={!hasSearched || currentPage === 1}>
                 Prev
               </button>
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
+              <span className="text-secondary-light text-sm">
+                Page {hasSearched ? currentPage : 1} / {hasSearched ? totalPages : 1}
+              </span>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={!hasSearched || currentPage === totalPages}>
                 Next
               </button>
             </div>
@@ -730,118 +812,87 @@ const LiveClass = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
-      <WizardPopup
-        modalWidth="560px"
-        open={isAddOpen}
-        title="Add Live Class"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
+      <WizardPopup modalWidth="900px" open={isAddOpen} title="Add Live Class" steps={STEPS} step={addStep} onClose={() => setIsAddOpen(false)} onBack={() => setAddStep((s) => Math.max(0, s - 1))} onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))} onSubmit={submitAdd} submitLabel={saving ? 'Saving...' : 'Save'}>
+        {renderEntryForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* Edit Modal */}
-      <WizardPopup
-        modalWidth="560px"
-        open={isEditOpen}
-        title="Edit Live Class"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
+      <WizardPopup modalWidth="900px" open={isEditOpen} title="Edit Live Class" steps={STEPS} step={editStep} onClose={() => setIsEditOpen(false)} onBack={() => setEditStep((s) => Math.max(0, s - 1))} onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))} onSubmit={submitEdit} submitLabel={saving ? 'Updating...' : 'Update'}>
+        {renderEntryForm(editForm, setEditForm)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Live Classes"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+      <SlideSidebar isOpen={isFindSidebarOpen} title="Find Live Class" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            <select id="schoolId" className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`} value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
+              <option value="Select">--Select School--</option>
+              {schoolsLookup.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.schoolName}
+                </option>
+              ))}
             </select>
+            {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Class
+            <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Class <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="className"
-              className="form-control form-select"
-              value={pendingFilters.className}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            <select id="classId" className={`form-control form-select${findErrors.classId ? ' is-invalid' : ''}`} value={pendingFilters.classId} onChange={handlePendingFilterChange}>
+              <option value="Select">--Select--</option>
+              {classOptions.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.className}
+                </option>
+              ))}
             </select>
+            {findErrors.classId ? <div className="text-danger-600 text-sm mt-4">{findErrors.classId}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="section" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Section
+            <label htmlFor="sectionId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Section <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="section"
-              className="form-control form-select"
-              value={pendingFilters.section}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            <select id="sectionId" className={`form-control form-select${findErrors.sectionId ? ' is-invalid' : ''}`} value={pendingFilters.sectionId} onChange={handlePendingFilterChange}>
+              <option value="Select">--Select--</option>
+              {sectionOptions.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
             </select>
+            {findErrors.sectionId ? <div className="text-danger-600 text-sm mt-4">{findErrors.sectionId}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="subject" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Subject
+            <label htmlFor="subjectId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Subject <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="subject"
-              className="form-control form-select"
-              value={pendingFilters.subject}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            <select id="subjectId" className={`form-control form-select${findErrors.subjectId ? ' is-invalid' : ''}`} value={pendingFilters.subjectId} onChange={handlePendingFilterChange}>
+              <option value="Select">--Select--</option>
+              {subjectOptions.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
             </select>
+            {findErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{findErrors.subjectId}</div> : null}
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="status" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Status
+              Status (Optional)
             </label>
-            <select
-              id="status"
-              className="form-control form-select"
-              value={pendingFilters.status}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            <select id="status" className="form-control form-select" value={pendingFilters.status} onChange={handlePendingFilterChange}>
+              <option value="Select">--All--</option>
+              {['Scheduled', 'Live', 'Completed', 'Cancelled'].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -851,7 +902,7 @@ const LiveClass = () => {
             </button>
           </div>
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>
+            <button type="submit" className="btn btn-primary-600 w-100" disabled={loading}>
               Apply
             </button>
           </div>
@@ -862,4 +913,3 @@ const LiveClass = () => {
 }
 
 export default LiveClass
-

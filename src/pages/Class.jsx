@@ -5,6 +5,8 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createClass, deleteClass, fetchClasses, updateClass } from '../apis/classesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -72,6 +74,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Class = () => {
+  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [classes, setClasses] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
@@ -94,9 +98,25 @@ const Class = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolName = authSchoolName || ''
+  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
+    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
+      byId.set(String(resolvedSchoolId), {
+        id: resolvedSchoolId,
+        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
   const loadLookups = useCallback(async () => {
-    const [schools, teachers] = await Promise.all([fetchSchoolsLookup(), fetchTeachers()])
+    const [schoolsResult, teachersResult] = await Promise.allSettled([fetchSchoolsLookup(), fetchTeachers()])
+    const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
+    const teachers = teachersResult.status === 'fulfilled' ? teachersResult.value : []
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     const teacherRows = Array.isArray(teachers) ? teachers : []
     setTeachersLookup(
@@ -111,7 +131,9 @@ const Class = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchClasses()
+      const data = await fetchClasses({
+        schoolId: isSchoolSelectionEnabled ? activeSchoolId : resolvedSchoolId || undefined,
+      })
       setClasses(Array.isArray(data) ? data : [])
     } catch (e) {
       setClasses([])
@@ -119,7 +141,7 @@ const Class = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeSchoolId, isSchoolSelectionEnabled, resolvedSchoolId])
 
   useEffect(() => {
     void loadLookups()
@@ -203,7 +225,7 @@ const Class = () => {
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(emptyForm)
+    setAddForm(resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
   }
@@ -212,7 +234,7 @@ const Class = () => {
     setError('')
     setEditingId(row?.id ?? null)
     setEditForm({
-      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId,
       className: row?.className || '',
       numericName: row?.numericName || '',
       teacherId: row?.teacherId != null ? String(row.teacherId) : '',
@@ -306,9 +328,10 @@ const Class = () => {
             id="schoolId"
             value={form.schoolId}
             onChange={handleChange(setter)}
+            disabled={saving || isSchoolLocked}
           >
             <option value="">--Select School--</option>
-            {schoolsLookup.map((s) => (
+            {effectiveSchoolsLookup.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.schoolName}
               </option>

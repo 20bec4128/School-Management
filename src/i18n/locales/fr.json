@@ -1,0 +1,19 @@
+{
+  "common.search": "Rechercher",
+  "common.back": "Retour",
+  "common.theme": "Thème",
+  "common.language": "Langue",
+  "common.notifications": "Notifications",
+  "common.profile": "Profil",
+  "common.settings": "Paramètres",
+  "common.logout": "Se déconnecter",
+
+  "topbar.choose_language": "Choisissez votre langue",
+  "topbar.see_all_notifications": "Voir toutes les notifications",
+
+  "bottomnav.dashboard": "Tableau de bord",
+  "bottomnav.attendance": "Présence",
+  "bottomnav.teachers": "Enseignants",
+  "bottomnav.students": "Étudiants",
+  "bottomnav.more": "Plus"
+}

@@ -1,6 +1,9 @@
 import React from 'react';
 import '../css/sidebar.css';
 import { useSidebar } from '../context/SidebarContext';
+import { can } from '../utils/permissions';
+import { canManageUsers } from '../utils/editableRoles';
+import { normalizeRole } from '../utils/roles';
 
 const menuSections = [
   {
@@ -9,143 +12,137 @@ const menuSections = [
       {
         title: 'Dashboard',
         icon: 'ri:dashboard-line',
-        submenu: [
-          { label: 'School', href: '#' },
-          { label: 'Teacher', href: '#' },
-          { label: 'Student', href: '#' },
-          { label: 'Teacher', href: '#' },
-          
-          { label: 'Parent', href: '#' },
-          { label: 'LMS', href: '#' },
-        ],
+        page: 'dashboard',
       },
-      {
-        title: 'Theme',
-        icon: 'ri:palette-line',
-        submenu: [
-          { label: 'Colors', href: '#' },
-          { label: 'Typography', href: '#' },
-        ],
-      },
-      {
-        title: 'Language',
-        icon: 'ri:translate-2',
-        submenu: [
-          { label: 'English', href: '#' },
-          { label: 'Hindi', href: '#' },
-        ],
-      },
+      // {
+      //   title: 'Theme',
+      //   icon: 'ri:palette-line',
+      //   submenu: [
+      //     { label: 'Colors', href: '#' },
+      //     { label: 'Typography', href: '#' },
+      //   ],
+      // },
+      // {
+      //   title: 'Language',
+      //   icon: 'ri:translate-2',
+      //   submenu: [
+      //     { label: 'English', href: '#' },
+      //     { label: 'Hindi', href: '#' },
+      //   ],
+      // },
       {
         title: 'Administrator',
         icon: 'ri:user-settings-line',
         submenu: [
-          { label: 'General Setting', href: '#' },
-          { label: 'Manage School', href: '#',page: 'manage-school' },
-          { label: 'Payment Setting', href: '#', page: 'payment-setting' },
-          { label: 'SMS Setting', href: '#' ,page: 'sms-setting' },
-          { label: 'Email Setting', href: '#' ,page: 'email-setting' },
-          { label: 'Academic Year', href: '#' },
-          { label: 'User Role (ACL)', href: '#' },
-          { label: 'Role Permission (ACL)', href: '#' },
-          { label: 'Manage Super Admin', href: '#' },
-          { label: 'Manage User', href: '#' },
-          { label: 'Reset User Password', href: '#' },
-          { label: 'Reset Username', href: '#' },
-          { label: 'User Credential', href: '#' },
-          { label: 'Activity Log', href: '#' },
-          { label: 'Manage Feedback', href: '#' },
-          { label: 'Backup Database', href: '#' },
-          { label: 'Opening Hour', href: '#' },
+          // { label: 'General Setting', href: '#' },
+          { label: 'Head Offices', href: '#', page: 'head-offices', perm: 'HEAD_OFFICE_MANAGE' },
+          { label: 'Manage School', href: '#', page: 'manage-school', perm: 'SCHOOL_MANAGE' },
+          { label: 'Manage User Roles', href: '#', page: 'user-role-acl', perm: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE'] },
+          { label: 'Payment Setting', href: '#', page: 'payment-setting', perm: 'SCHOOL_MANAGE' },
+          { label: 'SMS Setting', href: '#', page: 'sms-setting', perm: 'SCHOOL_MANAGE' },
+          { label: 'Email Setting', href: '#', page: 'email-setting', perm: 'SCHOOL_MANAGE' },
+          { label: 'Academic Year', href: '#', perm: 'SCHOOL_MANAGE' },
+          // { label: 'Role Permission (ACL)', href: '#' },
+          // { label: 'Manage Super Admin', href: '#' },
+          // { label: 'Manage User', href: '#' },
+          // { label: 'Reset User Password', href: '#' },
+          // { label: 'Reset Username', href: '#' },
+          // { label: 'User Credential', href: '#' },
+          // { label: 'Activity Log', href: '#' },
+          // { label: 'Manage Feedback', href: '#' },
+          // { label: 'Backup Database', href: '#' },
+          // { label: 'Opening Hour', href: '#' },
         ],
       },
-      {
-        title: 'Template',
-        icon: 'ri:layout-2-line',
-        submenu: [
-          { label: 'SMS Template', href: '#' },
-          { label: 'Email Template', href: '#' },
-        ],
-      },
-      {
-        title: 'Profile',
-        icon: 'ri:user-3-line',
-        submenu: [
-          { label: 'My Profile', href: '#' },
-          { label: 'Settings', href: '#' },
-          { label: 'Logout', href: '#' },
-        ],
-      },
-      {
-        title: 'Subscription (SaaS)',
-        icon: 'ri:vip-crown-line',
-        submenu: [
-          { label: 'FAQ', href: '#' },
-          { label: 'Slider', href: '#' },
-          { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
-          { label: 'General Settings', href: '#' },
-          { label: 'Subscription Plnas', href: '#' },
-          { label: 'School Subscription', href: '#' },
+      // {
+      //   title: 'Template',
+      //   icon: 'ri:layout-2-line',
+      //   submenu: [
+      //     { label: 'SMS Template', href: '#' },
+      //     { label: 'Email Template', href: '#' },
+      //   ],
+      // },
+      // {
+      //   title: 'Profile',
+      //   icon: 'ri:user-3-line',
+      //   submenu: [
+      //     { label: 'My Profile', href: '#' },
+      //     { label: 'Settings', href: '#' },
+      //     { label: 'Logout', href: '#' },
+      //   ],
+      // },
+      // {
+      //   title: 'Subscription (SaaS)',
+      //   icon: 'ri:vip-crown-line',
+      //   submenu: [
+      //     { label: 'FAQ', href: '#' },
+      //     { label: 'Slider', href: '#' },
+      //     { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
+      //     { label: 'General Settings', href: '#' },
+      //     { label: 'Subscription Plnas', href: '#' },
+      //     { label: 'School Subscription', href: '#' },
 
-        ],
-      },
+      //   ],
+      // },
     ],
   },
-  {
-    title: 'Front Office',
-    items: [
-      {
-        title: 'Front Office',
-        icon: 'ri:building-4-line',
-        submenu: [
-          { label: 'Visitor Purpose', href: '#' ,page: 'visitor-purpose' },
-          { label: 'Visitor Info', href: '#', page: 'visitor-info' },
-          { label: 'Call Log', href: '#', page: 'call-log' },
-        { label: 'Postal Dispatch', href: '#',page: 'postal-dispatch' },
-          { label: 'Postal Receive', href: '#',page : 'postal-receive' },
+  // {
+  //   title: 'Front Office',
+  //   items: [
+  //     {
+  //       title: 'Front Office',
+  //       icon: 'ri:building-4-line',
+  //       submenu: [
+  //         { label: 'Visitor Purpose', href: '#' ,page: 'visitor-purpose' },
+  //         { label: 'Visitor Info', href: '#', page: 'visitor-info' },
+  //         { label: 'Call Log', href: '#', page: 'call-log' },
+  //       { label: 'Postal Dispatch', href: '#',page: 'postal-dispatch' },
+  //         { label: 'Postal Receive', href: '#',page : 'postal-receive' },
         
-        ],
-      },
-      {
-        title: 'Complain',
-        icon: 'ri:chat-3-line',
-        submenu: [
-          { label: 'Complaints Type', href: '#',page: 'complain-type' },
-          { label: 'Manage Complain', href: '#',page: 'manage-complain' },
-        ],
-      },
-      {
-        title: 'Announcement',
-        icon: 'ri:megaphone-line',
-        submenu: [
-          { label: 'Notice', href: '#',page: 'notice' },
-          { label: 'News', href: '#',page: 'news' },
-          { label: 'Holiday', href: '#',page: 'holiday' },
-        ],
-      },
-      {
-        title: 'Event',
-        icon: 'ri:calendar-event-line',
-        href: '#',
-        page: 'event',
-      },
-      {
-        title: 'Media Gallery',
-        icon: 'ri:image-line',
-        submenu: [                    
-          { label: 'Gallery', href: '#',page: 'gallery' },
-          { label: 'Images', href: '#',page: 'images' },
-         { label: 'Videos', href: '#', page: 'videos' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Complain',
+  //       icon: 'ri:chat-3-line',
+  //       submenu: [
+  //         { label: 'Complaints Type', href: '#',page: 'complain-type' },
+  //         { label: 'Manage Complain', href: '#',page: 'manage-complain' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Announcement',
+  //       icon: 'ri:megaphone-line',
+  //       submenu: [
+  //         { label: 'Notice', href: '#',page: 'notice' },
+  //         { label: 'News', href: '#',page: 'news' },
+  //         { label: 'Holiday', href: '#',page: 'holiday' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Event',
+  //       icon: 'ri:calendar-event-line',
+  //       href: '#',
+  //       page: 'event',
+  //     },
+  //     {
+  //       title: 'Media Gallery',
+  //       icon: 'ri:image-line',
+  //       submenu: [
+  //         { label: 'Gallery', href: '#',page: 'gallery' },
+  //         { label: 'Images', href: '#',page: 'images' },
+  //        { label: 'Videos', href: '#', page: 'videos' },
 
-        ],
-      },
-    ],
-  },
+  //       ],
+  //     },
+  //   ],
+  // },
   {
     title: 'Student Management',
     items: [
       {
         title: 'Manage Student',
         icon: 'ri:group-line',
+        perm: 'STUDENT_TYPE_MANAGE',
         submenu: [
           { label: 'Student Type', href: '#',page: 'student-type' },
           { label: 'Student List', href: '#', page: 'student-list' },
@@ -154,57 +151,57 @@ const menuSections = [
           { label: 'Student Activity', href: '#',page: 'student-activity' },
         ],
       },
-      {
-        title: 'Attendance',
-        icon: 'ri:calendar-check-line',
-        submenu: [
-          { label: 'Student Attendance', href: '#',page: 'student-attendance' },
-          { label: 'Teacher Attendance', href: '#',page: 'teacher-attendance' },
-          { label: 'Employee Attendance', href: '#',page: 'employee-attendance' },
-          { label: 'Absent Email', href: '#',page: 'absent-email' },
-          { label: 'Absent SMS', href: '#',page: 'absent-sms' },
-        ],
-      },
-      {
-        title: 'Promotion',
-        icon: 'ri:arrow-up-circle-line',
-        href: '#',
-        page: 'promotion',
-      },
-      {
-        title: 'Generate Card',
-        icon: 'ri:id-card-line',
-        submenu: [
-          { label: 'ID Card Setting', href: '#',page: 'id-card-setting' },
-          { label: 'Admit Card Setting', href: '#',page: 'admit-card-setting' },
+      // {
+      //   title: 'Attendance',
+      //   icon: 'ri:calendar-check-line',
+      //   submenu: [
+      //     { label: 'Student Attendance', href: '#',page: 'student-attendance' },
+      //     { label: 'Teacher Attendance', href: '#',page: 'teacher-attendance' },
+      //     { label: 'Employee Attendance', href: '#',page: 'employee-attendance' },
+      //     { label: 'Absent Email', href: '#',page: 'absent-email' },
+      //     { label: 'Absent SMS', href: '#',page: 'absent-sms' },
+      //   ],
+      // },
+      // {
+      //   title: 'Promotion',
+      //   icon: 'ri:arrow-up-circle-line',
+      //   href: '#',
+      //   page: 'promotion',
+      // },
+      // {
+      //   title: 'Generate Card',
+      //   icon: 'ri:id-card-line',
+      //   submenu: [
+      //     { label: 'ID Card Setting', href: '#',page: 'id-card-setting' },
+      //     { label: 'Admit Card Setting', href: '#',page: 'admit-card-setting' },
     
-        ],
-      },
-      {
-        title: 'Certificate',
-        icon: 'ri:award-line',
-        submenu: [
-          { label: 'Certificate Type', href: '#',page: 'certificate-type' },
-          { label: 'Generate Certificate', href: '#',page: 'generate-certificate' },
-        ],
-      },
-      {
-        title: 'Scholarship',
-        icon: 'ri:graduation-cap-line',
-        submenu: [
-          { label: 'Candidate', href: '#',page: 'candidate' },
-          { label: 'Donar', href: '#',page: 'donar' },
-          { label: 'Scholarship', href: '#',page: 'scholarship' },
-        ],
-      },
-      {
-        title: 'Guardian',
-        icon: 'ri:account-circle-line',
-        href: '#',
-        page: 'guardian',
+      //   ],
+      // },
+      // {
+      //   title: 'Certificate',
+      //   icon: 'ri:award-line',
+      //   submenu: [
+      //     { label: 'Certificate Type', href: '#',page: 'certificate-type' },
+      //     { label: 'Generate Certificate', href: '#',page: 'generate-certificate' },
+      //   ],
+      // },
+      // {
+      //   title: 'Scholarship',
+      //   icon: 'ri:graduation-cap-line',
+      //   submenu: [
+      //     { label: 'Candidate', href: '#',page: 'candidate' },
+      //     { label: 'Donar', href: '#',page: 'donar' },
+      //     { label: 'Scholarship', href: '#',page: 'scholarship' },
+      //   ],
+      // },
+      // {
+      //   title: 'Guardian',
+      //   icon: 'ri:account-circle-line',
+      //   href: '#',
+      //   page: 'guardian',
           
         
-      },
+      // },
     ],
   },
   {
@@ -240,8 +237,6 @@ const menuSections = [
         icon: 'ri:time-line',
         href: '#',
         page: 'class-routine',
-          
-      
       },
       {
         title: 'Teacher',
@@ -256,49 +251,49 @@ const menuSections = [
       },
     ],
   },
-  {
-    title: 'Examination System',
-    items: [
-      {
-        title: 'Online Exam',
-        icon: 'ri:computer-line',
-        submenu: [
-          { label: 'Exam Instruction', href: '#',page: 'exam-instruction' },
-          { label: 'Question Bank', href: '#',page: 'question-bank' },
-          { label: 'Online Exam', href: '#',page: 'onlineexam' },
-          { label: 'Exam Result', href: '#',page: 'exam-result' },
-        ],
-      },
-      {
-        title: 'Manage Exam',
-        icon: 'ri:file-edit-line',
-        submenu: [
+  // {
+  //   title: 'Examination System',
+  //   items: [
+  //     {
+  //       title: 'Online Exam',
+  //       icon: 'ri:computer-line',
+  //       submenu: [
+  //         { label: 'Exam Instruction', href: '#',page: 'exam-instruction' },
+  //         { label: 'Question Bank', href: '#',page: 'question-bank' },
+  //         { label: 'Online Exam', href: '#',page: 'onlineexam' },
+  //         { label: 'Exam Result', href: '#',page: 'exam-result' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Manage Exam',
+  //       icon: 'ri:file-edit-line',
+  //       submenu: [
          
-          { label: 'Exam Grade', href: '#',page: 'exam-grade' },
-          { label: 'Exam Term', href: '#' ,page : 'exam-term' },
-           { label: 'Schedule', href: '#',page : 'schedule' },
-          { label: 'Suggestion', href: '#',page: 'suggestion'},
-          { label: 'Attendance', href: '#',page: 'attendance' },
-        ],
-      },
-      {
-        title: 'Exam Mark',
-        icon: 'ri:file-chart-line',
-        submenu: [
-          { label: 'Manage Mark', href: '#',page: 'manage-mark' },
-          { label: 'Exam Term Result', href: '#',page: 'exam-term-result' },
-          { label: 'Exam final result', href: '#', page: 'exam-final-result' },
-          { label: 'Merit List', href: '#', page: 'merit-list' },
-          { label: 'Mark Sheet', href: '#',page: 'mark-sheet' },
-          { label: 'Result Card', href: '#',page: 'result-card' },
-          { label: 'Mark send by Email', href: '#',page : 'mark-send-email' },
-          { label: 'Mark send by SMS', href: '#',page: 'mark-send-sms' },
-          { label: 'Result Send by Email', href: '#',page: 'result-email' },
-          { label: 'Result Send by SMS', href: '#',page: 'result-sms' },
-        ],
-      },
-    ],
-  },
+  //         { label: 'Exam Grade', href: '#',page: 'exam-grade' },
+  //         { label: 'Exam Term', href: '#' ,page : 'exam-term' },
+  //          { label: 'Schedule', href: '#',page : 'schedule' },
+  //         { label: 'Suggestion', href: '#',page: 'suggestion'},
+  //         { label: 'Attendance', href: '#',page: 'attendance' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Exam Mark',
+  //       icon: 'ri:file-chart-line',
+  //       submenu: [
+  //         { label: 'Manage Mark', href: '#',page: 'manage-mark' },
+  //         { label: 'Exam Term Result', href: '#',page: 'exam-term-result' },
+  //         { label: 'Exam final result', href: '#', page: 'exam-final-result' },
+  //         { label: 'Merit List', href: '#', page: 'merit-list' },
+  //         { label: 'Mark Sheet', href: '#',page: 'mark-sheet' },
+  //         { label: 'Result Card', href: '#',page: 'result-card' },
+  //         { label: 'Mark send by Email', href: '#',page : 'mark-send-email' },
+  //         { label: 'Mark send by SMS', href: '#',page: 'mark-send-sms' },
+  //         { label: 'Result Send by Email', href: '#',page: 'result-email' },
+  //         { label: 'Result Send by SMS', href: '#',page: 'result-sms' },
+  //       ],
+  //     },
+  //   ],
+  // },
   {
     title: 'Human Resource (HR)',
     items: [
@@ -311,232 +306,627 @@ const menuSections = [
         
         ],
       },
-      {
-        title: 'Manage Leave',
-        icon: 'ri:calendar-todo-line',
-        submenu: [
-          { label: 'Leave Type', href: '#', page: 'leave-type' },
-          { label: 'Leave Application', href: '#',page: 'leave-application' },
-          { label: 'Waiting Application', href: '#',page: 'waiting-application' },
-          { label: 'Approved Application', href: '#',page: 'approved-application' },
-          { label: 'Declined Application', href: '#',page: 'declined-application' },
-        ],
-      },
-      {
-        title: 'Payroll',
-        icon: 'ri:money-dollar-circle-line',
-        submenu: [
-          { label: 'Salary Grade', href: '#', page: 'salary-grade' },
-          { label: 'Salary Payment', href: '#',page: 'salary-payment' },
-          { label: 'Salary History', href: '#', page: 'salary-history' },
-        ],
-      },
+      // {
+      //   title: 'Manage Leave',
+      //   icon: 'ri:calendar-todo-line',
+      //   submenu: [
+      //     { label: 'Leave Type', href: '#', page: 'leave-type' },
+      //     { label: 'Leave Application', href: '#',page: 'leave-application' },
+      //     { label: 'Waiting Application', href: '#',page: 'waiting-application' },
+      //     { label: 'Approved Application', href: '#',page: 'approved-application' },
+      //     { label: 'Declined Application', href: '#',page: 'declined-application' },
+      //   ],
+      // },
+      // {
+      //   title: 'Payroll',
+      //   icon: 'ri:money-dollar-circle-line',
+      //   submenu: [
+      //     { label: 'Salary Grade', href: '#', page: 'salary-grade' },
+      //     { label: 'Salary Payment', href: '#',page: 'salary-payment' },
+      //     { label: 'Salary History', href: '#', page: 'salary-history' },
+      //   ],
+      // },
     ],
   },
-  {
-    title: 'Finance & Accounts',
-    items: [
-      {
-        title: 'Accounting',
-        icon: 'ri:calculator-line',
-        submenu: [
-          { label: 'Discount', href: '#',page : 'discount' },
-          { label: 'Fee Type', href: '#',page : 'fee-type' },
-          { label: 'Fee Collection', href: '#',page : 'fee-collection' },
-          { label: 'Manage Invoice', href: '#' },
-          { label: 'Due Invoice', href: '#' },
-          { label: 'Due Receipt', href: '#' },
-          { label: 'Paid Receipt', href: '#' },
-          { label: 'Due Fee Email', href: '#' },
-          { label: 'Due Fee SMS', href: '#' },
-          { label: 'Income Head', href: '#' },
-          { label: 'Income', href: '#' },
-          { label: 'Expenditure Head', href: '#' },
-          { label: 'Expenditure', href: '#' },
-        ],
-      },
-      {
-        title: 'Report',
-        icon: 'ri:bar-chart-line',
-        submenu: [
-          { label: 'Income Report', href: '#' },
-          { label: 'Expenditure Report', href: '#' },
-          { label: 'Invoice Report', href: '#' },
-          { label: 'Due Fee Report', href: '#' },
-          { label: 'Fee Collection Report', href: '#' },
-          { label: 'Accounting Balance Report', href: '#' },
-          { label: 'Library Report', href: '#' },
-          { label: 'Student Attendance Report', href: '#' },
-          { label: 'Student Yearly Attendance Report', href: '#' },
-          { label: 'Teacher Attendance Report', href: '#' },
-          { label: 'Teacher Yearly Attendance Report', href: '#' },
-          { label: 'Employee Attendance Report', href: '#' },
-          { label: 'Employee Yearly Attendance Report', href: '#' },
-          { label: 'Student Report', href: '#' },
-          { label: 'Student Invoice Report', href: '#' },
-          { label: 'Student Activity Report', href: '#' },
-          { label: 'Payroll Report', href: '#' },
-          { label: 'Daily Transaction Report', href: '#' },
-          { label: 'Daily Statemen Report', href: '#' },
-          { label: 'Exam Result Report', href: '#' },
-          { label: 'Certificate Type', href: '#' },
-          { label: 'Gerate Certificate', href: '#' },
-        ],
-      },
-    ],
-  },
-  {
-    title: 'Inventory & Assets',
-    items: [
-      {
-        title: 'Inventory',
-        icon: 'ri:box-3-line',
-        submenu: [
+//   {
+//     title: 'Finance & Accounts',
+//     items: [
+//       {
+//         title: 'Accounting',
+//         icon: 'ri:calculator-line',
+//         submenu: [
+//           { label: 'Discount', href: '#',page : 'discount' },
+//           { label: 'Fee Type', href: '#',page : 'fee-type' },
+//           { label: 'Fee Collection', href: '#',page : 'fee-collection' },
+//           { label: 'Manage Invoice', href: '#' },
+//           { label: 'Due Invoice', href: '#' },
+//           { label: 'Due Receipt', href: '#' },
+//           { label: 'Paid Receipt', href: '#' },
+//           { label: 'Due Fee Email', href: '#' },
+//           { label: 'Due Fee SMS', href: '#' },
+//           { label: 'Income Head', href: '#' },
+//           { label: 'Income', href: '#' },
+//           { label: 'Expenditure Head', href: '#' },
+//           { label: 'Expenditure', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Report',
+//         icon: 'ri:bar-chart-line',
+//         submenu: [
+//           { label: 'Income Report', href: '#' },
+//           { label: 'Expenditure Report', href: '#' },
+//           { label: 'Invoice Report', href: '#' },
+//           { label: 'Due Fee Report', href: '#' },
+//           { label: 'Fee Collection Report', href: '#' },
+//           { label: 'Accounting Balance Report', href: '#' },
+//           { label: 'Library Report', href: '#' },
+//           { label: 'Student Attendance Report', href: '#' },
+//           { label: 'Student Yearly Attendance Report', href: '#' },
+//           { label: 'Teacher Attendance Report', href: '#' },
+//           { label: 'Teacher Yearly Attendance Report', href: '#' },
+//           { label: 'Employee Attendance Report', href: '#' },
+//           { label: 'Employee Yearly Attendance Report', href: '#' },
+//           { label: 'Student Report', href: '#' },
+//           { label: 'Student Invoice Report', href: '#' },
+//           { label: 'Student Activity Report', href: '#' },
+//           { label: 'Payroll Report', href: '#' },
+//           { label: 'Daily Transaction Report', href: '#' },
+//           { label: 'Daily Statemen Report', href: '#' },
+//           { label: 'Exam Result Report', href: '#' },
+//           { label: 'Certificate Type', href: '#' },
+//           { label: 'Gerate Certificate', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Inventory & Assets',
+//     items: [
+//       {
+//         title: 'Inventory',
+//         icon: 'ri:box-3-line',
+//         submenu: [
           
           
-          { label: 'Suppliers', href: '#' },
-           { label: 'Warhouse', href: '#' },
- { label: 'Category', href: '#' },
- { label: 'Product', href: '#' },
-           { label: 'Purchase', href: '#' },
-                     { label: 'Sale', href: '#' },
-                               { label: 'Issue', href: '#' },
-           { label: 'Warhouse', href: '#' },
- { label: 'Category', href: '#' },
- { label: 'Product', href: '#' },
-           { label: 'Purchase', href: '#' },
-                     { label: 'Sale', href: '#' },
-                               { label: 'Issue', href: '#' },
-        ],
-      },
-      {
-        title: 'Asset Management',
-        icon: 'ri:building-2-line',
-        submenu: [
-          { label: 'Vendor', href: '#' },
-          { label: 'Store', href: '#' },
-          { label: 'Category', href: '#' },
-          { label: 'Item', href: '#' },
-          { label: 'Purchase', href: '#' },
+//           { label: 'Suppliers', href: '#' },
+//            { label: 'Warhouse', href: '#' },
+//  { label: 'Category', href: '#' },
+//  { label: 'Product', href: '#' },
+//            { label: 'Purchase', href: '#' },
+//                      { label: 'Sale', href: '#' },
+//                                { label: 'Issue', href: '#' },
+//            { label: 'Warhouse', href: '#' },
+//  { label: 'Category', href: '#' },
+//  { label: 'Product', href: '#' },
+//            { label: 'Purchase', href: '#' },
+//                      { label: 'Sale', href: '#' },
+//                                { label: 'Issue', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Asset Management',
+//         icon: 'ri:building-2-line',
+//         submenu: [
+//           { label: 'Vendor', href: '#' },
+//           { label: 'Store', href: '#' },
+//           { label: 'Category', href: '#' },
+//           { label: 'Item', href: '#' },
+//           { label: 'Purchase', href: '#' },
          
-          { label: 'Issue', href: '#' },
+//           { label: 'Issue', href: '#' },
 
-          { label: 'Vendor', href: '#' },
-          { label: 'Store', href: '#' },
-          { label: 'Category', href: '#' },
-          { label: 'Item', href: '#' },
-          { label: 'Purchase', href: '#' },
+//           { label: 'Vendor', href: '#' },
+//           { label: 'Store', href: '#' },
+//           { label: 'Category', href: '#' },
+//           { label: 'Item', href: '#' },
+//           { label: 'Purchase', href: '#' },
          
-          { label: 'Issue', href: '#' },
+//           { label: 'Issue', href: '#' },
 
-        ],
-      },
-      {
-        title: 'Library',
-        icon: 'ri:book-2-line',
-        submenu: [
-          { label: 'Books List', href: '#' },
-          { label: 'Library Members', href: '#' },
-          { label: 'Issue/Return', href: '#' },
-          { label: 'E-Book', href: '#' },
-        ],
-      },
-    ],
-  },
-  {
-    title: 'Transport & Facilities',
-    items: [
-      {
-        title: 'Transport',
-        icon: 'ri:bus-line',
-        submenu: [
-          { label: 'Vehicles', href: '#' },
-          { label: 'Trasnsport Route', href: '#' },
-          { label: 'Trasnsport Member', href: '#' },
-          { label: 'Trasnsport Route', href: '#' },
-          { label: 'Trasnsport Member', href: '#' },
-        ],
-      },
-      {
-        title: 'Hostel',
-        icon: 'ri:hotel-bed-line',
-        submenu: [
-          { label: 'Manage Hostel', href: '#' },
-          { label: 'Manage Room', href: '#' },
-          { label: 'Hostel Member', href: '#' },
-          { label: 'Manage Hostel', href: '#' },
-          { label: 'Manage Room', href: '#' },
-          { label: 'Hostel Member', href: '#' },
-        ],
-      },
-    ],
-  },
-  {
-    title: 'Communication System',
-    items: [
-      {
-        title: 'Mail & SMS',
-        icon: 'ri:mail-line',
-        submenu: [
-          { label: 'Email', href: '#' },
-          { label: 'SMS', href: '#' },
-        ],
-      },
-    ],
-  },
-  {
-    title: 'Website (CMS)',
-    items: [
-      {
-        title: 'Manage Frontend',
-        icon: 'ri:layout-line',
-        submenu: [
-          { label: 'Frontend Page', href: '#' },
-          { label: 'Slider', href: '#' },
-          { label: 'About School', href: '#' },
-        ],
-      },
-    ],
-  },
-  {
-    title: 'Miscellaneous',
-    items: [
-      {
-        title: 'Miscellaneous',
-        icon: 'ri:more-2-line',
-        submenu: [
-          { label: 'Tools', href: '#' },
-          { label: 'Settings', href: '#' },
-        ],
-      },
-      {
-        title: 'Subscription (SaaS)',
-        icon: 'ri:vip-crown-line',
-        submenu: [
-          { label: 'FAQ', href: '#' },
-          { label: 'Slider', href: '#' },
-          { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
-          { label: 'General Settings', href: '#' },
-          { label: 'Subscription Plnas', href: '#' },
-          { label: 'School Subscription', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Library',
+//         icon: 'ri:book-2-line',
+//         submenu: [
+//           { label: 'Books List', href: '#' },
+//           { label: 'Library Members', href: '#' },
+//           { label: 'Issue/Return', href: '#' },
+//           { label: 'E-Book', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Transport & Facilities',
+//     items: [
+//       {
+//         title: 'Transport',
+//         icon: 'ri:bus-line',
+//         submenu: [
+//           { label: 'Vehicles', href: '#' },
+//           { label: 'Trasnsport Route', href: '#' },
+//           { label: 'Trasnsport Member', href: '#' },
+//           { label: 'Trasnsport Route', href: '#' },
+//           { label: 'Trasnsport Member', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Hostel',
+//         icon: 'ri:hotel-bed-line',
+//         submenu: [
+//           { label: 'Manage Hostel', href: '#' },
+//           { label: 'Manage Room', href: '#' },
+//           { label: 'Hostel Member', href: '#' },
+//           { label: 'Manage Hostel', href: '#' },
+//           { label: 'Manage Room', href: '#' },
+//           { label: 'Hostel Member', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Communication System',
+//     items: [
+//       {
+//         title: 'Mail & SMS',
+//         icon: 'ri:mail-line',
+//         submenu: [
+//           { label: 'Email', href: '#' },
+//           { label: 'SMS', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Website (CMS)',
+//     items: [
+//       {
+//         title: 'Manage Frontend',
+//         icon: 'ri:layout-line',
+//         submenu: [
+//           { label: 'Frontend Page', href: '#' },
+//           { label: 'Slider', href: '#' },
+//           { label: 'About School', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Miscellaneous',
+//     items: [
+//       {
+//         title: 'Miscellaneous',
+//         icon: 'ri:more-2-line',
+//         submenu: [
+//           { label: 'Tools', href: '#' },
+//           { label: 'Settings', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Subscription (SaaS)',
+//         icon: 'ri:vip-crown-line',
+//         submenu: [
+//           { label: 'FAQ', href: '#' },
+//           { label: 'Slider', href: '#' },
+//           { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
+//           { label: 'General Settings', href: '#' },
+//           { label: 'Subscription Plnas', href: '#' },
+//           { label: 'School Subscription', href: '#' },
 
-        ],
-      },
-      {
-        title: 'Profile',
-        icon: 'ri:user-3-line',
-        submenu: [
-          { label: 'My Profile', href: '#' },
-          { label: 'Settings', href: '#' },
-          { label: 'Logout', href: '#' },
-        ],
-      },
-    ],
-  },
+//         ],
+//       },
+//       {
+//         title: 'Profile',
+//         icon: 'ri:user-3-line',
+//         submenu: [
+//           { label: 'My Profile', href: '#' },
+//           { label: 'Settings', href: '#' },
+//           { label: 'Logout', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+  // {
+  //   title: 'Examination System',
+  //   items: [
+  //     {
+  //       title: 'Online Exam',
+  //       icon: 'ri:computer-line',
+  //       submenu: [
+  //         { label: 'Exam Instruction', href: '#',page: 'exam-instruction' },
+  //         { label: 'Question Bank', href: '#',page: 'question-bank' },
+  //         { label: 'Online Exam', href: '#',page: 'onlineexam' },
+  //         { label: 'Exam Result', href: '#',page: 'exam-result' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Manage Exam',
+  //       icon: 'ri:file-edit-line',
+  //       submenu: [
+         
+  //         { label: 'Exam Grade', href: '#',page: 'exam-grade' },
+  //         { label: 'Exam Term', href: '#' ,page : 'exam-term' },
+  //          { label: 'Schedule', href: '#',page : 'schedule' },
+  //         { label: 'Suggestion', href: '#',page: 'suggestion'},
+  //         { label: 'Attendance', href: '#',page: 'attendance' },
+  //       ],
+  //     },
+  //     {
+  //       title: 'Exam Mark',
+  //       icon: 'ri:file-chart-line',
+  //       submenu: [
+  //         { label: 'Manage Mark', href: '#',page: 'manage-mark' },
+  //         { label: 'Exam Term Result', href: '#',page: 'exam-term-result' },
+  //         { label: 'Exam final result', href: '#', page: 'exam-final-result' },
+  //         { label: 'Merit List', href: '#', page: 'merit-list' },
+  //         { label: 'Mark Sheet', href: '#',page: 'mark-sheet' },
+  //         { label: 'Result Card', href: '#',page: 'result-card' },
+  //         { label: 'Mark send by Email', href: '#',page : 'mark-send-email' },
+  //         { label: 'Mark send by SMS', href: '#',page: 'mark-send-sms' },
+  //         { label: 'Result Send by Email', href: '#',page: 'result-email' },
+  //         { label: 'Result Send by SMS', href: '#',page: 'result-sms' },
+  //       ],
+  //     },
+  //   ],
+  // },
+//   {
+//     title: 'Human Resource (HR)',
+//     items: [
+//       {
+//         title: 'Human Resource',
+//         icon: 'ri:team-line',
+//         submenu: [
+//           { label: 'Manage Destination', href: '#', page: 'manage-designation' },
+//           { label: 'Manage Employees', href: '#',page: 'manage-employee' },
+        
+//         ],
+//       },
+//       {
+//         title: 'Manage Leave',
+//         icon: 'ri:calendar-todo-line',
+//         submenu: [
+//           { label: 'Leave Type', href: '#', page: 'leave-type' },
+//           { label: 'Leave Application', href: '#',page: 'leave-application' },
+//           { label: 'Waiting Application', href: '#',page: 'waiting-application' },
+//           { label: 'Approved Application', href: '#',page: 'approved-application' },
+//           { label: 'Declined Application', href: '#',page: 'declined-application' },
+//         ],
+//       },
+//       {
+//         title: 'Payroll',
+//         icon: 'ri:money-dollar-circle-line',
+//         submenu: [
+//           { label: 'Salary Grade', href: '#', page: 'salary-grade' },
+//           { label: 'Salary Payment', href: '#',page: 'salary-payment' },
+//           { label: 'Salary History', href: '#', page: 'salary-history' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Finance & Accounts',
+//     items: [
+//       {
+//         title: 'Accounting',
+//         icon: 'ri:calculator-line',
+//         submenu: [
+//           { label: 'Discount', href: '#',page : 'discount' },
+//           { label: 'Fee Type', href: '#',page : 'fee-type' },
+//           { label: 'Fee Collection', href: '#',page : 'fee-collection' },
+//           { label: 'Manage Invoice', href: '#' },
+//           { label: 'Due Invoice', href: '#' },
+//           { label: 'Due Receipt', href: '#' },
+//           { label: 'Paid Receipt', href: '#' },
+//           { label: 'Due Fee Email', href: '#' },
+//           { label: 'Due Fee SMS', href: '#' },
+//           { label: 'Income Head', href: '#' },
+//           { label: 'Income', href: '#' },
+//           { label: 'Expenditure Head', href: '#' },
+//           { label: 'Expenditure', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Report',
+//         icon: 'ri:bar-chart-line',
+//         submenu: [
+//           { label: 'Income Report', href: '#' },
+//           { label: 'Expenditure Report', href: '#' },
+//           { label: 'Invoice Report', href: '#' },
+//           { label: 'Due Fee Report', href: '#' },
+//           { label: 'Fee Collection Report', href: '#' },
+//           { label: 'Accounting Balance Report', href: '#' },
+//           { label: 'Library Report', href: '#' },
+//           { label: 'Student Attendance Report', href: '#' },
+//           { label: 'Student Yearly Attendance Report', href: '#' },
+//           { label: 'Teacher Attendance Report', href: '#' },
+//           { label: 'Teacher Yearly Attendance Report', href: '#' },
+//           { label: 'Employee Attendance Report', href: '#' },
+//           { label: 'Employee Yearly Attendance Report', href: '#' },
+//           { label: 'Student Report', href: '#' },
+//           { label: 'Student Invoice Report', href: '#' },
+//           { label: 'Student Activity Report', href: '#' },
+//           { label: 'Payroll Report', href: '#' },
+//           { label: 'Daily Transaction Report', href: '#' },
+//           { label: 'Daily Statemen Report', href: '#' },
+//           { label: 'Exam Result Report', href: '#' },
+//           { label: 'Certificate Type', href: '#' },
+//           { label: 'Gerate Certificate', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Inventory & Assets',
+//     items: [
+//       {
+//         title: 'Inventory',
+//         icon: 'ri:box-3-line',
+//         submenu: [
+          
+          
+//           { label: 'Suppliers', href: '#' },
+//            { label: 'Warhouse', href: '#' },
+//  { label: 'Category', href: '#' },
+//  { label: 'Product', href: '#' },
+//            { label: 'Purchase', href: '#' },
+//                      { label: 'Sale', href: '#' },
+//                                { label: 'Issue', href: '#' },
+//            { label: 'Warhouse', href: '#' },
+//  { label: 'Category', href: '#' },
+//  { label: 'Product', href: '#' },
+//            { label: 'Purchase', href: '#' },
+//                      { label: 'Sale', href: '#' },
+//                                { label: 'Issue', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Asset Management',
+//         icon: 'ri:building-2-line',
+//         submenu: [
+//           { label: 'Vendor', href: '#' },
+//           { label: 'Store', href: '#' },
+//           { label: 'Category', href: '#' },
+//           { label: 'Item', href: '#' },
+//           { label: 'Purchase', href: '#' },
+         
+//           { label: 'Issue', href: '#' },
+
+//           { label: 'Vendor', href: '#' },
+//           { label: 'Store', href: '#' },
+//           { label: 'Category', href: '#' },
+//           { label: 'Item', href: '#' },
+//           { label: 'Purchase', href: '#' },
+         
+//           { label: 'Issue', href: '#' },
+
+//         ],
+//       },
+//       {
+//         title: 'Library',
+//         icon: 'ri:book-2-line',
+//         submenu: [
+//           { label: 'Books List', href: '#' },
+//           { label: 'Library Members', href: '#' },
+//           { label: 'Issue/Return', href: '#' },
+//           { label: 'E-Book', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Transport & Facilities',
+//     items: [
+//       {
+//         title: 'Transport',
+//         icon: 'ri:bus-line',
+//         submenu: [
+//           { label: 'Vehicles', href: '#' },
+//           { label: 'Trasnsport Route', href: '#' },
+//           { label: 'Trasnsport Member', href: '#' },
+//           { label: 'Trasnsport Route', href: '#' },
+//           { label: 'Trasnsport Member', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Hostel',
+//         icon: 'ri:hotel-bed-line',
+//         submenu: [
+//           { label: 'Manage Hostel', href: '#' },
+//           { label: 'Manage Room', href: '#' },
+//           { label: 'Hostel Member', href: '#' },
+//           { label: 'Manage Hostel', href: '#' },
+//           { label: 'Manage Room', href: '#' },
+//           { label: 'Hostel Member', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Communication System',
+//     items: [
+//       {
+//         title: 'Mail & SMS',
+//         icon: 'ri:mail-line',
+//         submenu: [
+//           { label: 'Email', href: '#' },
+//           { label: 'SMS', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Website (CMS)',
+//     items: [
+//       {
+//         title: 'Manage Frontend',
+//         icon: 'ri:layout-line',
+//         submenu: [
+//           { label: 'Frontend Page', href: '#' },
+//           { label: 'Slider', href: '#' },
+//           { label: 'About School', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
+//   {
+//     title: 'Miscellaneous',
+//     items: [
+//       {
+//         title: 'Miscellaneous',
+//         icon: 'ri:more-2-line',
+//         submenu: [
+//           { label: 'Tools', href: '#' },
+//           { label: 'Settings', href: '#' },
+//         ],
+//       },
+//       {
+//         title: 'Subscription (SaaS)',
+//         icon: 'ri:vip-crown-line',
+//         submenu: [
+//           { label: 'FAQ', href: '#' },
+//           { label: 'Slider', href: '#' },
+//           { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
+//           { label: 'General Settings', href: '#' },
+//           { label: 'Subscription Plnas', href: '#' },
+//           { label: 'School Subscription', href: '#' },
+
+//         ],
+//       },
+//       {
+//         title: 'Profile',
+//         icon: 'ri:user-3-line',
+//         submenu: [
+//           { label: 'My Profile', href: '#' },
+//           { label: 'Settings', href: '#' },
+//           { label: 'Logout', href: '#' },
+//         ],
+//       },
+//     ],
+//   },
 ];
 
-const Sidebar = ({ onNavigate, currentPage }) => {
-  const { isOpen, isCollapsed, closeSidebar, toggleSidebar } = useSidebar();
+const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
+  const { isOpen, isCollapsed, closeSidebar, closeForNavigation, toggleSidebar } = useSidebar();
+  const username =
+    user?.username ||
+    user?.userName ||
+    user?.name ||
+    user?.fullName ||
+    user?.email ||
+    'User';
+  const role = normalizeRole(user?.role || user?.userRole || user?.authority);
+  const dashboardByRole = {
+    SUPER_ADMIN: { page: 'super-admin-dashboard', label: 'Dashboard' },
+    HEAD_OFFICE_ADMIN: { page: 'head-office-dashboard', label: 'Dashboard' },
+    SCHOOL_ADMIN: { page: 'school-admin-dashboard', label: 'Dashboard' },
+    TEACHER: { page: 'teacher-dashboard', label: 'Teacher Dashboard' },
+    STUDENT: { page: 'student-dashboard', label: 'Student Dashboard' },
+    PARENT: { page: 'parent-dashboard', label: 'Parent Dashboard' },
+  }
+  const roleDashboard = dashboardByRole[role] || { page: 'dashboard', label: 'Dashboard' }
+  const isStudent = role === 'STUDENT'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const isTeacher = role === 'TEACHER'
+  const studentAllowedPages = new Set([
+    'dashboard',
+    'student-dashboard',
+    'class-routine',
+    'subject',
+    'syllabus',
+    'study-material',
+    'live-class',
+    'assignment',
+    'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+  ])
+  const schoolAdminAllowedPages = new Set([
+    'dashboard',
+    'school-admin-dashboard',
+    'teacher-department',
+    'user-role-acl',
+    'class',
+    'section',
+    'subject',
+    'manage-teacher',
+    'student-list',
+    'student-type',
+    'online-admission',
+    'student-activity',
+    'syllabus',
+    'study-material',
+    'live-class',
+    'assignment',
+    'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+    'class-routine',
+  ])
+  const teacherVisiblePages = new Set([
+    'teacher-dashboard',
+    'student-type',
+    'student-list',
+    'online-admission',
+    'class',
+    'section',
+    'subject',
+    'syllabus',
+    'study-material',
+    'live-class',
+    'assignment',
+    'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+    'class-routine',
+  ])
+  const parentVisiblePages = new Set([
+    'parent-dashboard',
+    'dashboard',
+    'class-routine',
+    'student-attendance',
+    'exam-result',
+    'mark-sheet',
+    'result-card',
+    'fee-collection',
+    'subject',
+    'syllabus',
+    'study-material',
+    'live-class',
+    'assignment',
+    'submission',
+    'lesson',
+    'topic',
+    'lesson-timeline',
+    'lesson-status',
+    'lesson-plan',
+  ])
+
+  const canOpenPage = (page) => {
+    if (!page) return true
+    if (isStudent) return studentAllowedPages.has(page)
+    if (isSchoolAdmin) return schoolAdminAllowedPages.has(page)
+    if (isTeacher) return teacherVisiblePages.has(page)
+    if (role === 'PARENT') return parentVisiblePages.has(page)
+    return true
+  }
+
+  const canOpenUserRoles = () => {
+    if (!canManageUsers(user)) return false
+    // Permission gate is still enforced by `perm` checks below; this just hides the menu
+    // when a role has no editable targets in the hierarchy.
+    return true
+  }
 
   const sidebarClass = [
     'sidebar',
@@ -570,18 +960,17 @@ const Sidebar = ({ onNavigate, currentPage }) => {
         </button>
 
         <div>
-          <div className="sidebar-logo d-flex align-items-center justify-content-center">
-            <a href="#">
+          <div className="sidebar-logo d-flex align-items-center justify-content-between">
+            <a href="#" className="sidebar-logo__brand">
               <img src="/assets/images/logo.png" alt="site logo" className="light-logo" />
               <img src="/assets/images/logo-light.png" alt="site logo" className="dark-logo" />
               <img src="/assets/images/logo-icon.png" alt="site logo" className="logo-icon" />
             </a>
             <button
               type="button"
-              className="text-xxl d-xl-flex d-none line-height-1 sidebar-toggle text-neutral-500"
+              className="sidebar-collapse-btn text-xxl d-xl-flex d-none line-height-1 text-neutral-500"
               aria-label="Collapse Sidebar"
               onClick={toggleSidebar}
-              style={{ position: 'absolute', right: '1rem' }}
             >
               <iconify-icon icon="ri:contract-left-line"></iconify-icon>
             </button>
@@ -604,8 +993,10 @@ const Sidebar = ({ onNavigate, currentPage }) => {
                   className="w-40-px h-40-px rounded-circle object-fit-cover flex-shrink-0"
                 />
                 <span className="profile-dropdown__contents">
-                  <span className="h6 mb-0 text-md d-block text-primary-light">Jone Copper</span>
-                  <span className="text-secondary-light text-sm mb-0 d-block">Admin</span>
+                  <span className="h6 mb-0 text-md d-block text-primary-light">{username}</span>
+                  {role ? (
+                    <span className="text-secondary-light text-sm mb-0 d-block">{role}</span>
+                  ) : null}
                 </span>
               </span>
               <span className="profile-dropdown__icon pe-8 text-xl d-flex line-height-1">
@@ -633,6 +1024,10 @@ const Sidebar = ({ onNavigate, currentPage }) => {
                 <a
                   href="#"
                   className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    onLogout?.()
+                  }}
                 >
                   <iconify-icon icon="ri:shut-down-line"></iconify-icon> Log Out
                 </a>
@@ -643,7 +1038,45 @@ const Sidebar = ({ onNavigate, currentPage }) => {
 
         <div className="sidebar-menu-area">
           <ul className="sidebar-menu" id="sidebar-menu">
-            {menuSections.map((section, sectionIndex) => (
+            {menuSections
+              .map((section) => ({
+                ...section,
+                items: section.items
+                  .map((item) => {
+                    if (section.title === 'Core System' && item.title === 'Dashboard') {
+                      return {
+                        ...item,
+                        title: roleDashboard.label,
+                        page: roleDashboard.page,
+                        submenu: undefined,
+                      }
+                    }
+                    return item
+                  })
+                  .filter((item) => {
+                    if (role === 'PARENT' && item.page && !canOpenPage(item.page)) return false
+                    if (!isStudent && !isSchoolAdmin) return true
+                    if (item.page && canOpenPage(item.page)) return true
+                    if (Array.isArray(item.submenu)) {
+                      return item.submenu.some((sub) => sub?.page && canOpenPage(sub.page))
+                    }
+                    return false
+                  })
+                  .filter((item) => !item.perm || can(user, item.perm))
+                  .map((item) => ({
+                    ...item,
+                    submenu: Array.isArray(item.submenu)
+                      ? item.submenu.filter((sub) => canOpenPage(sub.page) && (!sub.perm || can(user, sub.perm)))
+                        .filter((sub) => !(role === 'PARENT' && ['class', 'section'].includes(sub?.page)))
+                      : item.submenu,
+                  }))
+                  .filter((item) => {
+                    if (!Array.isArray(item.submenu)) return true
+                    return item.submenu.length > 0 || !!item.page
+                  }),
+              }))
+              .filter((section) => section.items.length > 0)
+              .map((section, sectionIndex) => (
               <React.Fragment key={sectionIndex}>
                 {section.title ? (
                   <li className={`sidebar-menu-group-title ${isCollapsed ? 'hidden' : ''}`}>
@@ -681,7 +1114,12 @@ const Sidebar = ({ onNavigate, currentPage }) => {
                       {hasSubmenu ? <iconify-icon icon="ri:arrow-down-s-line" className="sidebar-menu__arrow"></iconify-icon> : null}
                     </a>
                     {hasSubmenu ? <ul className="sidebar-submenu">
-                      {item.submenu?.map((sub, subIndex) => (
+                      {item.submenu
+                        ?.filter((sub) => {
+                          if (sub?.page === 'user-role-acl') return canOpenUserRoles()
+                          return true
+                        })
+                        .map((sub, subIndex) => (
                         <li key={subIndex}>
                           <a
                             href={sub.href}

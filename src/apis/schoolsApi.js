@@ -1,4 +1,6 @@
 // Use the Vite dev-server proxy (`/api` -> backend) to avoid browser CORS issues.
+import { apiFetch } from './apiClient'
+
 const SCHOOLS_API_BASE = '/api/schools'
 
 const readApiError = async (res) => {
@@ -24,14 +26,21 @@ const buildUpsertFormData = (payload, form) => {
   return fd
 }
 
+const readCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem('sm_user') || sessionStorage.getItem('sm_user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export const fetchSchoolsPage = async (page, size) => {
   const query = new URLSearchParams({
     page: String(Math.max(page, 0)),
     size: String(size),
   })
-  const res = await fetch(`${SCHOOLS_API_BASE}?${query.toString()}`, {
-    headers: { Accept: 'application/json' },
-  })
+  const res = await apiFetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()
 }
@@ -83,11 +92,22 @@ export const fetchSchoolsLookup = async () => {
     byId.set(String(id), { id, schoolName })
   }
 
+  const currentUser = readCurrentUser()
+  const currentSchoolId = currentUser?.schoolId ?? currentUser?.school?.id ?? null
+  const currentSchoolName =
+    currentUser?.schoolName ?? currentUser?.school?.schoolName ?? currentUser?.school?.name ?? null
+  if (currentSchoolId != null) {
+    const key = String(currentSchoolId)
+    if (!byId.has(key)) {
+      byId.set(key, { id: currentSchoolId, schoolName: currentSchoolName || `School ${currentSchoolId}` })
+    }
+  }
+
   return Array.from(byId.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName))
 }
 
 export const createSchool = async (payload, form) => {
-  const res = await fetch(SCHOOLS_API_BASE, {
+  const res = await apiFetch(SCHOOLS_API_BASE, {
     method: 'POST',
     body: buildUpsertFormData(payload, form),
   })
@@ -95,8 +115,18 @@ export const createSchool = async (payload, form) => {
   return res.json()
 }
 
+export const createSchoolWithAdmin = async (payload, form) => {
+  const fd = buildUpsertFormData(payload, form)
+  const res = await apiFetch(`${SCHOOLS_API_BASE}/create-with-admin`, {
+    method: 'POST',
+    body: fd,
+  })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const updateSchool = async (schoolId, payload, form) => {
-  const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, {
+  const res = await apiFetch(`${SCHOOLS_API_BASE}/${schoolId}`, {
     method: 'PUT',
     body: buildUpsertFormData(payload, form),
   })
@@ -105,7 +135,7 @@ export const updateSchool = async (schoolId, payload, form) => {
 }
 
 export const deleteSchool = async (schoolId) => {
-  const res = await fetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
+  const res = await apiFetch(`${SCHOOLS_API_BASE}/${schoolId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

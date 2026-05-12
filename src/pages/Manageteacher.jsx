@@ -6,6 +6,8 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createTeacher, deleteTeacher, fetchTeachers, updateTeacher } from '../apis/teachersApi'
 import { fetchAllDepartments } from '../apis/departmentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import AddDepartmentModal from '../components/AddDepartmentModal'
 import '../assets/css/addModalShared.css'
 
@@ -16,6 +18,7 @@ const emptyForm = {
   email: '', username: '', password: '', salaryGrade: '', salaryType: '', role: 'Teacher', joiningDate: '', resume: null,
   // Other
   isViewOnWeb: '', facebookUrl: '', linkedinUrl: '', twitterUrl: '', instagramUrl: '', youtubeUrl: '', pinterestUrl: '', otherInfo: '', photo: null,
+  schoolId: '',
 }
 
 const STEPS = ['Basic Info', 'Address Info', 'Academic Info', 'Other Info']
@@ -94,6 +97,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ManageTeacher = () => {
+  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [teachers, setTeachers] = useState([])
   const [departments, setDepartments] = useState([])
   const [schools, setSchools] = useState([])
@@ -134,22 +139,57 @@ const ManageTeacher = () => {
   const photoRef = useRef()
   const editPhotoRef = useRef()
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolName = authSchoolName || ''
+  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+
+  const effectiveSchoolsLookup = useMemo(() => {
+    const byId = new Map((Array.isArray(schools) ? schools : []).map((school) => [String(school?.id), school]))
+    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
+      byId.set(String(resolvedSchoolId), {
+        id: resolvedSchoolId,
+        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
+      })
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [resolvedSchoolId, resolvedSchoolName, schools])
 
   const loadTeachers = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [teacherData, deptData, schoolData] = await Promise.all([fetchTeachers(), fetchAllDepartments(), fetchSchoolsLookup()])
-      setTeachers(Array.isArray(teacherData) ? teacherData : [])
-      setDepartments(Array.isArray(deptData) ? deptData : [])
-      setSchools(Array.isArray(schoolData) ? schoolData : [])
+      const [teacherData, deptResult, schoolResult] = await Promise.allSettled([
+        fetchTeachers(),
+        fetchAllDepartments(),
+        fetchSchoolsLookup(),
+      ])
+      if (teacherData.status === 'rejected') {
+        throw teacherData.reason
+      }
+      const teacherRows = Array.isArray(teacherData.value) ? teacherData.value : []
+      const normalizedTeachers = teacherRows.map((row) => {
+        const fallbackSchoolId =
+          row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId || ''
+        return {
+          ...row,
+          schoolId: fallbackSchoolId,
+          schoolName: row?.schoolName || (fallbackSchoolId ? (resolvedSchoolId && String(fallbackSchoolId) === String(resolvedSchoolId) ? resolvedSchoolName : '') : ''),
+        }
+      })
+      setTeachers(
+        resolvedSchoolId
+          ? normalizedTeachers.filter((row) => String(row.schoolId || '') === String(resolvedSchoolId))
+          : normalizedTeachers,
+      )
+      setDepartments(deptResult.status === 'fulfilled' && Array.isArray(deptResult.value) ? deptResult.value : [])
+      setSchools(schoolResult.status === 'fulfilled' && Array.isArray(schoolResult.value) ? schoolResult.value : [])
     } catch (e) {
       setTeachers([])
       setError(e?.message || 'Failed to load teachers')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [resolvedSchoolId, resolvedSchoolName])
 
   useEffect(() => {
     void loadTeachers()
@@ -217,7 +257,10 @@ const ManageTeacher = () => {
   const openAdd = () => {
     setError('')
     setEditingTeacherId(null)
-    setAddForm(emptyForm)
+    setAddForm({
+      ...emptyForm,
+      schoolId: resolvedSchoolId || '',
+    })
     setPhotoPreview(null)
     setAddStep(0)
     setIsAddOpen(true)
@@ -253,6 +296,7 @@ const ManageTeacher = () => {
       youtubeUrl: row?.youtubeUrl || '',
       pinterestUrl: row?.pinterestUrl || '',
       otherInfo: row?.otherInfo || '',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId || '',
       photo: null,
     })
     setEditPhotoPreview(row?.photoUrl || null)
@@ -287,6 +331,7 @@ const ManageTeacher = () => {
     pinterestUrl: form.pinterestUrl || '',
     otherInfo: form.otherInfo || '',
     displayOrder: form.displayOrder ?? null,
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
   })
 
   const handleCreateTeacher = async () => {
@@ -376,6 +421,16 @@ const ManageTeacher = () => {
         <p className="avm-section-title">Basic Information</p>
         <div className="avm-grid">
           <FormField label="Name" required><input type="text" className="avm-input" id="name" placeholder="Enter name" value={addForm.name} onChange={handleChange(setAddForm)} /></FormField>
+          <FormField label="School Name" required full>
+            <select className="avm-select" id="schoolId" value={addForm.schoolId} onChange={handleChange(setAddForm)} disabled={isSchoolLocked}>
+              <option value="">--Select School--</option>
+              {effectiveSchoolsLookup.map((school) => (
+                <option key={school.id} value={String(school.id)}>
+                  {school.schoolName}
+                </option>
+              ))}
+            </select>
+          </FormField>
           <FormField label="National ID"><input type="text" className="avm-input" id="nationalId" placeholder="Enter national ID" value={addForm.nationalId} onChange={handleChange(setAddForm)} /></FormField>
           <FormField label="Department" required noIcon>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -485,6 +540,16 @@ const ManageTeacher = () => {
         <p className="avm-section-title">Basic Information</p>
         <div className="avm-grid">
           <FormField label="Name" required><input type="text" className="avm-input" id="name" placeholder="Enter name" value={editForm.name} onChange={handleChange(setEditForm)} /></FormField>
+          <FormField label="School Name" required full>
+            <select className="avm-select" id="schoolId" value={editForm.schoolId} onChange={handleChange(setEditForm)} disabled={isSchoolLocked}>
+              <option value="">--Select School--</option>
+              {effectiveSchoolsLookup.map((school) => (
+                <option key={school.id} value={String(school.id)}>
+                  {school.schoolName}
+                </option>
+              ))}
+            </select>
+          </FormField>
           <FormField label="National ID"><input type="text" className="avm-input" id="nationalId" placeholder="Enter national ID" value={editForm.nationalId} onChange={handleChange(setEditForm)} /></FormField>
           <FormField label="Department" required noIcon>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

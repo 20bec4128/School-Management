@@ -1,234 +1,291 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
-import useColumnVisibility from '../hooks/useColumnVisibility'
+import { fetchLessonStatusPageData, updateLessonStatus, updateTopicStatus } from '../apis/lessonStatusApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSubjects } from '../apis/subjectsApi'
+import { can } from '../utils/permissions'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
+import FindEmptyState from '../components/FindEmptyState'
 
-const lessonStatuses = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    academicYear: '2024-2025',
-    className: 'Class 10',
-    subject: 'Mathematics',
-    lessonStartDate: '2024-04-01',
-    lessonEndDate: '2024-04-30',
-    lessonStatus: 'Completed',
-    topicStartDate: '2024-04-01',
-    topicEndDate: '2024-04-10',
-    topicStatus: 'Completed',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    academicYear: '2024-2025',
-    className: 'Class 11',
-    subject: 'Physics',
-    lessonStartDate: '2024-04-05',
-    lessonEndDate: '2024-05-05',
-    lessonStatus: 'Running',
-    topicStartDate: '2024-04-05',
-    topicEndDate: '2024-04-18',
-    topicStatus: 'Completed',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    academicYear: '2024-2025',
-    className: 'Class 9',
-    subject: 'English',
-    lessonStartDate: '2024-03-15',
-    lessonEndDate: '2024-04-15',
-    lessonStatus: 'Running',
-    topicStartDate: '2024-03-15',
-    topicEndDate: '2024-03-28',
-    topicStatus: 'Running',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    academicYear: '2023-2024',
-    className: 'Class 11',
-    subject: 'Biology',
-    lessonStartDate: '2023-11-01',
-    lessonEndDate: '2023-11-30',
-    lessonStatus: 'Completed',
-    topicStartDate: '2023-11-01',
-    topicEndDate: '2023-11-14',
-    topicStatus: 'Completed',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    academicYear: '2023-2024',
-    className: 'Class 12',
-    subject: 'Computer Science',
-    lessonStartDate: '2023-12-01',
-    lessonEndDate: '2023-12-31',
-    lessonStatus: 'Upcoming',
-    topicStartDate: '2023-12-01',
-    topicEndDate: '2023-12-15',
-    topicStatus: 'Upcoming',
-  },
-]
+const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
-const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-const subjectOptions = [
-  'Mathematics', 'Physics', 'Chemistry', 'Biology',
-  'English', 'Computer Science', 'History', 'Geography',
+const STATUS_OPTIONS = [
+  { value: 'YET_TO_START', label: 'Yet To Start' },
+  { value: 'GOING_ON', label: 'On Progress' },
+  { value: 'COMPLETED', label: 'Completed' },
 ]
-const academicYearOptions = ['2024-2025', '2023-2024', '2022-2023']
 
 const emptyFilters = {
-  school: 'Select',
+  schoolId: 'Select',
   academicYear: 'Select',
-  className: 'Select',
-  subject: 'Select',
+  classId: 'Select',
+  subjectId: 'Select',
 }
 
-const columnOptions = [
-  { key: 'school', label: 'School' },
-  { key: 'academicYear', label: 'Academic Year' },
-  { key: 'className', label: 'Class' },
-  { key: 'subject', label: 'Subject' },
-  { key: 'lessonInfo', label: 'Lesson / Start Date - End Date / Status' },
-  { key: 'topicInfo', label: 'Topic / Start Date - End Date / Status' },
-]
+const DEFAULT_ACADEMIC_YEAR = ACADEMIC_YEAR_OPTIONS[0]
 
-const statusBadge = (status) => {
-  if (status === 'Completed') return 'bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm'
-  if (status === 'Running') return 'bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm'
-  if (status === 'Upcoming') return 'bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm'
-  return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
+const getChildScope = (children, selectedChildId) => {
+  const list = Array.isArray(children) ? children : []
+  const selected = selectedChildId != null && selectedChildId !== ''
+    ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
+    : null
+  return selected || list[0] || null
 }
 
-const DateRangeWithStatus = ({ startDate, endDate, status, startIcon, endIcon }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem', color: '#34393f', whiteSpace: 'nowrap' }}>
-      <i className={`${startIcon} text-secondary-light`} style={{ fontSize: '0.82rem' }}></i>
-      {startDate}
-      <span style={{ color: '#a0aab4' }}>—</span>
-      <i className={`${endIcon} text-secondary-light`} style={{ fontSize: '0.82rem' }}></i>
-      {endDate}
-    </span>
-    <span className={statusBadge(status)} style={{ alignSelf: 'flex-start' }}>{status}</span>
-  </div>
-)
+const statusMeta = (status) => {
+  const v = String(status || 'YET_TO_START')
+  if (v === 'COMPLETED') return { label: 'Completed', cls: 'bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm' }
+  if (v === 'GOING_ON') return { label: 'On Progress', cls: 'bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm' }
+  return { label: 'Yet To Start', cls: 'bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm' }
+}
+
+const canCompleteLesson = (lesson) => {
+  const topics = Array.isArray(lesson?.topics) ? lesson.topics : []
+  return topics.every((t) => String(t?.topicStatus || 'YET_TO_START') === 'COMPLETED')
+}
 
 const LessonStatus = () => {
+  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user } = useAuth()
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [subjectsLookup, setSubjectsLookup] = useState([])
+
+  const [lessons, setLessons] = useState([])
+  const [selectedLessonId, setSelectedLessonId] = useState(null)
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const [search, setSearch] = useState('')
-  const [rowsPerPage, setRowsPerPage] = useState(10)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRows, setSelectedRows] = useState([])
   const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
-  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(lessonStatuses.map((r) => r.school))),
-    [],
-  )
+  const roleUpper = String(role || '').toUpperCase()
+  const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const effectiveSchoolId = roleUpper === 'STUDENT'
+    ? schoolId
+    : roleUpper === 'PARENT'
+      ? selectedChild?.schoolId ?? null
+      : null
+  const effectiveClassId = roleUpper === 'STUDENT'
+    ? studentClassId
+    : roleUpper === 'PARENT'
+      ? selectedChild?.classId ?? null
+      : null
+  const canManageLessonStatus = can(user, ['LESSON_PLAN_MANAGE', 'LESSON_PLAN_MANAGE_ASSIGNED', '*'])
 
-  const filtered = useMemo(() => {
+  useEffect(() => {
+    let ignore = false
+    const run = async () => {
+      try {
+        setLoading(true)
+        setError('')
+        if (isStudentScope) {
+          if (!effectiveSchoolId || !effectiveClassId) {
+            if (!ignore) {
+              setSchoolsLookup([])
+              setClassesLookup([])
+              setSubjectsLookup([])
+              setLoading(false)
+            }
+            return
+          }
+          const nextFilters = {
+            schoolId: String(effectiveSchoolId),
+            academicYear: DEFAULT_ACADEMIC_YEAR,
+            classId: String(effectiveClassId),
+            subjectId: 'Select',
+          }
+          setPendingFilters(nextFilters)
+          setFilters(nextFilters)
+          setHasSearched(true)
+          setIsFindSidebarOpen(false)
+          await reloadPageData(nextFilters)
+          return
+        }
+        const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+        if (ignore) return
+        setSchoolsLookup(Array.isArray(schools) ? schools : [])
+        setClassesLookup(Array.isArray(classes) ? classes : [])
+        setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
+      } catch (e) {
+        if (!ignore) setError(e?.message || 'Failed to load lookups')
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    }
+    void run()
+    return () => {
+      ignore = true
+    }
+  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
+
+  const filteredLessons = useMemo(() => {
     if (!hasSearched) return []
     const q = search.trim().toLowerCase()
-    return lessonStatuses.filter((r) => {
-      const matchesSearch =
-        !q ||
-        [r.school, r.academicYear, r.className, r.subject,
-          r.lessonStartDate, r.lessonEndDate, r.lessonStatus,
-          r.topicStartDate, r.topicEndDate, r.topicStatus]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesYear = filters.academicYear === 'Select' || r.academicYear === filters.academicYear
-      const matchesClass = filters.className === 'Select' || r.className === filters.className
-      const matchesSubject = filters.subject === 'Select' || r.subject === filters.subject
-      return matchesSearch && matchesSchool && matchesYear && matchesClass && matchesSubject
+    if (!q) return lessons
+    return lessons.filter((l) => {
+      const lessonText = `${l.lessonName || ''} ${l.lessonStatus || ''}`
+      const topicText = Array.isArray(l.topics) ? l.topics.map((t) => `${t.topicName || ''} ${t.topicStatus || ''}`).join(' ') : ''
+      return `${lessonText} ${topicText}`.toLowerCase().includes(q)
     })
-  }, [search, filters, hasSearched])
+  }, [lessons, search, hasSearched])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
-  }
-
-  const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-    setFindErrors((prev) => ({ ...prev, [id]: '' }))
-  }
+  const selectedLesson = useMemo(() => {
+    return lessons.find((l) => String(l.lessonId) === String(selectedLessonId)) || null
+  }, [lessons, selectedLessonId])
 
   const validateFind = () => {
     const errs = {}
-    if (pendingFilters.school === 'Select') errs.school = 'School Name is required.'
+    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
     if (pendingFilters.academicYear === 'Select') errs.academicYear = 'Academic Year is required.'
-    if (pendingFilters.className === 'Select') errs.className = 'Class is required.'
-    if (pendingFilters.subject === 'Select') errs.subject = 'Subject is required.'
+    if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
+    if (pendingFilters.subjectId === 'Select') errs.subjectId = 'Subject is required.'
     return errs
   }
 
-  const handleApplyFilters = (e) => {
+  const reloadPageData = async (nextFilters = filters) => {
+    const data = await fetchLessonStatusPageData({
+      schoolId: nextFilters.schoolId,
+      academicYear: nextFilters.academicYear,
+      classId: nextFilters.classId,
+      subjectId: nextFilters.subjectId,
+    })
+    const nextLessons = Array.isArray(data?.lessons) ? data.lessons : []
+    setLessons(nextLessons)
+    if (nextLessons.length > 0) {
+      const keep = nextLessons.some((l) => String(l.lessonId) === String(selectedLessonId))
+      setSelectedLessonId(keep ? selectedLessonId : nextLessons[0].lessonId)
+    } else {
+      setSelectedLessonId(null)
+    }
+  }
+
+  const handleApplyFilters = async (e) => {
     e.preventDefault()
+    if (isStudentScope) return
     const errs = validateFind()
     if (Object.keys(errs).length > 0) {
       setFindErrors(errs)
       return
     }
-    setFindErrors({})
-    setFilters(pendingFilters)
-    setCurrentPage(1)
-    setHasSearched(true)
-    setIsFindSidebarOpen(false)
+    try {
+      setFindErrors({})
+      setError('')
+      setLoading(true)
+      const next = { ...pendingFilters }
+      setFilters(next)
+      setHasSearched(true)
+      setIsFindSidebarOpen(false)
+      await reloadPageData(next)
+    } catch (e2) {
+      setError(e2?.message || 'Failed to load lesson status')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleResetFilters = () => {
+    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setFindErrors({})
-    setCurrentPage(1)
     setHasSearched(false)
+    setLessons([])
+    setSelectedLessonId(null)
+    setSearch('')
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target
+    setPendingFilters((prev) => {
+      if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
+      if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
+      return { ...prev, [id]: value }
+    })
+    setFindErrors((prev) => ({ ...prev, [id]: '' }))
   }
+
+  const updateLessonInState = (lessonId, patch) => {
+    setLessons((prev) => prev.map((l) => (String(l.lessonId) === String(lessonId) ? { ...l, ...patch } : l)))
+  }
+
+  const updateTopicInState = (topicId, patch) => {
+    setLessons((prev) =>
+      prev.map((l) => {
+        const topics = Array.isArray(l.topics) ? l.topics : []
+        if (!topics.some((t) => String(t.topicId) === String(topicId))) return l
+        return { ...l, topics: topics.map((t) => (String(t.topicId) === String(topicId) ? { ...t, ...patch } : t)) }
+      }),
+    )
+  }
+
+  const handleTopicStatusChange = async (topic, nextStatus) => {
+    if (!topic?.topicId) return
+    try {
+      setSaving(true)
+      setError('')
+      const res = await updateTopicStatus({ topicId: topic.topicId, status: nextStatus })
+      updateTopicInState(topic.topicId, { topicStatus: res?.topicStatus || nextStatus })
+      if (res?.lessonId && res?.lessonStatus) {
+        updateLessonInState(res.lessonId, { lessonStatus: res.lessonStatus })
+      } else if (selectedLessonId) {
+        await reloadPageData(filters)
+      }
+    } catch (e) {
+      setError(e?.message || 'Failed to update topic status')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLessonStatusChange = async (lesson, nextStatus) => {
+    if (!lesson?.lessonId) return
+    if (nextStatus === 'COMPLETED' && !canCompleteLesson(lesson)) return
+    try {
+      setSaving(true)
+      setError('')
+      const res = await updateLessonStatus({ lessonId: lesson.lessonId, status: nextStatus })
+      updateLessonInState(lesson.lessonId, { lessonStatus: res?.lessonStatus || nextStatus })
+    } catch (e) {
+      setError(e?.message || 'Failed to update lesson status')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const classOptions = useMemo(() => {
+    return classesLookup
+      .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
+      .slice()
+      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
+  }, [classesLookup, pendingFilters.schoolId])
+
+  const subjectOptions = useMemo(() => {
+    return subjectsLookup
+      .filter((s) => {
+        if (pendingFilters.schoolId !== 'Select' && String(s.schoolId) !== String(pendingFilters.schoolId)) return false
+        if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+        return true
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+  }, [subjectsLookup, pendingFilters.schoolId, pendingFilters.classId])
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Lesson Status</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Lesson Status</span>
@@ -236,95 +293,38 @@ const LessonStatus = () => {
         </div>
       </div>
 
-      {/* Table Card */}
+      {error ? (
+        <div className="card mb-16">
+          <div className="card-body px-20 py-12 text-danger-600">{error}</div>
+        </div>
+      ) : null}
+
       <div className="card h-100">
-        <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
+        <div className="card-body p-0">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
-              <div className="dropdown">
+              {!isStudentScope ? (
                 <button
                   type="button"
                   className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
+                  onClick={() => setIsFindSidebarOpen(true)}
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Find</span>
+                  <span>
+                    <i className="ri-arrow-right-line"></i>
                   </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Find */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFindSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Find</span>
-                <span><i className="ri-arrow-right-line"></i></span>
-              </button>
-
-              {/* Columns */}
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  {columnOptions.map((column) => (
-                    <li key={column.key}>
-                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
-                        {column.label}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Rows per page */}
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-              >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              ) : null}
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search lesson status..."
+                placeholder="Search lessons/topics..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
+                disabled={!hasSearched}
+                onChange={(e) => setSearch(e.target.value)}
               />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
@@ -332,202 +332,184 @@ const LessonStatus = () => {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1000 }}>
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={handleSelectAll}
-                      />
-                      <label className="form-check-label">S.L</label>
+          <div className="p-20">
+            <div className="row g-16">
+              <div className="col-12 col-lg-5">
+                <div className="border rounded">
+                  <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">Lessons</div>
+                  <div className="table-responsive">
+                    <table className="table table-striped align-middle mb-0">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '70%' }}>Lesson</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {!hasSearched ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                <FindEmptyState
+                                  title="Lesson Status"
+                                  description="Use the Find button to select School, Academic Year, Class and Subject to load lesson statuses."
+                                  buttonLabel="Find Lesson Status"
+                                  onFind={() => setIsFindSidebarOpen(true)}
+                                />
+                              </td>
+                            </tr>
+                          ) : loading ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                Loading...
+                              </td>
+                            </tr>
+                          ) : filteredLessons.length === 0 ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                No lessons found.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredLessons.map((l) => {
+                              const isActive = String(l.lessonId) === String(selectedLessonId)
+                              const allowComplete = canCompleteLesson(l)
+                              return (
+                                <tr
+                                  key={l.lessonId}
+                                  onClick={() => {
+                                    if (!hasSearched || loading) return
+                                    setSelectedLessonId(l.lessonId)
+                                  }}
+                                  style={{ cursor: 'pointer', background: isActive ? '#f8fafc' : undefined }}
+                                >
+                                  <td className="fw-medium text-primary-light">{l.lessonName || `Lesson ${l.lessonId}`}</td>
+                                  <td>
+                                    <select
+                                      className="form-select form-select-sm"
+                                      value={l.lessonStatus || 'YET_TO_START'}
+                                      disabled={!canManageLessonStatus || saving}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={(e) => handleLessonStatusChange(l, e.target.value)}
+                                    >
+                                      {STATUS_OPTIONS.map((o) => (
+                                        <option key={o.value} value={o.value} disabled={o.value === 'COMPLETED' && !allowComplete}>
+                                          {o.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {!allowComplete && String(l.lessonStatus || 'YET_TO_START') !== 'COMPLETED' ? (
+                                      <div className="text-secondary-light text-xs mt-4">Complete all topics first.</div>
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          )}
+                        </tbody>
+                      </table>
                     </div>
-                  </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.academicYear ? <th scope="col">Academic Year</th> : null}
-                  {visibleColumns.className ? <th scope="col">Class</th> : null}
-                  {visibleColumns.subject ? <th scope="col">Subject</th> : null}
-                  {visibleColumns.lessonInfo ? <th scope="col">Lesson / Start Date — End Date / Status</th> : null}
-                  {visibleColumns.topicInfo ? <th scope="col">Topic / Start Date — End Date / Status</th> : null}
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!hasSearched ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + 1} className="text-center py-40">
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <i className="ri-search-line" style={{ fontSize: '1.5rem', color: '#45597a' }}></i>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#45597a' }}>Lesson Status</p>
-                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#7a8a9a' }}>
-                          Use the <strong>Find</strong> button to select School, Academic Year, Class and Subject to load results.
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-primary-600 d-flex align-items-center gap-6"
-                          style={{ marginTop: '0.25rem' }}
-                          onClick={() => setIsFindSidebarOpen(true)}
-                        >
-                          <i className="ri-filter-3-line"></i> Find Lesson Status
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
-                      No lesson status records found for the selected criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
-                      <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
-                          />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.academicYear ? (
-                        <td>
-                          <span className="bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.academicYear}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.className ? (
-                        <td className="fw-medium text-primary-light">{row.className}</td>
-                      ) : null}
-                      {visibleColumns.subject ? (
-                        <td>
-                          <span className="bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm">
-                            {row.subject}
-                          </span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.lessonInfo ? (
-                        <td>
-                          <DateRangeWithStatus
-                            startDate={row.lessonStartDate}
-                            endDate={row.lessonEndDate}
-                            status={row.lessonStatus}
-                            startIcon="ri-calendar-2-line"
-                            endIcon="ri-calendar-check-line"
-                          />
-                        </td>
-                      ) : null}
-                      {visibleColumns.topicInfo ? (
-                        <td>
-                          <DateRangeWithStatus
-                            startDate={row.topicStartDate}
-                            endDate={row.topicEndDate}
-                            status={row.topicStatus}
-                            startIcon="ri-bookmark-line"
-                            endIcon="ri-bookmark-fill"
-                          />
-                        </td>
-                      ) : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </div>
+                </div>
+              </div>
 
-          {/* Pagination — only shown after search */}
-          {hasSearched && (
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-              <span className="text-sm text-secondary-light">
-                Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-                {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-              </span>
-              <div className="d-flex align-items-center gap-8">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-light border"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Prev
-                </button>
-                {getVisiblePages().map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                    onClick={() => setCurrentPage(p)}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="btn btn-sm btn-light border"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
+              <div className="col-12 col-lg-7">
+                <div className="border rounded">
+                  <div className="px-16 py-12 border-bottom fw-semibold text-primary-light">
+                    Topics {selectedLesson ? <span className="text-secondary-light">/ {selectedLesson.lessonName}</span> : null}
+                  </div>
+                  <div className="table-responsive">
+                    <table className="table table-striped align-middle mb-0">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '60%' }}>Topic</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {!hasSearched ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                <FindEmptyState
+                                  title="Lesson Status"
+                                  description="Use the Find button to select School, Academic Year, Class and Subject to load lesson statuses."
+                                  buttonLabel="Find Lesson Status"
+                                  onFind={() => setIsFindSidebarOpen(true)}
+                                />
+                              </td>
+                            </tr>
+                          ) : loading ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                Loading...
+                              </td>
+                            </tr>
+                          ) : !selectedLesson ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                Select a lesson to view topics.
+                              </td>
+                            </tr>
+                          ) : (selectedLesson.topics || []).length === 0 ? (
+                            <tr>
+                              <td colSpan={2} className="text-center py-20 text-secondary-light">
+                                No topics under this lesson.
+                              </td>
+                            </tr>
+                          ) : (
+                            (selectedLesson.topics || []).map((t) => (
+                              <tr key={t.topicId}>
+                                <td className="fw-medium text-primary-light">{t.topicName || `Topic ${t.topicId}`}</td>
+                                <td>
+                                  <select
+                                    className="form-select form-select-sm"
+                                    value={t.topicStatus || 'YET_TO_START'}
+                                    disabled={!canManageLessonStatus || saving}
+                                    onChange={(e) => handleTopicStatusChange(t, e.target.value)}
+                                  >
+                                    {STATUS_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Find Sidebar */}
-      <SlideSidebar
-        isOpen={isFindSidebarOpen}
-        title="Find Lesson Status"
-        onClose={() => setIsFindSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+          </div>
+      {!isStudentScope ? (
+        <SlideSidebar
+          isOpen={isFindSidebarOpen}
+          title="Find Lesson Status"
+          onClose={() => setIsFindSidebarOpen(false)}
+          className="filter-sidebar"
+        >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-
           <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School Name <span className="text-danger-600">*</span>
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School <span className="text-danger-600">*</span>
             </label>
             <select
-              id="school"
-              className={`form-control form-select${findErrors.school ? ' is-invalid' : ''}`}
-              value={pendingFilters.school}
+              id="schoolId"
+              className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`}
+              value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">--Select School--</option>
-              {schoolOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+              {schoolsLookup.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.schoolName}
+                </option>
+              ))}
             </select>
-            {findErrors.school && <div className="text-danger-600 text-sm mt-4">{findErrors.school}</div>}
+            {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>
@@ -541,42 +523,56 @@ const LessonStatus = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">--Select--</option>
-              {academicYearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+              {ACADEMIC_YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
             </select>
-            {findErrors.academicYear && <div className="text-danger-600 text-sm mt-4">{findErrors.academicYear}</div>}
+            {findErrors.academicYear ? <div className="text-danger-600 text-sm mt-4">{findErrors.academicYear}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Class <span className="text-danger-600">*</span>
             </label>
             <select
-              id="className"
-              className={`form-control form-select${findErrors.className ? ' is-invalid' : ''}`}
-              value={pendingFilters.className}
+              id="classId"
+              className={`form-control form-select${findErrors.classId ? ' is-invalid' : ''}`}
+              value={pendingFilters.classId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">--Select--</option>
-              {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              {classOptions.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.className}
+                </option>
+              ))}
             </select>
-            {findErrors.className && <div className="text-danger-600 text-sm mt-4">{findErrors.className}</div>}
+            {findErrors.classId ? <div className="text-danger-600 text-sm mt-4">{findErrors.classId}</div> : null}
           </div>
 
           <div>
-            <label htmlFor="subject" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="subjectId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Subject <span className="text-danger-600">*</span>
             </label>
             <select
-              id="subject"
-              className={`form-control form-select${findErrors.subject ? ' is-invalid' : ''}`}
-              value={pendingFilters.subject}
+              id="subjectId"
+              className={`form-control form-select${findErrors.subjectId ? ' is-invalid' : ''}`}
+              value={pendingFilters.subjectId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">--Select--</option>
-              {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              {subjectOptions.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
             </select>
-            {findErrors.subject && <div className="text-danger-600 text-sm mt-4">{findErrors.subject}</div>}
+            {findErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{findErrors.subjectId}</div> : null}
           </div>
+
+          <div></div>
 
           <div>
             <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
@@ -584,15 +580,15 @@ const LessonStatus = () => {
             </button>
           </div>
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100">
+            <button type="submit" className="btn btn-primary-600 w-100" disabled={loading}>
               Apply
             </button>
           </div>
-        </form>
-      </SlideSidebar>
+          </form>
+        </SlideSidebar>
+      ) : null}
     </div>
   )
 }
 
 export default LessonStatus
-

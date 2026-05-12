@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { fetchSchoolsPage } from '../apis/schoolsApi'
 import {
   createStudentType,
@@ -71,6 +73,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const StudentType = () => {
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
   // ── Data state ──────────────────────────────────────────────────────────────
   const [studentTypes, setStudentTypes] = useState([])
   const [schools, setSchools] = useState([])
@@ -100,6 +104,10 @@ const StudentType = () => {
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const roleUpper = String(role || '').toUpperCase()
+  const isTeacherScope = roleUpper === 'TEACHER'
+  const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolvedSchoolLabel = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
 
   // ── Derived options ──────────────────────────────────────────────────────────
   const studentTypeOptions = useMemo(
@@ -166,6 +174,12 @@ const StudentType = () => {
       .catch(() => setSchools([]))
   }, [])
 
+  useEffect(() => {
+    if (!isTeacherScope || !resolvedSchoolLabel) return
+    setPendingFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
+    setFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
+  }, [isTeacherScope, resolvedSchoolLabel])
+
   // ── Selection helpers ────────────────────────────────────────────────────────
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -189,6 +203,7 @@ const StudentType = () => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
+    if (isTeacherScope && id === 'school') return
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
@@ -200,8 +215,11 @@ const StudentType = () => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const next = isTeacherScope
+      ? { ...emptyFilters, school: resolvedSchoolLabel || 'Select' }
+      : emptyFilters
+    setPendingFilters(next)
+    setFilters(next)
     setCurrentPage(1)
   }
 
@@ -209,7 +227,7 @@ const StudentType = () => {
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(emptyForm)
+    setAddForm(isTeacherScope && resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
   }
@@ -218,7 +236,7 @@ const StudentType = () => {
     setError('')
     setEditingId(row.id)
     setEditForm({
-      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      schoolId: isTeacherScope ? resolvedSchoolId : row.schoolId != null ? String(row.schoolId) : '',
       studentType: row.studentType || '',
       note: row.note || '',
     })
@@ -228,7 +246,9 @@ const StudentType = () => {
 
   // ── CRUD handlers ────────────────────────────────────────────────────────────
   const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    schoolId: isTeacherScope
+      ? (resolvedSchoolId ? Number(resolvedSchoolId) : null)
+      : (form.schoolId ? Number(form.schoolId) : null),
     studentType: form.studentType || '',
     note: form.note || '',
   })
@@ -302,6 +322,8 @@ const StudentType = () => {
     return map
   }, [schools])
 
+  const teacherSchoolName = resolvedSchoolLabel || schoolNameById[resolvedSchoolId] || ''
+
   const getSchoolName = (row) =>
     row.schoolName || row.school || schoolNameById[row.schoolId] || '-'
 
@@ -311,19 +333,23 @@ const StudentType = () => {
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
         <FormField label="School Name" required full>
-          <select
-            className="avm-select"
-            id="schoolId"
-            value={form.schoolId}
-            onChange={handleChange(setter)}
-          >
-            <option value="">-- Select School --</option>
-            {schools.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.schoolName}
-              </option>
-            ))}
-          </select>
+          {isTeacherScope ? (
+            <input type="text" className="avm-input" value={teacherSchoolName} readOnly />
+          ) : (
+            <select
+              className="avm-select"
+              id="schoolId"
+              value={form.schoolId}
+              onChange={handleChange(setter)}
+            >
+              <option value="">-- Select School --</option>
+              {schools.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.schoolName}
+                </option>
+              ))}
+            </select>
+          )}
         </FormField>
 
         <FormField label="Student Type" required full>
@@ -654,17 +680,21 @@ const StudentType = () => {
             <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
             </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolFilterOptions.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+            {isTeacherScope ? (
+              <input type="text" className="form-control" value={teacherSchoolName} readOnly />
+            ) : (
+              <select
+                id="school"
+                className="form-control form-select"
+                value={pendingFilters.school}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select School</option>
+                {schoolFilterOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>

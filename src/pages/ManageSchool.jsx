@@ -3,7 +3,9 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createSchool, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
+import { createSchoolWithAdmin, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -14,6 +16,9 @@ const emptyForm = {
   subscription: 'Standard',
   isDemo: 'No',
   status: 'Active',
+  adminUsername: '',
+  adminPassword: '',
+  headOfficeId: '',
   address: '',
   phone: '',
   registrationDate: '',
@@ -80,6 +85,8 @@ const FIELD_ICONS = {
   'Pinterest URL': 'ri-pinterest-line',
   'Frontend Logo': 'ri-image-line',
   'Admin Logo': 'ri-image-2-line',
+  'School Admin Username': 'ri-user-3-line',
+  'School Admin Password': 'ri-lock-password-line',
 }
 
 const columnOptions = [
@@ -102,10 +109,26 @@ const onlineAdmissionOptions = ['Yes', 'No']
 const examResultOptions = ['Average of All Exam', 'Highest Mark', 'Lowest Mark', 'Grade Only']
 
 const getStatusBadge = (status) => {
-  if (status === 'Active') {
+  const v = String(status || '').trim().toUpperCase()
+  if (v === 'ACTIVE' || status === 'Active') {
     return <span className="bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm">Active</span>
   }
   return <span className="bg-danger-100 text-danger-600 px-12 py-4 radius-4 fw-medium text-sm">Inactive</span>
+}
+
+const toUiStatus = (status) => {
+  const v = String(status || '').trim().toUpperCase()
+  if (v === 'ACTIVE') return 'Active'
+  if (v === 'INACTIVE') return 'Inactive'
+  return status || 'Active'
+}
+
+const toApiStatus = (status) => {
+  const v = String(status || '').trim().toUpperCase()
+  if (v === 'ACTIVE' || v === 'INACTIVE') return v
+  if (String(status || '').trim() === 'Active') return 'ACTIVE'
+  if (String(status || '').trim() === 'Inactive') return 'INACTIVE'
+  return v || 'ACTIVE'
 }
 
 const getIsDemoBadge = (isDemo) => {
@@ -150,7 +173,9 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ManageSchool = () => {
+  const { role, headOfficeId: currentHeadOfficeId, headOfficeName: currentHeadOfficeName } = useAuth()
   const [schools, setSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -182,11 +207,25 @@ const ManageSchool = () => {
   const [editAdminLogoInputKey, setEditAdminLogoInputKey] = useState(0)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeScoped = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
 
   const schoolOptions = useMemo(
     () => Array.from(new Set(schools.map((item) => item.schoolName))).sort(),
     [schools],
   )
+
+  const headOfficeOptions = useMemo(() => {
+    const fromApi = Array.isArray(headOffices) ? headOffices : []
+    const normalized = fromApi
+      .map((row) => ({ id: row?.id, name: row?.name || row?.headOfficeName || '' }))
+      .filter((row) => row.id != null && row.name)
+    if (isHeadOfficeScoped && currentHeadOfficeId != null && currentHeadOfficeName) {
+      const exists = normalized.some((row) => String(row.id) === String(currentHeadOfficeId))
+      if (!exists) normalized.unshift({ id: currentHeadOfficeId, name: currentHeadOfficeName })
+    }
+    return normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [currentHeadOfficeId, currentHeadOfficeName, headOffices, isHeadOfficeScoped])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -270,7 +309,10 @@ const ManageSchool = () => {
   const openAdd = () => {
     setError('')
     setEditingSchoolId(null)
-    setAddForm(emptyForm)
+    setAddForm({
+      ...emptyForm,
+      headOfficeId: isHeadOfficeScoped && currentHeadOfficeId != null ? String(currentHeadOfficeId) : '',
+    })
     setAddFrontendLogoPreview(null)
     setAddAdminLogoPreview(null)
     setAddFrontendLogoInputKey((k) => k + 1)
@@ -288,7 +330,7 @@ const ManageSchool = () => {
       schoolName: row.schoolName || '',
       subscription: row.subscription || 'Standard',
       isDemo: row.isDemo || 'No',
-      status: row.status || 'Active',
+      status: toUiStatus(row.status),
       address: row.address || '',
       phone: row.phone || '',
       registrationDate: row.registrationDate || '',
@@ -312,6 +354,9 @@ const ManageSchool = () => {
       youtubeUrl: row.youtubeUrl || '',
       instagramUrl: row.instagramUrl || '',
       pinterestUrl: row.pinterestUrl || '',
+      headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : (isHeadOfficeScoped && currentHeadOfficeId != null ? String(currentHeadOfficeId) : ''),
+      adminUsername: row.adminUsername || '',
+      adminPassword: '',
       frontendLogo: null,
       adminLogo: null,
     })
@@ -328,14 +373,17 @@ const ManageSchool = () => {
     setError('')
     try {
       const data = await fetchSchoolsPage(currentPage - 1, rowsPerPage)
+      const normalizeRows = (rows) =>
+        (Array.isArray(rows) ? rows : []).map((r) => ({ ...r, status: toUiStatus(r?.status) }))
+
       if (Array.isArray(data)) {
-        setSchools(data)
+        setSchools(normalizeRows(data))
         setTotalElements(data.length)
         const nextTotalPages = 1
         setTotalPages(nextTotalPages)
         setCurrentPage((prev) => (prev > nextTotalPages ? nextTotalPages : prev))
       } else {
-        setSchools(Array.isArray(data?.content) ? data.content : [])
+        setSchools(normalizeRows(Array.isArray(data?.content) ? data.content : []))
         setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
         const nextTotalPages = Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1)
         setTotalPages(nextTotalPages)
@@ -352,6 +400,21 @@ const ManageSchool = () => {
     }
   }, [currentPage, rowsPerPage])
 
+  const loadHeadOffices = useCallback(async () => {
+    if (!isSuperAdmin) {
+      if (isHeadOfficeScoped && currentHeadOfficeId != null && currentHeadOfficeName) {
+        setHeadOffices([{ id: currentHeadOfficeId, name: currentHeadOfficeName }])
+      }
+      return
+    }
+    try {
+      const page = await fetchHeadOfficesPage(0, 500)
+      setHeadOffices(Array.isArray(page?.content) ? page.content : [])
+    } catch {
+      setHeadOffices([])
+    }
+  }, [currentHeadOfficeId, currentHeadOfficeName, isHeadOfficeScoped, isSuperAdmin])
+
   useEffect(() => {
     const fetchData = async () => {
       await loadSchools()
@@ -359,13 +422,17 @@ const ManageSchool = () => {
     void fetchData()
   }, [currentPage, rowsPerPage, loadSchools])
 
+  useEffect(() => {
+    void loadHeadOffices()
+  }, [loadHeadOffices])
+
   const buildSchoolPayload = (form) => ({
     schoolUrl: form.schoolUrl || '',
     schoolCode: form.schoolCode || '',
     schoolName: form.schoolName || '',
     subscription: form.subscription || 'Standard',
     isDemo: form.isDemo || 'No',
-    status: form.status || 'Active',
+    status: toApiStatus(form.status),
     address: form.address || '',
     phone: form.phone || '',
     registrationDate: form.registrationDate || '',
@@ -389,15 +456,32 @@ const ManageSchool = () => {
     youtubeUrl: form.youtubeUrl || '',
     instagramUrl: form.instagramUrl || '',
     pinterestUrl: form.pinterestUrl || '',
+    headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
+    adminUsername: form.adminUsername || '',
+    adminPassword: form.adminPassword || '',
   })
 
   const handleCreateSchool = async () => {
     if (saving) return
-    setSaving(true)
     setError('')
     try {
+      if (isSuperAdmin && !addForm.headOfficeId) {
+        setError('Head office is required')
+        return
+      }
+      if (!String(addForm.adminUsername || '').trim() || !String(addForm.adminPassword || '').trim()) {
+        setError('School admin username and password are required')
+        return
+      }
+      setSaving(true)
       const payload = buildSchoolPayload(addForm)
-      await createSchool(payload, addForm)
+      await createSchoolWithAdmin(
+        {
+          school: payload,
+          admin: { username: addForm.adminUsername || '', password: addForm.adminPassword || '' },
+        },
+        addForm,
+      )
       setIsAddOpen(false)
       setAddForm(emptyForm)
       setAddStep(0)
@@ -546,6 +630,57 @@ const ManageSchool = () => {
                   ))}
                 </select>
               </FormField>
+
+              <FormField label="Head Office" required full>
+                {isSuperAdmin ? (
+                  <select
+                    id="headOfficeId"
+                    className="avm-input"
+                    value={form.headOfficeId || ''}
+                    onChange={handleChange(setter)}
+                  >
+                    <option value="">--Select Head Office--</option>
+                    {headOfficeOptions.map((option) => (
+                      <option key={option.id} value={String(option.id)}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="avm-input"
+                    value={currentHeadOfficeName || 'Linked automatically'}
+                    disabled
+                  />
+                )}
+              </FormField>
+
+              {setter === setAddForm || setter === setEditForm ? (
+                <>
+                  <FormField label="School Admin Username" required={setter === setAddForm} full>
+                    <input
+                      type="text"
+                      className="avm-input"
+                      id="adminUsername"
+                      placeholder={setter === setAddForm ? 'School admin username' : 'Leave blank to keep current username'}
+                      value={form.adminUsername || ''}
+                      onChange={handleChange(setter)}
+                    />
+                  </FormField>
+
+                  <FormField label="School Admin Password" required={setter === setAddForm} full>
+                    <input
+                      type="password"
+                      className="avm-input"
+                      id="adminPassword"
+                      placeholder={setter === setAddForm ? 'School admin password' : 'Leave blank to keep current password'}
+                      value={form.adminPassword || ''}
+                      onChange={handleChange(setter)}
+                    />
+                  </FormField>
+                </>
+              ) : null}
 
               <FormField label="Address" required full>
                 <textarea

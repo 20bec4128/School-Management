@@ -12,6 +12,8 @@ import {
   fetchStudentActivitiesPage,
   updateStudentActivity,
 } from '../apis/studentActivityApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
@@ -213,6 +215,8 @@ const useStudentActivityLookups = (form, enabled) => {
 }
 
 const StudentActivity = () => {
+  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
   // ── Data state ──────────────────────────────────────────────────────────────
   const [activities, setActivities] = useState([])
   const [schools, setSchools] = useState([])
@@ -222,6 +226,10 @@ const StudentActivity = () => {
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const resolvedSchoolId = activeSchoolId || authSchoolId || ''
+  const resolvedSchoolName = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
+  const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const isSchoolLocked = Boolean(scopedSchoolId)
 
   // ── Table state ──────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('')
@@ -245,7 +253,19 @@ const StudentActivity = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   // ── Derived options ──────────────────────────────────────────────────────────
-  const schoolOptions = useMemo(() => schools.map(s => ({ id: s.id, name: s.schoolName })), [schools])
+  const effectiveSchoolList = useMemo(() => {
+    const list = (Array.isArray(schools) ? schools : [])
+      .map((school) => ({ id: school?.id, name: school?.schoolName || school?.name || '' }))
+      .filter((school) => school.id != null && school.name)
+
+    if (!scopedSchoolId) {
+      return list.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    }
+
+    const selected = list.find((school) => String(school.id) === String(scopedSchoolId))
+    if (selected) return [selected]
+    return [{ id: scopedSchoolId, name: resolvedSchoolName || `School ${scopedSchoolId}` }]
+  }, [resolvedSchoolName, schools, scopedSchoolId])
   
   const filterClassOptions = useMemo(() => {
     const classes = new Set()
@@ -355,7 +375,7 @@ const StudentActivity = () => {
       setError('')
       try {
         const apiFilters = {
-          schoolId: filters.schoolId !== 'Select' ? filters.schoolId : null,
+          schoolId: scopedSchoolId || (filters.schoolId !== 'Select' ? filters.schoolId : null),
           className: filters.className !== 'Select' ? filters.className : null,
           section: filters.section !== 'Select' ? filters.section : null,
         }
@@ -382,7 +402,7 @@ const StudentActivity = () => {
     }
     load()
     return () => { cancelled = true }
-  }, [currentPage, rowsPerPage, refreshKey, filters])
+  }, [currentPage, rowsPerPage, refreshKey, filters, scopedSchoolId])
 
   // ── Load schools for dropdown ────────────────────────────────────────────────
   useEffect(() => {
@@ -393,6 +413,11 @@ const StudentActivity = () => {
       })
       .catch(() => setSchools([]))
   }, [])
+
+  useEffect(() => {
+    setCurrentPage(1)
+    setSelectedRows([])
+  }, [scopedSchoolId])
 
   // ── Selection helpers ────────────────────────────────────────────────────────
   const handleSelectAll = (e) => {
@@ -494,7 +519,11 @@ const StudentActivity = () => {
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(emptyForm)
+    setAddForm({
+      ...emptyForm,
+      schoolId: scopedSchoolId ? String(scopedSchoolId) : '',
+      schoolName: resolvedSchoolName || '',
+    })
     setStudents([])
     setAddStep(0)
     setIsAddOpen(true)
@@ -505,8 +534,8 @@ const StudentActivity = () => {
     setEditingId(row.id)
     setEditForm({
       id: row.id,
-      schoolId: row.schoolId || '',
-      schoolName: row.schoolName || '',
+      schoolId: row.schoolId || (scopedSchoolId ? String(scopedSchoolId) : ''),
+      schoolName: row.schoolName || resolvedSchoolName || '',
       classId: row.classId ? String(row.classId) : '',
       className: row.className || '',
       sectionId: row.sectionId ? String(row.sectionId) : '',
@@ -617,10 +646,11 @@ const StudentActivity = () => {
                 className="avm-select" 
                 id="schoolId" 
                 value={form.schoolId} 
+                disabled={isSchoolLocked}
               onChange={handleChange(setter, currentStudents)}
               >
               <option value="">--Select School--</option>
-              {schoolOptions.map((school) => (
+              {effectiveSchoolList.map((school) => (
                 <option key={school.id} value={school.id}>
                   {school.name}
                 </option>
@@ -1048,11 +1078,12 @@ const StudentActivity = () => {
             <select
               id="schoolId"
               className="form-control form-select"
-              value={pendingFilters.schoolId}
+              value={isSchoolLocked ? scopedSchoolId : pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
+              disabled={isSchoolLocked}
             >
               <option value="Select">Select School</option>
-              {schoolOptions.map((school) => (
+              {effectiveSchoolList.map((school) => (
                 <option key={school.id} value={school.id}>
                   {school.name}
                 </option>

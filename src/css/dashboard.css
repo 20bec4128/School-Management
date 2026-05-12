@@ -80,6 +80,65 @@
   font-weight: 700;
 }
 
+.cr-month-calendar__header {
+  align-items: flex-start;
+}
+
+.cr-month-calendar__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cr-month-calendar__week,
+.cr-month-calendar__grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.cr-month-calendar__day {
+  min-height: clamp(42px, 5vw, 56px);
+  width: 100%;
+}
+
+.cr-month-calendar__day.is-empty {
+  min-height: clamp(42px, 5vw, 56px);
+}
+
+.cr-month-calendar__viewport {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cr-month-calendar__surface {
+  min-width: 560px;
+}
+
+@media (max-width: 991.98px) {
+  .cr-month-calendar__header {
+    gap: 12px;
+  }
+
+  .cr-month-calendar__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .cr-month-calendar__surface {
+    min-width: 520px;
+  }
+
+  .cr-month-calendar__day {
+    min-height: 42px;
+    padding: 7px !important;
+  }
+
+  .cr-month-calendar__day .text-sm {
+    font-size: 11px !important;
+  }
+}
+
 /* Top Student: make ring + labels align like the reference */
 .top-student-row .top-student-name {
   font-weight: 600;

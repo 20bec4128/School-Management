@@ -2007,7 +2007,7 @@ const Dashboard = () => {
         <div className="">
           <p className="mb-0 text-center">
             {' '}
-            &copy; <span className="current-year"></span> Made With &#10084; by Wowtheme7.
+            &copy; <span className="current-year"></span> Made With &#10084;
           </p>
         </div>
       </footer>

@@ -1,4 +1,5 @@
-const SlideSidebar = ({ isOpen, title, onClose, children, className = '' }) => {
+const SlideSidebar = ({ isOpen, show, title, onClose, children, className = '' }) => {
+  const resolvedOpen = isOpen ?? show ?? false
   const panelClass = [
     className,
     'bg-white',
@@ -13,7 +14,7 @@ const SlideSidebar = ({ isOpen, title, onClose, children, className = '' }) => {
     'translate-x-full',
     'duration-300',
     'active-translate-0',
-    isOpen ? 'active' : '',
+    resolvedOpen ? 'active' : '',
   ]
     .filter(Boolean)
     .join(' ')

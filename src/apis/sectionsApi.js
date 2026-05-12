@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 const SECTIONS_API_BASE = '/api/sections'
 
 const readApiError = async (res) => {
@@ -24,14 +26,14 @@ export const fetchSections = async ({ schoolId, classId } = {}) => {
   if (classId != null && classId !== '') qs.set('classId', String(classId))
   const url = qs.toString() ? `${SECTIONS_API_BASE}?${qs.toString()}` : SECTIONS_API_BASE
 
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()
   return unwrapCollection(data)
 }
 
 export const createSection = async (payload) => {
-  const res = await fetch(SECTIONS_API_BASE, {
+  const res = await apiFetch(SECTIONS_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -41,7 +43,7 @@ export const createSection = async (payload) => {
 }
 
 export const updateSection = async (id, payload) => {
-  const res = await fetch(`${SECTIONS_API_BASE}/${id}`, {
+  const res = await apiFetch(`${SECTIONS_API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -51,7 +53,7 @@ export const updateSection = async (id, payload) => {
 }
 
 export const deleteSection = async (id) => {
-  const res = await fetch(`${SECTIONS_API_BASE}/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`${SECTIONS_API_BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }

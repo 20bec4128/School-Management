@@ -1,0 +1,19 @@
+{
+  "common.search": "खोजें",
+  "common.back": "वापस",
+  "common.theme": "थीम",
+  "common.language": "भाषा",
+  "common.notifications": "सूचनाएं",
+  "common.profile": "प्रोफ़ाइल",
+  "common.settings": "सेटिंग्स",
+  "common.logout": "लॉग आउट",
+
+  "topbar.choose_language": "अपनी भाषा चुनें",
+  "topbar.see_all_notifications": "सभी सूचनाएं देखें",
+
+  "bottomnav.dashboard": "डैशबोर्ड",
+  "bottomnav.attendance": "उपस्थिति",
+  "bottomnav.teachers": "शिक्षक",
+  "bottomnav.students": "छात्र",
+  "bottomnav.more": "और"
+}
