@@ -19,6 +19,9 @@ public class Designation {
     private Long schoolId;
 
     @Column(nullable = false)
+    private String role;
+
+    @Column(nullable = false)
     private String name;
 
     @Column(columnDefinition = "TEXT")
@@ -43,6 +46,14 @@ public class Designation {
         this.schoolId = schoolId;
     }
 
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
     public String getName() {
         return name;
     }
@@ -59,4 +70,3 @@ public class Designation {
         this.note = note;
     }
 }
-

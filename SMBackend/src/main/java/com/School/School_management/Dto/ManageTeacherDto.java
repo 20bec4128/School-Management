@@ -21,6 +21,8 @@ public class ManageTeacherDto {
     private String password;
     private String salaryGrade;
     private String salaryType;
+    private Long designationId;
+    private String designationName;
     private String role;
     private LocalDate joiningDate;
     private String isViewOnWeb;
@@ -169,6 +171,22 @@ public class ManageTeacherDto {
 
     public void setSalaryType(String salaryType) {
         this.salaryType = salaryType;
+    }
+
+    public Long getDesignationId() {
+        return designationId;
+    }
+
+    public void setDesignationId(Long designationId) {
+        this.designationId = designationId;
+    }
+
+    public String getDesignationName() {
+        return designationName;
+    }
+
+    public void setDesignationName(String designationName) {
+        this.designationName = designationName;
     }
 
     public String getRole() {

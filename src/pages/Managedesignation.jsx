@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
 import { useAuth } from '../context/useAuth'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchSchoolRoles } from '../apis/schoolRbacApi'
 import { createDesignation, deleteDesignation, fetchDesignations, updateDesignation } from '../apis/designationsApi'
 import { normalizeRole } from '../utils/roles'
 
@@ -14,6 +16,7 @@ const emptyForm = {
   headOfficeId: '',
   schoolId: '',
   designationId: null,
+  role: '',
   designation: '',
   note: '',
 }
@@ -22,15 +25,27 @@ const STEPS = ['Basic']
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
+  Role: 'ri-shield-user-line',
   Designation: 'ri-award-line',
   Note: 'ri-sticky-note-line',
 }
 
 const columnOptions = [
   { key: 'school', label: 'School Name' },
+  { key: 'role', label: 'Role' },
   { key: 'designation', label: 'Designation' },
   { key: 'note', label: 'Note' },
 ]
+
+const formatRoleLabel = (value) => {
+  const v = String(value || '').trim().toUpperCase().replaceAll('_', ' ')
+  return v ? v.replace(/\b\w/g, (m) => m.toUpperCase()) : ''
+}
+
+const normalizeRoleValue = (value) => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/[- ]+/g, '_').replaceAll('__', '_')
+  return normalized
+}
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -79,6 +94,7 @@ const ManageDesignation = () => {
 
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
+  const [roles, setRoles] = useState([])
 
   const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
 
@@ -125,6 +141,16 @@ const ManageDesignation = () => {
     if (headOfficeId == null) return ''
     const row = headOfficesById.get(String(headOfficeId))
     return row?.name || ''
+  }
+
+  const loadRolesForSchool = async (schoolId) => {
+    if (schoolId == null || String(schoolId).trim() === '') {
+      setRoles([])
+      return
+    }
+
+    const data = await fetchSchoolRoles({ schoolId: Number(schoolId) })
+    setRoles(Array.isArray(data) ? data : [])
   }
 
   const loadLookups = async () => {
@@ -180,6 +206,7 @@ const ManageDesignation = () => {
             d?.schoolId ?? effectiveSchoolId,
             isSchoolAdmin ? authSchoolName || (authSchoolId != null ? `School ${authSchoolId}` : '') : '',
           ),
+        role: d?.role ?? '',
         designation: d?.name ?? d?.designation ?? '',
         note: d?.note ?? '',
       })),
@@ -234,12 +261,14 @@ const ManageDesignation = () => {
   const schoolOptions = useMemo(() => Array.from(new Set(rows.map((item) => item.schoolName).filter(Boolean))), [rows])
   const designationOptions = useMemo(() => Array.from(new Set(rows.map((item) => item.designation).filter(Boolean))), [rows])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  const pageSize = rowsPerPage === -1 ? Math.max(filtered.length, 1) : rowsPerPage
+  const totalPages = rowsPerPage === -1 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize))
 
   const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    if (rowsPerPage === -1) return filtered
+    const start = (currentPage - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [currentPage, filtered, pageSize, rowsPerPage])
 
   const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(String(r.id)))
 
@@ -254,7 +283,14 @@ const ManageDesignation = () => {
 
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
+    setter((prev) => ({
+      ...prev,
+      [id]: value,
+      ...(id === 'schoolId' ? { role: '', designation: '' } : {}),
+    }))
+    if (id === 'schoolId') {
+      void loadRolesForSchool(value)
+    }
   }
 
   const openAdd = () => {
@@ -268,6 +304,7 @@ const ManageDesignation = () => {
     setAddForm(base)
     setAddStep(0)
     setIsAddOpen(true)
+    void loadRolesForSchool(base.schoolId)
   }
 
   const openEdit = (row) => {
@@ -282,11 +319,13 @@ const ManageDesignation = () => {
         return ''
       })(),
       schoolId: row?.schoolId != null ? String(row.schoolId) : '',
+      role: row?.role ?? '',
       designation: row?.designation ?? '',
       note: row?.note ?? '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+    void loadRolesForSchool(row?.schoolId)
   }
 
   const getVisiblePages = () => {
@@ -358,6 +397,23 @@ const ManageDesignation = () => {
             <input className="avm-input" value={authSchoolName || resolveSchoolName(authSchoolId, authSchoolName) || ''} readOnly />
           </FormField>
         ) : null}
+
+        <FormField label="Role" required full>
+          <select
+            className="avm-select"
+            id="role"
+            value={form.role}
+            onChange={handleChange(setter)}
+            disabled={!form.schoolId && !isSchoolAdmin}
+          >
+            <option value="">--Select Role--</option>
+            {roles.map((item) => (
+              <option key={item.name} value={item.name}>
+                {formatRoleLabel(item.name)}
+              </option>
+            ))}
+          </select>
+        </FormField>
 
         <FormField label="Designation" required full>
           <input
@@ -500,13 +556,11 @@ const ManageDesignation = () => {
               </button>
 
               {/* Rows per page */}
-              <select
+              <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-              >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+                onChange={(value) => { setRowsPerPage(value); setCurrentPage(1) }}
+              />
             </div>
 
             {/* Search */}
@@ -536,6 +590,7 @@ const ManageDesignation = () => {
                     </div>
                   </th>
                   {visibleColumns.school ? <th scope="col">School Name</th> : null}
+                  {visibleColumns.role ? <th scope="col">Role</th> : null}
                   {visibleColumns.designation ? <th scope="col">Designation</th> : null}
                   {visibleColumns.note ? <th scope="col">Note</th> : null}
                   <th scope="col">Action</th>
@@ -555,8 +610,9 @@ const ManageDesignation = () => {
                           <input type="checkbox" className="form-check-input" checked={selectedRows.includes(String(row.id))} onChange={() => handleSelectRow(String(row.id))} />
                           <label className="form-check-label">{row.id}</label>
                         </div>
-                      </td>
+                    </td>
                     {visibleColumns.school ? <td>{row.schoolName}</td> : null}
+                    {visibleColumns.role ? <td>{formatRoleLabel(row.role) || '-'}</td> : null}
                     {visibleColumns.designation ? <td className="fw-medium text-primary-light">{row.designation}</td> : null}
                     {visibleColumns.note ? <td>{row.note || '-'}</td> : null}
                     <td>
@@ -602,7 +658,7 @@ const ManageDesignation = () => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
               Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              {rowsPerPage === -1 ? filtered.length : Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
@@ -656,10 +712,16 @@ const ManageDesignation = () => {
             setLoadError('Designation name is required')
             return
           }
+          const roleValue = normalizeRoleValue(addForm.role)
+          if (!roleValue) {
+            setLoadError('Role is required')
+            return
+          }
           setBusy(true)
           try {
-            await createDesignation({ schoolId: effectiveSchoolId, name, note: addForm.note })
+            await createDesignation({ schoolId: effectiveSchoolId, role: roleValue, name, note: addForm.note })
             setIsAddOpen(false)
+            await loadRolesForSchool(effectiveSchoolId)
             await loadDesignations({ schoolId: effectiveSchoolId })
           } catch (e) {
             setLoadError(e?.message || 'Failed to create designation')
@@ -707,10 +769,16 @@ const ManageDesignation = () => {
             setLoadError('Designation name is required')
             return
           }
+          const roleValue = normalizeRoleValue(editForm.role)
+          if (!roleValue) {
+            setLoadError('Role is required')
+            return
+          }
           setBusy(true)
           try {
-            await updateDesignation(id, { schoolId: effectiveSchoolId, name, note: editForm.note })
+            await updateDesignation(id, { schoolId: effectiveSchoolId, role: roleValue, name, note: editForm.note })
             setIsEditOpen(false)
+            await loadRolesForSchool(effectiveSchoolId)
             await loadDesignations({ schoolId: effectiveSchoolId })
           } catch (e) {
             setLoadError(e?.message || 'Failed to update designation')

@@ -19,6 +19,7 @@ const RowsPerPageSelect = ({ value, onChange, className }) => {
 
   const selectValue = useMemo(() => {
     if (normalized === 10) return '10'
+    if (normalized === 20) return '20'
     if (normalized === -1) return '-1'
     return `custom:${normalized}`
   }, [normalized])
@@ -30,6 +31,7 @@ const RowsPerPageSelect = ({ value, onChange, className }) => {
       onChange={(e) => {
         const v = String(e.target.value || '')
         if (v === '10') return onChange(10)
+        if (v === '20') return onChange(20)
         if (v === '-1') return onChange(-1)
         if (v === 'custom') {
           const next = readCustomSize(normalized)
@@ -40,12 +42,12 @@ const RowsPerPageSelect = ({ value, onChange, className }) => {
       }}
     >
       <option value="10">10</option>
+      <option value="20">20</option>
       <option value="-1">All</option>
-      {normalized !== 10 && normalized !== -1 ? <option value={`custom:${normalized}`}>Custom ({normalized})</option> : null}
+      {normalized !== 10 && normalized !== 20 && normalized !== -1 ? <option value={`custom:${normalized}`}>Custom ({normalized})</option> : null}
       <option value="custom">Custom...</option>
     </select>
   )
 }
 
 export default RowsPerPageSelect
-

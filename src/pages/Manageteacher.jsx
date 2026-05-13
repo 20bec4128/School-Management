@@ -5,6 +5,7 @@ import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createTeacher, deleteTeacher, fetchTeachers, updateTeacher } from '../apis/teachersApi'
 import { fetchAllDepartments } from '../apis/departmentsApi'
+import { fetchDesignations } from '../apis/designationsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
@@ -15,7 +16,7 @@ const emptyForm = {
   // Basic
   name: '', nationalId: '', department: '', phone: '', gender: '', bloodGroup: '', religion: '', birthDate: '', presentAddress: '', permanentAddress: '',
   // Academic
-  email: '', username: '', password: '', salaryGrade: '', salaryType: '', role: 'Teacher', joiningDate: '', resume: null,
+  email: '', username: '', password: '', salaryGrade: '', salaryType: '', designationId: '', role: 'Teacher', joiningDate: '', resume: null,
   // Other
   isViewOnWeb: '', facebookUrl: '', linkedinUrl: '', twitterUrl: '', instagramUrl: '', youtubeUrl: '', pinterestUrl: '', otherInfo: '', photo: null,
   schoolId: '',
@@ -37,6 +38,7 @@ const FIELD_ICONS = {
   Password: 'ri-lock-2-line',
   'Salary Grade': 'ri-medal-line',
   'Salary Type': 'ri-money-dollar-circle-line',
+  Designation: 'ri-award-line',
   Role: 'ri-shield-user-line',
   'Joining Date': 'ri-calendar-check-line',
   Resume: 'ri-file-text-line',
@@ -53,6 +55,7 @@ const FIELD_ICONS = {
 const columnOptions = [
   { key: 'photo', label: 'Photo' },
   { key: 'name', label: 'Name' },
+  { key: 'designation', label: 'Designation' },
   { key: 'department', label: 'Department' },
   { key: 'phone', label: 'Phone' },
   { key: 'email', label: 'Email' },
@@ -101,6 +104,9 @@ const ManageTeacher = () => {
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const [teachers, setTeachers] = useState([])
   const [departments, setDepartments] = useState([])
+  const [designationOptions, setDesignationOptions] = useState([])
+  const [designationLoading, setDesignationLoading] = useState(false)
+  const [designationError, setDesignationError] = useState('')
   const [schools, setSchools] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -142,6 +148,7 @@ const ManageTeacher = () => {
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const resolvedSchoolName = authSchoolName || ''
   const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const lastDesignationSchoolRef = useRef(null)
 
   const effectiveSchoolsLookup = useMemo(() => {
     const byId = new Map((Array.isArray(schools) ? schools : []).map((school) => [String(school?.id), school]))
@@ -195,12 +202,48 @@ const ManageTeacher = () => {
     void loadTeachers()
   }, [loadTeachers])
 
+  const loadDesignations = useCallback(async (schoolId) => {
+    const normalizedSchoolId = schoolId != null ? String(schoolId) : ''
+    if (!normalizedSchoolId) {
+      setDesignationOptions([])
+      setDesignationError('')
+      lastDesignationSchoolRef.current = null
+      return
+    }
+
+    if (lastDesignationSchoolRef.current === normalizedSchoolId) return
+
+    setDesignationLoading(true)
+    setDesignationError('')
+    try {
+      const rows = await fetchDesignations({ schoolId: normalizedSchoolId, role: 'TEACHER' })
+      setDesignationOptions(Array.isArray(rows) ? rows : [])
+      lastDesignationSchoolRef.current = normalizedSchoolId
+    } catch (e) {
+      setDesignationOptions([])
+      lastDesignationSchoolRef.current = null
+      setDesignationError(e?.message || 'Failed to load designations')
+    } finally {
+      setDesignationLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAddOpen) return
+    void loadDesignations(addForm.schoolId)
+  }, [addForm.schoolId, isAddOpen, loadDesignations])
+
+  useEffect(() => {
+    if (!isEditOpen) return
+    void loadDesignations(editForm.schoolId)
+  }, [editForm.schoolId, isEditOpen, loadDesignations])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return teachers.filter((r) => {
       const matchesSearch =
         !q ||
-        [r?.name, r?.department, r?.phone, r?.email]
+        [r?.name, r?.designationName, r?.department, r?.phone, r?.email]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()
@@ -257,6 +300,7 @@ const ManageTeacher = () => {
   const openAdd = () => {
     setError('')
     setEditingTeacherId(null)
+    lastDesignationSchoolRef.current = null
     setAddForm({
       ...emptyForm,
       schoolId: resolvedSchoolId || '',
@@ -268,6 +312,7 @@ const ManageTeacher = () => {
   const openEdit = (row) => {
     setError('')
     setEditingTeacherId(row?.id ?? null)
+    lastDesignationSchoolRef.current = null
     setEditForm({
       ...emptyForm,
       name: row?.name || '',
@@ -285,6 +330,7 @@ const ManageTeacher = () => {
       password: row?.password || '',
       salaryGrade: row?.salaryGrade || '',
       salaryType: row?.salaryType || '',
+      designationId: row?.designationId != null ? String(row.designationId) : '',
       role: row?.role || 'Teacher',
       joiningDate: row?.joiningDate || '',
       resume: null,
@@ -320,6 +366,7 @@ const ManageTeacher = () => {
     password: form.password || '',
     salaryGrade: form.salaryGrade || '',
     salaryType: form.salaryType || '',
+    designationId: form.designationId ? Number(form.designationId) : null,
     role: form.role || 'Teacher',
     joiningDate: form.joiningDate || null,
     isViewOnWeb: form.isViewOnWeb || '',
@@ -339,6 +386,8 @@ const ManageTeacher = () => {
     setSaving(true)
     setError('')
     try {
+      if (!addForm.schoolId) throw new Error('School is required')
+      if (!addForm.designationId) throw new Error('Designation is required')
       const payload = buildTeacherPayload(addForm)
       const created = await createTeacher(payload, addForm)
       setTeachers((prev) => [created, ...prev])
@@ -363,6 +412,8 @@ const ManageTeacher = () => {
     setSaving(true)
     setError('')
     try {
+      if (!editForm.schoolId) throw new Error('School is required')
+      if (!editForm.designationId) throw new Error('Designation is required')
       const payload = buildTeacherPayload(editForm)
       const updated = await updateTeacher(editingTeacherId, payload, editForm)
       setTeachers((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
@@ -494,6 +545,23 @@ const ManageTeacher = () => {
               <option value="">--Select--</option><option>Monthly</option><option>Hourly</option>
             </select>
           </FormField>
+          <FormField label="Designation" required>
+            <select
+              className="avm-select"
+              id="designationId"
+              value={addForm.designationId}
+              onChange={handleChange(setAddForm)}
+              disabled={!addForm.schoolId || designationLoading}
+            >
+              <option value="">{!addForm.schoolId ? '--Select school first--' : designationLoading ? 'Loading...' : '--Select--'}</option>
+              {designationOptions.map((d) => (
+                <option key={d.id} value={String(d.id)}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            {designationError ? <div className="text-danger text-sm mt-4">{designationError}</div> : null}
+          </FormField>
           <FormField label="Role" required><input type="text" className="avm-input" id="role" value={addForm.role} onChange={handleChange(setAddForm)} /></FormField>
           <FormField label="Joining Date" required><input type="date" className="avm-input" id="joiningDate" value={addForm.joiningDate} onChange={handleChange(setAddForm)} /></FormField>
           <FormField label="Resume" full noIcon>
@@ -612,6 +680,23 @@ const ManageTeacher = () => {
             <select className="avm-select" id="salaryType" value={editForm.salaryType} onChange={handleChange(setEditForm)}>
               <option value="">--Select--</option><option>Monthly</option><option>Hourly</option>
             </select>
+          </FormField>
+          <FormField label="Designation" required>
+            <select
+              className="avm-select"
+              id="designationId"
+              value={editForm.designationId}
+              onChange={handleChange(setEditForm)}
+              disabled={!editForm.schoolId || designationLoading}
+            >
+              <option value="">{!editForm.schoolId ? '--Select school first--' : designationLoading ? 'Loading...' : '--Select--'}</option>
+              {designationOptions.map((d) => (
+                <option key={d.id} value={String(d.id)}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            {designationError ? <div className="text-danger text-sm mt-4">{designationError}</div> : null}
           </FormField>
           <FormField label="Role" required><input type="text" className="avm-input" id="role" value={editForm.role} onChange={handleChange(setEditForm)} /></FormField>
           <FormField label="Joining Date" required><input type="date" className="avm-input" id="joiningDate" value={editForm.joiningDate} onChange={handleChange(setEditForm)} /></FormField>
@@ -747,6 +832,7 @@ const ManageTeacher = () => {
                   </th>
                   {visibleColumns.photo ? <th scope="col">Photo</th> : null}
                   {visibleColumns.name ? <th scope="col">Name</th> : null}
+                  {visibleColumns.designation ? <th scope="col">Designation</th> : null}
                   {visibleColumns.department ? <th scope="col">Department</th> : null}
                   {visibleColumns.phone ? <th scope="col">Phone</th> : null}
                   {visibleColumns.email ? <th scope="col">Email</th> : null}
@@ -777,6 +863,7 @@ const ManageTeacher = () => {
                       </td>
                     ) : null}
                     {visibleColumns.name ? <td className="fw-medium text-primary-light">{row.name}</td> : null}
+                    {visibleColumns.designation ? <td>{row.designationName || ''}</td> : null}
                     {visibleColumns.department ? <td>{row.department}</td> : null}
                     {visibleColumns.phone ? <td>{row.phone}</td> : null}
                     {visibleColumns.email ? <td>{row.email}</td> : null}

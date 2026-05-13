@@ -26,8 +26,11 @@ public class DesignationController {
     }
 
     @GetMapping
-    public List<DesignationDto> list(@RequestParam(required = false) Long schoolId) {
-        return designationService.list(schoolId);
+    public List<DesignationDto> list(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) String role
+    ) {
+        return designationService.list(schoolId, role);
     }
 
     @PostMapping
@@ -46,4 +49,3 @@ public class DesignationController {
         return "Designation deleted successfully";
     }
 }
-

@@ -26,13 +26,10 @@ const buildUpsertFormData = (payload, form) => {
   return fd
 }
 
-const readCurrentUser = () => {
-  try {
-    const raw = localStorage.getItem('sm_user') || sessionStorage.getItem('sm_user')
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
+const isActiveSchoolRow = (row) => {
+  const status = String(row?.status || '').trim().toUpperCase()
+  const isDeleted = row?.isDeleted === true || String(row?.isDeleted || '').trim().toLowerCase() === 'true'
+  return !isDeleted && (status === '' || status === 'ACTIVE')
 }
 
 export const fetchSchoolsPage = async (page, size) => {
@@ -49,9 +46,10 @@ export const fetchSchoolNames = async () => {
   const firstPage = await fetchSchoolsPage(0, 500)
   const firstContent = Array.isArray(firstPage?.content) ? firstPage.content : []
   const totalPages = Number.isFinite(firstPage?.totalPages) ? firstPage.totalPages : 1
+  const activeContent = firstContent.filter(isActiveSchoolRow)
 
   if (totalPages <= 1) {
-    return Array.from(new Set(firstContent.map((s) => s?.schoolName).filter(Boolean))).sort()
+    return Array.from(new Set(activeContent.map((s) => s?.schoolName).filter(Boolean))).sort()
   }
 
   const pageRequests = []
@@ -63,15 +61,16 @@ export const fetchSchoolNames = async () => {
   const allContent = restPages.reduce((acc, item) => {
     if (Array.isArray(item?.content)) acc.push(...item.content)
     return acc
-  }, [...firstContent])
+  }, [...activeContent])
 
-  return Array.from(new Set(allContent.map((s) => s?.schoolName).filter(Boolean))).sort()
+  return Array.from(new Set(allContent.filter(isActiveSchoolRow).map((s) => s?.schoolName).filter(Boolean))).sort()
 }
 
 export const fetchSchoolsLookup = async () => {
   const firstPage = await fetchSchoolsPage(0, 500)
   const firstContent = Array.isArray(firstPage?.content) ? firstPage.content : []
   const totalPages = Number.isFinite(firstPage?.totalPages) ? firstPage.totalPages : 1
+  const activeFirstContent = firstContent.filter(isActiveSchoolRow)
 
   const pageRequests = []
   for (let page = 1; page < totalPages; page += 1) {
@@ -82,26 +81,16 @@ export const fetchSchoolsLookup = async () => {
   const allContent = restPages.reduce((acc, item) => {
     if (Array.isArray(item?.content)) acc.push(...item.content)
     return acc
-  }, [...firstContent])
+  }, [...activeFirstContent])
 
   const byId = new Map()
   for (const row of allContent) {
+    if (!isActiveSchoolRow(row)) continue
     const id = row?.id
     const schoolName = row?.schoolName
     const headOfficeId = row?.headOfficeId ?? row?.headOffice?.id ?? null
     if (id == null || !schoolName) continue
     byId.set(String(id), { id, schoolName, headOfficeId })
-  }
-
-  const currentUser = readCurrentUser()
-  const currentSchoolId = currentUser?.schoolId ?? currentUser?.school?.id ?? null
-  const currentSchoolName =
-    currentUser?.schoolName ?? currentUser?.school?.schoolName ?? currentUser?.school?.name ?? null
-  if (currentSchoolId != null) {
-    const key = String(currentSchoolId)
-    if (!byId.has(key)) {
-      byId.set(key, { id: currentSchoolId, schoolName: currentSchoolName || `School ${currentSchoolId}`, headOfficeId: currentUser?.headOfficeId ?? currentUser?.headOffice?.id ?? null })
-    }
   }
 
   return Array.from(byId.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName))

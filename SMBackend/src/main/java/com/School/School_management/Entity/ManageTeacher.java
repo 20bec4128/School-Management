@@ -31,6 +31,13 @@ public class ManageTeacher {
     private String password;
     private String salaryGrade;
     private String salaryType;
+
+    @Column(name = "designation_id")
+    private Long designationId;
+
+    @Column(name = "designation_name")
+    private String designationName;
+
     private String role;
     private LocalDate joiningDate;
 
@@ -182,6 +189,22 @@ public class ManageTeacher {
 
     public void setSalaryType(String salaryType) {
         this.salaryType = salaryType;
+    }
+
+    public Long getDesignationId() {
+        return designationId;
+    }
+
+    public void setDesignationId(Long designationId) {
+        this.designationId = designationId;
+    }
+
+    public String getDesignationName() {
+        return designationName;
+    }
+
+    public void setDesignationName(String designationName) {
+        this.designationName = designationName;
     }
 
     public String getRole() {

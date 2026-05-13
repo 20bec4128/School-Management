@@ -4,6 +4,7 @@ public class DesignationDto {
     private Long id;
     private Long schoolId;
     private String schoolName;
+    private String role;
     private String name;
     private String note;
 
@@ -29,6 +30,14 @@ public class DesignationDto {
 
     public void setSchoolName(String schoolName) {
         this.schoolName = schoolName;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public String getName() {

@@ -32,7 +32,7 @@ public class DesignationServiceImpl implements DesignationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<DesignationDto> list(Long schoolId) {
+    public List<DesignationDto> list(Long schoolId, String role) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
@@ -44,7 +44,10 @@ public class DesignationServiceImpl implements DesignationService {
         }
 
         Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return designationRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
+        List<Designation> rows = (role == null || role.isBlank())
+                ? designationRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
+                : designationRepository.findBySchoolIdAndRoleIgnoreCaseOrderByIdDesc(effectiveSchoolId, normalizeRequiredRole(role));
+        return rows
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
@@ -56,15 +59,17 @@ public class DesignationServiceImpl implements DesignationService {
         if (user == null) throw new ForbiddenException();
 
         Long effectiveSchoolId = effectiveSchoolIdForWrite(user, dto == null ? null : dto.getSchoolId());
+        String role = normalizeRequiredRole(dto == null ? null : dto.getRole());
         String name = normalizeRequired(dto == null ? null : dto.getName(), "Designation name is required");
         String note = normalizeOptional(dto == null ? null : dto.getNote());
 
-        if (designationRepository.existsBySchoolIdAndNameIgnoreCase(effectiveSchoolId, name)) {
+        if (designationRepository.existsBySchoolIdAndRoleIgnoreCaseAndNameIgnoreCase(effectiveSchoolId, role, name)) {
             throw new ConflictException("Designation already exists");
         }
 
         Designation entity = new Designation();
         entity.setSchoolId(effectiveSchoolId);
+        entity.setRole(role);
         entity.setName(name);
         entity.setNote(note);
         return toDto(designationRepository.save(entity));
@@ -83,15 +88,21 @@ public class DesignationServiceImpl implements DesignationService {
             throw new ForbiddenException();
         }
 
+        String role = normalizeRequiredRole(dto == null ? null : dto.getRole());
         String name = normalizeRequired(dto == null ? null : dto.getName(), "Designation name is required");
         String note = normalizeOptional(dto == null ? null : dto.getNote());
 
-        boolean nameChanged = entity.getName() == null || !entity.getName().equalsIgnoreCase(name);
-        if (nameChanged && designationRepository.existsBySchoolIdAndNameIgnoreCase(effectiveSchoolId, name)) {
+        boolean changed = entity.getName() == null
+                || !entity.getName().equalsIgnoreCase(name)
+                || entity.getRole() == null
+                || !entity.getRole().equalsIgnoreCase(role);
+        if (changed && designationRepository.existsBySchoolIdAndRoleIgnoreCaseAndNameIgnoreCaseAndIdNot(
+                effectiveSchoolId, role, name, id)) {
             throw new ConflictException("Designation already exists");
         }
 
         entity.setSchoolId(effectiveSchoolId);
+        entity.setRole(role);
         entity.setName(name);
         entity.setNote(note);
         return toDto(designationRepository.save(entity));
@@ -156,9 +167,19 @@ public class DesignationServiceImpl implements DesignationService {
         dto.setId(entity.getId());
         dto.setSchoolId(entity.getSchoolId());
         dto.setSchoolName(resolveSchoolName(entity.getSchoolId()));
+        dto.setRole(entity.getRole());
         dto.setName(entity.getName());
         dto.setNote(entity.getNote());
         return dto;
+    }
+
+    private String normalizeRequiredRole(String value) {
+        String role = normalizeRequired(value, "Role is required");
+        role = role.trim().toUpperCase().replace('-', '_').replace(' ', '_');
+        role = role.replaceAll("_+", "_");
+        role = role.replaceAll("^_+|_+$", "");
+        if (role.isBlank()) throw new BadRequestException("Role is required");
+        return role;
     }
 
     private String resolveSchoolName(Long schoolId) {

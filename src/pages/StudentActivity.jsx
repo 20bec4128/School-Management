@@ -409,7 +409,14 @@ const StudentActivity = () => {
     fetchSchoolsPage(0, 200)
       .then((data) => {
         const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
-        setSchools(list)
+        setSchools(
+          list.filter((school) => {
+            const status = String(school?.status || '').trim().toUpperCase()
+            const isDeleted =
+              school?.isDeleted === true || String(school?.isDeleted || '').trim().toLowerCase() === 'true'
+            return !isDeleted && (status === '' || status === 'ACTIVE')
+          }),
+        )
       })
       .catch(() => setSchools([]))
   }, [])

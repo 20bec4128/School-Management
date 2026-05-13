@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createEmployee, deleteEmployee, fetchEmployees, updateEmployee } from '../apis/employeesApi'
@@ -136,6 +137,13 @@ const toNumberOrNull = (value) => {
   const num = Number(text)
   return Number.isFinite(num) ? num : null
 }
+
+const formatRoleLabel = (value) =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
 
 const getRowSchoolName = (row, schoolById, fallbackSchoolName) => {
   if (!row) return ''
@@ -299,6 +307,12 @@ const ManageEmployee = () => {
     return schoolById.get(String(modalSchoolId))?.schoolName || currentSchoolOption?.schoolName || `School ${modalSchoolId}`
   }, [currentSchoolOption?.schoolName, modalSchoolId, schoolById])
 
+  const modalRole = useMemo(() => {
+    if (isEditOpen) return String(editForm.role || '').trim()
+    if (isAddOpen) return String(addForm.role || '').trim()
+    return ''
+  }, [addForm.role, editForm.role, isAddOpen, isEditOpen])
+
   const modalHeadOfficeName = useMemo(() => {
     if (isSchoolAdmin || isHeadOfficeAdmin) {
       return authHeadOfficeName || headOfficeById.get(String(authHeadOfficeId || ''))?.name || (authHeadOfficeId != null ? `Head Office ${authHeadOfficeId}` : '')
@@ -445,7 +459,7 @@ const ManageEmployee = () => {
     const run = async () => {
       try {
         const [designationRows, roleRows] = await Promise.all([
-          fetchDesignations({ schoolId: modalSchoolId }),
+          modalRole ? fetchDesignations({ schoolId: modalSchoolId, role: modalRole }) : Promise.resolve([]),
           fetchSchoolRoles({ schoolId: modalSchoolId }),
         ])
         if (cancelled) return
@@ -469,7 +483,7 @@ const ManageEmployee = () => {
     return () => {
       cancelled = true
     }
-  }, [isAddOpen, isEditOpen, modalSchoolId])
+  }, [isAddOpen, isEditOpen, modalSchoolId, modalRole])
 
   const displayRows = useMemo(() => {
     return rows.map((row) => {
@@ -541,7 +555,8 @@ const ManageEmployee = () => {
     })
   }, [displayRows, filters, search])
 
-  const totalPages = Math.max(1, Math.ceil(visibleRows.length / rowsPerPage))
+  const pageSize = rowsPerPage === -1 ? Math.max(visibleRows.length, 1) : rowsPerPage
+  const totalPages = rowsPerPage === -1 ? 1 : Math.max(1, Math.ceil(visibleRows.length / pageSize))
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -550,9 +565,10 @@ const ManageEmployee = () => {
   }, [currentPage, totalPages])
 
   const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return visibleRows.slice(start, start + rowsPerPage)
-  }, [currentPage, rowsPerPage, visibleRows])
+    if (rowsPerPage === -1) return visibleRows
+    const start = (currentPage - 1) * pageSize
+    return visibleRows.slice(start, start + pageSize)
+  }, [currentPage, pageSize, rowsPerPage, visibleRows])
 
   const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(row.id))
 
@@ -910,6 +926,8 @@ const ManageEmployee = () => {
               </FormField>
             )}
 
+           
+
             <FormField label="Name" required>
               <input
                 type="text"
@@ -931,6 +949,28 @@ const ManageEmployee = () => {
                 onChange={(e) => setter((prev) => ({ ...prev, nationalId: e.target.value }))}
               />
             </FormField>
+             <FormField label="Role" required>
+              <select
+                className="avm-select"
+                id="role"
+                value={form.role}
+                onChange={(e) =>
+                  setter((prev) => ({
+                    ...prev,
+                    role: e.target.value,
+                    designationId: '',
+                  }))
+                }
+                disabled={!modalSchoolId}
+              >
+                <option value="">--Select--</option>
+                {roles.map((item) => (
+                  <option key={item} value={item}>
+                    {formatRoleLabel(item)}
+                  </option>
+                ))}
+              </select>
+            </FormField>
 
             <FormField label="Designation" required>
               <select
@@ -938,7 +978,7 @@ const ManageEmployee = () => {
                 id="designationId"
                 value={form.designationId}
                 onChange={(e) => setter((prev) => ({ ...prev, designationId: e.target.value }))}
-                disabled={!modalSchoolId}
+                disabled={!modalSchoolId || !form.role}
               >
                 <option value="">--Select--</option>
                 {activeDesignationRows.map((item) => (
@@ -1107,23 +1147,6 @@ const ManageEmployee = () => {
                 <option value="">--Select--</option>
                 <option>Monthly</option>
                 <option>Hourly</option>
-              </select>
-            </FormField>
-
-            <FormField label="Role" required>
-              <select
-                className="avm-select"
-                id="role"
-                value={form.role}
-                onChange={(e) => setter((prev) => ({ ...prev, role: e.target.value }))}
-                disabled={!modalSchoolId}
-              >
-                <option value="">--Select--</option>
-                {roles.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
               </select>
             </FormField>
 
@@ -1380,16 +1403,14 @@ const ManageEmployee = () => {
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
-              <select
+              <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              />
             </div>
             <div className="position-relative">
               <input
@@ -1512,7 +1533,7 @@ const ManageEmployee = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {visibleRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, visibleRows.length)} of {visibleRows.length}
+              Showing {visibleRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {rowsPerPage === -1 ? visibleRows.length : Math.min(currentPage * rowsPerPage, visibleRows.length)} of {visibleRows.length}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>

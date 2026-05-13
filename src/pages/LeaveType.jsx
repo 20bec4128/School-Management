@@ -1,57 +1,32 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { normalizeRole } from '../utils/roles'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchDesignations } from '../apis/designationsApi'
+import { fetchSchoolRoles } from '../apis/schoolRbacApi'
+import {
+  createLeaveType,
+  deleteLeaveType,
+  fetchLeaveTypes,
+  updateLeaveType,
+} from '../apis/leaveTypeApi'
 import '../assets/css/addModalShared.css'
 
-const leaveTypeData = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    applicantType: 'Student',
-    leaveType: 'Sick Leave',
-    totalLeave: 12,
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    applicantType: 'Student',
-    leaveType: 'Casual Leave',
-    totalLeave: 6,
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    applicantType: 'Teacher',
-    leaveType: 'Sick Leave',
-    totalLeave: 10,
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    applicantType: 'Teacher',
-    leaveType: 'Casual Leave',
-    totalLeave: 8,
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    applicantType: 'Staff',
-    leaveType: 'Annual Leave',
-    totalLeave: 15,
-  },
-]
-
-const emptyForm = {
-  school: '',
-  applicantType: '',
+const makeEmptyForm = (defaultSchoolId = '', defaultApplicantType = '') => ({
+  schoolId: defaultSchoolId ? String(defaultSchoolId) : '',
+  applicantType: defaultApplicantType,
+  designationId: '',
   leaveType: '',
-  totalLeave: '',
-}
+  allowedLeavesPerYear: '',
+})
 
 const emptyFilters = {
   school: 'Select',
   applicantType: 'Select',
+  designation: 'Select',
 }
 
 const STEPS = ['Basic Information']
@@ -59,18 +34,27 @@ const STEPS = ['Basic Information']
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
   'Applicant Type': 'ri-user-3-line',
+  Designation: 'ri-award-line',
   'Leave Type': 'ri-calendar-line',
-  'Total Leave': 'ri-number-1',
+  'Allowed Leaves count/year': 'ri-number-1',
 }
 
 const columnOptions = [
   { key: 'school', label: 'School' },
   { key: 'applicantType', label: 'Applicant Type' },
+  { key: 'designationName', label: 'Designation' },
   { key: 'leaveType', label: 'Leave Type' },
-  { key: 'totalLeave', label: 'Total Leave' },
+  { key: 'allowedLeavesPerYear', label: 'Allowed Leaves count/year' },
 ]
 
-const applicantTypeOptions = ['Student', 'Teacher', 'Staff']
+const normalizeApplicantType = (value) => String(value || '').trim().toUpperCase()
+
+const formatRoleLabel = (value) =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -107,76 +91,404 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const LeaveType = () => {
+  const {
+    status,
+    token,
+    user,
+    role: authRole,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    headOfficeId: authHeadOfficeId,
+  } = useAuth()
+  const role = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
+    [authRole, user],
+  )
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const isStudentRole = role === 'STUDENT'
+  const isFixedSchoolRole = isSchoolAdmin || isStudentRole
+
+  const [rows, setRows] = useState([])
+  const [schools, setSchools] = useState([])
+  const [applicantRoles, setApplicantRoles] = useState([])
+  const [designations, setDesignations] = useState([])
+  const [scopeSchoolId, setScopeSchoolId] = useState(() =>
+    isFixedSchoolRole && authSchoolId != null ? String(authSchoolId) : '',
+  )
+
+  const [busy, setBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
+
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState(null)
+  const [addForm, setAddForm] = useState(makeEmptyForm())
+  const [editForm, setEditForm] = useState(makeEmptyForm())
+
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(leaveTypeData.map((item) => item.school))),
-    [],
-  )
-  const applicantTypeOptionsFromData = useMemo(
-    () => Array.from(new Set(leaveTypeData.map((item) => item.applicantType))),
-    [],
+  const schoolsById = useMemo(() => {
+    const map = new Map()
+    for (const item of Array.isArray(schools) ? schools : []) {
+      if (item?.id == null) continue
+      map.set(String(item.id), item)
+    }
+    return map
+  }, [schools])
+
+  const designationsById = useMemo(() => {
+    const map = new Map()
+    for (const item of Array.isArray(designations) ? designations : []) {
+      if (item?.id == null) continue
+      map.set(String(item.id), item)
+    }
+    return map
+  }, [designations])
+
+  const resolveSchoolName = (schoolId, fallback = '') => {
+    if (schoolId == null) return fallback || ''
+    const row = schoolsById.get(String(schoolId))
+    return row?.schoolName || row?.name || fallback || (schoolId === authSchoolId ? authSchoolName : '') || ''
+  }
+
+  const resolveDesignationName = (designationId, fallback = '') => {
+    if (designationId == null) return fallback || ''
+    const row = designationsById.get(String(designationId))
+    return row?.name || row?.designation || fallback || ''
+  }
+
+  const availableApplicantRoles = useMemo(
+    () =>
+      (Array.isArray(applicantRoles) ? applicantRoles : []).filter((item) => {
+        const roleName = normalizeApplicantType(item?.name)
+        return roleName && roleName !== 'SUPER_ADMIN' && roleName !== 'HEAD_OFFICE_ADMIN'
+      }),
+    [applicantRoles],
   )
 
-  const filtered = useMemo(() => {
+  const loadApplicantRolesForSchool = async (schoolId) => {
+    if (!schoolId || String(schoolId).trim() === '') {
+      setApplicantRoles([])
+      return
+    }
+    const data = await fetchSchoolRoles({ schoolId: Number(schoolId) })
+    setApplicantRoles(Array.isArray(data) ? data : [])
+  }
+
+  const schoolOptions = useMemo(() => {
+    const values = []
+    const seen = new Set()
+    const push = (name) => {
+      if (!name) return
+      const normalized = String(name).trim()
+      if (!normalized || seen.has(normalized)) return
+      seen.add(normalized)
+      values.push(normalized)
+    }
+
+    for (const row of rows) {
+      push(row.schoolName)
+    }
+
+    for (const item of schools) {
+      if (isHeadOfficeAdmin && String(item?.headOfficeId ?? '') !== String(authHeadOfficeId ?? '')) {
+        continue
+      }
+      push(item?.schoolName)
+    }
+
+    if (isFixedSchoolRole) {
+      push(authSchoolName || (authSchoolId != null ? `School ${authSchoolId}` : ''))
+    }
+
+    return values.sort((a, b) => a.localeCompare(b))
+  }, [rows, schools, isHeadOfficeAdmin, isFixedSchoolRole, authHeadOfficeId, authSchoolName, authSchoolId])
+
+  const designationOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((item) => item.designationName).filter(Boolean).map((value) => String(value).trim())),
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows],
+  )
+
+  const applicantTypeFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((item) => item.applicantType).filter(Boolean).map((value) => String(value).trim())),
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows],
+  )
+
+  const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-
-    return leaveTypeData.filter((row) => {
+    return rows.filter((row) => {
       const matchesSearch =
         !q ||
-        [row.school, row.applicantType, row.leaveType, String(row.totalLeave)]
+        [
+          row.schoolName,
+          row.applicantType,
+          row.designationName,
+          row.leaveType,
+          String(row.allowedLeavesPerYear ?? ''),
+        ]
           .join(' ')
           .toLowerCase()
           .includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
+      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
       const matchesApplicantType =
         filters.applicantType === 'Select' || row.applicantType === filters.applicantType
-
-      return matchesSearch && matchesSchool && matchesApplicantType
+      const matchesDesignation =
+        filters.designation === 'Select' || row.designationName === filters.designation
+      return matchesSearch && matchesSchool && matchesApplicantType && matchesDesignation
     })
-  }, [search, filters])
+  }, [rows, search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage))
 
-  const paginated = useMemo(() => {
+  const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    return filteredRows.slice(start, start + rowsPerPage)
+  }, [currentPage, filteredRows, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
+
+  const getListingSchoolIdNumber = () => {
+    if (isFixedSchoolRole) return authSchoolId
+    if (isHeadOfficeAdmin) return scopeSchoolId ? Number(scopeSchoolId) : null
+    return null
+  }
+
+  const loadSchools = async () => {
+    if (!isSuperAdmin && !isHeadOfficeAdmin) {
+      setSchools([])
+      return
+    }
+    try {
+      const list = await fetchSchoolsLookup()
+      setSchools(Array.isArray(list) ? list : [])
+    } catch {
+      setSchools([])
+    }
+  }
+
+  const loadDesignationsForSchool = async (schoolId, applicantType) => {
+    const normalizedApplicantType = normalizeApplicantType(applicantType)
+    if (
+      !schoolId ||
+      String(schoolId).trim() === '' ||
+      !normalizedApplicantType ||
+      normalizedApplicantType === 'STUDENT'
+    ) {
+      setDesignations([])
+      return
+    }
+    const data = await fetchDesignations({
+      schoolId: Number(schoolId),
+      role: normalizedApplicantType,
+    })
+    setDesignations(Array.isArray(data) ? data : [])
+  }
+
+  const loadRows = async (schoolId = null) => {
+    if (isHeadOfficeAdmin && !schoolId) {
+      setRows([])
+      return
+    }
+
+    const querySchoolId = isFixedSchoolRole
+      ? authSchoolId
+      : isHeadOfficeAdmin
+        ? schoolId
+        : schoolId
+
+    const data = await fetchLeaveTypes(querySchoolId != null ? { schoolId: querySchoolId } : {})
+    const list = Array.isArray(data) ? data : []
+    setRows(
+      list.map((item) => ({
+        id: item?.id,
+        schoolId: item?.schoolId ?? querySchoolId ?? null,
+        schoolName: item?.schoolName || resolveSchoolName(item?.schoolId ?? querySchoolId, ''),
+        designationId: item?.designationId ?? null,
+        designationName: item?.designationName || resolveDesignationName(item?.designationId, ''),
+        applicantType: item?.applicantType || '',
+        leaveType: item?.leaveType || '',
+        allowedLeavesPerYear: item?.allowedLeavesPerYear ?? '',
+      })),
+    )
+  }
+
+  useEffect(() => {
+    if (isFixedSchoolRole && authSchoolId != null) {
+      setScopeSchoolId(String(authSchoolId))
+    }
+  }, [isFixedSchoolRole, authSchoolId])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+
+    let active = true
+    const run = async () => {
+      setError('')
+      setBusy(true)
+      try {
+        await loadSchools()
+        const initialSchoolId = (() => {
+          if (isFixedSchoolRole) return authSchoolId
+          if (isHeadOfficeAdmin) return scopeSchoolId ? Number(scopeSchoolId) : null
+          return null
+        })()
+        if (initialSchoolId) {
+          await loadApplicantRolesForSchool(initialSchoolId)
+        } else {
+          setApplicantRoles([])
+        }
+        if (isFixedSchoolRole) {
+          await loadRows(authSchoolId)
+        } else if (isSuperAdmin) {
+          await loadRows()
+        } else if (isHeadOfficeAdmin) {
+          if (scopeSchoolId) {
+            await loadRows(Number(scopeSchoolId))
+          } else if (active) {
+            setRows([])
+          }
+        }
+      } catch (e) {
+        if (active) setError(e?.message || 'Failed to load leave types')
+      } finally {
+        if (active) setBusy(false)
+      }
+    }
+
+    run()
+    return () => {
+      active = false
+    }
+  }, [status, token, role, authSchoolId])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    if (!isHeadOfficeAdmin) return
+
+    let active = true
+    const run = async () => {
+      if (!scopeSchoolId) {
+        setRows([])
+        setApplicantRoles([])
+        return
+      }
+      setError('')
+      setBusy(true)
+      try {
+        await loadApplicantRolesForSchool(Number(scopeSchoolId))
+        await loadRows(Number(scopeSchoolId))
+      } catch (e) {
+        if (active) setError(e?.message || 'Failed to load leave types')
+      } finally {
+        if (active) setBusy(false)
+      }
+    }
+
+    run()
+    return () => {
+      active = false
+    }
+  }, [status, token, isHeadOfficeAdmin, scopeSchoolId])
+
+  const handleFormChange = (form, setter) => (e) => {
+    const { id, value } = e.target
+    setter((prev) => {
+      const next = { ...prev, [id]: value }
+      if (id === 'schoolId') {
+        next.applicantType = ''
+        next.designationId = ''
+      }
+      if (id === 'applicantType') {
+        next.designationId = ''
+      }
+      return next
+    })
+
+    if (id === 'schoolId') {
+      void loadApplicantRolesForSchool(value)
+      void loadDesignationsForSchool(value, '')
+      return
+    }
+
+    if (id === 'applicantType') {
+      void loadDesignationsForSchool(form.schoolId, value)
+    }
+  }
+
+  const openAdd = () => {
+    const defaultSchoolId = isFixedSchoolRole
+      ? authSchoolId
+      : isHeadOfficeAdmin
+        ? scopeSchoolId || ''
+        : ''
+    const nextForm = makeEmptyForm(defaultSchoolId, '')
+    setAddForm(nextForm)
+    setAddStep(0)
+    setIsAddOpen(true)
+    if (nextForm.schoolId) {
+      void loadApplicantRolesForSchool(nextForm.schoolId)
+      void loadDesignationsForSchool(nextForm.schoolId, nextForm.applicantType)
+    } else {
+      setApplicantRoles([])
+      setDesignations([])
+    }
+  }
+
+  const openEdit = (row) => {
+    const nextForm = {
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      applicantType: row.applicantType || '',
+      designationId:
+        normalizeApplicantType(row.applicantType) === 'STUDENT' || row.designationId == null
+          ? ''
+          : String(row.designationId),
+      leaveType: row.leaveType || '',
+      allowedLeavesPerYear:
+        row.allowedLeavesPerYear == null ? '' : String(row.allowedLeavesPerYear),
+    }
+    setEditForm(nextForm)
+    setEditingId(row.id)
+    setEditStep(0)
+    setIsEditOpen(true)
+    if (nextForm.schoolId) {
+      void loadApplicantRolesForSchool(nextForm.schoolId)
+      void loadDesignationsForSchool(nextForm.schoolId, nextForm.applicantType)
+    } else {
+      setApplicantRoles([])
+      setDesignations([])
+    }
+  }
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
     }
   }
 
   const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
+    setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
   const handlePendingFilterChange = (e) => {
@@ -197,97 +509,234 @@ const LeaveType = () => {
     setCurrentPage(1)
   }
 
-  const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setIsAddOpen(true)
+  const validateForm = (form) => {
+    const schoolId = isFixedSchoolRole ? authSchoolId : form.schoolId
+    if (!schoolId) return 'School is required.'
+    if (!form.applicantType || !String(form.applicantType).trim()) return 'Applicant type is required.'
+    if (!form.leaveType || !String(form.leaveType).trim()) return 'Leave type is required.'
+    if (form.allowedLeavesPerYear === '' || form.allowedLeavesPerYear == null) {
+      return 'Allowed leaves count/year is required.'
+    }
+    const parsedAllowedLeaves = Number(form.allowedLeavesPerYear)
+    if (Number.isNaN(parsedAllowedLeaves) || parsedAllowedLeaves < 0) {
+      return 'Allowed leaves count/year must be zero or greater.'
+    }
+    if (normalizeApplicantType(form.applicantType) !== 'STUDENT' && !form.designationId) {
+      return 'Designation is required for non-student applicant types.'
+    }
+    return ''
   }
 
-  const openEdit = (row) => {
-    setEditForm({
-      school: row.school,
-      applicantType: row.applicantType,
-      leaveType: row.leaveType,
-      totalLeave: row.totalLeave,
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+  const buildPayload = (form) => {
+    const schoolId = isFixedSchoolRole ? authSchoolId : Number(form.schoolId)
+    const applicantType = normalizeApplicantType(form.applicantType)
+    const isStudentApplicant = applicantType === 'STUDENT'
+    return {
+      schoolId: Number(schoolId),
+      designationId: isStudentApplicant || !form.designationId ? null : Number(form.designationId),
+      applicantType,
+      leaveType: String(form.leaveType || '').trim(),
+      allowedLeavesPerYear: Number(form.allowedLeavesPerYear),
+    }
+  }
+
+  const refreshRows = async () => {
+    await loadRows(getListingSchoolIdNumber())
+  }
+
+  const handleCreate = async () => {
+    const validationError = validateForm(addForm)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await createLeaveType(buildPayload(addForm))
+      setIsAddOpen(false)
+      setAddForm(makeEmptyForm(isFixedSchoolRole ? authSchoolId : '', ''))
+      setDesignations([])
+      setApplicantRoles([])
+      await refreshRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to create leave type')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    const validationError = validateForm(editForm)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      if (editingId == null) throw new Error('Unable to determine the record to update')
+      await updateLeaveType(editingId, buildPayload(editForm))
+      setIsEditOpen(false)
+      setEditForm(makeEmptyForm(isFixedSchoolRole ? authSchoolId : '', ''))
+      setEditingId(null)
+      setDesignations([])
+      setApplicantRoles([])
+      await refreshRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to update leave type')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    if (!window.confirm('Delete this leave type? This cannot be undone.')) return
+
+    setSaving(true)
+    setError('')
+    try {
+      await deleteLeaveType(row.id)
+      setSelectedRows((prev) => prev.filter((id) => String(id) !== String(row.id)))
+      await refreshRows()
+    } catch (e) {
+      setError(e?.message || 'Failed to delete leave type')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
+    for (let p = start; p <= end; p += 1) pages.push(p)
     return pages
   }
 
-  const renderForm = (form, setter, step) => {
+  const renderApplicantTypeField = (form, setter) => {
+    return (
+      <FormField label="Applicant Type" required>
+        <select
+          className="avm-select"
+          id="applicantType"
+          value={form.applicantType}
+          onChange={handleFormChange(form, setter)}
+          disabled={!form.schoolId && !isFixedSchoolRole}
+        >
+          <option value="">--Select Applicant Type--</option>
+          {availableApplicantRoles.map((option) => (
+            <option key={option.name} value={option.name}>
+              {formatRoleLabel(option.name)}
+            </option>
+          ))}
+        </select>
+      </FormField>
+    )
+  }
+
+  const renderSchoolField = (form, setter) => {
+    if (isFixedSchoolRole) {
+      return (
+        <FormField label="School Name" required full>
+          <input className="avm-input" value={authSchoolName || (authSchoolId != null ? `School ${authSchoolId}` : '')} readOnly />
+        </FormField>
+      )
+    }
+
+    const schoolSelectOptions =
+      isHeadOfficeAdmin && authHeadOfficeId != null
+        ? schools.filter((item) => String(item?.headOfficeId ?? '') === String(authHeadOfficeId))
+        : schools
+
+    return (
+      <FormField label="School Name" required full>
+        <select
+          className="avm-select"
+          id="schoolId"
+          value={form.schoolId}
+          onChange={handleFormChange(form, setter)}
+        >
+          <option value="">--Select School--</option>
+          {schoolSelectOptions.map((option) => (
+            <option key={option.id} value={String(option.id)}>
+              {option.schoolName}
+            </option>
+          ))}
+        </select>
+      </FormField>
+    )
+  }
+
+  const renderDesignationField = (form, setter) => {
+    const applicantType = normalizeApplicantType(form.applicantType)
+    if (applicantType === 'STUDENT') return null
+
+    const schoolId = isFixedSchoolRole ? authSchoolId : form.schoolId
+    const disabled = !schoolId || !applicantType
+
+    return (
+      <FormField label="Designation" required full>
+        <select
+          className="avm-select"
+          id="designationId"
+          value={form.designationId}
+          onChange={handleFormChange(form, setter)}
+          disabled={disabled}
+        >
+          <option value="">--Select Designation--</option>
+          {designations.map((option) => (
+            <option key={option.id} value={String(option.id)}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+        {!disabled && designations.length === 0 ? (
+          <small className="text-secondary-light d-block mt-8">
+            No designations found for the selected role and school.
+          </small>
+        ) : null}
+      </FormField>
+    )
+  }
+
+  const renderForm = (form, setter) => {
     return (
       <>
-        {step === 0 && (
-          <>
-            <p className="avm-section-title">{STEPS[0]}</p>
-            <div className="avm-grid">
-              <FormField label="School Name" required full>
-                <select
-                  className="avm-select"
-                  id="school"
-                  value={form.school}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select School--</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Applicant Type" required>
-                <select
-                  className="avm-select"
-                  id="applicantType"
-                  value={form.applicantType}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select--</option>
-                  {applicantTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Leave Type" required full>
-                <input
-                  type="text"
-                  className="avm-input"
-                  id="leaveType"
-                  placeholder="Enter leave type"
-                  value={form.leaveType}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Total Leave" required>
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="totalLeave"
-                  placeholder="Enter total leave"
-                  value={form.totalLeave}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </div>
-          </>
-        )}
+        <p className="avm-section-title">{STEPS[0]}</p>
+        <div className="avm-grid">
+          {renderSchoolField(form, setter)}
+          {renderApplicantTypeField(form, setter)}
+          {renderDesignationField(form, setter)}
+          <FormField label="Leave Type" required full>
+            <input
+              type="text"
+              className="avm-input"
+              id="leaveType"
+              placeholder="Enter leave type"
+              value={form.leaveType}
+              onChange={handleFormChange(form, setter)}
+            />
+          </FormField>
+          <FormField label="Allowed Leaves count/year" required>
+            <input
+              type="number"
+              min="0"
+              className="avm-input"
+              id="allowedLeavesPerYear"
+              placeholder="Enter allowed leaves count/year"
+              value={form.allowedLeavesPerYear}
+              onChange={handleFormChange(form, setter)}
+            />
+          </FormField>
+        </div>
       </>
     )
   }
+
+  const canCreate = !isHeadOfficeAdmin || !!scopeSchoolId
 
   return (
     <div className="dashboard-main-body">
@@ -304,17 +753,44 @@ const LeaveType = () => {
             <span className="text-secondary-light"> / Leave Type</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Leave Type
-        </button>
+
+        <div className="d-flex align-items-center gap-12 flex-wrap">
+          {isHeadOfficeAdmin ? (
+            <select
+              className="form-select border border-neutral-300 radius-8 text-secondary-light"
+              style={{ minWidth: 240 }}
+              value={scopeSchoolId}
+              onChange={(e) => setScopeSchoolId(e.target.value)}
+            >
+              <option value="">Select School</option>
+              {schools
+                .filter((item) => item?.headOfficeId == null || String(item.headOfficeId) === String(authHeadOfficeId))
+                .map((item) => (
+                  <option key={item.id} value={String(item.id)}>
+                    {item.schoolName}
+                  </option>
+                ))}
+            </select>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+            disabled={!canCreate || saving}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Leave Type
+          </button>
+        </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger mb-16" role="alert">
+          {error}
+        </div>
+      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
@@ -359,9 +835,7 @@ const LeaveType = () => {
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span>
                   <i className="ri-arrow-right-line"></i>
                 </span>
@@ -374,9 +848,7 @@ const LeaveType = () => {
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
                   <span>
                     <i className="ri-arrow-down-s-line"></i>
                   </span>
@@ -432,7 +904,7 @@ const LeaveType = () => {
           </div>
 
           <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 800 }}>
+            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1020 }}>
               <thead>
                 <tr>
                   <th scope="col">
@@ -443,47 +915,62 @@ const LeaveType = () => {
                         checked={allSelected}
                         onChange={handleSelectAll}
                       />
-                      <label className="form-check-label">S.L</label>
+                      <label className="form-check-label">ID</label>
                     </div>
                   </th>
                   {visibleColumns.school ? <th scope="col">School</th> : null}
                   {visibleColumns.applicantType ? <th scope="col">Applicant Type</th> : null}
+                  {visibleColumns.designationName ? <th scope="col">Designation</th> : null}
                   {visibleColumns.leaveType ? <th scope="col">Leave Type</th> : null}
-                  {visibleColumns.totalLeave ? <th scope="col">Total Leave</th> : null}
+                  {visibleColumns.allowedLeavesPerYear ? <th scope="col">Allowed Leaves count/year</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {busy ? (
                   <tr>
                     <td
-                      colSpan={visibleColumnCount + 1}
+                      colSpan={visibleColumnCount + 2}
                       className="text-center py-40 text-secondary-light"
                     >
-                      No leave type records found.
+                      Loading leave types...
+                    </td>
+                  </tr>
+                ) : paginatedRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visibleColumnCount + 2}
+                      className="text-center py-40 text-secondary-light"
+                    >
+                      {isHeadOfficeAdmin && !scopeSchoolId
+                        ? 'Select a school to view leave types.'
+                        : 'No leave type records found.'}
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginatedRows.map((row) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(String(row.id))}
+                            onChange={() => handleSelectRow(String(row.id))}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{row.id}</label>
                         </div>
                       </td>
                       {visibleColumns.school ? (
-                        <td className="fw-medium text-primary-light">{row.school}</td>
+                        <td className="fw-medium text-primary-light">{row.schoolName || '-'}</td>
                       ) : null}
-                      {visibleColumns.applicantType ? <td>{row.applicantType}</td> : null}
-                      {visibleColumns.leaveType ? <td className="fw-medium">{row.leaveType}</td> : null}
-                      {visibleColumns.totalLeave ? <td className="text-center fw-semibold">{row.totalLeave}</td> : null}
+                      {visibleColumns.applicantType ? <td>{formatRoleLabel(row.applicantType) || '-'}</td> : null}
+                      {visibleColumns.designationName ? <td>{row.designationName || '-'}</td> : null}
+                      {visibleColumns.leaveType ? <td className="fw-medium">{row.leaveType || '-'}</td> : null}
+                      {visibleColumns.allowedLeavesPerYear ? (
+                        <td className="text-center fw-semibold">{row.allowedLeavesPerYear ?? '-'}</td>
+                      ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
@@ -491,6 +978,7 @@ const LeaveType = () => {
                             className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             onClick={() => openEdit(row)}
                             title="Edit"
+                            disabled={saving}
                           >
                             <i className="ri-edit-line"></i>
                           </button>
@@ -498,6 +986,8 @@ const LeaveType = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={() => handleDelete(row)}
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -512,8 +1002,8 @@ const LeaveType = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
             </span>
 
             <div className="d-flex align-items-center gap-8">
@@ -529,11 +1019,7 @@ const LeaveType = () => {
                 <button
                   key={p}
                   type="button"
-                  className={
-                    p === currentPage
-                      ? 'btn btn-sm btn-primary-600'
-                      : 'btn btn-sm btn-light border'
-                  }
+                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
                   onClick={() => setCurrentPage(p)}
                 >
                   {p}
@@ -553,7 +1039,7 @@ const LeaveType = () => {
       </div>
 
       <WizardPopup
-        modalWidth="580px"
+        modalWidth="620px"
         open={isAddOpen}
         title="Add Leave Type"
         steps={STEPS}
@@ -561,14 +1047,14 @@ const LeaveType = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onSubmit={handleCreate}
+        submitLabel={saving ? 'Saving...' : 'Save'}
       >
-        {renderForm(addForm, setAddForm, addStep)}
+        {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
       <WizardPopup
-        modalWidth="580px"
+        modalWidth="620px"
         open={isEditOpen}
         title="Edit Leave Type"
         steps={STEPS}
@@ -576,10 +1062,10 @@ const LeaveType = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
+        onSubmit={handleUpdate}
+        submitLabel={saving ? 'Updating...' : 'Update'}
       >
-        {renderForm(editForm, setEditForm, editStep)}
+        {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
       <SlideSidebar
@@ -590,10 +1076,7 @@ const LeaveType = () => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="school"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
+            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
             </label>
             <select
@@ -625,7 +1108,29 @@ const LeaveType = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select Applicant Type</option>
-              {applicantTypeOptionsFromData.map((option) => (
+              {applicantTypeFilterOptions.map((option) => (
+                <option key={option} value={option}>
+                  {formatRoleLabel(option)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="designation"
+              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+            >
+              Designation
+            </label>
+            <select
+              id="designation"
+              className="form-control form-select"
+              value={pendingFilters.designation}
+              onChange={handlePendingFilterChange}
+            >
+              <option value="Select">Select Designation</option>
+              {designationOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>

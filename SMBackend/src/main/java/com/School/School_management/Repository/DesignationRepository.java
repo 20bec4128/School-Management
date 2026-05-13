@@ -10,9 +10,13 @@ import org.springframework.stereotype.Repository;
 public interface DesignationRepository extends JpaRepository<Designation, Long> {
     List<Designation> findBySchoolIdOrderByIdDesc(Long schoolId);
 
+    List<Designation> findBySchoolIdAndRoleIgnoreCaseOrderByIdDesc(Long schoolId, String role);
+
     List<Designation> findBySchoolIdInOrderByIdDesc(Collection<Long> schoolIds);
 
     List<Designation> findAllByOrderByIdDesc();
 
-    boolean existsBySchoolIdAndNameIgnoreCase(Long schoolId, String name);
+    boolean existsBySchoolIdAndRoleIgnoreCaseAndNameIgnoreCase(Long schoolId, String role, String name);
+
+    boolean existsBySchoolIdAndRoleIgnoreCaseAndNameIgnoreCaseAndIdNot(Long schoolId, String role, String name, Long id);
 }

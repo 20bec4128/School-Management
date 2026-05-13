@@ -1,0 +1,80 @@
+package com.School.School_management.Controller;
+
+import com.School.School_management.Dto.LeaveApplicationDto;
+import com.School.School_management.Service.LeaveApplicationService;
+import com.School.School_management.auth.RequirePermission;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/leave-applications")
+@RequirePermission({"ADMIN_USER_MANAGE", "SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+public class LeaveApplicationController {
+
+    private final LeaveApplicationService leaveApplicationService;
+    private final ObjectMapper objectMapper;
+
+    public LeaveApplicationController(LeaveApplicationService leaveApplicationService, ObjectMapper objectMapper) {
+        this.leaveApplicationService = leaveApplicationService;
+        this.objectMapper = objectMapper;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<LeaveApplicationDto.Response>> list(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(leaveApplicationService.list(schoolId, status));
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<LeaveApplicationDto.Response> create(
+            @RequestPart("data") String data,
+            @RequestPart(value = "attachment", required = false) MultipartFile attachment
+    ) throws Exception {
+        LeaveApplicationDto.Request request = objectMapper.readValue(data, LeaveApplicationDto.Request.class);
+        return ResponseEntity.ok(leaveApplicationService.create(request, attachment));
+    }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<LeaveApplicationDto.Response> update(
+            @PathVariable Long id,
+            @RequestPart("data") String data,
+            @RequestPart(value = "attachment", required = false) MultipartFile attachment
+    ) throws Exception {
+        LeaveApplicationDto.Request request = objectMapper.readValue(data, LeaveApplicationDto.Request.class);
+        return ResponseEntity.ok(leaveApplicationService.update(id, request, attachment));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<LeaveApplicationDto.Response> updateStatus(
+            @PathVariable Long id,
+            @RequestParam String status
+    ) {
+        return ResponseEntity.ok(leaveApplicationService.updateStatus(id, status));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> delete(@PathVariable Long id) {
+        leaveApplicationService.delete(id);
+        return ResponseEntity.ok("Leave application deleted successfully");
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<LeaveApplicationDto.Response> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(leaveApplicationService.getById(id));
+    }
+}

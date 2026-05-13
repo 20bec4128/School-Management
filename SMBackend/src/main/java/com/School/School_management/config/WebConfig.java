@@ -44,7 +44,7 @@ public class WebConfig implements WebMvcConfigurer {
             "http://127.0.0.1:*",
             "https://school.infitoolz.com",
             "http://school.infitoolz.com")
-        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         .allowedHeaders("*")
         .allowCredentials(true)
         .maxAge(3600);
