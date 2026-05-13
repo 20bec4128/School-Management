@@ -13,3 +13,4 @@ CREATE TABLE IF NOT EXISTS academic_years (
 
 CREATE INDEX IF NOT EXISTS idx_academic_years_school_id ON academic_years(school_id);
 CREATE INDEX IF NOT EXISTS idx_academic_years_school_running ON academic_years(school_id, is_running);
+
