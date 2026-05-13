@@ -53,11 +53,13 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SubjectResponseDto> getAllSubjects() {
+    public List<SubjectResponseDto> getAllSubjects(Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
         return subjectRepository.findAll().stream()
+                .filter(subject -> schoolId == null
+                        || (subject.getSchool() != null && schoolId.equals(subject.getSchool().getId())))
                 .filter(subject -> canAccess(user, subject))
                 .map(this::mapToResponseDto)
                 .toList();

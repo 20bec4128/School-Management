@@ -15,7 +15,7 @@ export const PAGE_GROUPS = [
   {
     key: 'administrator',
     label: 'Administrator',
-    pageKeys: ['head-offices', 'manage-school', 'user-role-acl', 'payment-setting', 'sms-setting'],
+    pageKeys: ['head-offices', 'manage-school', 'academic-year', 'user-role-acl', 'payment-setting', 'sms-setting'],
   },
   {
     key: 'student-management',
@@ -86,6 +86,7 @@ export const PAGE_GROUPS = [
 
 export const ROUTE_ACCESS_RULES = [
   { pageKeys: ['head-offices'], permissions: ['HEAD_OFFICE_MANAGE', '*'] },
+  { pageKeys: ['academic-year'], permissions: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
   { pageKeys: ['manage-school', 'payment-setting', 'sms-setting'], permissions: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
   { pageKeys: ['user-role-acl'], permissions: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*'] },
   { pageKeys: ['class-routine'], permissions: ['CLASS_ROUTINE_VIEW', 'CLASS_ROUTINE_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },

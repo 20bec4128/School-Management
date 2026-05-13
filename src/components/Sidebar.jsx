@@ -24,12 +24,51 @@ const menuSections = [
         title: "Administrator",
         icon: "ri:user-settings-line",
         submenu: [
+<<<<<<< HEAD
           { label: "Head Offices", href: "#", page: "head-offices", perm: "HEAD_OFFICE_MANAGE" },
           { label: "Manage School", href: "#", page: "manage-school", perm: "SCHOOL_MANAGE" },
           { label: "Manage User Roles", href: "#", page: "user-role-acl", perm: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE"] },
           { label: "Payment Setting", href: "#", page: "payment-setting", perm: "SCHOOL_MANAGE" },
           { label: "SMS Setting", href: "#", page: "sms-setting", perm: "SCHOOL_MANAGE" },
           { label: "Email Setting", href: "#", page: "email-setting", perm: "SCHOOL_MANAGE" },
+=======
+          {
+            label: "Head Offices",
+            href: "#",
+            page: "head-offices",
+            perm: "HEAD_OFFICE_MANAGE",
+          },
+          {
+            label: "Manage School",
+            href: "#",
+            page: "manage-school",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "Manage User Roles",
+            href: "#",
+            page: "user-role-acl",
+            perm: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE"],
+          },
+          {
+            label: "Payment Setting",
+            href: "#",
+            page: "payment-setting",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "SMS Setting",
+            href: "#",
+            page: "sms-setting",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "Email Setting",
+            href: "#",
+            page: "email-setting",
+            perm: "SCHOOL_MANAGE",
+          },
+>>>>>>> a6224f6bade402bb9ce58b14fd91ec361ac0a2e7
           { label: "Academic Year", href: "#", page: "academic-year", perm: "SCHOOL_MANAGE" },
         ],
       },
@@ -499,6 +538,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     "school-admin-dashboard",
     "teacher-department",
     "user-role-acl",
+    "academic-year",
     "class",
     "section",
     "subject",
