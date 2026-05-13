@@ -9,6 +9,8 @@ import UserRoleAcl from "./pages/UserRoleAcl";
 import TeacherDepartment from "./pages/TeacherDepartment";
 import StudentList from "./pages/StudentList";
 import AddStudent from "./pages/AddStudent";
+import AddLesson from "./pages/AddLesson";
+import EditLesson from "./pages/EditLesson";
 import ManageTeacher from "./pages/Manageteacher";
 import ClassLecture from "./pages/ClassLecture";
 import Rating from "./pages/Rating";
@@ -91,6 +93,7 @@ import Discount from "./pages/Discount";
 import FeeType from "./pages/FeeType";
 import FeeCollection from "./pages/FeeCollection";
 import ManageSchool from "./pages/ManageSchool";
+import AcademicYear from "./pages/AcademicYear";
 import PaymentSetting from "./pages/PaymentSetting";
 import SmsSetting from "./pages/SmsSetting";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -128,6 +131,11 @@ const routeEntries = [
     pageKey: "head-office-dashboard",
     component: HeadOfficeDashboard,
     allowedRoles: ["HEAD_OFFICE_ADMIN"],
+  },
+  {
+    pageKey: "head-offices",
+    component: HeadOffices,
+    permission: ["HEAD_OFFICE_MANAGE", "*"],
   },
   {
     pageKey: "teacher-dashboard",
@@ -199,6 +207,8 @@ const routeEntries = [
   { pageKey: "assignment", component: Assignment },
   { pageKey: "submission", component: Submission },
   { pageKey: "lesson", component: Lesson },
+  { pageKey: "add-lesson", component: AddLesson },
+  { pageKey: "edit-lesson", component: EditLesson },
   { pageKey: "topic", component: Topic },
   { pageKey: "lesson-timeline", component: LessonTimeline },
   { pageKey: "lesson-status", component: LessonStatus },
@@ -238,6 +248,11 @@ const routeEntries = [
   {
     pageKey: "manage-school",
     component: ManageSchool,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "academic-year",
+    component: AcademicYear,
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {

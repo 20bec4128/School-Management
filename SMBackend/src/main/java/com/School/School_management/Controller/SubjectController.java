@@ -20,8 +20,8 @@ public class SubjectController {
 
     @RequirePermission({"SUBJECT_MANAGE", "SUBJECT_MANAGE_ASSIGNED", "SUBJECT_VIEW_ASSIGNED", "SUBJECT_VIEW_OWN", "SUBJECT_VIEW_CHILD", "*"})
     @GetMapping
-    public List<SubjectResponseDto> getAllSubjects() {
-        return subjectService.getAllSubjects();
+    public List<SubjectResponseDto> getAllSubjects(@RequestParam(required = false) Long schoolId) {
+        return subjectService.getAllSubjects(schoolId);
     }
 
     @RequirePermission({"SUBJECT_MANAGE", "SUBJECT_MANAGE_ASSIGNED", "SUBJECT_VIEW_ASSIGNED", "SUBJECT_VIEW_OWN", "SUBJECT_VIEW_CHILD", "*"})

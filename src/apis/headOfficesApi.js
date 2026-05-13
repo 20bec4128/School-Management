@@ -92,3 +92,8 @@ export const deleteHeadOffice = async (id) => {
   if (!contentType.includes('application/json')) return null
   return res.json()
 }
+export const fetchHeadOfficesLookup = async () => {
+  const page = await fetchHeadOfficesPage(0, 500)
+  const content = Array.isArray(page?.content) ? page.content : []
+  return content.map(ho => ({ id: ho.id, name: ho.name })).sort((a, b) => a.name.localeCompare(b.name))
+}

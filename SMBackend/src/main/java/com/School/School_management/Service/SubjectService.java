@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface SubjectService {
 
-    List<SubjectResponseDto> getAllSubjects();
+    List<SubjectResponseDto> getAllSubjects(Long schoolId);
 
     SubjectResponseDto getSubjectById(Long id);
 

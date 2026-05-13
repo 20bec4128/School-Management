@@ -1,6 +1,6 @@
 import { apiFetch } from './apiClient'
 
-const SUBJECTS_API_BASE = '/api/subjects'
+const BASE = '/api/academic-years'
 
 const readApiError = async (res) => {
   try {
@@ -17,19 +17,18 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchSubjects = async ({ schoolId } = {}) => {
+export const fetchAcademicYears = async ({ schoolId } = {}) => {
   const qs = new URLSearchParams()
-  if (schoolId != null && schoolId !== '') qs.set('schoolId', String(schoolId))
-  const url = qs.toString() ? `${SUBJECTS_API_BASE}?${qs.toString()}` : SUBJECTS_API_BASE
+  if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
+  const url = qs.size ? `${BASE}?${qs.toString()}` : BASE
 
   const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
-  const data = await res.json()
-  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+  return res.json()
 }
 
-export const createSubject = async (payload) => {
-  const res = await apiFetch(SUBJECTS_API_BASE, {
+export const createAcademicYear = async (payload) => {
+  const res = await apiFetch(BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -38,8 +37,8 @@ export const createSubject = async (payload) => {
   return res.json()
 }
 
-export const updateSubject = async (id, payload) => {
-  const res = await apiFetch(`${SUBJECTS_API_BASE}/${id}`, {
+export const updateAcademicYear = async (id, payload) => {
+  const res = await apiFetch(`${BASE}/${encodeURIComponent(String(id))}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -48,8 +47,8 @@ export const updateSubject = async (id, payload) => {
   return res.json()
 }
 
-export const deleteSubject = async (id) => {
-  const res = await apiFetch(`${SUBJECTS_API_BASE}/${id}`, { method: 'DELETE' })
+export const deleteAcademicYear = async (id) => {
+  const res = await apiFetch(`${BASE}/${encodeURIComponent(String(id))}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
