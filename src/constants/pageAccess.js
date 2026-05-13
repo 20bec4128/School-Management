@@ -65,12 +65,12 @@ export const PAGE_GROUPS = [
   {
     key: 'hr',
     label: 'Human Resource',
-    pageKeys: ['manage-designation', 'manage-employee', 'leave-type', 'leave-application', 'waiting-application', 'approved-application', 'declined-application', 'salary-grade', 'salary-payment', 'salary-history'],
+    pageKeys: ['manage-designation', 'manage-employee', 'leave-type', 'leave-application', 'waiting-application', 'approved-application', 'declined-application', 'salary-grade', 'salary-payment', 'salary-history', 'employee-attendance-report'],
   },
   {
     key: 'finance',
     label: 'Finance & Accounts',
-    pageKeys: ['discount', 'fee-type', 'fee-collection'],
+    pageKeys: ['discount', 'fee-type', 'fee-collection', 'manage-invoice', 'due-invoice'],
   },
   {
     key: 'communication',
@@ -171,6 +171,8 @@ export const PAGE_KEY_PERMISSIONS = {
   discount: ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
   'fee-type': ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
   'fee-collection': ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
+  'manage-invoice': ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
+  'due-invoice': ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
 
   // Communication
   'visitor-purpose': ['NOTICE_VIEW', 'NEWS_VIEW', '*'],

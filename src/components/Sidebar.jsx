@@ -1,127 +1,280 @@
-import React, { useState, useEffect } from 'react';
-import '../css/sidebar.css';
-import { useSidebar } from '../context/SidebarContext';
-import { can } from '../utils/permissions';
-import { canManageUsers } from '../utils/editableRoles';
-import { normalizeRole } from '../utils/roles';
+import React, { useState, useEffect } from "react";
+import "../css/sidebar.css";
+import { useSidebar } from "../context/SidebarContext";
+import { can } from "../utils/permissions";
+import { canManageUsers } from "../utils/editableRoles";
+import { normalizeRole } from "../utils/roles";
 
 const menuSections = [
   {
-    title: 'Core System',
+    title: "Core System",
     items: [
       {
-        title: 'Dashboard',
-        icon: 'ri:dashboard-line',
+        title: "Dashboard",
+        icon: "ri:dashboard-line",
         submenu: [
-          { label: 'School', href: '#', page: 'school-admin-dashboard', perm: '*' },
-          { label: 'Student', href: '#', page: 'student-dashboard', perm: '*' },
-          { label: 'Teacher', href: '#', page: 'teacher-dashboard', perm: '*' },
-          { label: 'Parent', href: '#', page: 'parent-dashboard', perm: '*' },
-          { label: 'LMS', href: '#', page: 'lms-dashboard', perm: '*' },
+          {
+            label: "School",
+            href: "#",
+            page: "school-admin-dashboard",
+            perm: "*",
+          },
+          { label: "Student", href: "#", page: "student-dashboard", perm: "*" },
+          { label: "Teacher", href: "#", page: "teacher-dashboard", perm: "*" },
+          { label: "Parent", href: "#", page: "parent-dashboard", perm: "*" },
+          { label: "LMS", href: "#", page: "lms-dashboard", perm: "*" },
         ],
       },
       {
-        title: 'Administrator',
-        icon: 'ri:user-settings-line',
+        title: "Administrator",
+        icon: "ri:user-settings-line",
         submenu: [
-          { label: 'Head Offices', href: '#', page: 'head-offices', perm: 'HEAD_OFFICE_MANAGE' },
-          { label: 'Manage School', href: '#', page: 'manage-school', perm: 'SCHOOL_MANAGE' },
-          { label: 'Manage User Roles', href: '#', page: 'user-role-acl', perm: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE'] },
-          { label: 'Payment Setting', href: '#', page: 'payment-setting', perm: 'SCHOOL_MANAGE' },
-          { label: 'SMS Setting', href: '#', page: 'sms-setting', perm: 'SCHOOL_MANAGE' },
-          { label: 'Email Setting', href: '#', page: 'email-setting', perm: 'SCHOOL_MANAGE' },
-          { label: 'Academic Year', href: '#', perm: 'SCHOOL_MANAGE' },
+          {
+            label: "Head Offices",
+            href: "#",
+            page: "head-offices",
+            perm: "HEAD_OFFICE_MANAGE",
+          },
+          {
+            label: "Manage School",
+            href: "#",
+            page: "manage-school",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "Manage User Roles",
+            href: "#",
+            page: "user-role-acl",
+            perm: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE"],
+          },
+          {
+            label: "Payment Setting",
+            href: "#",
+            page: "payment-setting",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "SMS Setting",
+            href: "#",
+            page: "sms-setting",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "Email Setting",
+            href: "#",
+            page: "email-setting",
+            perm: "SCHOOL_MANAGE",
+          },
+          { label: "Academic Year", href: "#", perm: "SCHOOL_MANAGE" },
         ],
       },
     ],
   },
   {
-    title: 'Student Management',
+    title: "Student Management",
     items: [
       {
-        title: 'Manage Student',
-        icon: 'ri:group-line',
-        perm: 'STUDENT_TYPE_MANAGE',
+        title: "Manage Student",
+        icon: "ri:group-line",
+        perm: "STUDENT_TYPE_MANAGE",
         submenu: [
-          { label: 'Student Type', href: '#', page: 'student-type' },
-          { label: 'Student List', href: '#', page: 'student-list' },
-          { label: 'Online Admission', href: '#', page: 'online-admission' },
-          { label: 'Student Activity', href: '#', page: 'student-activity' },
+          { label: "Student Type", href: "#", page: "student-type" },
+          { label: "Student List", href: "#", page: "student-list" },
+          { label: "Online Admission", href: "#", page: "online-admission" },
+          { label: "Student Activity", href: "#", page: "student-activity" },
         ],
       },
     ],
   },
   {
-    title: 'Academic Management',
+    title: "Academic Management",
     items: [
       {
-        title: 'Academic',
-        icon: 'ri:bank-line',
+        title: "Academic",
+        icon: "ri:bank-line",
         submenu: [
-          { label: 'Class', href: '#', page: 'class' },
-          { label: 'Section', href: '#', page: 'section' },
-          { label: 'Subject', href: '#', page: 'subject' },
-          { label: 'Syllabus', href: '#', page: 'syllabus' },
-          { label: 'Study Material', href: '#', page: 'study-material' },
-          { label: 'Live Class', href: '#', page: 'live-class' },
-          { label: 'Assignment', href: '#', page: 'assignment' },
-          { label: 'Submission', href: '#', page: 'submission' },
+          { label: "Class", href: "#", page: "class" },
+          { label: "Section", href: "#", page: "section" },
+          { label: "Subject", href: "#", page: "subject" },
+          { label: "Syllabus", href: "#", page: "syllabus" },
+          { label: "Study Material", href: "#", page: "study-material" },
+          { label: "Live Class", href: "#", page: "live-class" },
+          { label: "Assignment", href: "#", page: "assignment" },
+          { label: "Submission", href: "#", page: "submission" },
         ],
       },
       {
-        title: 'Lesson Plan',
-        icon: 'ri:file-list-3-line',
+        title: "Lesson Plan",
+        icon: "ri:file-list-3-line",
         submenu: [
-          { label: 'Lesson', href: '#', page: 'lesson' },
-          { label: 'Topic', href: '#', page: 'topic' },
-          { label: 'Lesson Timeline', href: '#', page: 'lesson-timeline' },
-          { label: 'Lesson Status', href: '#', page: 'lesson-status' },
-          { label: 'Lesson Plan', href: '#', page: 'lesson-plan' },
+          { label: "Lesson", href: "#", page: "lesson" },
+          { label: "Topic", href: "#", page: "topic" },
+          { label: "Lesson Timeline", href: "#", page: "lesson-timeline" },
+          { label: "Lesson Status", href: "#", page: "lesson-status" },
+          { label: "Lesson Plan", href: "#", page: "lesson-plan" },
         ],
       },
       {
-        title: 'Class Routine',
-        icon: 'ri:time-line',
-        href: '#',
-        page: 'class-routine',
+        title: "Class Routine",
+        icon: "ri:time-line",
+        href: "#",
+        page: "class-routine",
       },
       {
-        title: 'Teacher',
-        icon: 'ri:user-star-line',
+        title: "Teacher",
+        icon: "ri:user-star-line",
         submenu: [
-          { label: 'Department', href: '#', page: 'teacher-department' },
-          { label: 'Manage Teacher', href: '#', page: 'manage-teacher' },
-          { label: 'Class Lecture', href: '#', page: 'class-lecture' },
-          { label: 'Rating', href: '#', page: 'rating' },
+          { label: "Department", href: "#", page: "teacher-department" },
+          { label: "Manage Teacher", href: "#", page: "manage-teacher" },
+          { label: "Class Lecture", href: "#", page: "class-lecture" },
+          { label: "Rating", href: "#", page: "rating" },
         ],
       },
     ],
   },
   {
-    title: 'Human Resource (HR)',
+    title: "Human Resource (HR)",
     items: [
       {
-        title: 'Human Resource',
-        icon: 'ri:team-line',
+        title: "Human Resource",
+        icon: "ri:team-line",
         submenu: [
-          { label: 'Manage Destination', href: '#', page: 'manage-designation' },
-          { label: 'Manage Employees', href: '#', page: 'manage-employee' },
+          {
+            label: "Manage Destination",
+            href: "#",
+            page: "manage-designation",
+          },
+          { label: "Manage Employees", href: "#", page: "manage-employee" },
         ],
       },
     ],
   },
   {
-    title: 'Manage Leave',
+    title: "Manage Leave",
     items: [
       {
-        title: 'Manage Leave',
-        icon: 'ri:calendar-todo-line',
+        title: "Manage Leave",
+        icon: "ri:calendar-todo-line",
         submenu: [
-          { label: 'Leave Type', href: '#', page: '' },
-          { label: 'Leave Application', href: '#', page: '' },
-          { label: 'Waiting Application', href: '#', page: '' },
-          { label: 'Approved Application', href: '#', page: '' },
-          { label: 'Declined Application', href: '#', page: '' },
+          { label: "Leave Type", href: "#", page: "leave-type" },
+          { label: "Leave Application", href: "#", page: "leave-application" },
+          {
+            label: "Waiting Application",
+            href: "#",
+            page: "waiting-application",
+          },
+          {
+            label: "Approved Application",
+            href: "#",
+            page: "approved-application",
+          },
+          {
+            label: "Declined Application",
+            href: "#",
+            page: "declined-application",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    title: "Payroll",
+    items: [
+      {
+        title: "Payroll",
+        icon: "ri:money-dollar-circle-line",
+        submenu: [
+          { label: "Salary Grade", href: "#", page: "salary-grade" },
+          { label: "Salary Payment", href: "#", page: "salary-payment" },
+          { label: "Salary History", href: "#", page: "salary-history" },
+        ],
+      },
+    ],
+  },
+  {
+    title: "Finance & Accounts",
+    items: [
+      {
+        title: "Accounting",
+        icon: "ri:calculator-line",
+        submenu: [
+          { label: "Discount", href: "#", page: "discount" },
+          { label: "Fee Type", href: "#", page: "fee-type" },
+          { label: "Fee Collection", href: "#", page: "fee-collection" },
+          { label: "Manage Invoice", href: "#", page: "manage-invoice" },
+          { label: "Due Invoice", href: "#", page: "due-invoice" },
+          { label: "Due Receipt", href: "#", page: "due-receipt" },
+          { label: "Paid Receipt", href: "#", page: "paid-receipt" },
+          { label: "Due Fee Email", href: "#", page: "due-fee-email" },
+          { label: "Due Fee SMS", href: "#", page: "due-fee-sms" },
+          { label: "Income Head", href: "#", page: "income-head" },
+          { label: "Income", href: "#", page: "income" },
+          { label: "Expenditure Head", href: "#", page: "expenditure-head" },
+          { label: "Expenditure", href: "#", page: "expenditure" },
+        ],
+      },
+      {
+        title: "Report",
+        icon: "ri:bar-chart-line",
+        submenu: [
+          { label: "Income Report", href: "#", page: "income-report" },
+          {
+            label: "Expenditure Report",
+            href: "#",
+            page: "expenditure-report",
+          },
+          { label: "Invoice Report", href: "#", page: "invoice-report" },
+          { label: "Due Fee Report", href: "#", page: "due-fee-report" },
+          {
+            label: "Fee Collection Report",
+            href: "#",
+            page: "fee-collection-report",
+          },
+          {
+            label: "Accounting Balance Report",
+            href: "#",
+            page: "accounting-balance-report",
+          },
+          { label: "Library Report", href: "#", page: "library-report" },
+          {
+            label: "Student Attendance Report",
+            href: "#",
+            page: "student-attendance-report",
+          },
+          {
+            label: "Student Yearly Attendance Report",
+            href: "#",
+            page: "student-yearly-attendance-report",
+          },
+          {
+            label: "Teacher Attendance Report",
+            href: "#",
+            page: "teacher-attendance-report",
+          },
+          {
+            label: "Teacher Yearly Attendance Report",
+            href: "#",
+            page: "teacher-yearly-attendance-report",
+          },
+          {
+            label: "Employee Attendance Report",
+            href: "#",
+            page: "employee-attendance-report",
+          },
+          {
+            label: "Employee Yearly Attendance Report",
+            href: "#",
+            page: "employee-yearly-attendance-report",
+          },
+          { label: "Student Report", href: "#" },
+          { label: "Student Invoice Report", href: "#" },
+          { label: "Student Activity Report", href: "#" },
+          { label: "Payroll Report", href: "#" },
+          { label: "Daily Transaction Report", href: "#" },
+          { label: "Daily Statement Report", href: "#" },
+          { label: "Exam Result Report", href: "#" },
+          { label: "Certificate Type", href: "#" },
+          { label: "Generate Certificate", href: "#" },
         ],
       },
     ],
@@ -137,35 +290,94 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     user?.name ||
     user?.fullName ||
     user?.email ||
-    'User';
+    "User";
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
-  const isStudent = role === 'STUDENT';
-  const isSchoolAdmin = role === 'SCHOOL_ADMIN';
-  const isTeacher = role === 'TEACHER';
+  const isStudent = role === "STUDENT";
+  const isSchoolAdmin = role === "SCHOOL_ADMIN";
+  const isTeacher = role === "TEACHER";
 
   const studentAllowedPages = new Set([
-    'dashboard', 'student-dashboard', 'class-routine', 'subject', 'syllabus',
-    'study-material', 'live-class', 'assignment', 'submission', 'lesson',
-    'topic', 'lesson-timeline', 'lesson-status', 'lesson-plan',
+    "dashboard",
+    "student-dashboard",
+    "class-routine",
+    "subject",
+    "syllabus",
+    "study-material",
+    "live-class",
+    "assignment",
+    "submission",
+    "lesson",
+    "topic",
+    "lesson-timeline",
+    "lesson-status",
+    "lesson-plan",
   ]);
   const schoolAdminAllowedPages = new Set([
-    'dashboard', 'school-admin-dashboard', 'teacher-department', 'user-role-acl',
-    'class', 'section', 'subject', 'manage-teacher', 'student-list', 'student-type',
-    'online-admission', 'student-activity', 'syllabus', 'study-material', 'live-class',
-    'assignment', 'submission', 'lesson', 'topic', 'lesson-timeline', 'lesson-status',
-    'lesson-plan', 'class-routine',
+    "dashboard",
+    "school-admin-dashboard",
+    "teacher-department",
+    "user-role-acl",
+    "class",
+    "section",
+    "subject",
+    "manage-teacher",
+    "student-list",
+    "student-type",
+    "online-admission",
+    "student-activity",
+    "syllabus",
+    "study-material",
+    "live-class",
+    "assignment",
+    "submission",
+    "lesson",
+    "topic",
+    "lesson-timeline",
+    "lesson-status",
+    "lesson-plan",
+    "class-routine",
   ]);
   const teacherVisiblePages = new Set([
-    'teacher-dashboard', 'student-type', 'student-list', 'online-admission', 'class',
-    'section', 'subject', 'syllabus', 'study-material', 'live-class', 'assignment',
-    'submission', 'lesson', 'topic', 'lesson-timeline', 'lesson-status', 'lesson-plan',
-    'class-routine',
+    "teacher-dashboard",
+    "student-type",
+    "student-list",
+    "online-admission",
+    "class",
+    "section",
+    "subject",
+    "syllabus",
+    "study-material",
+    "live-class",
+    "assignment",
+    "submission",
+    "lesson",
+    "topic",
+    "lesson-timeline",
+    "lesson-status",
+    "lesson-plan",
+    "class-routine",
   ]);
   const parentVisiblePages = new Set([
-    'parent-dashboard', 'dashboard', 'class-routine', 'student-attendance', 'exam-result',
-    'mark-sheet', 'result-card', 'fee-collection', 'subject', 'syllabus', 'study-material',
-    'live-class', 'assignment', 'submission', 'lesson', 'topic', 'lesson-timeline',
-    'lesson-status', 'lesson-plan',
+    "parent-dashboard",
+    "dashboard",
+    "class-routine",
+    "student-attendance",
+    "exam-result",
+    "mark-sheet",
+    "result-card",
+    "employee-attendance-report",
+    "fee-collection",
+    "subject",
+    "syllabus",
+    "study-material",
+    "live-class",
+    "assignment",
+    "submission",
+    "lesson",
+    "topic",
+    "lesson-timeline",
+    "lesson-status",
+    "lesson-plan",
   ]);
 
   const canOpenPage = (page) => {
@@ -173,7 +385,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     if (isStudent) return studentAllowedPages.has(page);
     if (isSchoolAdmin) return schoolAdminAllowedPages.has(page);
     if (isTeacher) return teacherVisiblePages.has(page);
-    if (role === 'PARENT') return parentVisiblePages.has(page);
+    if (role === "PARENT") return parentVisiblePages.has(page);
     return true;
   };
 
@@ -188,11 +400,14 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       ...section,
       items: (Array.isArray(section.items) ? section.items : [])
         .filter((item) => {
-          if (role === 'PARENT' && item.page && !canOpenPage(item.page)) return false;
+          if (role === "PARENT" && item.page && !canOpenPage(item.page))
+            return false;
           if (!isStudent && !isSchoolAdmin) return true;
           if (item.page && canOpenPage(item.page)) return true;
           if (Array.isArray(item.submenu)) {
-            return item.submenu.some((sub) => sub?.page && canOpenPage(sub.page));
+            return item.submenu.some(
+              (sub) => sub?.page && canOpenPage(sub.page),
+            );
           }
           return false;
         })
@@ -202,7 +417,13 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           submenu: Array.isArray(item.submenu)
             ? item.submenu
                 .filter((sub) => canOpenPage(sub.page))
-                .filter((sub) => !(role === 'PARENT' && ['class', 'section'].includes(sub?.page)))
+                .filter(
+                  (sub) =>
+                    !(
+                      role === "PARENT" &&
+                      ["class", "section"].includes(sub?.page)
+                    ),
+                )
             : item.submenu,
         }))
         .filter((item) => {
@@ -214,7 +435,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
 
   // ─── Build a flat list of (sectionIdx, itemIdx) keys for dropdown items ──
   // Key format: `${sectionIndex}-${itemIndex}`
-  const buildOpenKey = (sectionIndex, itemIndex) => `${sectionIndex}-${itemIndex}`;
+  const buildOpenKey = (sectionIndex, itemIndex) =>
+    `${sectionIndex}-${itemIndex}`;
 
   // Find which key contains the currentPage (to auto-open that dropdown)
   const findActiveKey = () => {
@@ -223,7 +445,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       for (let ii = 0; ii < section.items.length; ii++) {
         const item = section.items[ii];
         if (Array.isArray(item.submenu)) {
-          if (item.submenu.some((sub) => sub.page && sub.page === currentPage)) {
+          if (
+            item.submenu.some((sub) => sub.page && sub.page === currentPage)
+          ) {
             return buildOpenKey(si, ii);
           }
         }
@@ -259,19 +483,23 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   };
 
   const sidebarClass = [
-    'sidebar',
-    isOpen ? 'sidebar-open' : '',
-    isCollapsed ? 'active' : '',
+    "sidebar",
+    isOpen ? "sidebar-open" : "",
+    isCollapsed ? "active" : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <>
       {isOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
 
       <aside className={sidebarClass}>
-        <button type="button" className="sidebar-close-btn" onClick={closeSidebar}>
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          onClick={closeSidebar}
+        >
           <iconify-icon icon="ri:close-line"></iconify-icon>
         </button>
 
@@ -279,9 +507,21 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
         <div>
           <div className="sidebar-logo d-flex align-items-center justify-content-between">
             <a href="#" className="sidebar-logo__brand">
-              <img src="/assets/images/logo.png" alt="site logo" className="light-logo" />
-              <img src="/assets/images/logo-light.png" alt="site logo" className="dark-logo" />
-              <img src="/assets/images/logo-icon.png" alt="site logo" className="logo-icon" />
+              <img
+                src="/assets/images/logo.png"
+                alt="site logo"
+                className="light-logo"
+              />
+              <img
+                src="/assets/images/logo-light.png"
+                alt="site logo"
+                className="dark-logo"
+              />
+              <img
+                src="/assets/images/logo-icon.png"
+                alt="site logo"
+                className="logo-icon"
+              />
             </a>
             <button
               type="button"
@@ -311,9 +551,13 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   className="w-40-px h-40-px rounded-circle object-fit-cover flex-shrink-0"
                 />
                 <span className="profile-dropdown__contents">
-                  <span className="h6 mb-0 text-md d-block text-primary-light">{username}</span>
+                  <span className="h6 mb-0 text-md d-block text-primary-light">
+                    {username}
+                  </span>
                   {role ? (
-                    <span className="text-secondary-light text-sm mb-0 d-block">{role}</span>
+                    <span className="text-secondary-light text-sm mb-0 d-block">
+                      {role}
+                    </span>
                   ) : null}
                 </span>
               </span>
@@ -335,7 +579,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   href="#"
                   className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
                 >
-                  <iconify-icon icon="ri:settings-3-line"></iconify-icon> Setting
+                  <iconify-icon icon="ri:settings-3-line"></iconify-icon>{" "}
+                  Setting
                 </a>
               </li>
               <li>
@@ -360,13 +605,16 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
             {filteredSections.map((section, sectionIndex) => (
               <React.Fragment key={sectionIndex}>
                 {section.title ? (
-                  <li className={`sidebar-menu-group-title ${isCollapsed ? 'hidden' : ''}`}>
+                  <li
+                    className={`sidebar-menu-group-title ${isCollapsed ? "hidden" : ""}`}
+                  >
                     {section.title}
                   </li>
                 ) : null}
 
                 {section.items.map((item, itemIndex) => {
-                  const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+                  const hasSubmenu =
+                    Array.isArray(item.submenu) && item.submenu.length > 0;
                   const key = buildOpenKey(sectionIndex, itemIndex);
                   const isOpen_dropdown = hasSubmenu && openKey === key;
                   const isItemActive = item.page && item.page === currentPage;
@@ -375,16 +623,16 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                     <li
                       key={itemIndex}
                       className={[
-                        hasSubmenu ? 'dropdown' : '',
-                        isOpen_dropdown ? 'open' : '',
-                        isOpen_dropdown ? 'active-parent' : '',
+                        hasSubmenu ? "dropdown" : "",
+                        isOpen_dropdown ? "open" : "",
+                        isOpen_dropdown ? "active-parent" : "",
                       ]
                         .filter(Boolean)
-                        .join(' ')}
+                        .join(" ")}
                     >
                       <a
-                        href={item.href || '#'}
-                        className={isItemActive ? 'active-page' : ''}
+                        href={item.href || "#"}
+                        className={isItemActive ? "active-page" : ""}
                         onClick={(e) => {
                           e.preventDefault();
                           if (hasSubmenu) {
@@ -398,7 +646,10 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                           }
                         }}
                       >
-                        <iconify-icon icon={item.icon} className="menu-icon"></iconify-icon>
+                        <iconify-icon
+                          icon={item.icon}
+                          className="menu-icon"
+                        ></iconify-icon>
                         <span>{item.title}</span>
                         {hasSubmenu ? (
                           <iconify-icon
@@ -412,7 +663,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                         <ul className="sidebar-submenu">
                           {item.submenu
                             .filter((sub) => {
-                              if (sub?.page === 'user-role-acl') return canOpenUserRoles();
+                              if (sub?.page === "user-role-acl")
+                                return canOpenUserRoles();
                               return true;
                             })
                             .map((sub, subIndex) => (
@@ -420,7 +672,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                                 <a
                                   href={sub.href}
                                   className={
-                                    sub.page && sub.page === currentPage ? 'active-page' : ''
+                                    sub.page && sub.page === currentPage
+                                      ? "active-page"
+                                      : ""
                                   }
                                   onClick={(e) => {
                                     if (sub.page) handleNavClick(e, sub.page);
@@ -429,7 +683,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                                   <iconify-icon
                                     icon="ri:circle-fill"
                                     className="circle-icon w-auto"
-                                    style={{ fontSize: '6px' }}
+                                    style={{ fontSize: "6px" }}
                                   ></iconify-icon>
                                   <span>{sub.label}</span>
                                 </a>
