@@ -292,16 +292,10 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     user?.email ||
     "User";
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
-<<<<<<< HEAD
   const isStudent = role === 'STUDENT';
   const isSchoolAdmin = role === 'SCHOOL_ADMIN';
   const isTeacher = role === 'TEACHER';
   const isSuperAdmin = role === 'SUPER_ADMIN';
-=======
-  const isStudent = role === "STUDENT";
-  const isSchoolAdmin = role === "SCHOOL_ADMIN";
-  const isTeacher = role === "TEACHER";
->>>>>>> b5572daebb2ea6e351f93bdeacce758812bb258a
 
   const studentAllowedPages = new Set([
     "dashboard",

@@ -2,6 +2,7 @@ package com.School.School_management.ServiceImpl;
 
 import com.School.School_management.Dto.DesignationDto;
 import com.School.School_management.Entity.Designation;
+import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Exception.BadRequestException;
 import com.School.School_management.Exception.ConflictException;
 import com.School.School_management.Exception.ForbiddenException;
@@ -154,9 +155,17 @@ public class DesignationServiceImpl implements DesignationService {
         DesignationDto dto = new DesignationDto();
         dto.setId(entity.getId());
         dto.setSchoolId(entity.getSchoolId());
+        dto.setSchoolName(resolveSchoolName(entity.getSchoolId()));
         dto.setName(entity.getName());
         dto.setNote(entity.getNote());
         return dto;
+    }
+
+    private String resolveSchoolName(Long schoolId) {
+        if (schoolId == null) return null;
+        return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                .map(ManageSchool::getSchoolName)
+                .orElse(null);
     }
 
     private String normalizeRequired(String value, String message) {

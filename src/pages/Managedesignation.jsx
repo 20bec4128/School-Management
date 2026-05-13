@@ -67,7 +67,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ManageDesignation = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
@@ -115,10 +115,10 @@ const ManageDesignation = () => {
     return map
   }, [headOffices])
 
-  const resolveSchoolName = (schoolId) => {
+  const resolveSchoolName = (schoolId, fallbackName = '') => {
     if (schoolId == null) return ''
     const row = schoolsById.get(String(schoolId))
-    return row?.schoolName || row?.name || ''
+    return row?.schoolName || row?.name || fallbackName || ''
   }
 
   const resolveHeadOfficeName = (headOfficeId) => {
@@ -174,7 +174,12 @@ const ManageDesignation = () => {
       list.map((d) => ({
         id: d?.id,
         schoolId: d?.schoolId ?? effectiveSchoolId,
-        schoolName: resolveSchoolName(d?.schoolId ?? effectiveSchoolId),
+        schoolName:
+          d?.schoolName ||
+          resolveSchoolName(
+            d?.schoolId ?? effectiveSchoolId,
+            isSchoolAdmin ? authSchoolName || (authSchoolId != null ? `School ${authSchoolId}` : '') : '',
+          ),
         designation: d?.name ?? d?.designation ?? '',
         note: d?.note ?? '',
       })),
@@ -350,7 +355,7 @@ const ManageDesignation = () => {
 
         {isSchoolAdmin ? (
           <FormField label="School Name" required full>
-            <input className="avm-input" value={schoolName || resolveSchoolName(authSchoolId) || ''} readOnly />
+            <input className="avm-input" value={authSchoolName || resolveSchoolName(authSchoolId, authSchoolName) || ''} readOnly />
           </FormField>
         ) : null}
 

@@ -3,6 +3,7 @@ package com.School.School_management.Dto;
 public class DesignationDto {
     private Long id;
     private Long schoolId;
+    private String schoolName;
     private String name;
     private String note;
 
@@ -22,6 +23,14 @@ public class DesignationDto {
         this.schoolId = schoolId;
     }
 
+    public String getSchoolName() {
+        return schoolName;
+    }
+
+    public void setSchoolName(String schoolName) {
+        this.schoolName = schoolName;
+    }
+
     public String getName() {
         return name;
     }
@@ -38,4 +47,3 @@ public class DesignationDto {
         this.note = note;
     }
 }
-
