@@ -121,6 +121,44 @@ import TeacherAttendanceReport from "./pages/TeacherAttendanceReport";
 import TeacherYearlyAttendanceReport from "./pages/TeacherYearlyAttendanceReport";
 import EmployeeAttendanceReport from "./pages/EmployeeAttendanceReport";
 import EmployeeYearlyAttendanceReport from "./pages/EmployeeYearlyAttendanceReport";
+import StudentReport from "./pages/StudentReport";
+import StudentInvoiceReport from "./pages/StudentInvoiceReport";
+import StudentActivityReport from "./pages/StudentActivityReport";
+import PayrollReport from "./pages/PayrollReport";
+import DailyTransactionReport from "./pages/DailyTransactionReport";
+import DailyStatementReport from "./pages/DailyStatementReport";
+import ExamResultReport from "./pages/ExamResultReport";
+import Supplier from "./pages/Supplier";
+import Warehouse from "./pages/Warehouse";
+import Category from "./pages/Category";
+import Product from "./pages/Product";
+import Purchase from "./pages/Purchase.jsx";
+import Sale from "./pages/Sale";
+import Issue from "./pages/Issue";
+import SaleCreate from "./pages/SaleCreate";
+import Vendor from "./pages/Vendor";
+import AssetStore from "./pages/AssetStore";
+import AssetCategory from "./pages/AssetCategory";
+import AssetItem from "./pages/AssetItem";
+import AssetPurchase from "./pages/AssetPurchase";
+import AssetIssue from "./pages/AssetIssue";
+import AssetReturn from "./pages/AssetReturn";
+import AssetReport from "./pages/AssetReport";
+import AssetVendorCreate from "./pages/AssetVendorCreate";
+import AssetStoreCreate from "./pages/AssetStoreCreate";
+import AssetItemCreate from "./pages/AssetItemCreate";
+import AssetPurchaseCreate from "./pages/AssetPurchaseCreate";
+import Book from "./pages/Book.jsx";
+import BookCreate from "./pages/BookCreate.jsx";
+import LibraryMember from "./pages/LibraryMember.jsx";
+import IssueReturn from "./pages/IssueReturn.jsx";
+import IssueBookCreate from "./pages/IssueBookCreate.jsx";
+import NonLibraryMember from "./pages/NonLibraryMember.jsx";
+import EBook from "./pages/EBook.jsx";
+import EBookCreate from "./pages/EBookCreate.jsx.jsx";
+
+
+
 const routeEntries = [
   {
     pageKey: "school-admin-dashboard",
@@ -244,6 +282,8 @@ const routeEntries = [
   { pageKey: "discount", component: Discount },
   { pageKey: "fee-type", component: FeeType },
   { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "issue-return", component: IssueReturn },
+  { pageKey: "issue-book-create", component: IssueBookCreate },
 
   {
     pageKey: "manage-school",
@@ -307,7 +347,43 @@ const routeEntries = [
   {
     pageKey: "employee-yearly-attendance-report",
     component: EmployeeYearlyAttendanceReport,
-  }
+  },
+  { pageKey: "student-report", component: StudentReport },
+  { pageKey: "student-invoice-report", component: StudentInvoiceReport },
+  { pageKey: "student-activity-report", component: StudentActivityReport },
+  { pageKey: "payroll-report", component: PayrollReport },
+  { pageKey: "daily-transaction-report", component: DailyTransactionReport },
+  { pageKey: "daily-statement-report", component: DailyStatementReport },
+  { pageKey: "exam-result-report", component: ExamResultReport },
+  { pageKey: "supplier", component: Supplier },
+  { pageKey: "warehouse", component: Warehouse },
+  { pageKey: "category", component: Category },
+  { pageKey: "product", component: Product },
+  { pageKey: "purchase", component: Purchase },
+  { pageKey: "sale", component: Sale },
+  { pageKey: "issue", component: Issue },
+  { pageKey: "sale-create", component: SaleCreate },
+  { pageKey: "asset-vendor", component: Vendor },
+  { pageKey: "asset-store", component: AssetStore },
+  { pageKey: "asset-category", component: AssetCategory },
+  { pageKey: "asset-item", component: AssetItem },
+  { pageKey: "asset-purchase", component: AssetPurchase },
+  { pageKey: "asset-issue", component: AssetIssue },
+  { pageKey: "asset-return", component: AssetReturn },
+  { pageKey: "asset-report", component: AssetReport },
+  { pageKey: "add-asset-vendor", component: AssetVendorCreate },
+  { pageKey: "add-asset-store", component: AssetStoreCreate },
+  { pageKey: "add-asset-item", component: AssetItemCreate },
+  { pageKey: "add-asset-purchase", component: AssetPurchaseCreate },
+  { pageKey: "books-list", component: Book },
+  { pageKey: "book", component: Book },
+  { pageKey: "book-create", component: BookCreate },
+  { pageKey: "library-members", component: LibraryMember },
+  {pageKey:"non-library-members",component:NonLibraryMember},
+  {pageKey:"issue-book-create",component:IssueBookCreate},
+  {pageKey:"ebook",component:EBook},
+  {pageKey:"ebook-list",component:EBook},
+  {pageKey:"ebook-create",component:EBookCreate}
 ];
 
 const AppRoute = ({
@@ -341,7 +417,9 @@ const AppRoute = ({
     routeEntries.find((item) => item.pageKey === "lms-dashboard") ||
     routeEntries[0];
   const HomeComponent = homeEntry?.component;
-  const homeContent = HomeComponent ? <HomeComponent onNavigate={onNavigate} /> : null;
+  const homeContent = HomeComponent ? (
+    <HomeComponent onNavigate={onNavigate} />
+  ) : null;
 
   if (!entry) return homeContent;
 

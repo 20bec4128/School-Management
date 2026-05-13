@@ -7,6 +7,8 @@
   height: 100vh;
   background-color: var(--white);
   z-index: 1045;
+  display: flex;
+  flex-direction: column;
   transition: inset-inline-start 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -68,8 +70,9 @@
 }
 
 .sidebar-menu-area {
-  height: calc(100vh - 166px);
-  padding: 0.75rem 1rem;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0.75rem 1rem 2rem;
   overflow-y: auto;
   border-inline-end: 1px solid var(--neutral-200);
   background-color: var(--white);
@@ -134,7 +137,7 @@
 }
 
 .sidebar-menu li.dropdown.open > .sidebar-submenu {
-  max-height: 800px;
+  max-height: 2000px;
   opacity: 1;
 }
 
@@ -367,7 +370,7 @@
   display: block !important;
   visibility: visible !important;
   height: auto !important;
-  max-height: 500px !important;
+  max-height: 2000px !important;
   margin-inline-start: 1.5rem !important;
   padding-inline-start: 1rem !important;
   opacity: 1 !important;

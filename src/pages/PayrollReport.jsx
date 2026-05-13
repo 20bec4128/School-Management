@@ -5,24 +5,18 @@ import "../assets/css/addModalShared.css";
 
 const emptyFilters = {
   school: "Select",
-  department: "Select",
-  designation: "Select",
-  month: "Select",
+  academicYear: "Select",
+  groupBy: "Select", // e.g., Department, Designation, or Month
 };
 
-// Generating 1-31 date columns as per TeacherAttendanceReport standard
-const dateColumns = Array.from({ length: 31 }, (_, i) => ({
-  key: `day_${i + 1}`,
-  label: `${i + 1}`,
-}));
-
 const columnOptions = [
-  { key: "employeeName", label: "Employee" },
-  ...dateColumns,
+  { key: "academicYear", label: "Academic Year" },
+  { key: "groupValue", label: "Group by Data" }, // Dynamic label based on filter
+  { key: "amount", label: "Amount" },
 ];
 
-const EmployeeAttendanceReport = () => {
-  const [data, setData] = useState([]);
+const PayrollReport = () => {
+  const [data, setData] = useState([]); // Initialized as empty array per standards
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,6 +27,7 @@ const EmployeeAttendanceReport = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } =
     useColumnVisibility(columnOptions);
 
+  // Filtering Logic: Handles search and dropdown filters via useMemo
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.filter((row) => {
@@ -41,22 +36,22 @@ const EmployeeAttendanceReport = () => {
         Object.values(row).some((v) => String(v).toLowerCase().includes(q));
       const matchesSchool =
         filters.school === "Select" || row.school === filters.school;
-      const matchesDept =
-        filters.department === "Select" ||
-        row.department === filters.department;
-      const matchesMonth =
-        filters.month === "Select" || row.month === filters.month;
+      const matchesYear =
+        filters.academicYear === "Select" ||
+        row.academicYear === filters.academicYear;
+      const matchesGroup =
+        filters.groupBy === "Select" || row.groupBy === filters.groupBy;
 
-      return matchesSearch && matchesSchool && matchesDept && matchesMonth;
+      return matchesSearch && matchesSchool && matchesYear && matchesGroup;
     });
   }, [data, search, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
 
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
     return filtered.slice(start, start + rowsPerPage);
   }, [currentPage, filtered, rowsPerPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
 
   const handleApplyFilters = (e) => {
     e.preventDefault();
@@ -65,42 +60,25 @@ const EmployeeAttendanceReport = () => {
     setCurrentPage(1);
   };
 
-  // Status Badge Logic from Reference Standard
-  const renderAttendanceTag = (status) => {
-    const statusMap = {
-      P: { class: "bg-success-100 text-success-600", label: "P" },
-      A: { class: "bg-danger-100 text-danger-600", label: "A" },
-      L: { class: "bg-warning-100 text-warning-600", label: "L" },
-      H: { class: "bg-info-100 text-info-600", label: "H" },
-    };
-    const current = statusMap[status] || {
-      class: "text-secondary-light",
-      label: "-",
-    };
-    return (
-      <span
-        className="d-flex align-items-center justify-content-center radius-4 fw-bold text-xs"
-        style={{
-          width: "24px",
-          height: "24px",
-          ...(status ? {} : { border: "1px dashed #e3e6e9" }),
-        }}
-      >
-        <span
-          className={current.class}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: "4px",
-          }}
-        >
-          {current.label}
+  const renderCell = (row, column) => {
+    const value = row[column.key];
+
+    // Formatting for Currency/Amount
+    if (column.key === "amount") {
+      return (
+        <span className="fw-bold text-primary-light">
+          {value != null ? value : "0.00"}
         </span>
-      </span>
-    );
+      );
+    }
+
+    if (column.key === "groupValue") {
+      return (
+        <span className="fw-medium text-secondary-light">{value || "--"}</span>
+      );
+    }
+
+    return value || "--";
   };
 
   return (
@@ -108,10 +86,10 @@ const EmployeeAttendanceReport = () => {
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">
-            Employee Attendance Report
+            Payroll Report
           </h1>
           <span className="text-secondary-light">
-            Dashboard / Employee Attendance
+            Dashboard / Payroll Report
           </span>
         </div>
       </div>
@@ -120,11 +98,11 @@ const EmployeeAttendanceReport = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export Dropdown */}
+              {/* Export Dropdown Pattern */}
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                   data-bs-toggle="dropdown"
                 >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
@@ -163,9 +141,10 @@ const EmployeeAttendanceReport = () => {
                 </ul>
               </div>
 
+              {/* Filter Sidebar Trigger */}
               <button
                 type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
@@ -179,16 +158,13 @@ const EmployeeAttendanceReport = () => {
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                   data-bs-toggle="dropdown"
                 >
                   <span className="text-secondary-light text-sm">Columns</span>
                   <i className="ri-arrow-down-s-line"></i>
                 </button>
-                <ul
-                  className="dropdown-menu p-12 border bg-base shadow"
-                  style={{ maxHeight: "400px", overflowY: "auto" }}
-                >
+                <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((col) => (
                     <li key={col.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
@@ -225,7 +201,7 @@ const EmployeeAttendanceReport = () => {
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search employee..."
+                placeholder="Search payroll..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -236,49 +212,19 @@ const EmployeeAttendanceReport = () => {
           </div>
 
           <div className="p-0 table-responsive">
-            <table
-              className="table bordered-table mb-0 data-table employee-attendance-table"
-              style={{ minWidth: 1500 }}
-            >
+            <table className="table bordered-table mb-0 data-table">
               <thead>
                 <tr>
-                  <th
-                    scope="col"
-                    style={{
-                      position: "sticky",
-                      left: 0,
-                      background: "#fff",
-                      zIndex: 2,
-                    }}
-                  >
+                  <th scope="col">
                     <div className="form-check style-check d-flex align-items-center">
                       <input type="checkbox" className="form-check-input" />
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.employeeName && (
-                    <th
-                      scope="col"
-                      style={{
-                        position: "sticky",
-                        left: "70px",
-                        background: "#fff",
-                        zIndex: 2,
-                        minWidth: "200px",
-                      }}
-                    >
-                      Employee Name
-                    </th>
-                  )}
-                  {dateColumns.map(
+                  {columnOptions.map(
                     (col) =>
                       visibleColumns[col.key] && (
-                        <th
-                          scope="col"
-                          key={col.key}
-                          className="text-center"
-                          style={{ minWidth: "40px" }}
-                        >
+                        <th scope="col" key={col.key}>
                           {col.label}
                         </th>
                       ),
@@ -298,14 +244,7 @@ const EmployeeAttendanceReport = () => {
                 ) : (
                   paginated.map((row, idx) => (
                     <tr key={idx}>
-                      <td
-                        style={{
-                          position: "sticky",
-                          left: 0,
-                          background: "#fff",
-                          zIndex: 1,
-                        }}
-                      >
+                      <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input className="form-check-input" type="checkbox" />
                           <label className="form-check-label">
@@ -313,25 +252,10 @@ const EmployeeAttendanceReport = () => {
                           </label>
                         </div>
                       </td>
-                      {visibleColumns.employeeName && (
-                        <td
-                          style={{
-                            position: "sticky",
-                            left: "70px",
-                            background: "#fff",
-                            zIndex: 1,
-                          }}
-                          className="fw-medium text-primary-light"
-                        >
-                          {row.employeeName || "--"}
-                        </td>
-                      )}
-                      {dateColumns.map(
-                        (dateCol) =>
-                          visibleColumns[dateCol.key] && (
-                            <td key={dateCol.key} className="text-center">
-                              {renderAttendanceTag(row[dateCol.key])}
-                            </td>
+                      {columnOptions.map(
+                        (col) =>
+                          visibleColumns[col.key] && (
+                            <td key={col.key}>{renderCell(row, col)}</td>
                           ),
                       )}
                     </tr>
@@ -389,14 +313,15 @@ const EmployeeAttendanceReport = () => {
         </div>
       </div>
 
+      {/* Filter SlideSidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
-        title="Filter Attendance"
+        title="Filter Payroll Report"
         onClose={() => setIsFilterSidebarOpen(false)}
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
           <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
               School
             </label>
             <select
@@ -407,53 +332,42 @@ const EmployeeAttendanceReport = () => {
               }
             >
               <option value="Select">All Schools</option>
-              <option>Windsor Park High School</option>
             </select>
           </div>
           <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Department
+            <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
+              Academic Year
             </label>
             <select
               className="form-control form-select"
-              value={pendingFilters.department}
+              value={pendingFilters.academicYear}
               onChange={(e) =>
-                setPendingFilters((p) => ({ ...p, department: e.target.value }))
+                setPendingFilters((p) => ({
+                  ...p,
+                  academicYear: e.target.value,
+                }))
               }
             >
-              <option value="Select">Select Department</option>
+              <option value="Select">Select Year</option>
+              <option>2023-2024</option>
+              <option>2024-2025</option>
             </select>
           </div>
           <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Month
+            <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
+              Group By
             </label>
             <select
               className="form-control form-select"
-              value={pendingFilters.month}
+              value={pendingFilters.groupBy}
               onChange={(e) =>
-                setPendingFilters((p) => ({ ...p, month: e.target.value }))
+                setPendingFilters((p) => ({ ...p, groupBy: e.target.value }))
               }
             >
-              <option value="Select">Select Month</option>
-              {[
-                "January",
-                "February",
-                "March",
-                "April",
-                "May",
-                "June",
-                "July",
-                "August",
-                "September",
-                "October",
-                "November",
-                "December",
-              ].map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
+              <option value="Select">Select Category</option>
+              <option value="Department">Department</option>
+              <option value="Designation">Designation</option>
+              <option value="Month">Month</option>
             </select>
           </div>
           <div className="d-flex gap-8 mt-12">
@@ -470,23 +384,8 @@ const EmployeeAttendanceReport = () => {
           </div>
         </form>
       </SlideSidebar>
-
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        .employee-attendance-table th, .employee-attendance-table td {
-          padding: 12px 10px !important;
-          vertical-align: middle;
-          border-right: 1px solid #edeff2;
-        }
-        .employee-attendance-table thead th {
-          background-color: #f8fafc;
-        }
-      `,
-        }}
-      />
     </div>
   );
 };
 
-export default EmployeeAttendanceReport;
+export default PayrollReport;

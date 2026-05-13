@@ -13,7 +13,12 @@ const menuSections = [
         title: "Dashboard",
         icon: "ri:dashboard-line",
         submenu: [
-          { label: "School", href: "#", page: "school-admin-dashboard", perm: "*" },
+          {
+            label: "School",
+            href: "#",
+            page: "school-admin-dashboard",
+            perm: "*",
+          },
           { label: "Student", href: "#", page: "student-dashboard", perm: "*" },
           { label: "Teacher", href: "#", page: "teacher-dashboard", perm: "*" },
           { label: "Parent", href: "#", page: "parent-dashboard", perm: "*" },
@@ -60,13 +65,17 @@ const menuSections = [
             page: "email-setting",
             perm: "SCHOOL_MANAGE",
           },
-          { label: "Academic Year", href: "#", page: "academic-year", perm: "SCHOOL_MANAGE" },
+          {
+            label: "Academic Year",
+            href: "#",
+            page: "academic-year",
+            perm: "SCHOOL_MANAGE",
+          },
         ],
       },
     ],
   },
 
-  
   {
     title: "Front Office",
     items: [
@@ -115,7 +124,6 @@ const menuSections = [
       },
     ],
   },
-  
 
   {
     title: "Student Management",
@@ -132,14 +140,25 @@ const menuSections = [
         ],
       },
 
-      /*
       {
         title: "Attendance",
         icon: "ri:calendar-check-line",
         submenu: [
-          { label: "Student Attendance", href: "#", page: "student-attendance" },
-          { label: "Teacher Attendance", href: "#", page: "teacher-attendance" },
-          { label: "Employee Attendance", href: "#", page: "employee-attendance" },
+          {
+            label: "Student Attendance",
+            href: "#",
+            page: "student-attendance",
+          },
+          {
+            label: "Teacher Attendance",
+            href: "#",
+            page: "teacher-attendance",
+          },
+          {
+            label: "Employee Attendance",
+            href: "#",
+            page: "employee-attendance",
+          },
           { label: "Absent Email", href: "#", page: "absent-email" },
           { label: "Absent SMS", href: "#", page: "absent-sms" },
         ],
@@ -155,7 +174,11 @@ const menuSections = [
         icon: "ri:id-card-line",
         submenu: [
           { label: "ID Card Setting", href: "#", page: "id-card-setting" },
-          { label: "Admit Card Setting", href: "#", page: "admit-card-setting" },
+          {
+            label: "Admit Card Setting",
+            href: "#",
+            page: "admit-card-setting",
+          },
         ],
       },
       {
@@ -163,7 +186,11 @@ const menuSections = [
         icon: "ri:award-line",
         submenu: [
           { label: "Certificate Type", href: "#", page: "certificate-type" },
-          { label: "Generate Certificate", href: "#", page: "generate-certificate" },
+          {
+            label: "Generate Certificate",
+            href: "#",
+            page: "generate-certificate",
+          },
         ],
       },
       {
@@ -181,7 +208,6 @@ const menuSections = [
         href: "#",
         page: "guardian",
       },
-      */
     ],
   },
   {
@@ -231,7 +257,6 @@ const menuSections = [
     ],
   },
 
-  /*
   {
     title: "Examination System",
     items: [
@@ -274,7 +299,6 @@ const menuSections = [
       },
     ],
   },
-  */
 
   {
     title: "Human Resource (HR)",
@@ -283,7 +307,11 @@ const menuSections = [
         title: "Human Resource",
         icon: "ri:team-line",
         submenu: [
-          { label: "Manage Designation", href: "#", page: "manage-designation" },
+          {
+            label: "Manage Designation",
+            href: "#",
+            page: "manage-designation",
+          },
           { label: "Manage Employees", href: "#", page: "manage-employee" },
         ],
       },
@@ -298,9 +326,21 @@ const menuSections = [
         submenu: [
           { label: "Leave Type", href: "#", page: "leave-type" },
           { label: "Leave Application", href: "#", page: "leave-application" },
-          { label: "Waiting Application", href: "#", page: "waiting-application" },
-          { label: "Approved Application", href: "#", page: "approved-application" },
-          { label: "Declined Application", href: "#", page: "declined-application" },
+          {
+            label: "Waiting Application",
+            href: "#",
+            page: "waiting-application",
+          },
+          {
+            label: "Approved Application",
+            href: "#",
+            page: "approved-application",
+          },
+          {
+            label: "Declined Application",
+            href: "#",
+            page: "declined-application",
+          },
         ],
       },
     ],
@@ -346,31 +386,86 @@ const menuSections = [
         icon: "ri:bar-chart-line",
         submenu: [
           { label: "Income Report", href: "#", page: "income-report" },
-          { label: "Expenditure Report", href: "#", page: "expenditure-report" },
+          {
+            label: "Expenditure Report",
+            href: "#",
+            page: "expenditure-report",
+          },
           { label: "Invoice Report", href: "#", page: "invoice-report" },
           { label: "Due Fee Report", href: "#", page: "due-fee-report" },
-          { label: "Fee Collection Report", href: "#", page: "fee-collection-report" },
-          { label: "Accounting Balance Report", href: "#", page: "accounting-balance-report" },
+          {
+            label: "Fee Collection Report",
+            href: "#",
+            page: "fee-collection-report",
+          },
+          {
+            label: "Accounting Balance Report",
+            href: "#",
+            page: "accounting-balance-report",
+          },
           { label: "Library Report", href: "#", page: "library-report" },
-          { label: "Student Attendance Report", href: "#", page: "student-attendance-report" },
-          { label: "Student Yearly Attendance Report", href: "#", page: "student-yearly-attendance-report" },
-          { label: "Teacher Attendance Report", href: "#", page: "teacher-attendance-report" },
-          { label: "Teacher Yearly Attendance Report", href: "#", page: "teacher-yearly-attendance-report" },
-          { label: "Employee Attendance Report", href: "#", page: "employee-attendance-report" },
-          { label: "Employee Yearly Attendance Report", href: "#", page: "employee-yearly-attendance-report" },
+          {
+            label: "Student Attendance Report",
+            href: "#",
+            page: "student-attendance-report",
+          },
+          {
+            label: "Student Yearly Attendance Report",
+            href: "#",
+            page: "student-yearly-attendance-report",
+          },
+          {
+            label: "Teacher Attendance Report",
+            href: "#",
+            page: "teacher-attendance-report",
+          },
+          {
+            label: "Teacher Yearly Attendance Report",
+            href: "#",
+            page: "teacher-yearly-attendance-report",
+          },
+          {
+            label: "Employee Attendance Report",
+            href: "#",
+            page: "employee-attendance-report",
+          },
+          {
+            label: "Employee Yearly Attendance Report",
+            href: "#",
+            page: "employee-yearly-attendance-report",
+          },
           { label: "Student Report", href: "#", page: "student-report" },
-          { label: "Student Invoice Report", href: "#", page: "student-invoice-report" },
-          { label: "Student Activity Report", href: "#", page: "student-activity-report" },
+          {
+            label: "Student Invoice Report",
+            href: "#",
+            page: "student-invoice-report",
+          },
+          {
+            label: "Student Activity Report",
+            href: "#",
+            page: "student-activity-report",
+          },
           { label: "Payroll Report", href: "#", page: "payroll-report" },
-          { label: "Daily Transaction Report", href: "#", page: "daily-transaction-report" },
-          { label: "Daily Statement Report", href: "#", page: "daily-statement-report" },
-          { label: "Exam Result Report", href: "#", page: "exam-result-report" },
+          {
+            label: "Daily Transaction Report",
+            href: "#",
+            page: "daily-transaction-report",
+          },
+          {
+            label: "Daily Statement Report",
+            href: "#",
+            page: "daily-statement-report",
+          },
+          {
+            label: "Exam Result Report",
+            href: "#",
+            page: "exam-result-report",
+          },
         ],
       },
     ],
   },
 
-  /*
   {
     title: "Inventory & Assets",
     items: [
@@ -378,13 +473,13 @@ const menuSections = [
         title: "Inventory",
         icon: "ri:box-3-line",
         submenu: [
-          { label: "Suppliers", href: "#", page: "suppliers" },
+          { label: "Supplier", href: "#", page: "supplier" },
           { label: "Warehouse", href: "#", page: "warehouse" },
-          { label: "Category", href: "#", page: "inventory-category" },
-          { label: "Product", href: "#", page: "inventory-product" },
-          { label: "Purchase", href: "#", page: "inventory-purchase" },
-          { label: "Sale", href: "#", page: "inventory-sale" },
-          { label: "Issue", href: "#", page: "inventory-issue" },
+          { label: "Category", href: "#", page: "category" },
+          { label: "Product", href: "#", page: "product" },
+          { label: "Purchase", href: "#", page: "purchase" },
+          { label: "Sale", href: "#", page: "sale" },
+          { label: "Issue", href: "#", page: "issue" },
         ],
       },
       {
@@ -396,16 +491,16 @@ const menuSections = [
           { label: "Category", href: "#", page: "asset-category" },
           { label: "Item", href: "#", page: "asset-item" },
           { label: "Purchase", href: "#", page: "asset-purchase" },
-          { label: "Issue", href: "#", page: "asset-issue" },
         ],
       },
       {
         title: "Library",
         icon: "ri:book-2-line",
         submenu: [
-          { label: "Books List", href: "#", page: "books-list" },
+          { label: "Book", href: "#", page: "book" },
           { label: "Library Members", href: "#", page: "library-members" },
-          { label: "Issue/Return", href: "#", page: "library-issue-return" },
+          { label:"Non Library Members", href: "#", page: "non-library-members" },
+          { label: "Issue/Return", href: "#", page: "issue-return" },
           { label: "E-Book", href: "#", page: "ebook" },
         ],
       },
@@ -478,15 +573,26 @@ const menuSections = [
         submenu: [
           { label: "FAQ", href: "#", page: "faq" },
           { label: "Slider", href: "#", page: "subscription-slider" },
-          { label: "Subscription Settings", href: "#", page: "subscription-settings" },
+          {
+            label: "Subscription Settings",
+            href: "#",
+            page: "subscription-settings",
+          },
           { label: "General Settings", href: "#", page: "general-settings" },
-          { label: "Subscription Plans", href: "#", page: "subscription-plans" },
-          { label: "School Subscription", href: "#", page: "school-subscription" },
+          {
+            label: "Subscription Plans",
+            href: "#",
+            page: "subscription-plans",
+          },
+          {
+            label: "School Subscription",
+            href: "#",
+            page: "school-subscription",
+          },
         ],
       },
     ],
   },
-  */
 ];
 
 const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
@@ -556,6 +662,22 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     "waiting-application",
     "approved-application",
     "declined-application",
+    "vendor",
+    "asset-store",
+    "asset-category",
+    "asset-item",
+    "asset-purchase",
+    "asset-issue",
+    "asset-return",
+    "asset-report",
+    "book",
+    "books-list",
+    "book-create",
+    "library-members",
+    "library-issue-return",
+    "issue-return",
+    "ebook",
+    "payroll-report",
   ]);
 
   const teacherVisiblePages = new Set([
@@ -621,11 +743,15 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       ...section,
       items: (Array.isArray(section.items) ? section.items : [])
         .filter((item) => {
-          if (role === "PARENT" && item.page && !canOpenPage(item.page)) return false;
-          if (!isStudent && !isSchoolAdmin && !isTeacher && role !== "PARENT") return true;
+          if (role === "PARENT" && item.page && !canOpenPage(item.page))
+            return false;
+          if (!isStudent && !isSchoolAdmin && !isTeacher && role !== "PARENT")
+            return true;
           if (item.page && canOpenPage(item.page)) return true;
           if (Array.isArray(item.submenu)) {
-            return item.submenu.some((sub) => sub?.page && canOpenPage(sub.page));
+            return item.submenu.some(
+              (sub) => sub?.page && canOpenPage(sub.page),
+            );
           }
           return false;
         })
@@ -635,8 +761,20 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           submenu: Array.isArray(item.submenu)
             ? item.submenu
                 .filter((sub) => canOpenPage(sub.page))
-                .filter((sub) => isSuperAdmin || !sub.perm || sub.perm === "*" || can(user, sub.perm))
-                .filter((sub) => !(role === "PARENT" && ["class", "section"].includes(sub?.page)))
+                .filter(
+                  (sub) =>
+                    isSuperAdmin ||
+                    !sub.perm ||
+                    sub.perm === "*" ||
+                    can(user, sub.perm),
+                )
+                .filter(
+                  (sub) =>
+                    !(
+                      role === "PARENT" &&
+                      ["class", "section"].includes(sub?.page)
+                    ),
+                )
             : item.submenu,
         }))
         .filter((item) => {
@@ -646,7 +784,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     }))
     .filter((section) => section.items.length > 0);
 
-  const buildOpenKey = (sectionIndex, itemIndex) => `${sectionIndex}-${itemIndex}`;
+  const buildOpenKey = (sectionIndex, itemIndex) =>
+    `${sectionIndex}-${itemIndex}`;
 
   const findActiveKey = () => {
     for (let si = 0; si < filteredSections.length; si++) {
@@ -654,7 +793,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       for (let ii = 0; ii < section.items.length; ii++) {
         const item = section.items[ii];
         if (Array.isArray(item.submenu)) {
-          if (item.submenu.some((sub) => sub.page && sub.page === currentPage)) {
+          if (
+            item.submenu.some((sub) => sub.page && sub.page === currentPage)
+          ) {
             return buildOpenKey(si, ii);
           }
         }
@@ -695,16 +836,32 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       {isOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
 
       <aside className={sidebarClass}>
-        <button type="button" className="sidebar-close-btn" onClick={closeSidebar}>
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          onClick={closeSidebar}
+        >
           <iconify-icon icon="ri:close-line"></iconify-icon>
         </button>
 
         <div>
           <div className="sidebar-logo d-flex align-items-center justify-content-between">
             <a href="#" className="sidebar-logo__brand">
-              <img src="/assets/images/logo.png" alt="site logo" className="light-logo" />
-              <img src="/assets/images/logo-light.png" alt="site logo" className="dark-logo" />
-              <img src="/assets/images/logo-icon.png" alt="site logo" className="logo-icon" />
+              <img
+                src="/assets/images/logo.png"
+                alt="site logo"
+                className="light-logo"
+              />
+              <img
+                src="/assets/images/logo-light.png"
+                alt="site logo"
+                className="dark-logo"
+              />
+              <img
+                src="/assets/images/logo-icon.png"
+                alt="site logo"
+                className="logo-icon"
+              />
             </a>
             <button
               type="button"
@@ -733,8 +890,14 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   className="w-40-px h-40-px rounded-circle object-fit-cover flex-shrink-0"
                 />
                 <span className="profile-dropdown__contents">
-                  <span className="h6 mb-0 text-md d-block text-primary-light">{username}</span>
-                  {role ? <span className="text-secondary-light text-sm mb-0 d-block">{role}</span> : null}
+                  <span className="h6 mb-0 text-md d-block text-primary-light">
+                    {username}
+                  </span>
+                  {role ? (
+                    <span className="text-secondary-light text-sm mb-0 d-block">
+                      {role}
+                    </span>
+                  ) : null}
                 </span>
               </span>
               <span className="profile-dropdown__icon pe-8 text-xl d-flex line-height-1">
@@ -744,13 +907,20 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
 
             <ul className="dropdown-menu dropdown-menu-lg-end border p-12">
               <li>
-                <a href="#" className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6">
+                <a
+                  href="#"
+                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
+                >
                   <iconify-icon icon="ri:user-3-line"></iconify-icon> My Profile
                 </a>
               </li>
               <li>
-                <a href="#" className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6">
-                  <iconify-icon icon="ri:settings-3-line"></iconify-icon> Setting
+                <a
+                  href="#"
+                  className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
+                >
+                  <iconify-icon icon="ri:settings-3-line"></iconify-icon>{" "}
+                  Setting
                 </a>
               </li>
               <li>
@@ -774,13 +944,16 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
             {filteredSections.map((section, sectionIndex) => (
               <React.Fragment key={sectionIndex}>
                 {section.title ? (
-                  <li className={`sidebar-menu-group-title ${isCollapsed ? "hidden" : ""}`}>
+                  <li
+                    className={`sidebar-menu-group-title ${isCollapsed ? "hidden" : ""}`}
+                  >
                     {section.title}
                   </li>
                 ) : null}
 
                 {section.items.map((item, itemIndex) => {
-                  const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+                  const hasSubmenu =
+                    Array.isArray(item.submenu) && item.submenu.length > 0;
                   const key = buildOpenKey(sectionIndex, itemIndex);
                   const isOpenDropdown = hasSubmenu && openKey === key;
                   const isItemActive = item.page && item.page === currentPage;
@@ -788,7 +961,11 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   return (
                     <li
                       key={itemIndex}
-                      className={[hasSubmenu ? "dropdown" : "", isOpenDropdown ? "open" : "", isOpenDropdown ? "active-parent" : ""]
+                      className={[
+                        hasSubmenu ? "dropdown" : "",
+                        isOpenDropdown ? "open" : "",
+                        isOpenDropdown ? "active-parent" : "",
+                      ]
                         .filter(Boolean)
                         .join(" ")}
                     >
@@ -805,28 +982,45 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                           }
                         }}
                       >
-                        <iconify-icon icon={item.icon} className="menu-icon"></iconify-icon>
+                        <iconify-icon
+                          icon={item.icon}
+                          className="menu-icon"
+                        ></iconify-icon>
                         <span>{item.title}</span>
-                        {hasSubmenu ? <iconify-icon icon="ri:arrow-down-s-line" className="sidebar-menu__arrow"></iconify-icon> : null}
+                        {hasSubmenu ? (
+                          <iconify-icon
+                            icon="ri:arrow-down-s-line"
+                            className="sidebar-menu__arrow"
+                          ></iconify-icon>
+                        ) : null}
                       </a>
 
                       {hasSubmenu ? (
                         <ul className="sidebar-submenu">
                           {item.submenu
                             .filter((sub) => {
-                              if (sub?.page === "user-role-acl") return canOpenUserRoles();
+                              if (sub?.page === "user-role-acl")
+                                return canOpenUserRoles();
                               return true;
                             })
                             .map((sub, subIndex) => (
                               <li key={subIndex}>
                                 <a
                                   href={sub.href}
-                                  className={sub.page && sub.page === currentPage ? "active-page" : ""}
+                                  className={
+                                    sub.page && sub.page === currentPage
+                                      ? "active-page"
+                                      : ""
+                                  }
                                   onClick={(e) => {
                                     if (sub.page) handleNavClick(e, sub.page);
                                   }}
                                 >
-                                  <iconify-icon icon="ri:circle-fill" className="circle-icon w-auto" style={{ fontSize: "6px" }}></iconify-icon>
+                                  <iconify-icon
+                                    icon="ri:circle-fill"
+                                    className="circle-icon w-auto"
+                                    style={{ fontSize: "6px" }}
+                                  ></iconify-icon>
                                   <span>{sub.label}</span>
                                 </a>
                               </li>

@@ -58,6 +58,22 @@ const schoolAdminAllowedPages = new Set([
   'student-yearly-attendance-report',
   'teacher-attendance-report',
   'teacher-yearly-attendance-report',
+  'vendor',
+  'asset-store',
+  'asset-category',
+  'asset-item',
+  'asset-purchase',
+  'asset-issue',
+  'asset-return',
+  'asset-report',
+  'book',
+  'books-list',
+  'book-create',
+  'library-members',
+  'library-issue-return',
+  'issue-return',
+  'ebook',
+  'payroll-report',
 ])
 
 const studentTypeAllowedRoles = new Set([
@@ -87,6 +103,14 @@ const schoolScopedAllowedPages = new Set([
   'class-routine',
   'manage-invoice',
   'due-invoice',
+  'vendor',
+  'asset-store',
+  'asset-category',
+  'asset-item',
+  'asset-purchase',
+  'asset-issue',
+  'asset-return',
+  'asset-report',
 ])
 
 const parentAllowedPages = new Set([

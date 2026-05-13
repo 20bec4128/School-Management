@@ -94,7 +94,7 @@ const StudentAttendanceReport = () => {
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                 >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
@@ -103,27 +103,44 @@ const StudentAttendanceReport = () => {
                   <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li><button className="dropdown-item px-16 py-8 rounded text-secondary-light d-flex align-items-center gap-10"><i className="ri-file-text-line"></i> CSV</button></li>
-                  <li><button className="dropdown-item px-16 py-8 rounded text-secondary-light d-flex align-items-center gap-10"><i className="ri-file-excel-2-line"></i> Excel</button></li>
-                  <li><button className="dropdown-item px-16 py-8 rounded text-secondary-light d-flex align-items-center gap-10"><i className="ri-file-3-line"></i> PDF</button></li>
+                  <li><button className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"><i className="ri-file-text-line"></i> CSV</button></li>
+                  <li><button className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"><i className="ri-file-excel-2-line"></i> Excel</button></li>
+                  <li><button className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"><i className="ri-file-3-line"></i> PDF</button></li>
                 </ul>
               </div>
 
               <button
                 type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
+              <div className="dropdown">
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                  <span className="text-secondary-light text-sm">Columns</span>
+                  <i className="ri-arrow-down-s-line"></i>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {columnOptions.map((col) => (
+                    <li key={col.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                        {col.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
                 onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
               >
-                {[5, 10, 20, 50].map((n) => (
+                {[10, 20, 50].map((n) => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
@@ -153,8 +170,10 @@ const StudentAttendanceReport = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  <th scope="col" style={{ position: 'sticky', left: '70px', background: '#fff', zIndex: 2, minWidth: '180px' }}>Student Name</th>
-                  {dateColumns.map((col) => (
+                  {visibleColumns.studentName && (
+                    <th scope="col" style={{ position: 'sticky', left: '70px', background: '#fff', zIndex: 2, minWidth: '180px' }}>Student Name</th>
+                  )}
+                  {dateColumns.map((col) => visibleColumns[col.key] && (
                     <th scope="col" key={col.key} className="text-center" style={{ minWidth: '40px' }}>{col.label}</th>
                   ))}
                 </tr>
@@ -162,7 +181,7 @@ const StudentAttendanceReport = () => {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={33} className="text-center py-40 text-secondary-light">No attendance records found.</td>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No attendance records found.</td>
                   </tr>
                 ) : (
                   paginated.map((row, idx) => (
@@ -173,10 +192,12 @@ const StudentAttendanceReport = () => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      <td style={{ position: 'sticky', left: '70px', background: '#fff', zIndex: 1 }} className="fw-medium text-primary-light">
-                        {row.studentName || 'Student ' + (idx + 1)}
-                      </td>
-                      {dateColumns.map((dateCol) => (
+                      {visibleColumns.studentName && (
+                        <td style={{ position: 'sticky', left: '70px', background: '#fff', zIndex: 1 }} className="fw-medium text-primary-light">
+                          {row.studentName || 'Student ' + (idx + 1)}
+                        </td>
+                      )}
+                      {dateColumns.map((dateCol) => visibleColumns[dateCol.key] && (
                         <td key={dateCol.key} className="text-center">
                           {renderAttendanceTag(row[dateCol.key])}
                         </td>
