@@ -110,6 +110,22 @@ const menuSections = [
       },
     ],
   },
+  {
+    title: 'Manage Leave',
+    items: [
+      {
+        title: 'Manage Leave',
+        icon: 'ri:calendar-todo-line',
+        submenu: [
+          { label: 'Leave Type', href: '#', page: '' },
+          { label: 'Leave Application', href: '#', page: '' },
+          { label: 'Waiting Application', href: '#', page: '' },
+          { label: 'Approved Application', href: '#', page: '' },
+          { label: 'Declined Application', href: '#', page: '' },
+        ],
+      },
+    ],
+  },
 ];
 
 const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
@@ -170,7 +186,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const filteredSections = menuSections
     .map((section) => ({
       ...section,
-      items: section.items
+      items: (Array.isArray(section.items) ? section.items : [])
         .filter((item) => {
           if (role === 'PARENT' && item.page && !canOpenPage(item.page)) return false;
           if (!isStudent && !isSchoolAdmin) return true;

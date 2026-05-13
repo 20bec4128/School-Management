@@ -99,8 +99,8 @@ import { canAccessPage } from './utils/pageAccess'
 import { normalizeRole } from './utils/roles'
 
 const routeEntries = [
-  { pageKey: 'head-office-dashboard', component: HeadOfficeDashboard, allowedRoles: ['HEAD_OFFICE_ADMIN'] },
-  { pageKey: 'head-offices', component: HeadOffices, permission: ['HEAD_OFFICE_MANAGE', '*'] },
+
+
   { pageKey: 'school-admin-dashboard', component: SchoolAdminDashboard, allowedRoles: ['SCHOOL_ADMIN'] },
   { pageKey: 'teacher-dashboard', component: TeacherDashboard, allowedRoles: ['TEACHER'] },
   { pageKey: 'student-dashboard', component: StudentDashboard, allowedRoles: ['STUDENT'] },
