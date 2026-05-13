@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient'
+import { apiFetch, apiUrl } from './apiClient'
 
 const AUTH_BASE = '/api/auth'
 
@@ -18,7 +18,7 @@ const readApiError = async (res) => {
 }
 
 export const login = async (username, password) => {
-  const res = await fetch(`${AUTH_BASE}/login`, {
+  const res = await fetch(apiUrl(`${AUTH_BASE}/login`), {
     method: 'POST',
     credentials: 'omit',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },

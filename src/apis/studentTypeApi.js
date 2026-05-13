@@ -1,4 +1,5 @@
-// Use the Vite dev-server proxy (`/api` -> backend) to avoid browser CORS issues.
+import { apiFetch } from './apiClient'
+
 const STUDENT_TYPE_API_BASE = '/api/student-types'
 
 const readApiError = async (res) => {
@@ -21,7 +22,7 @@ export const fetchStudentTypesPage = async (page, size) => {
     page: String(Math.max(page, 0)),
     size: String(size),
   })
-  const res = await fetch(`${STUDENT_TYPE_API_BASE}?${query.toString()}`, {
+  const res = await apiFetch(`${STUDENT_TYPE_API_BASE}?${query.toString()}`, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) throw new Error(await readApiError(res))
@@ -52,7 +53,7 @@ export const fetchStudentTypesLookup = async () => {
 }
 
 export const createStudentType = async (payload) => {
-  const res = await fetch(STUDENT_TYPE_API_BASE, {
+  const res = await apiFetch(STUDENT_TYPE_API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -62,7 +63,7 @@ export const createStudentType = async (payload) => {
 }
 
 export const updateStudentType = async (id, payload) => {
-  const res = await fetch(`${STUDENT_TYPE_API_BASE}/${id}`, {
+  const res = await apiFetch(`${STUDENT_TYPE_API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -72,7 +73,7 @@ export const updateStudentType = async (id, payload) => {
 }
 
 export const deleteStudentType = async (id) => {
-  const res = await fetch(`${STUDENT_TYPE_API_BASE}/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`${STUDENT_TYPE_API_BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.text()
 }
