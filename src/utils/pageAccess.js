@@ -37,6 +37,27 @@ const schoolAdminAllowedPages = new Set([
   'assignment',
   'submission',
   'class-routine',
+  'manage-invoice',
+  'due-invoice',
+  'due-receipt',
+  'paid-receipt',
+  'due-fee-email',
+  'due-fee-sms',
+  'income-head',
+  'income',
+  'expenditure-head',
+  'expenditure',
+  'income-report',
+  'expenditure-report',
+  'invoice-report',
+  'due-fee-report',
+  'fee-collection-report',
+  'accounting-balance-report',
+  'library-report',
+  'student-attendance-report',
+  'student-yearly-attendance-report',
+  'teacher-attendance-report',
+  'teacher-yearly-attendance-report',
 ])
 
 const studentTypeAllowedRoles = new Set([
@@ -64,6 +85,8 @@ const schoolScopedAllowedPages = new Set([
   'lesson-status',
   'lesson-plan',
   'class-routine',
+  'manage-invoice',
+  'due-invoice',
 ])
 
 const parentAllowedPages = new Set([
@@ -75,6 +98,7 @@ const parentAllowedPages = new Set([
   'exam-result',
   'mark-sheet',
   'result-card',
+  'employee-attendance-report',
   'fee-collection',
   'subject',
   'syllabus',
