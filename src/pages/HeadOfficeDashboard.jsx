@@ -1,7 +1,1 @@
-import RoleDashboard from './RoleDashboard'
-
-const HeadOfficeDashboard = () => {
-  return <RoleDashboard variant="headOffice" />
-}
-
-export default HeadOfficeDashboard
+export { default } from '../DashBoard/HeadOfficeDashboard'

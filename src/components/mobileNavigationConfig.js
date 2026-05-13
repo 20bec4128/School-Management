@@ -26,7 +26,7 @@ const ROLE_CONFIGS = {
   SUPER_ADMIN: {
     accent: 'super-admin',
     tabs: [
-      makeTab('dashboard', 'Dashboard', 'super-admin-dashboard', 'ri-dashboard-3-line'),
+      makeTab('dashboard', 'Dashboard', 'lms-dashboard', 'ri-dashboard-3-line'),
       makeTab('head-offices', 'Head Offices', 'head-offices', 'ri-building-4-line', ['HEAD_OFFICE_MANAGE', '*']),
       makeTab('roles', 'Manage Roles', 'user-role-acl', 'ri-shield-user-line', ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']),
       makeTab('profile', 'Profile', null, 'ri-user-3-line'),

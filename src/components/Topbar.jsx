@@ -29,23 +29,10 @@ const notificationItems = [
   },
 ]
 
-const languageOptions = [
-  { code: 'EN', label: 'English' },
-  { code: 'HI', label: 'Hindi' },
-  { code: 'AR', label: 'Arabic' },
-]
-
 const readTheme = () => {
   if (typeof window === 'undefined') return 'light'
   const saved = localStorage.getItem('theme')
   return saved === 'dark' || saved === 'light' ? saved : document.documentElement.dataset.theme || 'light'
-}
-
-const readLanguage = () => {
-  if (typeof window === 'undefined') return 'EN'
-  const saved = localStorage.getItem('sm_language')
-  const match = languageOptions.find((option) => option.code === saved)
-  return match?.code || 'EN'
 }
 
 const Topbar = ({ user }) => {
@@ -54,7 +41,6 @@ const Topbar = ({ user }) => {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerQuery, setPickerQuery] = useState('')
   const [theme, setTheme] = useState(readTheme)
-  const [language, setLanguage] = useState(readLanguage)
   const [openMenu, setOpenMenu] = useState('none')
   const [desktopReady, setDesktopReady] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -194,12 +180,6 @@ const Topbar = ({ user }) => {
     localStorage.setItem('theme', next)
   }
 
-  const handleLanguageSelect = (code) => {
-    setLanguage(code)
-    localStorage.setItem('sm_language', code)
-    setOpenMenu('none')
-  }
-
   const renderPickerList = () => {
     if (selectorMode === 'school') {
       return (
@@ -322,41 +302,6 @@ const Topbar = ({ user }) => {
                     </div>
                     <span className="sm-topbar__menu-card-time">{item.time}</span>
                   </article>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="dropdown">
-          <button
-            type="button"
-            className="sm-topbar__action-btn sm-topbar__action-btn--language"
-            aria-label="Language"
-            aria-expanded={openMenu === 'language'}
-            onClick={() => setOpenMenu((prev) => (prev === 'language' ? 'none' : 'language'))}
-          >
-            <i className="ri-translate-2" />
-            <span>{language}</span>
-          </button>
-
-          {openMenu === 'language' ? (
-            <div className="sm-topbar__menu sm-topbar__menu--compact">
-              <div className="sm-topbar__menu-header">
-                <strong>Language</strong>
-                <span>Pick your display language</span>
-              </div>
-              <div className="sm-topbar__menu-list">
-                {languageOptions.map((option) => (
-                  <button
-                    key={option.code}
-                    type="button"
-                    className={`sm-topbar__menu-item${language === option.code ? ' is-active' : ''}`}
-                    onClick={() => handleLanguageSelect(option.code)}
-                  >
-                    <span>{option.label}</span>
-                    <small>{option.code}</small>
-                  </button>
                 ))}
               </div>
             </div>

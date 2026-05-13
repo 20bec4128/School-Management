@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import '../css/sidebar.css';
 import { useSidebar } from '../context/SidebarContext';
 import { can } from '../utils/permissions';
@@ -12,29 +12,18 @@ const menuSections = [
       {
         title: 'Dashboard',
         icon: 'ri:dashboard-line',
-        page: 'dashboard',
+        submenu: [
+          { label: 'School', href: '#', page: 'school-admin-dashboard', perm: '*' },
+          { label: 'Student', href: '#', page: 'student-dashboard', perm: '*' },
+          { label: 'Teacher', href: '#', page: 'teacher-dashboard', perm: '*' },
+          { label: 'Parent', href: '#', page: 'parent-dashboard', perm: '*' },
+          { label: 'LMS', href: '#', page: 'lms-dashboard', perm: '*' },
+        ],
       },
-      // {
-      //   title: 'Theme',
-      //   icon: 'ri:palette-line',
-      //   submenu: [
-      //     { label: 'Colors', href: '#' },
-      //     { label: 'Typography', href: '#' },
-      //   ],
-      // },
-      // {
-      //   title: 'Language',
-      //   icon: 'ri:translate-2',
-      //   submenu: [
-      //     { label: 'English', href: '#' },
-      //     { label: 'Hindi', href: '#' },
-      //   ],
-      // },
       {
         title: 'Administrator',
         icon: 'ri:user-settings-line',
         submenu: [
-          // { label: 'General Setting', href: '#' },
           { label: 'Head Offices', href: '#', page: 'head-offices', perm: 'HEAD_OFFICE_MANAGE' },
           { label: 'Manage School', href: '#', page: 'manage-school', perm: 'SCHOOL_MANAGE' },
           { label: 'Manage User Roles', href: '#', page: 'user-role-acl', perm: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE'] },
@@ -42,100 +31,10 @@ const menuSections = [
           { label: 'SMS Setting', href: '#', page: 'sms-setting', perm: 'SCHOOL_MANAGE' },
           { label: 'Email Setting', href: '#', page: 'email-setting', perm: 'SCHOOL_MANAGE' },
           { label: 'Academic Year', href: '#', perm: 'SCHOOL_MANAGE' },
-          // { label: 'Role Permission (ACL)', href: '#' },
-          // { label: 'Manage Super Admin', href: '#' },
-          // { label: 'Manage User', href: '#' },
-          // { label: 'Reset User Password', href: '#' },
-          // { label: 'Reset Username', href: '#' },
-          // { label: 'User Credential', href: '#' },
-          // { label: 'Activity Log', href: '#' },
-          // { label: 'Manage Feedback', href: '#' },
-          // { label: 'Backup Database', href: '#' },
-          // { label: 'Opening Hour', href: '#' },
         ],
       },
-      // {
-      //   title: 'Template',
-      //   icon: 'ri:layout-2-line',
-      //   submenu: [
-      //     { label: 'SMS Template', href: '#' },
-      //     { label: 'Email Template', href: '#' },
-      //   ],
-      // },
-      // {
-      //   title: 'Profile',
-      //   icon: 'ri:user-3-line',
-      //   submenu: [
-      //     { label: 'My Profile', href: '#' },
-      //     { label: 'Settings', href: '#' },
-      //     { label: 'Logout', href: '#' },
-      //   ],
-      // },
-      // {
-      //   title: 'Subscription (SaaS)',
-      //   icon: 'ri:vip-crown-line',
-      //   submenu: [
-      //     { label: 'FAQ', href: '#' },
-      //     { label: 'Slider', href: '#' },
-      //     { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
-      //     { label: 'General Settings', href: '#' },
-      //     { label: 'Subscription Plnas', href: '#' },
-      //     { label: 'School Subscription', href: '#' },
-
-      //   ],
-      // },
     ],
   },
-  // {
-  //   title: 'Front Office',
-  //   items: [
-  //     {
-  //       title: 'Front Office',
-  //       icon: 'ri:building-4-line',
-  //       submenu: [
-  //         { label: 'Visitor Purpose', href: '#' ,page: 'visitor-purpose' },
-  //         { label: 'Visitor Info', href: '#', page: 'visitor-info' },
-  //         { label: 'Call Log', href: '#', page: 'call-log' },
-  //       { label: 'Postal Dispatch', href: '#',page: 'postal-dispatch' },
-  //         { label: 'Postal Receive', href: '#',page : 'postal-receive' },
-        
-  //       ],
-  //     },
-  //     {
-  //       title: 'Complain',
-  //       icon: 'ri:chat-3-line',
-  //       submenu: [
-  //         { label: 'Complaints Type', href: '#',page: 'complain-type' },
-  //         { label: 'Manage Complain', href: '#',page: 'manage-complain' },
-  //       ],
-  //     },
-  //     {
-  //       title: 'Announcement',
-  //       icon: 'ri:megaphone-line',
-  //       submenu: [
-  //         { label: 'Notice', href: '#',page: 'notice' },
-  //         { label: 'News', href: '#',page: 'news' },
-  //         { label: 'Holiday', href: '#',page: 'holiday' },
-  //       ],
-  //     },
-  //     {
-  //       title: 'Event',
-  //       icon: 'ri:calendar-event-line',
-  //       href: '#',
-  //       page: 'event',
-  //     },
-  //     {
-  //       title: 'Media Gallery',
-  //       icon: 'ri:image-line',
-  //       submenu: [
-  //         { label: 'Gallery', href: '#',page: 'gallery' },
-  //         { label: 'Images', href: '#',page: 'images' },
-  //        { label: 'Videos', href: '#', page: 'videos' },
-
-  //       ],
-  //     },
-  //   ],
-  // },
   {
     title: 'Student Management',
     items: [
@@ -144,64 +43,12 @@ const menuSections = [
         icon: 'ri:group-line',
         perm: 'STUDENT_TYPE_MANAGE',
         submenu: [
-          { label: 'Student Type', href: '#',page: 'student-type' },
+          { label: 'Student Type', href: '#', page: 'student-type' },
           { label: 'Student List', href: '#', page: 'student-list' },
-        
-          { label: 'Online Admission', href: '#',page: 'online-admission' },
-          { label: 'Student Activity', href: '#',page: 'student-activity' },
+          { label: 'Online Admission', href: '#', page: 'online-admission' },
+          { label: 'Student Activity', href: '#', page: 'student-activity' },
         ],
       },
-      // {
-      //   title: 'Attendance',
-      //   icon: 'ri:calendar-check-line',
-      //   submenu: [
-      //     { label: 'Student Attendance', href: '#',page: 'student-attendance' },
-      //     { label: 'Teacher Attendance', href: '#',page: 'teacher-attendance' },
-      //     { label: 'Employee Attendance', href: '#',page: 'employee-attendance' },
-      //     { label: 'Absent Email', href: '#',page: 'absent-email' },
-      //     { label: 'Absent SMS', href: '#',page: 'absent-sms' },
-      //   ],
-      // },
-      // {
-      //   title: 'Promotion',
-      //   icon: 'ri:arrow-up-circle-line',
-      //   href: '#',
-      //   page: 'promotion',
-      // },
-      // {
-      //   title: 'Generate Card',
-      //   icon: 'ri:id-card-line',
-      //   submenu: [
-      //     { label: 'ID Card Setting', href: '#',page: 'id-card-setting' },
-      //     { label: 'Admit Card Setting', href: '#',page: 'admit-card-setting' },
-    
-      //   ],
-      // },
-      // {
-      //   title: 'Certificate',
-      //   icon: 'ri:award-line',
-      //   submenu: [
-      //     { label: 'Certificate Type', href: '#',page: 'certificate-type' },
-      //     { label: 'Generate Certificate', href: '#',page: 'generate-certificate' },
-      //   ],
-      // },
-      // {
-      //   title: 'Scholarship',
-      //   icon: 'ri:graduation-cap-line',
-      //   submenu: [
-      //     { label: 'Candidate', href: '#',page: 'candidate' },
-      //     { label: 'Donar', href: '#',page: 'donar' },
-      //     { label: 'Scholarship', href: '#',page: 'scholarship' },
-      //   ],
-      // },
-      // {
-      //   title: 'Guardian',
-      //   icon: 'ri:account-circle-line',
-      //   href: '#',
-      //   page: 'guardian',
-          
-        
-      // },
     ],
   },
   {
@@ -214,10 +61,10 @@ const menuSections = [
           { label: 'Class', href: '#', page: 'class' },
           { label: 'Section', href: '#', page: 'section' },
           { label: 'Subject', href: '#', page: 'subject' },
-          { label: 'Syllabus', href: '#',page: 'syllabus' },
+          { label: 'Syllabus', href: '#', page: 'syllabus' },
           { label: 'Study Material', href: '#', page: 'study-material' },
           { label: 'Live Class', href: '#', page: 'live-class' },
-          { label: 'Assignment', href: '#',page: 'assignment' },
+          { label: 'Assignment', href: '#', page: 'assignment' },
           { label: 'Submission', href: '#', page: 'submission' },
         ],
       },
@@ -225,11 +72,11 @@ const menuSections = [
         title: 'Lesson Plan',
         icon: 'ri:file-list-3-line',
         submenu: [
-          { label: 'Lesson', href: '#',page: 'lesson' },
+          { label: 'Lesson', href: '#', page: 'lesson' },
           { label: 'Topic', href: '#', page: 'topic' },
-          { label: 'Lesson Timeline', href: '#',page: 'lesson-timeline' },
-          { label: 'Lesson Status', href: '#',page: 'lesson-status' },
-          { label: 'Lesson Plan', href: '#',page: 'lesson-plan' },
+          { label: 'Lesson Timeline', href: '#', page: 'lesson-timeline' },
+          { label: 'Lesson Status', href: '#', page: 'lesson-status' },
+          { label: 'Lesson Plan', href: '#', page: 'lesson-plan' },
         ],
       },
       {
@@ -242,7 +89,6 @@ const menuSections = [
         title: 'Teacher',
         icon: 'ri:user-star-line',
         submenu: [
-          
           { label: 'Department', href: '#', page: 'teacher-department' },
           { label: 'Manage Teacher', href: '#', page: 'manage-teacher' },
           { label: 'Class Lecture', href: '#', page: 'class-lecture' },
@@ -251,49 +97,6 @@ const menuSections = [
       },
     ],
   },
-  // {
-  //   title: 'Examination System',
-  //   items: [
-  //     {
-  //       title: 'Online Exam',
-  //       icon: 'ri:computer-line',
-  //       submenu: [
-  //         { label: 'Exam Instruction', href: '#',page: 'exam-instruction' },
-  //         { label: 'Question Bank', href: '#',page: 'question-bank' },
-  //         { label: 'Online Exam', href: '#',page: 'onlineexam' },
-  //         { label: 'Exam Result', href: '#',page: 'exam-result' },
-  //       ],
-  //     },
-  //     {
-  //       title: 'Manage Exam',
-  //       icon: 'ri:file-edit-line',
-  //       submenu: [
-         
-  //         { label: 'Exam Grade', href: '#',page: 'exam-grade' },
-  //         { label: 'Exam Term', href: '#' ,page : 'exam-term' },
-  //          { label: 'Schedule', href: '#',page : 'schedule' },
-  //         { label: 'Suggestion', href: '#',page: 'suggestion'},
-  //         { label: 'Attendance', href: '#',page: 'attendance' },
-  //       ],
-  //     },
-  //     {
-  //       title: 'Exam Mark',
-  //       icon: 'ri:file-chart-line',
-  //       submenu: [
-  //         { label: 'Manage Mark', href: '#',page: 'manage-mark' },
-  //         { label: 'Exam Term Result', href: '#',page: 'exam-term-result' },
-  //         { label: 'Exam final result', href: '#', page: 'exam-final-result' },
-  //         { label: 'Merit List', href: '#', page: 'merit-list' },
-  //         { label: 'Mark Sheet', href: '#',page: 'mark-sheet' },
-  //         { label: 'Result Card', href: '#',page: 'result-card' },
-  //         { label: 'Mark send by Email', href: '#',page : 'mark-send-email' },
-  //         { label: 'Mark send by SMS', href: '#',page: 'mark-send-sms' },
-  //         { label: 'Result Send by Email', href: '#',page: 'result-email' },
-  //         { label: 'Result Send by SMS', href: '#',page: 'result-sms' },
-  //       ],
-  //     },
-  //   ],
-  // },
   {
     title: 'Human Resource (HR)',
     items: [
@@ -302,513 +105,16 @@ const menuSections = [
         icon: 'ri:team-line',
         submenu: [
           { label: 'Manage Destination', href: '#', page: 'manage-designation' },
-          { label: 'Manage Employees', href: '#',page: 'manage-employee' },
-        
+          { label: 'Manage Employees', href: '#', page: 'manage-employee' },
         ],
       },
-      // {
-      //   title: 'Manage Leave',
-      //   icon: 'ri:calendar-todo-line',
-      //   submenu: [
-      //     { label: 'Leave Type', href: '#', page: 'leave-type' },
-      //     { label: 'Leave Application', href: '#',page: 'leave-application' },
-      //     { label: 'Waiting Application', href: '#',page: 'waiting-application' },
-      //     { label: 'Approved Application', href: '#',page: 'approved-application' },
-      //     { label: 'Declined Application', href: '#',page: 'declined-application' },
-      //   ],
-      // },
-      // {
-      //   title: 'Payroll',
-      //   icon: 'ri:money-dollar-circle-line',
-      //   submenu: [
-      //     { label: 'Salary Grade', href: '#', page: 'salary-grade' },
-      //     { label: 'Salary Payment', href: '#',page: 'salary-payment' },
-      //     { label: 'Salary History', href: '#', page: 'salary-history' },
-      //   ],
-      // },
     ],
   },
-//   {
-//     title: 'Finance & Accounts',
-//     items: [
-//       {
-//         title: 'Accounting',
-//         icon: 'ri:calculator-line',
-//         submenu: [
-//           { label: 'Discount', href: '#',page : 'discount' },
-//           { label: 'Fee Type', href: '#',page : 'fee-type' },
-//           { label: 'Fee Collection', href: '#',page : 'fee-collection' },
-//           { label: 'Manage Invoice', href: '#' },
-//           { label: 'Due Invoice', href: '#' },
-//           { label: 'Due Receipt', href: '#' },
-//           { label: 'Paid Receipt', href: '#' },
-//           { label: 'Due Fee Email', href: '#' },
-//           { label: 'Due Fee SMS', href: '#' },
-//           { label: 'Income Head', href: '#' },
-//           { label: 'Income', href: '#' },
-//           { label: 'Expenditure Head', href: '#' },
-//           { label: 'Expenditure', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Report',
-//         icon: 'ri:bar-chart-line',
-//         submenu: [
-//           { label: 'Income Report', href: '#' },
-//           { label: 'Expenditure Report', href: '#' },
-//           { label: 'Invoice Report', href: '#' },
-//           { label: 'Due Fee Report', href: '#' },
-//           { label: 'Fee Collection Report', href: '#' },
-//           { label: 'Accounting Balance Report', href: '#' },
-//           { label: 'Library Report', href: '#' },
-//           { label: 'Student Attendance Report', href: '#' },
-//           { label: 'Student Yearly Attendance Report', href: '#' },
-//           { label: 'Teacher Attendance Report', href: '#' },
-//           { label: 'Teacher Yearly Attendance Report', href: '#' },
-//           { label: 'Employee Attendance Report', href: '#' },
-//           { label: 'Employee Yearly Attendance Report', href: '#' },
-//           { label: 'Student Report', href: '#' },
-//           { label: 'Student Invoice Report', href: '#' },
-//           { label: 'Student Activity Report', href: '#' },
-//           { label: 'Payroll Report', href: '#' },
-//           { label: 'Daily Transaction Report', href: '#' },
-//           { label: 'Daily Statemen Report', href: '#' },
-//           { label: 'Exam Result Report', href: '#' },
-//           { label: 'Certificate Type', href: '#' },
-//           { label: 'Gerate Certificate', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Inventory & Assets',
-//     items: [
-//       {
-//         title: 'Inventory',
-//         icon: 'ri:box-3-line',
-//         submenu: [
-          
-          
-//           { label: 'Suppliers', href: '#' },
-//            { label: 'Warhouse', href: '#' },
-//  { label: 'Category', href: '#' },
-//  { label: 'Product', href: '#' },
-//            { label: 'Purchase', href: '#' },
-//                      { label: 'Sale', href: '#' },
-//                                { label: 'Issue', href: '#' },
-//            { label: 'Warhouse', href: '#' },
-//  { label: 'Category', href: '#' },
-//  { label: 'Product', href: '#' },
-//            { label: 'Purchase', href: '#' },
-//                      { label: 'Sale', href: '#' },
-//                                { label: 'Issue', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Asset Management',
-//         icon: 'ri:building-2-line',
-//         submenu: [
-//           { label: 'Vendor', href: '#' },
-//           { label: 'Store', href: '#' },
-//           { label: 'Category', href: '#' },
-//           { label: 'Item', href: '#' },
-//           { label: 'Purchase', href: '#' },
-         
-//           { label: 'Issue', href: '#' },
-
-//           { label: 'Vendor', href: '#' },
-//           { label: 'Store', href: '#' },
-//           { label: 'Category', href: '#' },
-//           { label: 'Item', href: '#' },
-//           { label: 'Purchase', href: '#' },
-         
-//           { label: 'Issue', href: '#' },
-
-//         ],
-//       },
-//       {
-//         title: 'Library',
-//         icon: 'ri:book-2-line',
-//         submenu: [
-//           { label: 'Books List', href: '#' },
-//           { label: 'Library Members', href: '#' },
-//           { label: 'Issue/Return', href: '#' },
-//           { label: 'E-Book', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Transport & Facilities',
-//     items: [
-//       {
-//         title: 'Transport',
-//         icon: 'ri:bus-line',
-//         submenu: [
-//           { label: 'Vehicles', href: '#' },
-//           { label: 'Trasnsport Route', href: '#' },
-//           { label: 'Trasnsport Member', href: '#' },
-//           { label: 'Trasnsport Route', href: '#' },
-//           { label: 'Trasnsport Member', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Hostel',
-//         icon: 'ri:hotel-bed-line',
-//         submenu: [
-//           { label: 'Manage Hostel', href: '#' },
-//           { label: 'Manage Room', href: '#' },
-//           { label: 'Hostel Member', href: '#' },
-//           { label: 'Manage Hostel', href: '#' },
-//           { label: 'Manage Room', href: '#' },
-//           { label: 'Hostel Member', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Communication System',
-//     items: [
-//       {
-//         title: 'Mail & SMS',
-//         icon: 'ri:mail-line',
-//         submenu: [
-//           { label: 'Email', href: '#' },
-//           { label: 'SMS', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Website (CMS)',
-//     items: [
-//       {
-//         title: 'Manage Frontend',
-//         icon: 'ri:layout-line',
-//         submenu: [
-//           { label: 'Frontend Page', href: '#' },
-//           { label: 'Slider', href: '#' },
-//           { label: 'About School', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Miscellaneous',
-//     items: [
-//       {
-//         title: 'Miscellaneous',
-//         icon: 'ri:more-2-line',
-//         submenu: [
-//           { label: 'Tools', href: '#' },
-//           { label: 'Settings', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Subscription (SaaS)',
-//         icon: 'ri:vip-crown-line',
-//         submenu: [
-//           { label: 'FAQ', href: '#' },
-//           { label: 'Slider', href: '#' },
-//           { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
-//           { label: 'General Settings', href: '#' },
-//           { label: 'Subscription Plnas', href: '#' },
-//           { label: 'School Subscription', href: '#' },
-
-//         ],
-//       },
-//       {
-//         title: 'Profile',
-//         icon: 'ri:user-3-line',
-//         submenu: [
-//           { label: 'My Profile', href: '#' },
-//           { label: 'Settings', href: '#' },
-//           { label: 'Logout', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-  // {
-  //   title: 'Examination System',
-  //   items: [
-  //     {
-  //       title: 'Online Exam',
-  //       icon: 'ri:computer-line',
-  //       submenu: [
-  //         { label: 'Exam Instruction', href: '#',page: 'exam-instruction' },
-  //         { label: 'Question Bank', href: '#',page: 'question-bank' },
-  //         { label: 'Online Exam', href: '#',page: 'onlineexam' },
-  //         { label: 'Exam Result', href: '#',page: 'exam-result' },
-  //       ],
-  //     },
-  //     {
-  //       title: 'Manage Exam',
-  //       icon: 'ri:file-edit-line',
-  //       submenu: [
-         
-  //         { label: 'Exam Grade', href: '#',page: 'exam-grade' },
-  //         { label: 'Exam Term', href: '#' ,page : 'exam-term' },
-  //          { label: 'Schedule', href: '#',page : 'schedule' },
-  //         { label: 'Suggestion', href: '#',page: 'suggestion'},
-  //         { label: 'Attendance', href: '#',page: 'attendance' },
-  //       ],
-  //     },
-  //     {
-  //       title: 'Exam Mark',
-  //       icon: 'ri:file-chart-line',
-  //       submenu: [
-  //         { label: 'Manage Mark', href: '#',page: 'manage-mark' },
-  //         { label: 'Exam Term Result', href: '#',page: 'exam-term-result' },
-  //         { label: 'Exam final result', href: '#', page: 'exam-final-result' },
-  //         { label: 'Merit List', href: '#', page: 'merit-list' },
-  //         { label: 'Mark Sheet', href: '#',page: 'mark-sheet' },
-  //         { label: 'Result Card', href: '#',page: 'result-card' },
-  //         { label: 'Mark send by Email', href: '#',page : 'mark-send-email' },
-  //         { label: 'Mark send by SMS', href: '#',page: 'mark-send-sms' },
-  //         { label: 'Result Send by Email', href: '#',page: 'result-email' },
-  //         { label: 'Result Send by SMS', href: '#',page: 'result-sms' },
-  //       ],
-  //     },
-  //   ],
-  // },
-//   {
-//     title: 'Human Resource (HR)',
-//     items: [
-//       {
-//         title: 'Human Resource',
-//         icon: 'ri:team-line',
-//         submenu: [
-//           { label: 'Manage Destination', href: '#', page: 'manage-designation' },
-//           { label: 'Manage Employees', href: '#',page: 'manage-employee' },
-        
-//         ],
-//       },
-//       {
-//         title: 'Manage Leave',
-//         icon: 'ri:calendar-todo-line',
-//         submenu: [
-//           { label: 'Leave Type', href: '#', page: 'leave-type' },
-//           { label: 'Leave Application', href: '#',page: 'leave-application' },
-//           { label: 'Waiting Application', href: '#',page: 'waiting-application' },
-//           { label: 'Approved Application', href: '#',page: 'approved-application' },
-//           { label: 'Declined Application', href: '#',page: 'declined-application' },
-//         ],
-//       },
-//       {
-//         title: 'Payroll',
-//         icon: 'ri:money-dollar-circle-line',
-//         submenu: [
-//           { label: 'Salary Grade', href: '#', page: 'salary-grade' },
-//           { label: 'Salary Payment', href: '#',page: 'salary-payment' },
-//           { label: 'Salary History', href: '#', page: 'salary-history' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Finance & Accounts',
-//     items: [
-//       {
-//         title: 'Accounting',
-//         icon: 'ri:calculator-line',
-//         submenu: [
-//           { label: 'Discount', href: '#',page : 'discount' },
-//           { label: 'Fee Type', href: '#',page : 'fee-type' },
-//           { label: 'Fee Collection', href: '#',page : 'fee-collection' },
-//           { label: 'Manage Invoice', href: '#' },
-//           { label: 'Due Invoice', href: '#' },
-//           { label: 'Due Receipt', href: '#' },
-//           { label: 'Paid Receipt', href: '#' },
-//           { label: 'Due Fee Email', href: '#' },
-//           { label: 'Due Fee SMS', href: '#' },
-//           { label: 'Income Head', href: '#' },
-//           { label: 'Income', href: '#' },
-//           { label: 'Expenditure Head', href: '#' },
-//           { label: 'Expenditure', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Report',
-//         icon: 'ri:bar-chart-line',
-//         submenu: [
-//           { label: 'Income Report', href: '#' },
-//           { label: 'Expenditure Report', href: '#' },
-//           { label: 'Invoice Report', href: '#' },
-//           { label: 'Due Fee Report', href: '#' },
-//           { label: 'Fee Collection Report', href: '#' },
-//           { label: 'Accounting Balance Report', href: '#' },
-//           { label: 'Library Report', href: '#' },
-//           { label: 'Student Attendance Report', href: '#' },
-//           { label: 'Student Yearly Attendance Report', href: '#' },
-//           { label: 'Teacher Attendance Report', href: '#' },
-//           { label: 'Teacher Yearly Attendance Report', href: '#' },
-//           { label: 'Employee Attendance Report', href: '#' },
-//           { label: 'Employee Yearly Attendance Report', href: '#' },
-//           { label: 'Student Report', href: '#' },
-//           { label: 'Student Invoice Report', href: '#' },
-//           { label: 'Student Activity Report', href: '#' },
-//           { label: 'Payroll Report', href: '#' },
-//           { label: 'Daily Transaction Report', href: '#' },
-//           { label: 'Daily Statemen Report', href: '#' },
-//           { label: 'Exam Result Report', href: '#' },
-//           { label: 'Certificate Type', href: '#' },
-//           { label: 'Gerate Certificate', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Inventory & Assets',
-//     items: [
-//       {
-//         title: 'Inventory',
-//         icon: 'ri:box-3-line',
-//         submenu: [
-          
-          
-//           { label: 'Suppliers', href: '#' },
-//            { label: 'Warhouse', href: '#' },
-//  { label: 'Category', href: '#' },
-//  { label: 'Product', href: '#' },
-//            { label: 'Purchase', href: '#' },
-//                      { label: 'Sale', href: '#' },
-//                                { label: 'Issue', href: '#' },
-//            { label: 'Warhouse', href: '#' },
-//  { label: 'Category', href: '#' },
-//  { label: 'Product', href: '#' },
-//            { label: 'Purchase', href: '#' },
-//                      { label: 'Sale', href: '#' },
-//                                { label: 'Issue', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Asset Management',
-//         icon: 'ri:building-2-line',
-//         submenu: [
-//           { label: 'Vendor', href: '#' },
-//           { label: 'Store', href: '#' },
-//           { label: 'Category', href: '#' },
-//           { label: 'Item', href: '#' },
-//           { label: 'Purchase', href: '#' },
-         
-//           { label: 'Issue', href: '#' },
-
-//           { label: 'Vendor', href: '#' },
-//           { label: 'Store', href: '#' },
-//           { label: 'Category', href: '#' },
-//           { label: 'Item', href: '#' },
-//           { label: 'Purchase', href: '#' },
-         
-//           { label: 'Issue', href: '#' },
-
-//         ],
-//       },
-//       {
-//         title: 'Library',
-//         icon: 'ri:book-2-line',
-//         submenu: [
-//           { label: 'Books List', href: '#' },
-//           { label: 'Library Members', href: '#' },
-//           { label: 'Issue/Return', href: '#' },
-//           { label: 'E-Book', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Transport & Facilities',
-//     items: [
-//       {
-//         title: 'Transport',
-//         icon: 'ri:bus-line',
-//         submenu: [
-//           { label: 'Vehicles', href: '#' },
-//           { label: 'Trasnsport Route', href: '#' },
-//           { label: 'Trasnsport Member', href: '#' },
-//           { label: 'Trasnsport Route', href: '#' },
-//           { label: 'Trasnsport Member', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Hostel',
-//         icon: 'ri:hotel-bed-line',
-//         submenu: [
-//           { label: 'Manage Hostel', href: '#' },
-//           { label: 'Manage Room', href: '#' },
-//           { label: 'Hostel Member', href: '#' },
-//           { label: 'Manage Hostel', href: '#' },
-//           { label: 'Manage Room', href: '#' },
-//           { label: 'Hostel Member', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Communication System',
-//     items: [
-//       {
-//         title: 'Mail & SMS',
-//         icon: 'ri:mail-line',
-//         submenu: [
-//           { label: 'Email', href: '#' },
-//           { label: 'SMS', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Website (CMS)',
-//     items: [
-//       {
-//         title: 'Manage Frontend',
-//         icon: 'ri:layout-line',
-//         submenu: [
-//           { label: 'Frontend Page', href: '#' },
-//           { label: 'Slider', href: '#' },
-//           { label: 'About School', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
-//   {
-//     title: 'Miscellaneous',
-//     items: [
-//       {
-//         title: 'Miscellaneous',
-//         icon: 'ri:more-2-line',
-//         submenu: [
-//           { label: 'Tools', href: '#' },
-//           { label: 'Settings', href: '#' },
-//         ],
-//       },
-//       {
-//         title: 'Subscription (SaaS)',
-//         icon: 'ri:vip-crown-line',
-//         submenu: [
-//           { label: 'FAQ', href: '#' },
-//           { label: 'Slider', href: '#' },
-//           { label: 'Subscription Settings', href: '#' },            { label: 'Subscription Settings', href: '#' },
-//           { label: 'General Settings', href: '#' },
-//           { label: 'Subscription Plnas', href: '#' },
-//           { label: 'School Subscription', href: '#' },
-
-//         ],
-//       },
-//       {
-//         title: 'Profile',
-//         icon: 'ri:user-3-line',
-//         submenu: [
-//           { label: 'My Profile', href: '#' },
-//           { label: 'Settings', href: '#' },
-//           { label: 'Logout', href: '#' },
-//         ],
-//       },
-//     ],
-//   },
 ];
 
 const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
-  const { isOpen, isCollapsed, closeSidebar, closeForNavigation, toggleSidebar } = useSidebar();
+  const { isOpen, isCollapsed, closeSidebar, toggleSidebar } = useSidebar();
+
   const username =
     user?.username ||
     user?.userName ||
@@ -817,116 +123,124 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     user?.email ||
     'User';
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
-  const dashboardByRole = {
-    SUPER_ADMIN: { page: 'super-admin-dashboard', label: 'Dashboard' },
-    HEAD_OFFICE_ADMIN: { page: 'head-office-dashboard', label: 'Dashboard' },
-    SCHOOL_ADMIN: { page: 'school-admin-dashboard', label: 'Dashboard' },
-    TEACHER: { page: 'teacher-dashboard', label: 'Teacher Dashboard' },
-    STUDENT: { page: 'student-dashboard', label: 'Student Dashboard' },
-    PARENT: { page: 'parent-dashboard', label: 'Parent Dashboard' },
-  }
-  const roleDashboard = dashboardByRole[role] || { page: 'dashboard', label: 'Dashboard' }
-  const isStudent = role === 'STUDENT'
-  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
-  const isTeacher = role === 'TEACHER'
+  const isStudent = role === 'STUDENT';
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN';
+  const isTeacher = role === 'TEACHER';
+
   const studentAllowedPages = new Set([
-    'dashboard',
-    'student-dashboard',
-    'class-routine',
-    'subject',
-    'syllabus',
-    'study-material',
-    'live-class',
-    'assignment',
-    'submission',
-    'lesson',
-    'topic',
-    'lesson-timeline',
-    'lesson-status',
-    'lesson-plan',
-  ])
+    'dashboard', 'student-dashboard', 'class-routine', 'subject', 'syllabus',
+    'study-material', 'live-class', 'assignment', 'submission', 'lesson',
+    'topic', 'lesson-timeline', 'lesson-status', 'lesson-plan',
+  ]);
   const schoolAdminAllowedPages = new Set([
-    'dashboard',
-    'school-admin-dashboard',
-    'teacher-department',
-    'user-role-acl',
-    'class',
-    'section',
-    'subject',
-    'manage-teacher',
-    'student-list',
-    'student-type',
-    'online-admission',
-    'student-activity',
-    'syllabus',
-    'study-material',
-    'live-class',
-    'assignment',
-    'submission',
-    'lesson',
-    'topic',
-    'lesson-timeline',
-    'lesson-status',
-    'lesson-plan',
-    'class-routine',
-  ])
+    'dashboard', 'school-admin-dashboard', 'teacher-department', 'user-role-acl',
+    'class', 'section', 'subject', 'manage-teacher', 'student-list', 'student-type',
+    'online-admission', 'student-activity', 'syllabus', 'study-material', 'live-class',
+    'assignment', 'submission', 'lesson', 'topic', 'lesson-timeline', 'lesson-status',
+    'lesson-plan', 'class-routine',
+  ]);
   const teacherVisiblePages = new Set([
-    'teacher-dashboard',
-    'student-type',
-    'student-list',
-    'online-admission',
-    'class',
-    'section',
-    'subject',
-    'syllabus',
-    'study-material',
-    'live-class',
-    'assignment',
-    'submission',
-    'lesson',
-    'topic',
-    'lesson-timeline',
-    'lesson-status',
-    'lesson-plan',
+    'teacher-dashboard', 'student-type', 'student-list', 'online-admission', 'class',
+    'section', 'subject', 'syllabus', 'study-material', 'live-class', 'assignment',
+    'submission', 'lesson', 'topic', 'lesson-timeline', 'lesson-status', 'lesson-plan',
     'class-routine',
-  ])
+  ]);
   const parentVisiblePages = new Set([
-    'parent-dashboard',
-    'dashboard',
-    'class-routine',
-    'student-attendance',
-    'exam-result',
-    'mark-sheet',
-    'result-card',
-    'fee-collection',
-    'subject',
-    'syllabus',
-    'study-material',
-    'live-class',
-    'assignment',
-    'submission',
-    'lesson',
-    'topic',
-    'lesson-timeline',
-    'lesson-status',
-    'lesson-plan',
-  ])
+    'parent-dashboard', 'dashboard', 'class-routine', 'student-attendance', 'exam-result',
+    'mark-sheet', 'result-card', 'fee-collection', 'subject', 'syllabus', 'study-material',
+    'live-class', 'assignment', 'submission', 'lesson', 'topic', 'lesson-timeline',
+    'lesson-status', 'lesson-plan',
+  ]);
 
   const canOpenPage = (page) => {
-    if (!page) return true
-    if (isStudent) return studentAllowedPages.has(page)
-    if (isSchoolAdmin) return schoolAdminAllowedPages.has(page)
-    if (isTeacher) return teacherVisiblePages.has(page)
-    if (role === 'PARENT') return parentVisiblePages.has(page)
-    return true
-  }
+    if (!page) return true;
+    if (isStudent) return studentAllowedPages.has(page);
+    if (isSchoolAdmin) return schoolAdminAllowedPages.has(page);
+    if (isTeacher) return teacherVisiblePages.has(page);
+    if (role === 'PARENT') return parentVisiblePages.has(page);
+    return true;
+  };
 
   const canOpenUserRoles = () => {
-    if (!canManageUsers(user)) return false
-    // Permission gate is still enforced by `perm` checks below; this just hides the menu
-    // when a role has no editable targets in the hierarchy.
-    return true
-  }
+    if (!canManageUsers(user)) return false;
+    return true;
+  };
+
+  // ─── Build the filtered sections ──────────────────────────────────────────
+  const filteredSections = menuSections
+    .map((section) => ({
+      ...section,
+      items: section.items
+        .filter((item) => {
+          if (role === 'PARENT' && item.page && !canOpenPage(item.page)) return false;
+          if (!isStudent && !isSchoolAdmin) return true;
+          if (item.page && canOpenPage(item.page)) return true;
+          if (Array.isArray(item.submenu)) {
+            return item.submenu.some((sub) => sub?.page && canOpenPage(sub.page));
+          }
+          return false;
+        })
+        .filter((item) => !item.perm || can(user, item.perm))
+        .map((item) => ({
+          ...item,
+          submenu: Array.isArray(item.submenu)
+            ? item.submenu
+                .filter((sub) => canOpenPage(sub.page))
+                .filter((sub) => !(role === 'PARENT' && ['class', 'section'].includes(sub?.page)))
+            : item.submenu,
+        }))
+        .filter((item) => {
+          if (!Array.isArray(item.submenu)) return true;
+          return item.submenu.length > 0 || !!item.page;
+        }),
+    }))
+    .filter((section) => section.items.length > 0);
+
+  // ─── Build a flat list of (sectionIdx, itemIdx) keys for dropdown items ──
+  // Key format: `${sectionIndex}-${itemIndex}`
+  const buildOpenKey = (sectionIndex, itemIndex) => `${sectionIndex}-${itemIndex}`;
+
+  // Find which key contains the currentPage (to auto-open that dropdown)
+  const findActiveKey = () => {
+    for (let si = 0; si < filteredSections.length; si++) {
+      const section = filteredSections[si];
+      for (let ii = 0; ii < section.items.length; ii++) {
+        const item = section.items[ii];
+        if (Array.isArray(item.submenu)) {
+          if (item.submenu.some((sub) => sub.page && sub.page === currentPage)) {
+            return buildOpenKey(si, ii);
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  // React state: which dropdown key is open (only one at a time, accordion style)
+  const [openKey, setOpenKey] = useState(() => findActiveKey());
+
+  // Keep open key in sync when currentPage changes (e.g. external navigation)
+  useEffect(() => {
+    const activeKey = findActiveKey();
+    if (activeKey) {
+      setOpenKey(activeKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage]);
+
+  const handleDropdownToggle = (key) => {
+    setOpenKey((prev) => (prev === key ? null : key));
+  };
+
+  const handleNavClick = (e, page) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onNavigate) {
+      onNavigate(page);
+    }
+    // Close sidebar on mobile after navigation
+    closeSidebar();
+  };
 
   const sidebarClass = [
     'sidebar',
@@ -935,20 +249,6 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   ]
     .filter(Boolean)
     .join(' ');
-
-  const handleDropdownToggle = (e) => {
-    e.preventDefault();
-    const li = e.currentTarget.closest('li.dropdown');
-    if (li) li.classList.toggle('open');
-  };
-
- const handleNavClick = (e, page) => {
-  e.preventDefault();
-  e.stopPropagation();
-  if (onNavigate) {
-    onNavigate(page);
-  }
-};
 
   return (
     <>
@@ -959,6 +259,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           <iconify-icon icon="ri:close-line"></iconify-icon>
         </button>
 
+        {/* ── Logo ── */}
         <div>
           <div className="sidebar-logo d-flex align-items-center justify-content-between">
             <a href="#" className="sidebar-logo__brand">
@@ -977,6 +278,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           </div>
         </div>
 
+        {/* ── Profile dropdown ── */}
         <div className="mx-16 py-12">
           <div className="dropdown profile-dropdown">
             <button
@@ -1025,8 +327,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   href="#"
                   className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
                   onClick={(e) => {
-                    e.preventDefault()
-                    onLogout?.()
+                    e.preventDefault();
+                    onLogout?.();
                   }}
                 >
                   <iconify-icon icon="ri:shut-down-line"></iconify-icon> Log Out
@@ -1036,47 +338,10 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           </div>
         </div>
 
+        {/* ── Navigation menu ── */}
         <div className="sidebar-menu-area">
           <ul className="sidebar-menu" id="sidebar-menu">
-            {menuSections
-              .map((section) => ({
-                ...section,
-                items: section.items
-                  .map((item) => {
-                    if (section.title === 'Core System' && item.title === 'Dashboard') {
-                      return {
-                        ...item,
-                        title: roleDashboard.label,
-                        page: roleDashboard.page,
-                        submenu: undefined,
-                      }
-                    }
-                    return item
-                  })
-                  .filter((item) => {
-                    if (role === 'PARENT' && item.page && !canOpenPage(item.page)) return false
-                    if (!isStudent && !isSchoolAdmin) return true
-                    if (item.page && canOpenPage(item.page)) return true
-                    if (Array.isArray(item.submenu)) {
-                      return item.submenu.some((sub) => sub?.page && canOpenPage(sub.page))
-                    }
-                    return false
-                  })
-                  .filter((item) => !item.perm || can(user, item.perm))
-                  .map((item) => ({
-                    ...item,
-                    submenu: Array.isArray(item.submenu)
-                      ? item.submenu.filter((sub) => canOpenPage(sub.page) && (!sub.perm || can(user, sub.perm)))
-                        .filter((sub) => !(role === 'PARENT' && ['class', 'section'].includes(sub?.page)))
-                      : item.submenu,
-                  }))
-                  .filter((item) => {
-                    if (!Array.isArray(item.submenu)) return true
-                    return item.submenu.length > 0 || !!item.page
-                  }),
-              }))
-              .filter((section) => section.items.length > 0)
-              .map((section, sectionIndex) => (
+            {filteredSections.map((section, sectionIndex) => (
               <React.Fragment key={sectionIndex}>
                 {section.title ? (
                   <li className={`sidebar-menu-group-title ${isCollapsed ? 'hidden' : ''}`}>
@@ -1084,60 +349,81 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   </li>
                 ) : null}
 
-                {section.items.map((item, index) => {
+                {section.items.map((item, itemIndex) => {
                   const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
-                  const hasActiveSubmenu = hasSubmenu
-                    ? item.submenu.some((sub) => sub.page && sub.page === currentPage)
-                    : false;
+                  const key = buildOpenKey(sectionIndex, itemIndex);
+                  const isOpen_dropdown = hasSubmenu && openKey === key;
                   const isItemActive = item.page && item.page === currentPage;
 
                   return (
-                  <li key={index} className={hasSubmenu ? `dropdown${hasActiveSubmenu ? ' open' : ''}` : ''}>
-                    <a
-                      href={item.href || '#'}
-                      className={isItemActive ? 'active-page' : ''}
-                      onClick={(e) => {
-                        if (hasSubmenu) {
-                          handleDropdownToggle(e);
-                          if (item.page) {
+                    <li
+                      key={itemIndex}
+                      className={[
+                        hasSubmenu ? 'dropdown' : '',
+                        isOpen_dropdown ? 'open' : '',
+                        isOpen_dropdown ? 'active-parent' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <a
+                        href={item.href || '#'}
+                        className={isItemActive ? 'active-page' : ''}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (hasSubmenu) {
+                            handleDropdownToggle(key);
+                            // If item also has a page, navigate to it
+                            if (item.page && onNavigate) {
+                              onNavigate(item.page);
+                            }
+                          } else if (item.page) {
                             handleNavClick(e, item.page);
                           }
-                          return;
-                        }
-                        if (item.page) {
-                          handleNavClick(e, item.page);
-                        }
-                      }}
-                    >
-                      <iconify-icon icon={item.icon} className="menu-icon"></iconify-icon>
-                      <span>{item.title}</span>
-                      {hasSubmenu ? <iconify-icon icon="ri:arrow-down-s-line" className="sidebar-menu__arrow"></iconify-icon> : null}
-                    </a>
-                    {hasSubmenu ? <ul className="sidebar-submenu">
-                      {item.submenu
-                        ?.filter((sub) => {
-                          if (sub?.page === 'user-role-acl') return canOpenUserRoles()
-                          return true
-                        })
-                        .map((sub, subIndex) => (
-                        <li key={subIndex}>
-                          <a
-                            href={sub.href}
-                            className={sub.page && sub.page === currentPage ? 'active-page' : ''}
-                            onClick={(e) => { if (sub.page) handleNavClick(e, sub.page) }}
-                          >
-                            <iconify-icon
-                              icon="ri:circle-fill"
-                              className="circle-icon w-auto"
-                              style={{ fontSize: '6px' }}
-                            ></iconify-icon>
-                            {sub.label}
-                          </a>
-                        </li>
-                      ))}
-                    </ul> : null}
-                  </li>
-                )})}
+                        }}
+                      >
+                        <iconify-icon icon={item.icon} className="menu-icon"></iconify-icon>
+                        <span>{item.title}</span>
+                        {hasSubmenu ? (
+                          <iconify-icon
+                            icon="ri:arrow-down-s-line"
+                            className="sidebar-menu__arrow"
+                          ></iconify-icon>
+                        ) : null}
+                      </a>
+
+                      {hasSubmenu ? (
+                        <ul className="sidebar-submenu">
+                          {item.submenu
+                            .filter((sub) => {
+                              if (sub?.page === 'user-role-acl') return canOpenUserRoles();
+                              return true;
+                            })
+                            .map((sub, subIndex) => (
+                              <li key={subIndex}>
+                                <a
+                                  href={sub.href}
+                                  className={
+                                    sub.page && sub.page === currentPage ? 'active-page' : ''
+                                  }
+                                  onClick={(e) => {
+                                    if (sub.page) handleNavClick(e, sub.page);
+                                  }}
+                                >
+                                  <iconify-icon
+                                    icon="ri:circle-fill"
+                                    className="circle-icon w-auto"
+                                    style={{ fontSize: '6px' }}
+                                  ></iconify-icon>
+                                  <span>{sub.label}</span>
+                                </a>
+                              </li>
+                            ))}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </React.Fragment>
             ))}
           </ul>

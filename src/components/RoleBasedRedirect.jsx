@@ -6,7 +6,7 @@ import { normalizeRole } from '../utils/roles'
 const RoleBasedRedirect = ({ role, parentChildren, selectedChildId, onRedirect }) => {
   const homePage = useMemo(() => {
     const r = normalizeRole(role)
-    if (r === 'SUPER_ADMIN') return 'super-admin-dashboard'
+    if (r === 'SUPER_ADMIN') return 'lms-dashboard'
     if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'

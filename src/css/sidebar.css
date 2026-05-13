@@ -7,6 +7,7 @@
   height: 100vh;
   background-color: var(--white);
   z-index: 1045;
+  transition: inset-inline-start 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (min-width: 1200px) {
@@ -34,22 +35,7 @@
 
 .sidebar.active {
   width: 86px;
-}
-
-.sidebar.active:hover {
-  width: auto;
-}
-
-@media (min-width: 1400px) {
-  .sidebar.active:hover {
-    width: 17.1875rem;
-  }
-}
-
-@media (min-width: 1650px) {
-  .sidebar.active:hover {
-    width: 19.5rem;
-  }
+  overflow-x: hidden;
 }
 
 .sidebar-logo {
@@ -109,34 +95,47 @@
   color: #fff;
 }
 
-/* Active submenu page should use mild green hover-like effect (not dropdown active blue) */
-.sidebar-menu li > a.active-page {
-  background-color: transparent !important;
-  color: #15803d !important;
+.sidebar-menu li.dropdown.open > a:hover,
+.sidebar-menu li.dropdown.dropdown-open > a:hover {
+  color: #fff;
 }
 
-.sidebar-menu li > a.active-page .circle-icon {
-  color: #15803d !important;
+.sidebar-menu li > a.active-page {
+  background-color: var(--primary-600);
+  color: #fff;
+}
+
+.sidebar-menu li > a.active-page:hover {
+  color: #fff;
+}
+
+.sidebar-menu .sidebar-submenu li a.active-page {
+  background-color: transparent !important;
+  color: var(--primary-600);
+}
+
+.sidebar-menu .sidebar-submenu li a.active-page .circle-icon {
+  color: var(--primary-600);
 }
 
 .sidebar-menu .sidebar-submenu {
   padding-block-start: 0.75rem;
-  display: none;
+  display: block !important;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
   margin-inline-start: 1.5rem;
   padding-inline-start: 1rem;
-  border-inline-start: 1px solid #dbe7ea;
 }
 
 .sidebar-menu .sidebar-menu-group-title {
   color: var(--neutral-500);
 }
 
-.sidebar-menu li.dropdown > .sidebar-submenu {
-  display: none;
-}
-
 .sidebar-menu li.dropdown.open > .sidebar-submenu {
-  display: block;
+  max-height: 800px;
+  opacity: 1;
 }
 
 /* Hide the broken ::after remixicon arrow, use iconify-icon instead */
@@ -151,7 +150,7 @@
   top: 50%;
   transform: translateY(-50%);
   font-size: 1.125rem;
-  transition: transform 0.3s;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-menu li.dropdown.open > a .sidebar-menu__arrow {
@@ -195,6 +194,10 @@
   margin-inline-end: 0.75rem;
   flex: 0 0 auto;
   color: #c6d3d8;
+  box-shadow: 0 0 0 10px var(--white);
+  z-index: 1;
+  position: relative;
+  background: var(--white);
 }
 
 /* Make section headings align with menu items */
@@ -208,9 +211,191 @@
   display: none;
 }
 
+.sidebar-submenu {
+  position: relative;
+}
+
+.sidebar-submenu::before {
+  position: absolute;
+  content: "";
+  width: 0;
+  height: calc(100% - 34px);
+  border: 1px solid rgba(37, 161, 148, 0.21);
+  inset-inline-start: 3px;
+  z-index: -1;
+  top: 6px;
+}
+
 @media (min-width: 1200px) {
   .sidebar-close-btn {
     display: none;
   }
 }
 
+/* Proper collapsed sidebar */
+.sidebar.active {
+  width: 86px !important;
+  overflow-x: hidden;
+}
+
+.sidebar.active .sidebar-logo {
+  padding-inline: 0.75rem;
+  justify-content: center;
+}
+
+.sidebar.active .sidebar-logo__brand .light-logo,
+.sidebar.active .sidebar-logo__brand .dark-logo {
+  display: none !important;
+}
+
+.sidebar.active .sidebar-logo__brand .logo-icon {
+  display: block !important;
+  max-width: 48px;
+}
+
+.sidebar.active .profile-dropdown__contents,
+.sidebar.active .profile-dropdown__icon {
+  display: none !important;
+}
+
+.sidebar.active .dropdown.profile-dropdown .profile-dropdown__button {
+  padding: 0 !important;
+  width: 56px !important;
+  height: 56px;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sidebar.active .profile-dropdown__button {
+  justify-content: center !important;
+  padding: 0.625rem !important;
+}
+
+.sidebar.active .sidebar-menu-area {
+  padding-inline: 0.75rem;
+  overflow-x: hidden;
+}
+
+.sidebar.active .sidebar-menu-group-title {
+  display: none !important;
+}
+
+.sidebar.active .sidebar-menu li a {
+  width: 56px !important;
+  height: 44px;
+  padding: 0 !important;
+  margin-inline: auto;
+  justify-content: center !important;
+  overflow: hidden;
+}
+
+.sidebar.active .sidebar-menu li a span,
+.sidebar.active .sidebar-menu__arrow {
+  display: none !important;
+}
+
+.sidebar.active .sidebar-submenu {
+  display: block !important;
+  visibility: hidden !important;
+  height: auto !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+}
+
+.sidebar.active .sidebar-submenu::before {
+  display: none !important;
+}
+
+.sidebar.active .circle-icon {
+  display: none !important;
+}
+
+.sidebar.active .menu-icon {
+  margin: 0 !important;
+  font-size: 1.35rem !important;
+}
+
+.sidebar.active:hover {
+  width: 17.1875rem !important;
+  overflow-x: visible;
+}
+
+.sidebar.active:hover .sidebar-logo {
+  padding-inline: 1rem;
+  justify-content: space-between;
+}
+
+.sidebar.active:hover .sidebar-logo__brand .light-logo {
+  display: inline-block !important;
+}
+
+.sidebar.active:hover .sidebar-logo__brand .logo-icon {
+  display: none !important;
+}
+
+.sidebar.active:hover .sidebar-menu-area {
+  padding-inline: 1rem;
+  overflow-x: hidden;
+}
+
+.sidebar.active:hover .sidebar-menu li a {
+  width: auto !important;
+  height: auto !important;
+  padding: 0.625rem 0.75rem !important;
+  margin-inline: 0 !important;
+  justify-content: flex-start !important;
+  overflow: visible !important;
+}
+
+.sidebar.active:hover .sidebar-menu li a span,
+.sidebar.active:hover .sidebar-menu__arrow {
+  display: inline-flex !important;
+}
+
+.sidebar.active:hover .sidebar-menu-group-title {
+  display: block !important;
+}
+
+.sidebar.active:hover .sidebar-menu li.dropdown.open > .sidebar-submenu {
+  display: block !important;
+  visibility: visible !important;
+  height: auto !important;
+  max-height: 500px !important;
+  margin-inline-start: 1.5rem !important;
+  padding-inline-start: 1rem !important;
+  opacity: 1 !important;
+}
+
+.sidebar.active:hover .sidebar-menu li.dropdown.open > .sidebar-submenu::before {
+  display: block !important;
+}
+
+.sidebar.active:hover .sidebar-menu li.dropdown.open > .sidebar-submenu li a {
+  padding-block: 0.5rem !important;
+}
+
+.sidebar.active:hover .circle-icon {
+  display: inline-block !important;
+}
+
+.sidebar.active:hover .menu-icon {
+  margin-inline-end: 0.75rem !important;
+  font-size: inherit !important;
+}
+
+@media (min-width: 1200px) {
+  .dashboard-main {
+    transition: margin-inline-start 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .dashboard-main.active {
+    margin-inline-start: 86px !important;
+    width: calc(100% - 86px);
+  }
+}

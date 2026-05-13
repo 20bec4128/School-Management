@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import MobileBottomNav from './components/MobileBottomNav'
+import { useSidebar } from './context/SidebarContext'
 import { SidebarProvider } from './context/SidebarContext'
 import { SchoolProvider } from './context/SchoolContext'
 import Login from './pages/Login'
@@ -21,7 +22,7 @@ function App() {
     }
 
     const r = normalizeRole(role)
-    if (r === 'SUPER_ADMIN') return 'super-admin-dashboard'
+    if (r === 'SUPER_ADMIN') return 'lms-dashboard'
     if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
@@ -38,7 +39,7 @@ function App() {
       setCurrentPage('login')
       return
     }
-    setCurrentPage((prev) => (prev === 'login' ? homePage : prev))
+    setCurrentPage((prev) => (prev === 'login' || prev === 'dashboard' ? homePage : prev))
   }, [status, token, homePage])
 
   if (status !== 'ready') return null
@@ -56,22 +57,49 @@ function App() {
   return (
     <SchoolProvider user={user}>
       <SidebarProvider>
-        <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={logout} />
-
-        <main className="dashboard-main">
-          <Topbar user={user} />
-          <AppRoute
-            currentPage={currentPage}
-            user={user}
-            role={role}
-            parentChildren={parentChildren}
-            selectedChildId={selectedChildId}
-            onNavigate={setCurrentPage}
-          />
-        </main>
-        <MobileBottomNav currentPage={currentPage} onNavigate={setCurrentPage} onLogout={logout} />
+        <AppLayout
+          user={user}
+          role={role}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          parentChildren={parentChildren}
+          selectedChildId={selectedChildId}
+          logout={logout}
+        />
       </SidebarProvider>
     </SchoolProvider>
+  )
+}
+
+function AppLayout({
+  user,
+  role,
+  currentPage,
+  setCurrentPage,
+  parentChildren,
+  selectedChildId,
+  logout,
+}) {
+  const { isCollapsed } = useSidebar()
+
+  return (
+    <>
+      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={logout} />
+
+      <main className={`dashboard-main ${isCollapsed ? 'active' : ''}`}>
+        <Topbar user={user} />
+        <AppRoute
+          currentPage={currentPage}
+          user={user}
+          role={role}
+          parentChildren={parentChildren}
+          selectedChildId={selectedChildId}
+          onNavigate={setCurrentPage}
+        />
+      </main>
+
+      <MobileBottomNav currentPage={currentPage} onNavigate={setCurrentPage} onLogout={logout} />
+    </>
   )
 }
 

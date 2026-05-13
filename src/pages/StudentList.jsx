@@ -1053,7 +1053,7 @@ const StudentList = ({ onNavigate }) => {
             <span className="d-flex text-md"><i className="ri-download-cloud-2-line"></i></span>
             Import
           </button>
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => onNavigate?.('add-student')}>
             <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
             Add Student
           </button>
@@ -1264,25 +1264,6 @@ const StudentList = ({ onNavigate }) => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="700px"
-        open={isAddOpen}
-        title="Add Student"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleAddSubmit}
-        submitLabel="Save"
-      >
-        {submitError && <div className="alert alert-danger mx-20 mt-16">{submitError}</div>}
-        {renderForm(
-          addForm, setAddForm, addStep, addPreviews,
-          { fatherPhotoRef: addFatherPhotoRef, motherPhotoRef: addMotherPhotoRef, transferCertificateRef: addTransferCertificateRef, studentPhotoRef: addStudentPhotoRef },
-          setAddPreviews, isAddPasswordVisible, setIsAddPasswordVisible, isAddParentPasswordVisible, setIsAddParentPasswordVisible, addLookups,
-        )}
-      </WizardPopup>
 
       <WizardPopup
         modalWidth="700px"

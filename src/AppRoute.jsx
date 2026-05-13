@@ -1,6 +1,4 @@
 import AccessDenied from './pages/AccessDenied'
-import Dashboard from './pages/Dashboard'
-import SuperAdminDashboard from './pages/SuperAdminDashboard'
 import HeadOfficeDashboard from './pages/HeadOfficeDashboard'
 import SchoolAdminDashboard from './pages/SchoolAdminDashboard'
 import TeacherDashboard from './pages/TeacherDashboard'
@@ -11,6 +9,7 @@ import HeadOffices from './pages/HeadOffices'
 import UserRoleAcl from './pages/UserRoleAcl'
 import TeacherDepartment from './pages/TeacherDepartment'
 import StudentList from './pages/StudentList'
+import AddStudent from './pages/AddStudent'
 import ManageTeacher from './pages/Manageteacher'
 import ClassLecture from './pages/ClassLecture'
 import Rating from './pages/Rating'
@@ -100,7 +99,6 @@ import { canAccessPage } from './utils/pageAccess'
 import { normalizeRole } from './utils/roles'
 
 const routeEntries = [
-  { pageKey: 'super-admin-dashboard', component: SuperAdminDashboard, allowedRoles: ['SUPER_ADMIN'] },
   { pageKey: 'head-office-dashboard', component: HeadOfficeDashboard, allowedRoles: ['HEAD_OFFICE_ADMIN'] },
   { pageKey: 'head-offices', component: HeadOffices, permission: ['HEAD_OFFICE_MANAGE', '*'] },
   { pageKey: 'school-admin-dashboard', component: SchoolAdminDashboard, allowedRoles: ['SCHOOL_ADMIN'] },
@@ -111,6 +109,7 @@ const routeEntries = [
   { pageKey: 'user-role-acl', component: UserRoleAcl, permission: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*'] },
   { pageKey: 'teacher-department', component: TeacherDepartment },
   { pageKey: 'student-list', component: StudentList },
+  { pageKey: 'add-student', component: AddStudent },
   { pageKey: 'admit-card-setting', component: AdmitCardSetting },
   { pageKey: 'bulk-admission', component: BulkAdmission },
   { pageKey: 'manage-teacher', component: ManageTeacher },
@@ -201,7 +200,7 @@ const AppRoute = ({ currentPage, user, role, parentChildren, selectedChildId, on
   const normalizedRole = normalizeRole(role || user?.role || user?.userRole || user?.authority)
   const homePage = (() => {
     const r = normalizeRole(role || user?.role || user?.userRole || user?.authority)
-    if (r === 'SUPER_ADMIN') return 'super-admin-dashboard'
+    if (r === 'SUPER_ADMIN') return 'lms-dashboard'
     if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
@@ -212,7 +211,7 @@ const AppRoute = ({ currentPage, user, role, parentChildren, selectedChildId, on
   const effectivePage = currentPage === 'dashboard' ? homePage : currentPage
   const entry = routeEntries.find((item) => item.pageKey === effectivePage)
 
-  if (!entry) return <Dashboard />
+  if (!entry) return <AccessDenied />
 
   const PageComponent = entry.component
   const content = <PageComponent onNavigate={onNavigate} />

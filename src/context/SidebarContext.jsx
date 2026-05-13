@@ -11,15 +11,9 @@ export const SidebarProvider = ({ children }) => {
   const openSidebar   = () => setIsOpen(true);
   const closeSidebar  = () => {
     setIsOpen(false);
-    if (typeof window !== 'undefined' && window.innerWidth >= 1200) {
-      setIsCollapsed(true);
-    }
   };
   const closeForNavigation = () => {
     setIsOpen(false);
-    if (typeof window !== 'undefined' && window.innerWidth >= 1200) {
-      setIsCollapsed(true);
-    }
   };
 
   // Hamburger: on mobile toggles open/close, on desktop toggles collapse

@@ -4,7 +4,6 @@ export const PAGE_GROUPS = [
     label: 'Core System',
     pageKeys: [
       'dashboard',
-      'super-admin-dashboard',
       'head-office-dashboard',
       'school-admin-dashboard',
       'teacher-dashboard',
