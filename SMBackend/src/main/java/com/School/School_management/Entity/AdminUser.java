@@ -6,7 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
+//dsuhfushuhduhuudus
 @Entity
 @Table(name = "admin_users")
 public class AdminUser {

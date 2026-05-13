@@ -1,17 +1,11 @@
 package com.School.School_management.Entity;
 
 import jakarta.persistence.*;
-import lombok.*;
 
 import java.time.LocalDate;
 
 @Entity
 @Table(name = "schools")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class ManageSchool {
 
     @Id
@@ -78,6 +72,10 @@ public class ManageSchool {
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
+
+    public ManageSchool() {
+    }
+
 	public Long getId() {
 		return id;
 	}

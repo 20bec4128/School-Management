@@ -142,6 +142,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const isStudent = role === 'STUDENT';
   const isSchoolAdmin = role === 'SCHOOL_ADMIN';
   const isTeacher = role === 'TEACHER';
+  const isSuperAdmin = role === 'SUPER_ADMIN';
 
   const studentAllowedPages = new Set([
     'dashboard', 'student-dashboard', 'class-routine', 'subject', 'syllabus',
@@ -196,7 +197,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           }
           return false;
         })
-        .filter((item) => !item.perm || can(user, item.perm))
+        .filter((item) => isSuperAdmin || !item.perm || can(user, item.perm))
         .map((item) => ({
           ...item,
           submenu: Array.isArray(item.submenu)

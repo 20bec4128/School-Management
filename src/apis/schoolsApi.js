@@ -88,8 +88,9 @@ export const fetchSchoolsLookup = async () => {
   for (const row of allContent) {
     const id = row?.id
     const schoolName = row?.schoolName
+    const headOfficeId = row?.headOfficeId ?? row?.headOffice?.id ?? null
     if (id == null || !schoolName) continue
-    byId.set(String(id), { id, schoolName })
+    byId.set(String(id), { id, schoolName, headOfficeId })
   }
 
   const currentUser = readCurrentUser()
@@ -99,7 +100,7 @@ export const fetchSchoolsLookup = async () => {
   if (currentSchoolId != null) {
     const key = String(currentSchoolId)
     if (!byId.has(key)) {
-      byId.set(key, { id: currentSchoolId, schoolName: currentSchoolName || `School ${currentSchoolId}` })
+      byId.set(key, { id: currentSchoolId, schoolName: currentSchoolName || `School ${currentSchoolId}`, headOfficeId: currentUser?.headOfficeId ?? currentUser?.headOffice?.id ?? null })
     }
   }
 

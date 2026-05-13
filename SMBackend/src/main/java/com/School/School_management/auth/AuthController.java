@@ -9,6 +9,7 @@ import com.School.School_management.Repository.AdminUserRepository;
 import com.School.School_management.Repository.HeadOfficeRepository;
 import com.School.School_management.Repository.ParentRepository;
 import com.School.School_management.Repository.ParentStudentRepository;
+import com.School.School_management.Repository.EmployeeRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Repository.TeacherRepository;
@@ -41,6 +42,7 @@ public class AuthController {
     private final AdminUserRepository adminUserRepository;
     private final ParentRepository parentRepository;
     private final ParentStudentRepository parentStudentRepository;
+    private final EmployeeRepository employeeRepository;
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
     private final SchoolRepository schoolRepository;
@@ -54,6 +56,7 @@ public class AuthController {
             AdminUserRepository adminUserRepository,
             ParentRepository parentRepository,
             ParentStudentRepository parentStudentRepository,
+            EmployeeRepository employeeRepository,
             TeacherRepository teacherRepository,
             StudentRepository studentRepository,
             SchoolRepository schoolRepository,
@@ -66,6 +69,7 @@ public class AuthController {
         this.adminUserRepository = adminUserRepository;
         this.parentRepository = parentRepository;
         this.parentStudentRepository = parentStudentRepository;
+        this.employeeRepository = employeeRepository;
         this.teacherRepository = teacherRepository;
         this.studentRepository = studentRepository;
         this.schoolRepository = schoolRepository;
@@ -207,6 +211,19 @@ public class AuthController {
             });
             return;
         }
+
+        employeeRepository.findByUsername(username).ifPresent((e) -> {
+            body.put("userId", e.getId());
+            body.put("employeeId", e.getId());
+            body.put("name", e.getName());
+            if (e.getSchoolId() != null) {
+                body.put("schoolId", e.getSchoolId());
+                putSchoolName(body, e.getSchoolId());
+            }
+            if (e.getRole() != null && !e.getRole().isBlank()) {
+                body.put("employeeRole", e.getRole());
+            }
+        });
 
         adminUserRepository.findByUsername(username).ifPresent((a) -> {
             body.put("userId", a.getId());
@@ -382,6 +399,28 @@ public class AuthController {
             }
         }
 
+        Optional<com.School.School_management.Entity.Employee> employee = employeeRepository.findByUsername(username);
+        if (employee.isPresent() && isValidEmployeePassword(password, employee.get().getPasswordHash())) {
+            com.School.School_management.Entity.Employee e = employee.get();
+            Long schoolId = e.getSchoolId();
+            Long headOfficeId = resolveHeadOfficeIdFromSchool(schoolId);
+            String employeeRole = normalizeRoleNameForPermissions(e.getRole());
+            if (employeeRole == null || employeeRole.isBlank()) {
+                employeeRole = Role.TEACHER.name();
+            }
+            return new AuthResult(
+                    e.getUsername(),
+                    employeeRole,
+                    null,
+                    headOfficeId,
+                    schoolId,
+                    null,
+                    null,
+                    null,
+                    e.getName()
+            );
+        }
+
         return null;
     }
 
@@ -402,6 +441,15 @@ public class AuthController {
     }
 
     private boolean isValidParentPassword(String raw, String stored) {
+        if (raw == null || stored == null) return false;
+        String trimmed = stored.trim();
+        if (trimmed.isEmpty()) return false;
+        if (trimmed.startsWith("$2")) return passwordEncoder.matches(raw, trimmed);
+        if (trimmed.startsWith("{bcrypt}")) return passwordEncoder.matches(raw, trimmed.substring("{bcrypt}".length()));
+        return trimmed.equals(raw);
+    }
+
+    private boolean isValidEmployeePassword(String raw, String stored) {
         if (raw == null || stored == null) return false;
         String trimmed = stored.trim();
         if (trimmed.isEmpty()) return false;
