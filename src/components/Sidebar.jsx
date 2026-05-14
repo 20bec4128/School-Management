@@ -499,7 +499,11 @@ const menuSections = [
         submenu: [
           { label: "Book", href: "#", page: "book" },
           { label: "Library Members", href: "#", page: "library-members" },
-          { label:"Non Library Members", href: "#", page: "non-library-members" },
+          {
+            label: "Non Library Members",
+            href: "#",
+            page: "non-library-members",
+          },
           { label: "Issue/Return", href: "#", page: "issue-return" },
           { label: "E-Book", href: "#", page: "ebook" },
         ],
@@ -513,9 +517,14 @@ const menuSections = [
         title: "Transport",
         icon: "ri:bus-line",
         submenu: [
-          { label: "Vehicles", href: "#", page: "vehicles" },
+          { label: "Vehicle", href: "#", page: "vehicle" },
           { label: "Transport Route", href: "#", page: "transport-route" },
           { label: "Transport Member", href: "#", page: "transport-member" },
+          {
+            label: "Non Transport Member",
+            href: "#",
+            page: "non-transport-member",
+          },
         ],
       },
       {
@@ -525,6 +534,7 @@ const menuSections = [
           { label: "Manage Hostel", href: "#", page: "manage-hostel" },
           { label: "Manage Room", href: "#", page: "manage-room" },
           { label: "Hostel Member", href: "#", page: "hostel-member" },
+          { label: "Non Hostel Member", href: "#", page: "non-hostel-member" },
         ],
       },
     ],
@@ -563,15 +573,16 @@ const menuSections = [
         title: "Miscellaneous",
         icon: "ri:more-2-line",
         submenu: [
-          { label: "Tools", href: "#", page: "tools" },
-          { label: "Settings", href: "#", page: "settings" },
+          { label: "Manage Award", href: "#", page: "manage-award" },
+          { label: "Todo", href: "#", page: "manage-todo" },  
+          { label: "FAQ", href: "#", page: "faq" },
         ],
       },
       {
         title: "Subscription (SaaS)",
         icon: "ri:vip-crown-line",
         submenu: [
-          { label: "FAQ", href: "#", page: "faq" },
+          { label: "FAQ", href: "#", page: "subscription-faq" },
           { label: "Slider", href: "#", page: "subscription-slider" },
           {
             label: "Subscription Settings",

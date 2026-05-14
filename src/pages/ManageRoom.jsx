@@ -1,29 +1,24 @@
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import "../assets/css/addModalShared.css";
 
 const emptyFilters = {
   schoolId: "Select",
-  status: "Select",
+  hostelId: "Select",
 };
 
 const columnOptions = [
   { key: "school", label: "School" },
-  { key: "photo", label: "Photo" },
-  { key: "studentName", label: "Student" },
-  { key: "bookTitle", label: "Title" },
-  { key: "bookId", label: "Book ID" },
-  { key: "issueDate", label: "Issue Date" },
-  { key: "dueDate", label: "Due Date" },
-  { key: "returnDate", label: "Return Date" },
-  { key: "bookCover", label: "Book Cover" },
+  { key: "roomNo", label: "Room No" },
+  { key: "roomType", label: "Room Type" },
+  { key: "seatTotal", label: "Seat Total" },
+  { key: "hostel", label: "Hostel" },
+  { key: "costPerSeat", label: "Cost per Seat" },
 ];
 
-const IssueReturn = ({ onNavigate }) => {
+const ManageRoom = ({ onNavigate }) => {
   const [data, setData] = useState([]);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -39,7 +34,8 @@ const IssueReturn = ({ onNavigate }) => {
     return data.filter((row) => {
       const matchesSearch =
         !q ||
-        Object.values(row).some((v) => String(v).toLowerCase().includes(q));
+        row.roomNo?.toLowerCase().includes(q) ||
+        row.hostel?.toLowerCase().includes(q);
       const matchesSchool =
         filters.schoolId === "Select" || row.schoolId === filters.schoolId;
       return matchesSearch && matchesSchool;
@@ -54,10 +50,10 @@ const IssueReturn = ({ onNavigate }) => {
   const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
 
   const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Issues_Returns");
-    XLSX.writeFile(workbook, "Issue_Return_List.xlsx");
+    const ws = XLSX.utils.json_to_sheet(filteredData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rooms");
+    XLSX.writeFile(wb, "Room_List.xlsx");
   };
 
   return (
@@ -65,19 +61,15 @@ const IssueReturn = ({ onNavigate }) => {
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">
-            Issue & Return
+            Manage Room
           </h1>
-          <span className="text-secondary-light">Library / Issue & Return</span>
+          <span className="text-secondary-light">Hostel / Manage Room</span>
         </div>
         <button
           className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={() =>
-            onNavigate
-              ? onNavigate("issue-book-create")
-              : (window.location.href = "/issue-book-create")
-          }
+          onClick={() => onNavigate?.("add-room")}
         >
-          <i className="ri-add-large-line"></i> Issue Book
+          <i className="ri-add-large-line"></i> Add Room
         </button>
       </div>
 
@@ -86,11 +78,18 @@ const IssueReturn = ({ onNavigate }) => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                    <i className="ri-file-upload-line text-md line-height-1"></i>{" "}
+                    Export
                   </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
@@ -104,13 +103,20 @@ const IssueReturn = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterOpen(true)}>
+              <button
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                onClick={() => setIsFilterOpen(true)}
+              >
                 <span className="text-secondary-light text-sm">Find</span>
                 <i className="ri-arrow-right-line"></i>
               </button>
 
               <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                >
                   <span className="text-secondary-light text-sm">Columns</span>
                   <i className="ri-arrow-down-s-line"></i>
                 </button>
@@ -134,10 +140,7 @@ const IssueReturn = ({ onNavigate }) => {
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setRowsPerPage(Number(e.target.value))}
               >
                 {[10, 20, 50].map((n) => (
                   <option key={n} value={n}>
@@ -193,34 +196,33 @@ const IssueReturn = ({ onNavigate }) => {
                 ) : (
                   paginatedData.map((row, idx) => (
                     <tr key={idx}>
-                      <td>{(currentPage - 1) * rowsPerPage + idx + 1}</td>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input type="checkbox" className="form-check-input" />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
+                        </div>
+                      </td>
                       {columnOptions.map(
                         (col) =>
                           visibleColumns[col.key] && (
                             <td key={col.key}>
-                              {col.key === "photo" ||
-                              col.key === "bookCover" ? (
-                                <img
-                                  src={
-                                    row[col.key] || "https://placehold.co/40x50"
-                                  }
-                                  alt="thumb"
-                                  className="radius-4"
-                                  style={{ width: "40px" }}
-                                />
+                              {col.key === "roomNo" ? (
+                                <span className="fw-medium text-primary-light">
+                                  {row[col.key]}
+                                </span>
                               ) : (
-                                row[col.key] || "--"
+                                row[col.key]
                               )}
                             </td>
                           ),
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            className="text-success-600 bg-success-focus w-32-px h-32-px rounded-circle border-0"
-                            title="Return Book"
-                          >
-                            <i className="ri-arrow-go-back-line"></i>
+                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                            <i className="ri-delete-bin-line"></i>
                           </button>
                         </div>
                       </td>
@@ -234,7 +236,7 @@ const IssueReturn = ({ onNavigate }) => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
               Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{" "}
-              {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
+              {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length} entries
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
@@ -260,8 +262,36 @@ const IssueReturn = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      <SlideSidebar
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        title="Find Room"
+      >
+        <form className="p-20 d-grid gap-16">
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">
+              School
+            </label>
+            <select className="form-control form-select">
+              <option value="Select">--Select School--</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">
+              Hostel
+            </label>
+            <select className="form-control form-select">
+              <option value="Select">--Select Hostel--</option>
+            </select>
+          </div>
+          <button type="submit" className="btn btn-primary-600 w-100">
+            Apply Filter
+          </button>
+        </form>
+      </SlideSidebar>
     </div>
   );
 };
 
-export default IssueReturn;
+export default ManageRoom;

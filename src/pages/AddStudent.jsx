@@ -4,7 +4,7 @@ import { fetchSections } from '../apis/sectionsApi'
 import { createStudent } from '../apis/studentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchStudentTypesLookup } from '../apis/studentTypeApi'
-import useCountryCodes from '../hooks/useCountryCodes'
+import PhoneCodeField from '../components/PhoneCodeField'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 
@@ -146,128 +146,6 @@ const findMatchingSectionOption = (value, sectionOptions) =>
       (candidate) => String(candidate) === String(value),
     ),
   )
-
-const PhoneCodeField = ({ id, label, value, code, onValueChange, onCodeChange, required = false }) => {
-  const { countries } = useCountryCodes()
-  const wrapperRef = useRef(null)
-  const searchRef = useRef(null)
-  const [isOpen, setIsOpen] = useState(false)
-  const [search, setSearch] = useState('')
-
-  const uniqueCountries = useMemo(() => {
-    const seen = new Set()
-    return countries.filter((country) => {
-      if (seen.has(country.code)) return false
-      seen.add(country.code)
-      return true
-    })
-  }, [countries])
-
-  const selectedCountry =
-    uniqueCountries.find((country) => country.code === code) ||
-    uniqueCountries.find((country) => country.code === DEFAULT_PHONE_CODE) ||
-    uniqueCountries[0] ||
-    { code: DEFAULT_PHONE_CODE, country: 'India', iso: 'IN' }
-
-  const phoneLengthRule = PHONE_LENGTH_BY_ISO[selectedCountry.iso] || DEFAULT_PHONE_LENGTH
-
-  useEffect(() => {
-    const handleOutside = (event) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleOutside)
-    return () => document.removeEventListener('mousedown', handleOutside)
-  }, [])
-
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => searchRef.current?.focus(), 0)
-    }
-  }, [isOpen])
-
-  const filteredCountries = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return uniqueCountries
-    return uniqueCountries.filter(
-      (country) =>
-        country.country.toLowerCase().includes(q) ||
-        country.code.includes(q) ||
-        country.iso.toLowerCase().includes(q),
-    )
-  }, [search, uniqueCountries])
-
-  return (
-    <div ref={wrapperRef} style={{ position: 'relative' }}>
-      <label htmlFor={id} className="form-label fw-semibold text-primary-light">
-        {label}{required ? <span className="text-danger"> *</span> : null}
-      </label>
-      <div className="input-group">
-        <button
-          type="button"
-          className="form-select text-start"
-          style={{ maxWidth: '11rem', minWidth: '11rem' }}
-          onClick={() => setIsOpen((prev) => !prev)}
-          aria-label={`${label} country code`}
-        >
-          {selectedCountry.code} {selectedCountry.country}
-        </button>
-        <input
-          type="tel"
-          className="form-control"
-          id={id}
-          placeholder={label}
-          value={value}
-          onChange={(event) => onValueChange(event.target.value.replace(/\D/g, '').slice(0, phoneLengthRule.max))}
-          maxLength={phoneLengthRule.max}
-          pattern={`\\d{${phoneLengthRule.min},${phoneLengthRule.max}}`}
-          title={`Enter ${phoneLengthRule.min === phoneLengthRule.max ? phoneLengthRule.max : `${phoneLengthRule.min}-${phoneLengthRule.max}`} digits`}
-          required={required}
-        />
-      </div>
-
-      {isOpen ? (
-        <div
-          className="border rounded-3 bg-white shadow-sm position-absolute mt-2"
-          style={{ zIndex: 40, width: 'min(100%, 22rem)', left: 0, top: 'calc(100% + 0.4rem)' }}
-        >
-          <div className="p-2 border-bottom">
-            <input
-              ref={searchRef}
-              type="text"
-              className="form-control form-control-sm"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search country or code..."
-            />
-          </div>
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {filteredCountries.map((country) => (
-              <button
-                key={`${country.iso}-${country.code}`}
-                type="button"
-                className={`btn w-100 text-start rounded-0 border-0 px-3 py-2 ${
-                  country.code === selectedCountry.code ? 'bg-light' : ''
-                }`}
-                onClick={() => {
-                  onCodeChange(country.code)
-                  setIsOpen(false)
-                  setSearch('')
-                }}
-              >
-                {country.code} {country.country}
-              </button>
-            ))}
-            {filteredCountries.length === 0 ? (
-              <div className="px-3 py-2 text-secondary-light">No countries found.</div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
-}
 
 const AddStudent = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()

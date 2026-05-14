@@ -1,45 +1,42 @@
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import "../assets/css/addModalShared.css";
 
 const emptyFilters = {
   schoolId: "Select",
-  status: "Select",
+  classId: "Select",
+  sectionId: "Select",
 };
 
 const columnOptions = [
   { key: "school", label: "School" },
   { key: "photo", label: "Photo" },
-  { key: "studentName", label: "Student" },
-  { key: "bookTitle", label: "Title" },
-  { key: "bookId", label: "Book ID" },
-  { key: "issueDate", label: "Issue Date" },
-  { key: "dueDate", label: "Due Date" },
-  { key: "returnDate", label: "Return Date" },
-  { key: "bookCover", label: "Book Cover" },
+  { key: "name", label: "Name" },
+  { key: "className", label: "Class" },
+  { key: "section", label: "Section" },
+  { key: "rollNo", label: "Roll No" },
+  { key: "selectHostelRoom", label: "Select Hostel / Room No" },
 ];
 
-const IssueReturn = ({ onNavigate }) => {
-  const [data, setData] = useState([]);
+const NonHostelMember = () => {
+  const [data, setData] = useState([]); // Data state for member records
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(emptyFilters);
-
-  const { visibleColumns, visibleColumnCount, toggleColumn } =
-    useColumnVisibility(columnOptions);
+  
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.filter((row) => {
       const matchesSearch =
         !q ||
-        Object.values(row).some((v) => String(v).toLowerCase().includes(q));
+        row.name?.toLowerCase().includes(q) ||
+        row.rollNo?.toString().includes(q);
       const matchesSchool =
         filters.schoolId === "Select" || row.schoolId === filters.schoolId;
       return matchesSearch && matchesSchool;
@@ -52,33 +49,28 @@ const IssueReturn = ({ onNavigate }) => {
   }, [currentPage, filteredData, rowsPerPage]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
+  const getVisiblePages = () => {
+    const pages = [];
+    const start = Math.max(1, currentPage - 1);
+    const end = Math.min(totalPages, start + 2);
+    for (let p = start; p <= end; p++) pages.push(p);
+    return pages;
+  };
 
   const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Issues_Returns");
-    XLSX.writeFile(workbook, "Issue_Return_List.xlsx");
+    const ws = XLSX.utils.json_to_sheet(filteredData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "NonHostelMembers");
+    XLSX.writeFile(wb, "Non_Hostel_Member_List.xlsx");
   };
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">
-            Issue & Return
-          </h1>
-          <span className="text-secondary-light">Library / Issue & Return</span>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Non Hostel Member</h1>
+          <span className="text-secondary-light">Hostel / Non Hostel Member</span>
         </div>
-        <button
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={() =>
-            onNavigate
-              ? onNavigate("issue-book-create")
-              : (window.location.href = "/issue-book-create")
-          }
-        >
-          <i className="ri-add-large-line"></i> Issue Book
-        </button>
       </div>
 
       <div className="card h-100">
@@ -140,9 +132,7 @@ const IssueReturn = ({ onNavigate }) => {
                 }}
               >
                 {[10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
@@ -183,10 +173,7 @@ const IssueReturn = ({ onNavigate }) => {
               <tbody>
                 {paginatedData.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount + 2}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No records found.
                     </td>
                   </tr>
@@ -198,29 +185,33 @@ const IssueReturn = ({ onNavigate }) => {
                         (col) =>
                           visibleColumns[col.key] && (
                             <td key={col.key}>
-                              {col.key === "photo" ||
-                              col.key === "bookCover" ? (
+                              {col.key === "photo" ? (
                                 <img
-                                  src={
-                                    row[col.key] || "https://placehold.co/40x50"
-                                  }
-                                  alt="thumb"
-                                  className="radius-4"
-                                  style={{ width: "40px" }}
+                                  src={row.photo || "https://via.placeholder.com/40"}
+                                  alt="member"
+                                  className="w-40-px h-40-px radius-circle"
                                 />
+                              ) : col.key === "name" ? (
+                                <span className="fw-medium text-primary-light">
+                                  {row[col.key]}
+                                </span>
+                              ) : col.key === "selectHostelRoom" ? (
+                                <select className="form-control form-select-sm">
+                                  <option>--Select Hostel / Room--</option>
+                                </select>
                               ) : (
-                                row[col.key] || "--"
+                                row[col.key]
                               )}
                             </td>
                           ),
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            className="text-success-600 bg-success-focus w-32-px h-32-px rounded-circle border-0"
-                            title="Return Book"
-                          >
-                            <i className="ri-arrow-go-back-line"></i>
+                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                            <i className="ri-delete-bin-line"></i>
                           </button>
                         </div>
                       </td>
@@ -230,7 +221,7 @@ const IssueReturn = ({ onNavigate }) => {
               </tbody>
             </table>
           </div>
-
+          
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
               Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{" "}
@@ -245,9 +236,16 @@ const IssueReturn = ({ onNavigate }) => {
               >
                 Prev
               </button>
-              <button type="button" className="btn btn-sm btn-primary-600">
-                {currentPage}
-              </button>
+              {getVisiblePages().map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={p === currentPage ? "btn btn-sm btn-primary-600" : "btn btn-sm btn-light border"}
+                  onClick={() => setCurrentPage(p)}
+                >
+                  {p}
+                </button>
+              ))}
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
@@ -260,8 +258,30 @@ const IssueReturn = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      <SlideSidebar
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        title="Find Non Hostel Member"
+      >
+        <form className="p-20 d-grid gap-16">
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
+            <select className="form-control form-select">
+              <option value="Select">--Select School--</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">Class</label>
+            <select className="form-control form-select">
+              <option value="Select">--Select Class--</option>
+            </select>
+          </div>
+          <button type="submit" className="btn btn-primary-600 w-100">Apply Filter</button>
+        </form>
+      </SlideSidebar>
     </div>
   );
 };
 
-export default IssueReturn;
+export default NonHostelMember;

@@ -1,47 +1,36 @@
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import "../assets/css/addModalShared.css";
 
 const emptyFilters = {
   schoolId: "Select",
-  status: "Select",
 };
 
 const columnOptions = [
   { key: "school", label: "School" },
-  { key: "photo", label: "Photo" },
-  { key: "studentName", label: "Student" },
-  { key: "bookTitle", label: "Title" },
-  { key: "bookId", label: "Book ID" },
-  { key: "issueDate", label: "Issue Date" },
-  { key: "dueDate", label: "Due Date" },
-  { key: "returnDate", label: "Return Date" },
-  { key: "bookCover", label: "Book Cover" },
+  { key: "receiverType", label: "Receiver Type" },
+  { key: "subject", label: "Subject" },
+  { key: "attachment", label: "Attachment" },
+  { key: "sendDate", label: "Send Date" },
 ];
 
-const IssueReturn = ({ onNavigate }) => {
+const Email = ({ onNavigate }) => {
   const [data, setData] = useState([]);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState(emptyFilters);
-
-  const { visibleColumns, visibleColumnCount, toggleColumn } =
-    useColumnVisibility(columnOptions);
+  
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.filter((row) => {
-      const matchesSearch =
-        !q ||
-        Object.values(row).some((v) => String(v).toLowerCase().includes(q));
-      const matchesSchool =
-        filters.schoolId === "Select" || row.schoolId === filters.schoolId;
+      const matchesSearch = !q || row.subject?.toLowerCase().includes(q);
+      const matchesSchool = filters.schoolId === "Select" || row.schoolId === filters.schoolId;
       return matchesSearch && matchesSchool;
     });
   }, [data, search, filters]);
@@ -54,30 +43,24 @@ const IssueReturn = ({ onNavigate }) => {
   const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
 
   const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Issues_Returns");
-    XLSX.writeFile(workbook, "Issue_Return_List.xlsx");
+    const ws = XLSX.utils.json_to_sheet(filteredData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "EmailHistory");
+    XLSX.writeFile(wb, "Email_History.xlsx");
   };
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">
-            Issue & Return
-          </h1>
-          <span className="text-secondary-light">Library / Issue & Return</span>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Email</h1>
+          <span className="text-secondary-light">Communications / Email</span>
         </div>
-        <button
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={() =>
-            onNavigate
-              ? onNavigate("issue-book-create")
-              : (window.location.href = "/issue-book-create")
-          }
+        <button 
+          className="btn btn-primary-600 d-flex align-items-center gap-6" 
+          onClick={() => onNavigate?.("email-create")}
         >
-          <i className="ri-add-large-line"></i> Issue Book
+          <i className="ri-send-plane-2-line"></i> Send Email
         </button>
       </div>
 
@@ -94,10 +77,7 @@ const IssueReturn = ({ onNavigate }) => {
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
-                    <button
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
-                      onClick={handleExportExcel}
-                    >
+                    <button className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10" onClick={handleExportExcel}>
                       <i className="ri-file-excel-2-line"></i> Excel
                     </button>
                   </li>
@@ -118,12 +98,7 @@ const IssueReturn = ({ onNavigate }) => {
                   {columnOptions.map((col) => (
                     <li key={col.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[col.key]}
-                          onChange={() => toggleColumn(col.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
                         {col.label}
                       </label>
                     </li>
@@ -131,30 +106,13 @@ const IssueReturn = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-              >
-                {[10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
+              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
+                {[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
 
             <div className="position-relative">
-              <input
-                type="text"
-                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
               </span>
@@ -171,57 +129,31 @@ const IssueReturn = ({ onNavigate }) => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {columnOptions.map(
-                    (col) =>
-                      visibleColumns[col.key] && (
-                        <th key={col.key}>{col.label}</th>
-                      ),
-                  )}
+                  {columnOptions.map((col) => visibleColumns[col.key] && <th key={col.key}>{col.label}</th>)}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={visibleColumnCount + 2}
-                      className="text-center py-40 text-secondary-light"
-                    >
-                      No records found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
                 ) : (
                   paginatedData.map((row, idx) => (
                     <tr key={idx}>
-                      <td>{(currentPage - 1) * rowsPerPage + idx + 1}</td>
-                      {columnOptions.map(
-                        (col) =>
-                          visibleColumns[col.key] && (
-                            <td key={col.key}>
-                              {col.key === "photo" ||
-                              col.key === "bookCover" ? (
-                                <img
-                                  src={
-                                    row[col.key] || "https://placehold.co/40x50"
-                                  }
-                                  alt="thumb"
-                                  className="radius-4"
-                                  style={{ width: "40px" }}
-                                />
-                              ) : (
-                                row[col.key] || "--"
-                              )}
-                            </td>
-                          ),
-                      )}
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input type="checkbox" className="form-check-input" />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
+                        </div>
+                      </td>
+                      {columnOptions.map((col) => visibleColumns[col.key] && (
+                        <td key={col.key}>
+                          {col.key === "attachment" ? (row[col.key] ? <i className="ri-attachment-line text-primary"></i> : "-") : row[col.key]}
+                        </td>
+                      ))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            className="text-success-600 bg-success-focus w-32-px h-32-px rounded-circle border-0"
-                            title="Return Book"
-                          >
-                            <i className="ri-arrow-go-back-line"></i>
-                          </button>
+                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"><i className="ri-eye-line"></i></button>
+                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"><i className="ri-delete-bin-line"></i></button>
                         </div>
                       </td>
                     </tr>
@@ -245,9 +177,7 @@ const IssueReturn = ({ onNavigate }) => {
               >
                 Prev
               </button>
-              <button type="button" className="btn btn-sm btn-primary-600">
-                {currentPage}
-              </button>
+              <button type="button" className="btn btn-sm btn-primary-600">{currentPage}</button>
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
@@ -260,8 +190,20 @@ const IssueReturn = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      <SlideSidebar isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} title="Find Email">
+        <form className="p-20 d-grid gap-16">
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
+            <select className="form-control form-select">
+              <option value="Select">--Select School--</option>
+            </select>
+          </div>
+          <button type="submit" className="btn btn-primary-600 w-100">Apply Filter</button>
+        </form>
+      </SlideSidebar>
     </div>
   );
 };
 
-export default IssueReturn;
+export default Email;

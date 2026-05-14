@@ -156,8 +156,39 @@ import IssueBookCreate from "./pages/IssueBookCreate.jsx";
 import NonLibraryMember from "./pages/NonLibraryMember.jsx";
 import EBook from "./pages/EBook.jsx";
 import EBookCreate from "./pages/EBookCreate.jsx.jsx";
-
-
+import Vehicle from "./pages/Vehicle.jsx";
+import TransportRoute from "./pages/TransportRoute.jsx";
+import TransportRouteCreate from "./pages/TransportRouteCreate.jsx";
+import TransportMember from "./pages/TransportMember.jsx";
+import NonTransportMember from "./pages/NonTransportMember.jsx";
+import VehicleCreate from "./pages/VehicleCreate.jsx";
+import ManageHostel from "./pages/ManageHostel.jsx";
+import HostelCreate from "./pages/HostelCreate.jsx";
+import ManageRoom from "./pages/ManageRoom.jsx";
+import RoomCreate from "./pages/RoomCreate.jsx";
+import HostelMember from "./pages/HostelMember.jsx";
+import NonHostelMember from "./pages/NonHostelMember.jsx";
+import Email from "./pages/Email.jsx";
+import EmailCreate from "./pages/EmailCreate.jsx";
+import SMS from "./pages/SMS.jsx";
+import SMSCreate from "./pages/SMSCreate.jsx";
+import FrontendPage from "./pages/FrontendPage.jsx";
+import FrontendPageCreate from "./pages/FrontendPageCreate.jsx";
+import Slider from "./pages/Slider.jsx";
+import SliderCreate from "./pages/SliderCreate.jsx";
+import AboutSchool from "./pages/AboutSchool.jsx";
+import ManageAward from "./pages/ManageAward.jsx";
+import AwardCreate from "./pages/AwardCreate.jsx";
+import TodoCreate from "./pages/TodoCreate.jsx";
+import ManageTodo from "./pages/ManageTodo.jsx";
+import FAQ from "./pages/FAQ.jsx";
+import SubscriptionFAQ from "./pages/SubscriptionFAQ.jsx";
+import SubscriptionSlider from "./pages/SubscriptionSlider.jsx";
+import SubscriptionSetting from "./pages/SubscriptionSetting.jsx";
+import SubscriptionPlan from "./pages/SubscriptionPlan.jsx";
+import SchoolSubscription from "./pages/SchoolSubscription.jsx";
+import GeneralSetting from "./pages/GeneralSetting.jsx";
+import AddSchool from "./pages/AddSchool.jsx";
 
 const routeEntries = [
   {
@@ -379,11 +410,44 @@ const routeEntries = [
   { pageKey: "book", component: Book },
   { pageKey: "book-create", component: BookCreate },
   { pageKey: "library-members", component: LibraryMember },
-  {pageKey:"non-library-members",component:NonLibraryMember},
-  {pageKey:"issue-book-create",component:IssueBookCreate},
-  {pageKey:"ebook",component:EBook},
-  {pageKey:"ebook-list",component:EBook},
-  {pageKey:"ebook-create",component:EBookCreate}
+  { pageKey: "non-library-members", component: NonLibraryMember },
+  { pageKey: "issue-book-create", component: IssueBookCreate },
+  { pageKey: "ebook", component: EBook },
+  { pageKey: "ebook-list", component: EBook },
+  { pageKey: "ebook-create", component: EBookCreate },
+  { pageKey: "vehicle", component: Vehicle },
+  { pageKey: "transport-member", component: TransportMember },
+  { pageKey: "transport-route", component: TransportRoute },
+  { pageKey: "transport-route-create", component: TransportRouteCreate },
+  { pageKey: "non-transport-member", component: NonTransportMember },
+  { pageKey: "vehicle-create", component: VehicleCreate },
+  { pageKey: "manage-hostel", component: ManageHostel },
+  { pageKey: "hostel-create", component: HostelCreate },
+  { pageKey: "manage-room", component: ManageRoom },
+  { pageKey: "add-room", component: RoomCreate },
+  { pageKey: "hostel-member", component: HostelMember },
+  { pageKey: "non-hostel-member", component: NonHostelMember },
+  { pageKey: "email", component: Email },
+  { pageKey: "email-create", component: EmailCreate },
+  { pageKey: "sms", component: SMS },
+  { pageKey: "sms-create", component: SMSCreate },
+  { pageKey: "frontend-page", component: FrontendPage },
+  { pageKey: "frontend-page-create", component: FrontendPageCreate },
+  { pageKey: "slider", component: Slider },
+  { pageKey: "slider-create", component: SliderCreate },
+  { pageKey: "about-school", component: AboutSchool },
+  { pageKey: "manage-award", component: ManageAward },
+  { pageKey: "manage-award-create", component: AwardCreate },
+  { pageKey: "manage-todo", component: ManageTodo },
+  { pageKey: "manage-todo-create", component: TodoCreate },
+  { pageKey: "faq", component: FAQ },
+  { pageKey: "subscription-faq", component: SubscriptionFAQ },
+  { pageKey: "subscription-slider", component: SubscriptionSlider },
+  { pageKey: "subscription-settings", component: SubscriptionSetting },
+  { pageKey: "general-settings", component: GeneralSetting },
+  { pageKey: "subscription-plans", component: SubscriptionPlan },
+  { pageKey: "school-subscription", component: SchoolSubscription },
+  { pageKey: "add-school", component: AddSchool },
 ];
 
 const AppRoute = ({

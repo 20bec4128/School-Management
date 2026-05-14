@@ -172,7 +172,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const ManageSchool = () => {
+const ManageSchool = ({ onNavigate }) => {
   const { role, headOfficeId: currentHeadOfficeId, headOfficeName: currentHeadOfficeName } = useAuth()
   const [schools, setSchools] = useState([])
   const [headOffices, setHeadOffices] = useState([])
@@ -187,23 +187,16 @@ const ManageSchool = () => {
   const [totalPages, setTotalPages] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-  const [addFrontendLogoPreview, setAddFrontendLogoPreview] = useState(null)
   const [editFrontendLogoPreview, setEditFrontendLogoPreview] = useState(null)
-  const [addAdminLogoPreview, setAddAdminLogoPreview] = useState(null)
   const [editAdminLogoPreview, setEditAdminLogoPreview] = useState(null)
 
-  const [addFrontendLogoInputKey, setAddFrontendLogoInputKey] = useState(0)
   const [editFrontendLogoInputKey, setEditFrontendLogoInputKey] = useState(0)
-  const [addAdminLogoInputKey, setAddAdminLogoInputKey] = useState(0)
   const [editAdminLogoInputKey, setEditAdminLogoInputKey] = useState(0)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
@@ -307,65 +300,56 @@ const ManageSchool = () => {
   }
 
   const openAdd = () => {
-    setError('')
-    setEditingSchoolId(null)
-    setAddForm({
-      ...emptyForm,
-      headOfficeId: isHeadOfficeScoped && currentHeadOfficeId != null ? String(currentHeadOfficeId) : '',
-    })
-    setAddFrontendLogoPreview(null)
-    setAddAdminLogoPreview(null)
-    setAddFrontendLogoInputKey((k) => k + 1)
-    setAddAdminLogoInputKey((k) => k + 1)
-    setAddStep(0)
-    setIsAddOpen(true)
+    onNavigate('add-school')
   }
 
   const openEdit = (row) => {
-    setError('')
-    setEditingSchoolId(row.id)
-    setEditForm({
-      schoolUrl: row.schoolUrl || '',
-      schoolCode: row.schoolCode || '',
-      schoolName: row.schoolName || '',
-      subscription: row.subscription || 'Standard',
-      isDemo: row.isDemo || 'No',
-      status: toUiStatus(row.status),
-      address: row.address || '',
-      phone: row.phone || '',
-      registrationDate: row.registrationDate || '',
-      email: row.email || '',
-      fax: row.fax || '',
-      footer: row.footer || '',
-      currency: row.currency || '',
-      currencySymbol: row.currencySymbol || '',
-      enableFrontend: row.enableFrontend || 'Yes',
-      examFinalResult: row.examFinalResult || 'Average of All Exam',
-      language: row.language || '',
-      theme: row.theme || '',
-      onlineAdmission: row.onlineAdmission || '',
-      enableRTL: row.enableRTL || 'No',
-      zoomApiKey: row.zoomApiKey || '',
-      zoomSecret: row.zoomSecret || '',
-      googleMapUrl: row.googleMapUrl || '',
-      facebookUrl: row.facebookUrl || '',
-      twitterUrl: row.twitterUrl || '',
-      linkedinUrl: row.linkedinUrl || '',
-      youtubeUrl: row.youtubeUrl || '',
-      instagramUrl: row.instagramUrl || '',
-      pinterestUrl: row.pinterestUrl || '',
-      headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : (isHeadOfficeScoped && currentHeadOfficeId != null ? String(currentHeadOfficeId) : ''),
-      adminUsername: row.adminUsername || '',
-      adminPassword: '',
-      frontendLogo: null,
-      adminLogo: null,
-    })
-    setEditFrontendLogoPreview(row.frontendLogoUrl || null)
-    setEditAdminLogoPreview(row.adminLogoUrl || null)
-    setEditFrontendLogoInputKey((k) => k + 1)
-    setEditAdminLogoInputKey((k) => k + 1)
-    setEditStep(0)
-    setIsEditOpen(true)
+    if (!row?.id) return
+    sessionStorage.setItem(
+      'manage-school-edit-row',
+      JSON.stringify({
+        id: row.id,
+        schoolUrl: row.schoolUrl || '',
+        schoolCode: row.schoolCode || '',
+        schoolName: row.schoolName || '',
+        subscription: row.subscription || 'Standard',
+        isDemo: row.isDemo || 'No',
+        status: toUiStatus(row.status),
+        address: row.address || '',
+        phone: row.phone || '',
+        registrationDate: row.registrationDate || '',
+        email: row.email || '',
+        fax: row.fax || '',
+        footer: row.footer || '',
+        currency: row.currency || '',
+        currencySymbol: row.currencySymbol || '',
+        enableFrontend: row.enableFrontend || 'Yes',
+        examFinalResult: row.examFinalResult || 'Average of All Exam',
+        language: row.language || '',
+        theme: row.theme || '',
+        onlineAdmission: row.onlineAdmission || '',
+        enableRTL: row.enableRTL || 'No',
+        zoomApiKey: row.zoomApiKey || '',
+        zoomSecret: row.zoomSecret || '',
+        googleMapUrl: row.googleMapUrl || '',
+        facebookUrl: row.facebookUrl || '',
+        twitterUrl: row.twitterUrl || '',
+        linkedinUrl: row.linkedinUrl || '',
+        youtubeUrl: row.youtubeUrl || '',
+        instagramUrl: row.instagramUrl || '',
+        pinterestUrl: row.pinterestUrl || '',
+        headOfficeId:
+          row.headOfficeId != null
+            ? String(row.headOfficeId)
+            : isHeadOfficeScoped && currentHeadOfficeId != null
+              ? String(currentHeadOfficeId)
+              : '',
+        adminUsername: row.adminUsername || '',
+        frontendLogoUrl: row.frontendLogoUrl || '',
+        adminLogoUrl: row.adminLogoUrl || '',
+      }),
+    )
+    onNavigate('add-school')
   }
 
   const loadSchools = useCallback(async () => {
@@ -461,41 +445,6 @@ const ManageSchool = () => {
     adminPassword: form.adminPassword || '',
   })
 
-  const handleCreateSchool = async () => {
-    if (saving) return
-    setError('')
-    try {
-      if (isSuperAdmin && !addForm.headOfficeId) {
-        setError('Head office is required')
-        return
-      }
-      if (!String(addForm.adminUsername || '').trim() || !String(addForm.adminPassword || '').trim()) {
-        setError('School admin username and password are required')
-        return
-      }
-      setSaving(true)
-      const payload = buildSchoolPayload(addForm)
-      await createSchoolWithAdmin(
-        {
-          school: payload,
-          admin: { username: addForm.adminUsername || '', password: addForm.adminPassword || '' },
-        },
-        addForm,
-      )
-      setIsAddOpen(false)
-      setAddForm(emptyForm)
-      setAddStep(0)
-      if (currentPage !== 1) {
-        setCurrentPage(1)
-      } else {
-        await loadSchools()
-      }
-    } catch (e) {
-      setError(e?.message || 'Failed to create school')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleUpdateSchool = async () => {
     if (saving) return
@@ -656,25 +605,25 @@ const ManageSchool = () => {
                 )}
               </FormField>
 
-              {setter === setAddForm || setter === setEditForm ? (
+              {setter === setEditForm ? (
                 <>
-                  <FormField label="School Admin Username" required={setter === setAddForm} full>
+                  <FormField label="School Admin Username" full>
                     <input
                       type="text"
                       className="avm-input"
                       id="adminUsername"
-                      placeholder={setter === setAddForm ? 'School admin username' : 'Leave blank to keep current username'}
+                      placeholder="Leave blank to keep current username"
                       value={form.adminUsername || ''}
                       onChange={handleChange(setter)}
                     />
                   </FormField>
 
-                  <FormField label="School Admin Password" required={setter === setAddForm} full>
+                  <FormField label="School Admin Password" full>
                     <input
                       type="password"
                       className="avm-input"
                       id="adminPassword"
-                      placeholder={setter === setAddForm ? 'School admin password' : 'Leave blank to keep current password'}
+                      placeholder="Leave blank to keep current password"
                       value={form.adminPassword || ''}
                       onChange={handleChange(setter)}
                     />
@@ -1499,39 +1448,6 @@ const ManageSchool = () => {
         </div>
       </div>
 
-      {/* Add School Modal */}
-      <WizardPopup
-        modalWidth="650px"
-        open={isAddOpen}
-        title="Add School"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleCreateSchool}
-        submitLabel="Save School"
-      >
-        {renderForm(
-          addForm,
-          setAddForm,
-          addStep,
-          addFrontendLogoPreview,
-          setAddFrontendLogoPreview,
-          addAdminLogoPreview,
-          setAddAdminLogoPreview,
-          {
-            id: 'add-frontend-logo',
-            key: addFrontendLogoInputKey,
-            reset: () => setAddFrontendLogoInputKey((k) => k + 1),
-          },
-          {
-            id: 'add-admin-logo',
-            key: addAdminLogoInputKey,
-            reset: () => setAddAdminLogoInputKey((k) => k + 1),
-          },
-        )}
-      </WizardPopup>
 
       {/* Edit School Modal */}
       <WizardPopup

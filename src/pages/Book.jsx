@@ -83,48 +83,38 @@ const Book = ({ onNavigate }) => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <div className="dropdown">
-                <button
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                >
-                  <span className="text-secondary-light text-sm">
-                    <i className="ri-file-upload-line"></i> Export
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
                   </span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
-                <ul className="dropdown-menu">
+                <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
                     <button
-                      className="dropdown-item"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
                       onClick={handleExportExcel}
                     >
-                      Excel
+                      <i className="ri-file-excel-2-line"></i> Excel
                     </button>
                   </li>
                 </ul>
               </div>
 
-              <button
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                onClick={() => setIsFilterOpen(true)}
-              >
-                <span className="text-secondary-light text-sm">
-                  Find <i className="ri-arrow-right-line"></i>
-                </span>
+              <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterOpen(true)}>
+                <span className="text-secondary-light text-sm">Find</span>
+                <i className="ri-arrow-right-line"></i>
               </button>
 
               <div className="dropdown">
-                <button
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                >
-                  <span className="text-secondary-light text-sm">
-                    Columns <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                  <span className="text-secondary-light text-sm">Columns</span>
+                  <i className="ri-arrow-down-s-line"></i>
                 </button>
-                <ul className="dropdown-menu p-12 shadow border">
+                <ul className="dropdown-menu p-12 border shadow">
                   {columnOptions.map((col) => (
                     <li key={col.key}>
-                      <label className="dropdown-item d-flex align-items-center gap-8 cursor-pointer">
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
                         <input
                           type="checkbox"
                           className="form-check-input mt-0"
@@ -157,7 +147,7 @@ const Book = ({ onNavigate }) => {
             <div className="position-relative">
               <input
                 type="text"
-                className="form-control ps-40 py-9 border border-neutral-300 radius-8"
+                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -169,7 +159,7 @@ const Book = ({ onNavigate }) => {
           </div>
 
           <div className="table-responsive">
-            <table className="table bordered-table mb-0">
+            <table className="table bordered-table mb-0 data-table">
               <thead>
                 <tr>
                   <th scope="col">
@@ -223,10 +213,10 @@ const Book = ({ onNavigate }) => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button className="text-info-600 bg-info-focus w-32-px h-32-px rounded-circle border-0">
+                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
                             <i className="ri-edit-line"></i>
                           </button>
-                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px rounded-circle border-0">
+                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
                             <i className="ri-delete-bin-line"></i>
                           </button>
                         </div>
@@ -237,43 +227,42 @@ const Book = ({ onNavigate }) => {
               </tbody>
             </table>
           </div>
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+              <span className="text-sm text-secondary-light">
+                Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{" "}
+                {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
+              </span>
+              <div className="d-flex align-items-center gap-8">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Prev
+                </button>
+                {getVisiblePages().map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={p === currentPage ? "btn btn-sm btn-primary-600" : "btn btn-sm btn-light border"}
+                    onClick={() => setCurrentPage(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-        <span className="text-sm text-secondary-light">
-          Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{" "}
-          {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
-        </span>
-        <div className="d-flex align-items-center gap-8">
-          <button
-            type="button"
-            className="btn btn-sm btn-light border"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            Prev
-          </button>
-          {getVisiblePages().map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={p === currentPage ? "btn btn-sm btn-primary-600" : "btn btn-sm btn-light border"}
-              onClick={() => setCurrentPage(p)}
-            >
-              {p}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn btn-sm btn-light border"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Next
-          </button>
-        </div>
-      </div>
 
       <SlideSidebar
         isOpen={isFilterOpen}

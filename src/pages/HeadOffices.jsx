@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import * as XLSX from 'xlsx'
 import WizardPopup from '../components/WizardPopup'
+import SlideSidebar from '../components/SlideSidebar'
+import useColumnVisibility from '../hooks/useColumnVisibility'
 import {
   activateHeadOffice,
   createHeadOfficeWithAdmin,
@@ -11,6 +14,7 @@ import {
   updateHeadOffice,
 } from '../apis/headOfficesApi'
 import { getCurrentRole } from '../utils/currentUser'
+import "../assets/css/addModalShared.css"
 
 const buildEmptyForm = () => ({
   name: '',
@@ -19,10 +23,61 @@ const buildEmptyForm = () => ({
   adminPassword: '',
 })
 
+const emptyFilters = {
+  name: 'Select',
+  status: 'Select',
+}
+
+const FIELD_ICONS = {
+  "Head Office Name": "ri-building-line",
+  "Status": "ri-toggle-line",
+  "Head Office Admin Username": "ri-user-line",
+  "Head Office Admin Password": "ri-lock-password-line",
+  "Admin Username": "ri-user-line",
+  "Admin Password": "ri-lock-password-line",
+};
+
+const columnOptions = [
+  { key: 'name', label: 'Name' },
+  { key: 'status', label: 'Status' },
+]
+
+const FormField = ({ label, required, children, full = false }) => {
+  const icon = FIELD_ICONS[label] || "ri-edit-line";
+  return (
+    <div className={`avm-field${full ? " full" : ""}`}>
+      <label className="avm-label">
+        {label} {required && <span className="text-danger-600">*</span>}
+      </label>
+      <div className="avm-input-with-icon" style={{ position: "relative" }}>
+        <span
+          style={{
+            position: "absolute",
+            left: "0.85rem",
+            top: "50%",
+            transform: "translateY(-50%)",
+            color: "#667085",
+            zIndex: 1,
+          }}
+        >
+          <i className={icon}></i>
+        </span>
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const HeadOffices = () => {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState("");
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
+  const [filters, setFilters] = useState(emptyFilters)
   const isSuperAdmin = getCurrentRole() === 'SUPER_ADMIN'
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -34,11 +89,13 @@ const HeadOffices = () => {
   const [editForm, setEditForm] = useState({ name: '', status: 'ACTIVE', adminUsername: '', adminPassword: '' })
   const [updating, setUpdating] = useState(false)
 
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+
   const load = async () => {
     setLoading(true)
     setError('')
     try {
-      const page = await fetchHeadOfficesPage(0, 200)
+      const page = await fetchHeadOfficesPage(0, 500)
       setRows(Array.isArray(page?.content) ? page.content : [])
     } catch (e) {
       setRows([])
@@ -51,6 +108,23 @@ const HeadOffices = () => {
   useEffect(() => {
     void load()
   }, [])
+
+  const filteredData = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      const matchesSearch = !q || row.name?.toLowerCase().includes(q) || row.id?.toString().includes(q);
+      const matchesName = filters.name === 'Select' || row.name === filters.name
+      const matchesStatus = filters.status === 'Select' || String(row.status || '').toUpperCase() === String(filters.status || '').toUpperCase()
+      return matchesSearch && matchesName && matchesStatus;
+    });
+  }, [rows, search, filters]);
+
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return filteredData.slice(start, start + rowsPerPage);
+  }, [currentPage, filteredData, rowsPerPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
 
   const handleChange = (e) => {
     const { id, value } = e.target
@@ -121,7 +195,7 @@ const HeadOffices = () => {
       const admin = await fetchHeadOfficeAdmin(id)
       setEditForm((prev) => ({ ...prev, adminUsername: admin?.username || '' }))
     } catch {
-      // ignore: some head offices may not have an admin record
+      // ignore
     }
   }
 
@@ -172,92 +246,281 @@ const HeadOffices = () => {
     }
   }
 
+  const getVisiblePages = () => {
+    const pages = [];
+    const start = Math.max(1, currentPage - 1);
+    const end = Math.min(totalPages, start + 2);
+    for (let p = start; p <= end; p++) pages.push(p);
+    return pages;
+  };
+
+  const handleFilterChange = (e) => {
+    const { id, value } = e.target
+    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handleApplyFilters = (e) => {
+    e.preventDefault()
+    setFilters(pendingFilters)
+    setCurrentPage(1)
+    setIsFilterOpen(false)
+  }
+
+  const handleResetFilters = () => {
+    setPendingFilters(emptyFilters)
+    setFilters(emptyFilters)
+    setCurrentPage(1)
+  }
+
+  const handleExportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(
+      filteredData.map((row) => ({
+        ID: row.id,
+        Name: row.name,
+        Status: row.status,
+      })),
+    )
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'HeadOffices')
+    XLSX.writeFile(wb, 'Head_Offices_List.xlsx')
+  }
+
   return (
-    <div className="container-fluid py-4">
-      <div className="d-flex align-items-center justify-content-between mb-3">
+    <div className="dashboard-main-body">
+      <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h4 className="mb-1">Head Offices</h4>
-          <div className="text-muted small">Create head offices and head office admins.</div>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Head Offices</h1>
+          <span className="text-secondary-light">Administrator / Head Offices</span>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setIsCreateOpen(true)}>
-          Add Head Office
+        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => setIsCreateOpen(true)}>
+          <i className="ri-add-large-line"></i> Add Head Office
         </button>
       </div>
 
-      {error ? <div className="alert alert-danger">{error}</div> : null}
+      {error && <div className="alert alert-danger mb-24 radius-8">{error}</div>}
 
-      <div className="card">
-        <div className="card-body">
-          {loading ? <div>Loading...</div> : null}
-          {!loading ? (
-            <div className="table-responsive">
-              <table className="table table-striped align-middle">
-                <thead>
-                  <tr>
-                    <th style={{ width: 90 }}>ID</th>
-                    <th>Name</th>
-                    <th style={{ width: 120 }}>Status</th>
-                    <th style={{ width: isSuperAdmin ? 320 : 220 }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r?.id}>
-                      <td>{r?.id}</td>
-                      <td>{r?.name || '-'}</td>
-                      <td>{r?.status || '-'}</td>
+      <div className="card h-100">
+        <div className="card-body p-0 dataTable-wrapper">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-center gap-16">
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                  </span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
+                  <li>
+                    <button
+                      type="button"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
+                      onClick={handleExportExcel}
+                    >
+                      <i className="ri-file-excel-2-line"></i> Excel
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                >
+                  <span className="text-secondary-light text-sm">Columns</span>
+                  <i className="ri-arrow-down-s-line"></i>
+                </button>
+                <ul className="dropdown-menu p-12 border shadow">
+                  {columnOptions.map((col) => (
+                    <li key={col.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[col.key]}
+                          onChange={() => toggleColumn(col.key)}
+                        />
+                        {col.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <button
+                type="button"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                onClick={() => setIsFilterOpen(true)}
+              >
+                <span className="text-secondary-light text-sm">Find</span>
+                <i className="ri-arrow-right-line"></i>
+              </button>
+
+              <select
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                {[10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="position-relative">
+              <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table bordered-table mb-0 data-table">
+              <thead>
+                <tr>
+                  <th scope="col" style={{ width: 90 }}>ID</th>
+                  {visibleColumns.name ? <th scope="col">Name</th> : null}
+                  {visibleColumns.status ? <th scope="col" style={{ width: 120 }}>Status</th> : null}
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                   <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">Loading...</td></tr>
+                ) : paginatedData.length === 0 ? (
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
+                ) : (
+                  paginatedData.map((row, idx) => (
+                    <tr key={row.id}>
+                      <td>{row.id}</td>
+                      {visibleColumns.name ? (
+                        <td>
+                          <span className="fw-medium text-primary-light">{row.name || '-'}</span>
+                        </td>
+                      ) : null}
+                      {visibleColumns.status ? (
+                        <td>
+                          <span className={`px-12 py-4 radius-4 fw-medium text-sm ${String(row.status || '').toUpperCase() === "ACTIVE" ? "bg-success-100 text-success-600" : "bg-danger-100 text-danger-600"}`}>
+                            {row.status || '-'}
+                          </span>
+                        </td>
+                      ) : null}
                       <td>
-                        {String(r?.status || '').toUpperCase() === 'INACTIVE' ? (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-success"
-                            onClick={() => handleActivate(r)}
+                        <div className="d-flex align-items-center gap-10">
+                          {String(row.status || '').toUpperCase() === 'INACTIVE' ? (
+                            <button
+                              className="text-success-600 bg-success-focus w-32-px h-32-px rounded-circle border-0 d-flex align-items-center justify-content-center"
+                              onClick={() => handleActivate(row)}
+                              title="Activate"
+                            >
+                              <i className="ri-checkbox-circle-line"></i>
+                            </button>
+                          ) : (
+                            <button
+                              className="text-warning-600 bg-warning-focus w-32-px h-32-px rounded-circle border-0 d-flex align-items-center justify-content-center"
+                              onClick={() => handleDeactivate(row)}
+                              title="Deactivate"
+                            >
+                              <i className="ri-close-circle-line"></i>
+                            </button>
+                          )}
+                          <button 
+                            className="text-info-600 bg-info-focus w-32-px h-32-px rounded-circle border-0 d-flex align-items-center justify-content-center" 
+                            onClick={() => openEdit(row)}
+                            title="Edit"
                           >
-                            Activate
+                            <i className="ri-edit-line"></i>
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => handleDeactivate(r)}
-                            disabled={String(r?.status || '').toUpperCase() === 'INACTIVE'}
-                          >
-                            Deactivate
-                          </button>
-                        )}
-                        <button type="button" className="btn btn-sm btn-outline-primary ms-2" onClick={() => openEdit(r)}>
-                          Edit
-                        </button>
-                        {isSuperAdmin ? (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-danger ms-2"
-                            onClick={() => handleDelete(r)}
-                            disabled={
-                              String(r?.status || '').toUpperCase() !== 'INACTIVE' ||
-                              String(r?.name || '').toUpperCase() === 'DEFAULT_HEAD_OFFICE'
-                            }
-                            title={
-                              String(r?.name || '').toUpperCase() === 'DEFAULT_HEAD_OFFICE'
-                                ? 'Default head office cannot be deleted'
-                                : String(r?.status || '').toUpperCase() !== 'INACTIVE'
-                                  ? 'Deactivate before deleting'
-                                  : 'Delete head office'
-                            }
-                          >
-                            Delete
-                          </button>
-                        ) : null}
+                          {isSuperAdmin && (
+                            <button 
+                              className="text-danger-600 bg-danger-focus w-32-px h-32-px rounded-circle border-0 d-flex align-items-center justify-content-center" 
+                              onClick={() => handleDelete(row)}
+                              disabled={
+                                String(row.status || '').toUpperCase() !== 'INACTIVE' ||
+                                String(row.name || '').toUpperCase() === 'DEFAULT_HEAD_OFFICE'
+                              }
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {rows.length === 0 ? <div className="text-muted">No head offices found.</div> : null}
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+            <span className="text-sm text-secondary-light">
+              Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
+            </span>
+            <div className="d-flex align-items-center gap-8">
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
+              {getVisiblePages().map((p) => (
+                <button key={p} type="button" className={p === currentPage ? "btn btn-sm btn-primary-600" : "btn btn-sm btn-light border"} onClick={() => setCurrentPage(p)}>{p}</button>
+              ))}
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
+
+      <SlideSidebar
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        title="Find Head Office"
+      >
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">Head Office Name</label>
+            <select
+              id="name"
+              className="form-control form-select"
+              value={pendingFilters.name}
+              onChange={handleFilterChange}
+            >
+              <option value="Select">--Select Head Office--</option>
+              {Array.from(new Set(rows.map((row) => row.name).filter(Boolean))).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">Status</label>
+            <select
+              id="status"
+              className="form-control form-select"
+              value={pendingFilters.status}
+              onChange={handleFilterChange}
+            >
+              <option value="Select">--Select Status--</option>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="INACTIVE">INACTIVE</option>
+            </select>
+          </div>
+          <div className="d-flex gap-8 mt-12">
+            <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={handleResetFilters}>Reset</button>
+            <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
+          </div>
+        </form>
+      </SlideSidebar>
 
       <WizardPopup
         modalWidth="560px"
@@ -269,45 +532,35 @@ const HeadOffices = () => {
           setIsCreateOpen(false)
           setForm(buildEmptyForm())
         }}
-        onBack={() => {}}
-        onNext={() => {}}
         onSubmit={handleCreate}
         submitLabel={saving ? 'Saving...' : 'Save'}
       >
         <div className="avm-grid">
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="name">
-              Head Office Name <span className="req">*</span>
-            </label>
-            <input id="name" className="avm-input" value={form.name} onChange={handleChange} />
-          </div>
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="status">
-              Status
-            </label>
-            <select id="status" className="avm-select" value={form.status} onChange={handleChange}>
+          <FormField label="Head Office Name" required full>
+             <input id="name" className="avm-input" value={form.name} onChange={handleChange} placeholder="Enter head office name" />
+          </FormField>
+          
+          <FormField label="Status" required full>
+            <select id="status" className="avm-input form-select" value={form.status} onChange={handleChange}>
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
             </select>
-          </div>
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="adminUsername">
-              Head Office Admin Username <span className="req">*</span>
-            </label>
-            <input id="adminUsername" className="avm-input" value={form.adminUsername} onChange={handleChange} />
-          </div>
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="adminPassword">
-              Head Office Admin Password <span className="req">*</span>
-            </label>
+          </FormField>
+
+          <FormField label="Head Office Admin Username" required full>
+            <input id="adminUsername" className="avm-input" value={form.adminUsername} onChange={handleChange} placeholder="Enter admin username" />
+          </FormField>
+
+          <FormField label="Head Office Admin Password" required full>
             <input
               id="adminPassword"
               type="password"
               className="avm-input"
               value={form.adminPassword}
               onChange={handleChange}
+              placeholder="Enter admin password"
             />
-          </div>
+          </FormField>
         </div>
       </WizardPopup>
 
@@ -322,37 +575,29 @@ const HeadOffices = () => {
           setEditId(null)
           setEditForm({ name: '', status: 'ACTIVE', adminUsername: '', adminPassword: '' })
         }}
-        onBack={() => {}}
-        onNext={() => {}}
         onSubmit={handleUpdate}
         submitLabel={updating ? 'Updating...' : 'Update'}
       >
         <div className="avm-grid">
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="name">
-              Head Office Name <span className="req">*</span>
-            </label>
+          <FormField label="Head Office Name" required full>
             <input
               id="name"
               className="avm-input"
               value={editForm.name}
               onChange={handleEditChange}
               disabled={String(editForm.name || '').toUpperCase() === 'DEFAULT_HEAD_OFFICE'}
+              placeholder="Enter head office name"
             />
-          </div>
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="status">
-              Status
-            </label>
-            <select id="status" className="avm-select" value={editForm.status} onChange={handleEditChange}>
+          </FormField>
+
+          <FormField label="Status" required full>
+            <select id="status" className="avm-input form-select" value={editForm.status} onChange={handleEditChange}>
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
             </select>
-          </div>
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="adminUsername">
-              Admin Username
-            </label>
+          </FormField>
+
+          <FormField label="Admin Username" full>
             <input
               id="adminUsername"
               className="avm-input"
@@ -360,11 +605,9 @@ const HeadOffices = () => {
               onChange={handleEditChange}
               placeholder="Leave as-is or change"
             />
-          </div>
-          <div className="avm-field full">
-            <label className="avm-label" htmlFor="adminPassword">
-              Admin Password
-            </label>
+          </FormField>
+
+          <FormField label="Admin Password" full>
             <input
               id="adminPassword"
               type="password"
@@ -373,7 +616,7 @@ const HeadOffices = () => {
               onChange={handleEditChange}
               placeholder="Leave blank to keep current"
             />
-          </div>
+          </FormField>
         </div>
       </WizardPopup>
     </div>
