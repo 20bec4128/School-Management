@@ -14,14 +14,14 @@ const readCustomSize = (current) => {
   return Math.floor(n)
 }
 
-const RowsPerPageSelect = ({ value, onChange, className }) => {
+const RowsPerPageSelect = ({ value, onChange, className, options = [10, 20] }) => {
   const normalized = normalizeValue(value)
+  const optionValues = Array.from(new Set((Array.isArray(options) ? options : [10, 20]).map(normalizeValue)))
 
   const selectValue = useMemo(() => {
-    if (normalized === 10) return '10'
-    if (normalized === 20) return '20'
+    if (optionValues.includes(normalized)) return String(normalized)
     return `custom:${normalized}`
-  }, [normalized])
+  }, [normalized, optionValues])
 
   return (
     <select
@@ -29,8 +29,8 @@ const RowsPerPageSelect = ({ value, onChange, className }) => {
       value={selectValue}
       onChange={(e) => {
         const v = String(e.target.value || '')
-        if (v === '10') return onChange(10)
-        if (v === '20') return onChange(20)
+        const selected = Number(v)
+        if (Number.isFinite(selected) && optionValues.includes(selected)) return onChange(selected)
         if (v === 'custom') {
           const next = readCustomSize(normalized)
           if (next != null) onChange(next)
@@ -39,9 +39,12 @@ const RowsPerPageSelect = ({ value, onChange, className }) => {
         if (v.startsWith('custom:')) return
       }}
       >
-      <option value="10">10</option>
-      <option value="20">20</option>
-      {normalized !== 10 && normalized !== 20 ? <option value={`custom:${normalized}`}>Custom ({normalized})</option> : null}
+      {optionValues.map((option) => (
+        <option key={option} value={String(option)}>
+          {option}
+        </option>
+      ))}
+      {!optionValues.includes(normalized) ? <option value={`custom:${normalized}`}>Custom ({normalized})</option> : null}
       <option value="custom">Custom...</option>
     </select>
   )

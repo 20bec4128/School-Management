@@ -7,6 +7,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createEmployee, deleteEmployee, fetchEmployees, fetchEmployeesPage, updateEmployee } from '../apis/employeesApi'
 import { fetchDesignations } from '../apis/designationsApi'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSalaryGrades } from '../apis/salaryGradeApi'
 import { fetchSchoolRoles } from '../apis/schoolRbacApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { useAuth } from '../context/useAuth'
@@ -172,8 +173,10 @@ const ManageEmployee = () => {
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
   const [designations, setDesignations] = useState([])
+  const [salaryGrades, setSalaryGrades] = useState([])
   const [roles, setRoles] = useState([])
   const [designationCache, setDesignationCache] = useState({})
+  const [salaryGradeLoading, setSalaryGradeLoading] = useState(false)
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -304,6 +307,11 @@ const ManageEmployee = () => {
     if (!modalSchoolId) return []
     return designations.length > 0 ? designations : designationCache[String(modalSchoolId)] || []
   }, [designationCache, designations, modalSchoolId])
+
+  const activeSalaryGradeRows = useMemo(() => {
+    if (!modalSchoolId) return []
+    return salaryGrades
+  }, [modalSchoolId, salaryGrades])
 
   const modalSchoolName = useMemo(() => {
     if (!modalSchoolId) return ''
@@ -463,12 +471,14 @@ const ManageEmployee = () => {
   useEffect(() => {
     if (!isAddOpen && !isEditOpen) {
       setDesignations([])
+      setSalaryGrades([])
       setRoles([])
       return
     }
 
     if (!modalSchoolId) {
       setDesignations([])
+      setSalaryGrades([])
       setRoles([])
       return
     }
@@ -502,6 +512,40 @@ const ManageEmployee = () => {
       cancelled = true
     }
   }, [isAddOpen, isEditOpen, modalSchoolId, modalRole])
+
+  useEffect(() => {
+    if (!isAddOpen && !isEditOpen) {
+      setSalaryGrades([])
+      setSalaryGradeLoading(false)
+      return
+    }
+
+    if (!modalSchoolId) {
+      setSalaryGrades([])
+      setSalaryGradeLoading(false)
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      setSalaryGradeLoading(true)
+      try {
+        const rows = await fetchSalaryGrades({ schoolId: modalSchoolId })
+        if (cancelled) return
+        setSalaryGrades(Array.isArray(rows) ? rows : [])
+      } catch {
+        if (cancelled) return
+        setSalaryGrades([])
+      } finally {
+        if (!cancelled) setSalaryGradeLoading(false)
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [isAddOpen, isEditOpen, modalSchoolId])
 
   const displayRows = useMemo(() => {
     return rows.map((row) => {
@@ -854,6 +898,7 @@ const ManageEmployee = () => {
                       ...prev,
                       schoolId: e.target.value,
                       designationId: '',
+                      salaryGrade: '',
                       role: '',
                     }))
                   }
@@ -878,6 +923,7 @@ const ManageEmployee = () => {
                       ...prev,
                       schoolId: e.target.value,
                       designationId: '',
+                      salaryGrade: '',
                       role: '',
                     }))
                   }
@@ -1103,11 +1149,14 @@ const ManageEmployee = () => {
                 id="salaryGrade"
                 value={form.salaryGrade}
                 onChange={(e) => setter((prev) => ({ ...prev, salaryGrade: e.target.value }))}
+                disabled={!modalSchoolId || salaryGradeLoading}
               >
-                <option value="">--Select--</option>
-                <option>Grade A</option>
-                <option>Grade B</option>
-                <option>Grade C</option>
+                <option value="">{!modalSchoolId ? '--Select school first--' : salaryGradeLoading ? 'Loading...' : '--Select--'}</option>
+                {activeSalaryGradeRows.map((grade) => (
+                  <option key={grade.id} value={grade.gradeName}>
+                    {grade.gradeName}
+                  </option>
+                ))}
               </select>
             </FormField>
 

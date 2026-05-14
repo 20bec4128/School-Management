@@ -2,13 +2,13 @@ import { useMemo, useState, useEffect, useCallback } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
-import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import {
-  fetchFeeCollectionsBySchool,
+  fetchFeeCollectionsPage,
   createFeeCollection,
   deleteFeeCollection,
   updateFeeCollection,
@@ -152,6 +152,7 @@ const FeeCollection = () => {
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
@@ -166,6 +167,8 @@ const FeeCollection = () => {
   const [bulkForm, setBulkForm] = useState(emptyBulkForm)
   const [editForm, setEditForm] = useState(emptyForm)
   const [feeCollections, setFeeCollections] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
   const [allSchools, setAllSchools] = useState([])
@@ -180,6 +183,13 @@ const FeeCollection = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const currentForm = isEditOpen ? editForm : (isBulkOpen ? bulkForm : addForm)
   const currentFormHeadOfficeId = currentForm.headOfficeId
@@ -188,6 +198,11 @@ const FeeCollection = () => {
   const listSchoolId = isSuperAdmin
     ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
     : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const resolveSchoolIdFromName = useCallback((schoolName) => {
+    if (!schoolName || schoolName === 'Select') return null
+    const match = (Array.isArray(schools) ? schools : []).find((school) => school.schoolName === schoolName)
+    return match?.id != null ? String(match.id) : null
+  }, [schools])
   const schoolOptions = useMemo(() => (Array.isArray(schools) ? schools : []), [schools])
   const classOptions = useMemo(() => {
     const list = Array.isArray(classes) ? classes : []
@@ -226,39 +241,59 @@ const FeeCollection = () => {
     setLoading(true)
     setError('')
     try {
-      const schoolsData = await fetchSchoolsLookup()
-      const nextSchools = Array.isArray(schoolsData) ? schoolsData : []
-      setSchools(nextSchools)
-      setAllSchools(nextSchools)
-
-      if (isSuperAdmin) {
-        if (listSchoolId) {
-          const data = await fetchFeeCollectionsBySchool(listSchoolId)
-          setFeeCollections(Array.isArray(data) ? data : [])
-        } else {
-          const schoolIds = normalizeSchoolIds(nextSchools)
-          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchFeeCollectionsBySchool(schoolId))
-          setFeeCollections(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.invoiceNumber ?? ''}-${row?.studentId ?? ''}`)))
-        }
-      } else {
-        if (!listSchoolId) {
-          setFeeCollections([])
-          setError('Select a school before viewing fee collections.')
-          return
-        }
-        const data = await fetchFeeCollectionsBySchool(listSchoolId)
-        setFeeCollections(Array.isArray(data) ? data : [])
-      }
-
-      const classesData = await fetchClasses()
-      setClasses(Array.isArray(classesData) ? classesData : [])
+      const filterSchoolId = resolveSchoolIdFromName(filters.school)
+      const effectiveSchoolId = filterSchoolId || listSchoolId || null
+      const pageData = await fetchFeeCollectionsPage({
+        schoolId: effectiveSchoolId,
+        status: filters.status,
+        month: filters.month,
+        search: debouncedSearch,
+        page: currentPage - 1,
+        size: rowsPerPage,
+      })
+      setFeeCollections(Array.isArray(pageData?.content) ? pageData.content : [])
+      setTotalElements(Number(pageData?.totalElements ?? 0))
+      setTotalPages(Number(pageData?.totalPages ?? 0))
     } catch (err) {
       console.error('Failed to load data:', err)
       setError('Failed to load fee collections')
+      setFeeCollections([])
+      setTotalElements(0)
+      setTotalPages(0)
     } finally {
       setLoading(false)
     }
-  }, [isSuperAdmin, listSchoolId])
+  }, [debouncedSearch, currentPage, filters.month, filters.school, filters.status, listSchoolId, resolveSchoolIdFromName, rowsPerPage])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    let cancelled = false
+
+    const loadLookupData = async () => {
+      try {
+        const [schoolsData, classesData] = await Promise.all([
+          fetchSchoolsLookup(),
+          fetchClasses(),
+        ])
+        if (cancelled) return
+        const nextSchools = Array.isArray(schoolsData) ? schoolsData : []
+        setSchools(nextSchools)
+        setAllSchools(nextSchools)
+        setClasses(Array.isArray(classesData) ? classesData : [])
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to load school/class options:', err)
+        setSchools([])
+        setAllSchools([])
+        setClasses([])
+      }
+    }
+
+    void loadLookupData()
+    return () => {
+      cancelled = true
+    }
+  }, [status, token, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin])
 
   useEffect(() => {
     const rows = Array.isArray(allSchools) ? allSchools : []
@@ -337,31 +372,7 @@ const FeeCollection = () => {
       .then(data => setStudents(Array.isArray(data) ? data : []))
   }, [currentFormSchoolId, currentFormClassId])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-
-    return feeCollections.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.schoolName, row.invoiceNumber, row.studentName, row.month, row.paidStatus]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
-      const matchesStatus = filters.status === 'Select' || row.paidStatus === filters.status
-      const matchesMonth = filters.month === 'Select' || row.month === filters.month
-
-      return matchesSearch && matchesSchool && matchesStatus && matchesMonth
-    })
-  }, [search, filters, feeCollections])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+  const paginated = feeCollections
 
   const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
 
@@ -534,6 +545,7 @@ const FeeCollection = () => {
   }
 
   const getVisiblePages = () => {
+    if (totalPages < 1) return []
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
@@ -549,47 +561,47 @@ const FeeCollection = () => {
             <p className="avm-section-title">{INVOICE_STEPS[0]}</p>
             <div className="avm-grid">
               {isSuperAdmin ? (
-                <FormField label="Head Office" required full>
-                  <select
-                    className="avm-select"
-                    id="headOfficeId"
-                    value={form.headOfficeId}
-                    onChange={handleChange(setter)}
-                  >
-                    <option value="">--Select Head Office--</option>
-                    {headOffices.map((ho) => (
-                      <option key={ho.id} value={String(ho.id)}>
-                        {ho.name}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                <ManualScopeSelectors
+                  enabled
+                  headOffices={headOffices}
+                  schoolOptions={formSchoolOptions}
+                  selectedHeadOfficeId={form.headOfficeId}
+                  onHeadOfficeChange={(val) => handleChange(setter)({ target: { id: 'headOfficeId', value: val } })}
+                  selectedSchoolId={form.schoolId}
+                  onSchoolChange={(val) => handleChange(setter)({ target: { id: 'schoolId', value: val } })}
+                />
               ) : isHeadOfficeAdmin ? (
-                <FormField label="Head Office" required full>
-                  <input className="avm-input" value={headOfficeName || ''} readOnly />
-                </FormField>
+                <>
+                  <FormField label="Head Office" required full>
+                    <input className="avm-input" value={headOfficeName || ''} readOnly />
+                  </FormField>
+                  <FormField label="School Name" required full>
+                    <select
+                      className="avm-select"
+                      id="schoolId"
+                      value={form.schoolId}
+                      onChange={handleChange(setter)}
+                      disabled
+                    >
+                      <option value="">--Select School--</option>
+                      {formSchoolOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.schoolName}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                </>
               ) : isSchoolAdmin ? (
-                <FormField label="Head Office" required full>
-                  <input className="avm-input" value={headOfficeName || ''} readOnly />
-                </FormField>
+                <>
+                  <FormField label="Head Office" required full>
+                    <input className="avm-input" value={headOfficeName || ''} readOnly />
+                  </FormField>
+                  <FormField label="School Name" required full>
+                    <input className="avm-input" value={authSchoolName || ''} readOnly />
+                  </FormField>
+                </>
               ) : null}
-
-              <FormField label="School Name" required full>
-                <select
-                  className="avm-select"
-                  id="schoolId"
-                  value={form.schoolId}
-                  onChange={handleChange(setter)}
-                  disabled={isSchoolAdmin || isHeadOfficeAdmin ? true : !form.headOfficeId}
-                >
-                  <option value="">--Select School--</option>
-                  {formSchoolOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.schoolName}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
 
               <FormField label="Class" required>
                 <select
@@ -759,47 +771,47 @@ const FeeCollection = () => {
             <p className="avm-section-title">{BULK_STEPS[0]}</p>
             <div className="avm-grid">
               {isSuperAdmin ? (
-                <FormField label="Head Office" required full>
-                  <select
-                    className="avm-select"
-                    id="headOfficeId"
-                    value={form.headOfficeId}
-                    onChange={handleChange(setter)}
-                  >
-                    <option value="">--Select Head Office--</option>
-                    {headOffices.map((ho) => (
-                      <option key={ho.id} value={String(ho.id)}>
-                        {ho.name}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                <ManualScopeSelectors
+                  enabled
+                  headOffices={headOffices}
+                  schoolOptions={formSchoolOptions}
+                  selectedHeadOfficeId={form.headOfficeId}
+                  onHeadOfficeChange={(val) => handleChange(setter)({ target: { id: 'headOfficeId', value: val } })}
+                  selectedSchoolId={form.schoolId}
+                  onSchoolChange={(val) => handleChange(setter)({ target: { id: 'schoolId', value: val } })}
+                />
               ) : isHeadOfficeAdmin ? (
-                <FormField label="Head Office" required full>
-                  <input className="avm-input" value={headOfficeName || ''} readOnly />
-                </FormField>
+                <>
+                  <FormField label="Head Office" required full>
+                    <input className="avm-input" value={headOfficeName || ''} readOnly />
+                  </FormField>
+                  <FormField label="School Name" required full>
+                    <select
+                      className="avm-select"
+                      id="schoolId"
+                      value={form.schoolId}
+                      onChange={handleChange(setter)}
+                      disabled
+                    >
+                      <option value="">--Select School--</option>
+                      {formSchoolOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.schoolName}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                </>
               ) : isSchoolAdmin ? (
-                <FormField label="Head Office" required full>
-                  <input className="avm-input" value={headOfficeName || ''} readOnly />
-                </FormField>
+                <>
+                  <FormField label="Head Office" required full>
+                    <input className="avm-input" value={headOfficeName || ''} readOnly />
+                  </FormField>
+                  <FormField label="School Name" required full>
+                    <input className="avm-input" value={authSchoolName || ''} readOnly />
+                  </FormField>
+                </>
               ) : null}
-
-              <FormField label="School Name" required full>
-                <select
-                  className="avm-select"
-                  id="schoolId"
-                  value={form.schoolId}
-                  onChange={handleChange(setter)}
-                  disabled={isSchoolAdmin || isHeadOfficeAdmin ? true : !form.headOfficeId}
-                >
-                  <option value="">--Select School--</option>
-                  {formSchoolOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.schoolName}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
 
               <FormField label="Class" required full>
                 <select
@@ -1065,20 +1077,15 @@ const FeeCollection = () => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                options={[5, 10, 20, 50]}
+                onChange={(v) => {
+                  setRowsPerPage(v)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -1215,8 +1222,8 @@ const FeeCollection = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {paginated.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {Math.min((currentPage - 1) * rowsPerPage + paginated.length, totalElements)} of {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">
@@ -1224,7 +1231,7 @@ const FeeCollection = () => {
                 type="button"
                 className="btn btn-sm btn-light border"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+                disabled={currentPage === 1 || totalPages < 1}
               >
                 Prev
               </button>
@@ -1245,8 +1252,8 @@ const FeeCollection = () => {
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(Math.max(1, totalPages), p + 1))}
+                disabled={currentPage === totalPages || totalPages < 1}
               >
                 Next
               </button>
@@ -1325,27 +1332,29 @@ const FeeCollection = () => {
             </div>
           ) : null}
 
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="school"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schools.map((option) => (
-                <option key={option.id} value={option.schoolName}>
-                  {option.schoolName}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isSuperAdmin ? (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label
+                htmlFor="school"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                School
+              </label>
+              <select
+                id="school"
+                className="form-control form-select"
+                value={pendingFilters.school}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select School</option>
+                {schools.map((option) => (
+                  <option key={option.id} value={option.schoolName}>
+                    {option.schoolName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div>
             <label
