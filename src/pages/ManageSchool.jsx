@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createSchoolWithAdmin, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
@@ -183,6 +184,7 @@ const ManageSchool = ({ onNavigate }) => {
   const [editingSchoolId, setEditingSchoolId] = useState(null)
 
   const [search, setSearch] = useState('')
+  const debouncedSearch = search
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -562,30 +564,24 @@ const ManageSchool = ({ onNavigate }) => {
                 </select>
               </FormField>
 
-              <FormField label="Head Office" required full>
-                {isSuperAdmin ? (
-                  <select
-                    id="headOfficeId"
-                    className="avm-input"
-                    value={form.headOfficeId || ''}
-                    onChange={handleChange(setter)}
-                  >
-                    <option value="">--Select Head Office--</option>
-                    {headOfficeOptions.map((option) => (
-                      <option key={option.id} value={String(option.id)}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
+              <ManualScopeSelectors
+                enabled={isSuperAdmin}
+                headOffices={headOfficeOptions}
+                selectedHeadOfficeId={form.headOfficeId || ''}
+                onHeadOfficeChange={(value) => setter((prev) => ({ ...prev, headOfficeId: value }))}
+                showSchoolSelector={false}
+              />
+
+              {!isSuperAdmin ? (
+                <FormField label="Head Office" required full>
                   <input
                     type="text"
                     className="avm-input"
                     value={currentHeadOfficeName || 'Linked automatically'}
                     disabled
                   />
-                )}
-              </FormField>
+                </FormField>
+              ) : null}
 
               {setter === setEditForm ? (
                 <>
