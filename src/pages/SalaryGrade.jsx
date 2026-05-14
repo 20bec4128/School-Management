@@ -1,59 +1,19 @@
-﻿import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
-const salaryGradeData = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    gradeName: 'Grade A',
-    basicSalary: 50000,
-    hourlyRate: 500,
-    grossSalary: 65000,
-    netSalary: 58000,
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    gradeName: 'Grade B',
-    basicSalary: 40000,
-    hourlyRate: 400,
-    grossSalary: 52000,
-    netSalary: 46500,
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    gradeName: 'Grade C',
-    basicSalary: 30000,
-    hourlyRate: 300,
-    grossSalary: 39000,
-    netSalary: 35000,
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    gradeName: 'Grade D',
-    basicSalary: 25000,
-    hourlyRate: 250,
-    grossSalary: 32500,
-    netSalary: 29250,
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    gradeName: 'Grade E',
-    basicSalary: 20000,
-    hourlyRate: 200,
-    grossSalary: 26000,
-    netSalary: 23400,
-  },
-]
+import { useAuth } from '../context/useAuth'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { createSalaryGrade, deleteSalaryGrade, fetchSalaryGradesPage, updateSalaryGrade } from '../apis/salaryGradeApi'
+import { normalizeRole } from '../utils/roles'
 
 const emptyForm = {
-  school: '',
+  headOfficeId: '',
+  schoolId: '',
   gradeName: '',
   basicSalary: '',
   houseRent: '',
@@ -70,8 +30,9 @@ const emptyForm = {
 }
 
 const emptyFilters = {
-  school: 'Select',
-  gradeName: 'Select',
+  headOfficeId: '',
+  schoolId: '',
+  gradeName: '',
 }
 
 const STEPS = ['Basic Information', 'Allowances', 'Salary Summary']
@@ -137,71 +98,135 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const SalaryGrade = () => {
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+
+  const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+
+  const [headOffices, setHeadOffices] = useState([])
+  const [schools, setSchools] = useState([])
+
+  const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
+
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
+  
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
+  
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(salaryGradeData.map((item) => item.school))),
-    [],
-  )
-  const gradeNameOptions = useMemo(
-    () => Array.from(new Set(salaryGradeData.map((item) => item.gradeName))),
-    [],
-  )
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-
-    return salaryGradeData.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.school, row.gradeName, String(row.basicSalary), String(row.grossSalary), String(row.netSalary)]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
-      const matchesGradeName = filters.gradeName === 'Select' || row.gradeName === filters.gradeName
-
-      return matchesSearch && matchesSchool && matchesGradeName
-    })
-  }, [search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
-    } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+  const schoolsById = useMemo(() => {
+    const map = new Map()
+    for (const s of Array.isArray(schools) ? schools : []) {
+      if (s?.id == null) continue
+      map.set(String(s.id), s)
     }
+    return map
+  }, [schools])
+
+  const headOfficesById = useMemo(() => {
+    const map = new Map()
+    for (const ho of Array.isArray(headOffices) ? headOffices : []) {
+      if (ho?.id == null) continue
+      map.set(String(ho.id), ho)
+    }
+    return map
+  }, [headOffices])
+
+  const resolveSchoolName = (schoolId, fallbackName = '') => {
+    if (schoolId == null) return ''
+    const row = schoolsById.get(String(schoolId))
+    return row?.schoolName || row?.name || fallbackName || ''
   }
 
-  const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
+  const resolveHeadOfficeName = (headOfficeId) => {
+    if (headOfficeId == null) return ''
+    const row = headOfficesById.get(String(headOfficeId))
+    return row?.name || ''
   }
+
+  const loadLookups = async () => {
+    if (isSchoolAdmin) return
+    const tasks = []
+    if (isSuperAdmin || isHeadOfficeAdmin) {
+      tasks.push(
+        fetchHeadOfficesPage(0, 500).then((page) => {
+          const content = Array.isArray(page?.content) ? page.content : []
+          setHeadOffices(content)
+        }).catch(() => {}),
+      )
+    }
+    tasks.push(fetchSchoolsLookup().then((list) => setSchools(Array.isArray(list) ? list : [])))
+    await Promise.all(tasks)
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const loadSalaryGrades = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+    const effectiveSchoolId = (() => {
+      if (isSchoolAdmin) return authSchoolId
+      return schoolId || null
+    })()
+
+    if (!effectiveSchoolId && !isSuperAdmin) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
+      return
+    }
+
+    const data = await fetchSalaryGradesPage({ 
+      schoolId: effectiveSchoolId, 
+      page: page, 
+      size: size,
+      search: search
+    })
+    const list = Array.isArray(data?.content) ? data.content : []
+    setRows(list)
+    setTotalElements(data?.totalElements ?? 0)
+    setTotalPages(data?.totalPages ?? 0)
+  }
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    setLoadError('')
+    setBusy(true)
+    Promise.resolve()
+      .then(loadLookups)
+      .then(() => {
+        const initialSchoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId ? Number(filters.schoolId) : null))
+        return loadSalaryGrades({ 
+          schoolId: initialSchoolId,
+          page: currentPage - 1,
+          size: rowsPerPage,
+          search: debouncedSearch
+        })
+      })
+      .catch((e) => setLoadError(e?.message || 'Failed to load salary grades'))
+      .finally(() => setBusy(false))
+  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters])
 
   const calculateTotals = (formData) => {
     const basicSalary = parseFloat(formData.basicSalary) || 0
@@ -227,7 +252,11 @@ const SalaryGrade = () => {
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
     setter((prev) => {
-      const updated = { ...prev, [id]: value }
+      const updated = { 
+        ...prev, 
+        [id]: value,
+        ...(id === 'headOfficeId' ? { schoolId: '' } : {})
+      }
       const totals = calculateTotals(updated)
       return {
         ...updated,
@@ -239,49 +268,42 @@ const SalaryGrade = () => {
     })
   }
 
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
-    setFilters(pendingFilters)
-    setCurrentPage(1)
-    setIsFilterSidebarOpen(false)
-  }
-
-  const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setCurrentPage(1)
-  }
-
   const openAdd = () => {
-    setAddForm(emptyForm)
+    const base = { ...emptyForm }
+    if (isSchoolAdmin) {
+      base.schoolId = authSchoolId != null ? String(authSchoolId) : ''
+      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+    } else if (isHeadOfficeAdmin) {
+      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+    }
+    setAddForm(base)
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    const s = row?.schoolId != null ? schoolsById.get(String(row.schoolId)) : null
     setEditForm({
-      school: row.school,
-      gradeName: row.gradeName,
-      basicSalary: row.basicSalary,
-      houseRent: '',
-      transportAllowance: '',
-      medicalAllowance: '',
-      overTimeHourlyRate: '',
-      providentFund: '',
-      hourlyRate: row.hourlyRate,
-      totalAllowance: 0,
-      totalDeduction: 0,
-      grossSalary: row.grossSalary,
-      netSalary: row.netSalary,
-      note: '',
+      ...row,
+      headOfficeId: s?.headOfficeId != null ? String(s.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : ''),
+      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedRows((prev) => [...new Set([...prev, ...rows.map((row) => String(row.id))])])
+    } else {
+      setSelectedRows((prev) => prev.filter((id) => !rows.some((row) => String(row.id) === id)))
+    }
+  }
+
+  const handleSelectRow = (id) => {
+    setSelectedRows((prev) =>
+      prev.includes(String(id)) ? prev.filter((rowId) => rowId !== String(id)) : [...prev, String(id)],
+    )
   }
 
   const getVisiblePages = () => {
@@ -292,6 +314,21 @@ const SalaryGrade = () => {
     return pages
   }
 
+  const schoolOptionsForScope = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    if (isSuperAdmin) return list
+    if (isHeadOfficeAdmin) return list.filter(s => String(s.headOfficeId) === String(authHeadOfficeId))
+    return []
+  }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
+
+  const schoolOptionsForForm = (form) => {
+    if (isSchoolAdmin) return []
+    const selectedHeadOfficeId = isSuperAdmin ? form.headOfficeId : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+    const list = Array.isArray(schools) ? schools : []
+    if (!selectedHeadOfficeId) return []
+    return list.filter((s) => String(s?.headOfficeId ?? '') === String(selectedHeadOfficeId))
+  }
+
   const renderForm = (form, setter, step) => {
     return (
       <>
@@ -299,21 +336,35 @@ const SalaryGrade = () => {
           <>
             <p className="avm-section-title">{STEPS[0]}</p>
             <div className="avm-grid">
-              <FormField label="School Name" required full>
-                <select
-                  className="avm-select"
-                  id="school"
-                  value={form.school}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select School--</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
+              {isSuperAdmin ? (
+                <FormField label="Head Office" required full>
+                  <select className="avm-select" id="headOfficeId" value={form.headOfficeId} onChange={handleChange(setter)}>
+                    <option value="">--Select Head Office--</option>
+                    {headOffices.map((ho) => (
+                      <option key={ho.id} value={String(ho.id)}>{ho.name}</option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : (isHeadOfficeAdmin ? (
+                <FormField label="Head Office" required full>
+                  <input className="avm-input" value={headOfficeName || resolveHeadOfficeName(authHeadOfficeId) || ''} readOnly />
+                </FormField>
+              ) : null)}
+
+              {(isSuperAdmin || isHeadOfficeAdmin) ? (
+                <FormField label="School Name" required full>
+                  <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleChange(setter)}>
+                    <option value="">--Select School--</option>
+                    {schoolOptionsForForm(form).map((s) => (
+                      <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : (isSchoolAdmin ? (
+                <FormField label="School Name" required full>
+                  <input className="avm-input" value={authSchoolName || resolveSchoolName(authSchoolId, authSchoolName) || ''} readOnly />
+                </FormField>
+              ) : null)}
 
               <FormField label="Grade Name" required full>
                 <input
@@ -462,6 +513,19 @@ const SalaryGrade = () => {
     )
   }
 
+  const handleApplyFilters = (e) => {
+    e.preventDefault()
+    setFilters(pendingFilters)
+    setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
+  }
+
+  const handleResetFilters = () => {
+    setPendingFilters(emptyFilters)
+    setFilters(emptyFilters)
+    setCurrentPage(1)
+  }
+
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -477,20 +541,41 @@ const SalaryGrade = () => {
             <span className="text-secondary-light"> / Salary Grade</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Salary Grade
-        </button>
+        <div className="d-flex flex-wrap align-items-center gap-12">
+          {isHeadOfficeAdmin && !isSuperAdmin ? (
+            <select
+              className="form-select"
+              style={{ minWidth: 240 }}
+              value={scopeSchoolId}
+              onChange={(e) => {
+                setScopeSchoolId(e.target.value)
+                setCurrentPage(1)
+              }}
+            >
+              <option value="">Select School</option>
+              {schoolOptionsForScope.map((s) => (
+                <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
+              ))}
+            </select>
+          ) : null}
+
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Salary Grade
+          </button>
+        </div>
       </div>
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
+          {loadError && <div className="px-20 py-12 text-danger">{loadError}</div>}
+          
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <div className="dropdown">
@@ -571,20 +656,14 @@ const SalaryGrade = () => {
                 </ul>
               </div>
 
-              <select
+              <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="position-relative">
@@ -613,7 +692,7 @@ const SalaryGrade = () => {
                       <input
                         type="checkbox"
                         className="form-check-input"
-                        checked={allSelected}
+                        checked={rows.length > 0 && rows.every((r) => selectedRows.includes(String(r.id)))}
                         onChange={handleSelectAll}
                       />
                       <label className="form-check-label">S.L</label>
@@ -630,7 +709,13 @@ const SalaryGrade = () => {
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {busy && rows.length === 0 ? (
+                   <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={visibleColumnCount + 1}
@@ -640,34 +725,34 @@ const SalaryGrade = () => {
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  rows.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(String(row.id))}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
                       {visibleColumns.school ? (
-                        <td className="fw-medium text-primary-light">{row.school}</td>
+                        <td className="fw-medium text-primary-light">{row.schoolName}</td>
                       ) : null}
                       {visibleColumns.gradeName ? <td className="fw-medium">{row.gradeName}</td> : null}
                       {visibleColumns.basicSalary ? (
-                        <td className="text-end fw-semibold">â‚¹{row.basicSalary.toLocaleString()}</td>
+                        <td className="text-end fw-semibold">₹{row.basicSalary?.toLocaleString()}</td>
                       ) : null}
                       {visibleColumns.hourlyRate ? (
-                        <td className="text-end">â‚¹{row.hourlyRate}</td>
+                        <td className="text-end">₹{row.hourlyRate}</td>
                       ) : null}
                       {visibleColumns.grossSalary ? (
-                        <td className="text-end fw-semibold text-primary-light">â‚¹{row.grossSalary.toLocaleString()}</td>
+                        <td className="text-end fw-semibold text-primary-light">₹{row.grossSalary?.toLocaleString()}</td>
                       ) : null}
                       {visibleColumns.netSalary ? (
-                        <td className="text-end fw-semibold text-success-600">â‚¹{row.netSalary.toLocaleString()}</td>
+                        <td className="text-end fw-semibold text-success-600">₹{row.netSalary?.toLocaleString()}</td>
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
@@ -683,6 +768,20 @@ const SalaryGrade = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={async () => {
+                              if (!window.confirm('Are you sure?')) return
+                              setBusy(true)
+                              try {
+                                await deleteSalaryGrade(row.id)
+                                await loadSalaryGrades({
+                                  schoolId: isSchoolAdmin ? authSchoolId : (scopeSchoolId || filters.schoolId || null),
+                                  page: currentPage - 1,
+                                  size: rowsPerPage,
+                                  search: debouncedSearch
+                                })
+                              } catch (e) { setLoadError(e.message) }
+                              finally { setBusy(false) }
+                            }}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -697,8 +796,8 @@ const SalaryGrade = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">
@@ -746,7 +845,19 @@ const SalaryGrade = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={async () => {
+          setLoadError('')
+          const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (addForm.schoolId ? Number(addForm.schoolId) : null)
+          if (!effectiveSchoolId) { setLoadError('School is required'); return }
+          if (!addForm.gradeName) { setLoadError('Grade name is required'); return }
+          setBusy(true)
+          try {
+            await createSalaryGrade({ ...addForm, schoolId: effectiveSchoolId })
+            setIsAddOpen(false)
+            await loadSalaryGrades({ schoolId: effectiveSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+          } catch (e) { setLoadError(e.message) }
+          finally { setBusy(false) }
+        }}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm, addStep)}
@@ -761,7 +872,19 @@ const SalaryGrade = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={async () => {
+          setLoadError('')
+          const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (editForm.schoolId ? Number(editForm.schoolId) : null)
+          if (!effectiveSchoolId) { setLoadError('School is required'); return }
+          if (!editForm.gradeName) { setLoadError('Grade name is required'); return }
+          setBusy(true)
+          try {
+            await updateSalaryGrade(editForm.id, { ...editForm, schoolId: effectiveSchoolId })
+            setIsEditOpen(false)
+            await loadSalaryGrades({ schoolId: effectiveSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+          } catch (e) { setLoadError(e.message) }
+          finally { setBusy(false) }
+        }}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm, editStep)}
@@ -773,52 +896,36 @@ const SalaryGrade = () => {
         onClose={() => setIsFilterSidebarOpen(false)}
         className="filter-sidebar"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="school"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+           {isSuperAdmin && (
+             <div>
+              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Head Office</label>
+              <select 
+                className="form-control form-select" 
+                value={pendingFilters.headOfficeId} 
+                onChange={(e) => setPendingFilters(p => ({ ...p, headOfficeId: e.target.value, schoolId: '' }))}
+              >
+                <option value="">All</option>
+                {headOffices.map(ho => <option key={ho.id} value={String(ho.id)}>{ho.name}</option>)}
+              </select>
+            </div>
+           )}
 
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="gradeName"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              Grade Name
-            </label>
-            <select
-              id="gradeName"
-              className="form-control form-select"
-              value={pendingFilters.gradeName}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select Grade Name</option>
-              {gradeNameOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+           {(isSuperAdmin || isHeadOfficeAdmin) && (
+             <div>
+              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
+              <select 
+                className="form-control form-select" 
+                value={pendingFilters.schoolId} 
+                onChange={(e) => setPendingFilters(p => ({ ...p, schoolId: e.target.value }))}
+              >
+                <option value="">All</option>
+                {schoolOptionsForForm(pendingFilters).map(s => <option key={s.id} value={String(s.id)}>{s.schoolName}</option>)}
+              </select>
+            </div>
+           )}
 
-          <div>
+          <div className="d-flex gap-8 mt-16">
             <button
               type="button"
               onClick={handleResetFilters}
@@ -826,9 +933,6 @@ const SalaryGrade = () => {
             >
               Reset
             </button>
-          </div>
-
-          <div>
             <button type="submit" className="btn btn-primary-600 w-100">
               Apply
             </button>
@@ -840,5 +944,3 @@ const SalaryGrade = () => {
 }
 
 export default SalaryGrade
-
-

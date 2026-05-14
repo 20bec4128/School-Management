@@ -26,11 +26,21 @@ public class DesignationController {
     }
 
     @GetMapping
-    public List<DesignationDto> list(
+    public java.util.List<DesignationDto> list(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String role
     ) {
         return designationService.list(schoolId, role);
+    }
+
+    @GetMapping("/page")
+    public org.springframework.data.domain.Page<DesignationDto> listPaginated(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search
+    ) {
+        return designationService.listPaginated(schoolId, page, size, search);
     }
 
     @PostMapping

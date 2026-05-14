@@ -32,11 +32,14 @@ const isActiveSchoolRow = (row) => {
   return !isDeleted && (status === '' || status === 'ACTIVE')
 }
 
-export const fetchSchoolsPage = async (page, size) => {
+export const fetchSchoolsPage = async (page, size, search = '', statusFilter = '') => {
   const query = new URLSearchParams({
     page: String(Math.max(page, 0)),
     size: String(size),
   })
+  if (search) query.append('search', search)
+  if (statusFilter && statusFilter !== 'Select') query.append('status', statusFilter)
+
   const res = await apiFetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()

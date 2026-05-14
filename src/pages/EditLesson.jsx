@@ -5,8 +5,6 @@ import { fetchAcademicYears } from "../apis/academicYearsApi";
 import { fetchClasses } from "../apis/classesApi";
 import { fetchSubjects } from "../apis/subjectsApi";
 import { updateLesson } from "../apis/lessonsApi";
-import { useAuth } from "../context/useAuth";
-import { useSchool } from "../context/useSchool";
 
 const STORAGE_KEY = "sm_edit_lesson";
 
@@ -20,9 +18,6 @@ const readEditLesson = () => {
 };
 
 const EditLesson = ({ onNavigate }) => {
-  const { role } = useAuth();
-  const { activeSchoolId } = useSchool();
-
   const [headOfficesLookup, setHeadOfficesLookup] = useState([]);
   const [schoolsLookup, setSchoolsLookup] = useState([]);
   const [allSchools, setAllSchools] = useState([]);

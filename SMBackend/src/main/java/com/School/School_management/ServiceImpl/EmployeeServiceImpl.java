@@ -20,6 +20,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +66,39 @@ public class EmployeeServiceImpl implements EmployeeService {
         Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
         return employeeRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
                 .stream().map(this::toDto).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<EmployeeDto> listPaginated(Long schoolId, int page, int size, String search) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        String normalizedSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
+
+        if (user.isSuperAdmin() && schoolId == null) {
+            List<EmployeeDto> rows = employeeRepository.findAllByOrderByIdDesc()
+                    .stream()
+                    .map(this::toDto)
+                    .filter(dto -> {
+                        if (normalizedSearch == null) return true;
+                        String haystack = String.join(" ",
+                                safe(dto.getName()),
+                                safe(dto.getEmail()),
+                                safe(dto.getPhone()),
+                                safe(dto.getUsername()),
+                                safe(dto.getRole()))
+                                .toLowerCase();
+                        return haystack.contains(normalizedSearch.toLowerCase());
+                    })
+                    .toList();
+            return slice(rows, pageable);
+        }
+
+        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+        return employeeRepository.searchEmployees(effectiveSchoolId, normalizedSearch, pageable)
+                .map(this::toDto);
     }
 
     @Override
@@ -272,5 +310,15 @@ public class EmployeeServiceImpl implements EmployeeService {
         String t = trim(v);
         if (t == null) throw new BadRequestException(msg);
         return t;
+    }
+
+    private Page<EmployeeDto> slice(List<EmployeeDto> rows, Pageable pageable) {
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), rows.size());
+        int end = Math.min(start + pageable.getPageSize(), rows.size());
+        return new PageImpl<>(rows.subList(start, end), pageable, rows.size());
+    }
+
+    private String safe(String v) {
+        return v == null ? "" : v;
     }
 }

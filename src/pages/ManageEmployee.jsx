@@ -4,7 +4,7 @@ import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createEmployee, deleteEmployee, fetchEmployees, updateEmployee } from '../apis/employeesApi'
+import { createEmployee, deleteEmployee, fetchEmployees, fetchEmployeesPage, updateEmployee } from '../apis/employeesApi'
 import { fetchDesignations } from '../apis/designationsApi'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolRoles } from '../apis/schoolRbacApi'
@@ -162,6 +162,8 @@ const ManageEmployee = () => {
   const isSchoolAdmin = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
 
   const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [busy, setBusy] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -174,6 +176,7 @@ const ManageEmployee = () => {
   const [designationCache, setDesignationCache] = useState({})
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [filters, setFilters] = useState({
@@ -387,11 +390,18 @@ const ManageEmployee = () => {
     }
   }, [authHeadOfficeId, authHeadOfficeName, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, status])
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const loadRows = useCallback(async () => {
     if (status !== 'ready') return
 
     if (isHeadOfficeAdmin && !activeSchoolId) {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
       setBusy(false)
       setError('')
       setSelectedRows([])
@@ -411,11 +421,17 @@ const ManageEmployee = () => {
     setBusy(true)
     setError('')
     try {
-      const data = await fetchEmployees(effectiveSchoolId ? { schoolId: effectiveSchoolId } : {})
-      const normalizedRows = Array.isArray(data) ? data : []
+      const data = await fetchEmployeesPage({ 
+        schoolId: effectiveSchoolId, 
+        page: currentPage - 1, 
+        size: rowsPerPage === -1 ? 999999 : rowsPerPage,
+        search: debouncedSearch
+      })
+      const normalizedRows = Array.isArray(data?.content) ? data.content : []
       setRows(normalizedRows)
+      setTotalElements(data?.totalElements ?? 0)
+      setTotalPages(data?.totalPages ?? 0)
       setSelectedRows([])
-      setCurrentPage(1)
 
       const schoolIdsToPrime = isSuperAdmin
         ? normalizedRows
@@ -427,12 +443,14 @@ const ManageEmployee = () => {
       void loadDesignationCacheForSchools(schoolIdsToPrime)
     } catch (e) {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
       setSelectedRows([])
       setError(e?.message || 'Failed to load employees')
     } finally {
       setBusy(false)
     }
-  }, [activeSchoolId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, loadDesignationCacheForSchools, status])
+  }, [activeSchoolId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, loadDesignationCacheForSchools, status, currentPage, rowsPerPage, debouncedSearch])
 
   useEffect(() => {
     void loadScopeLookups()
@@ -532,59 +550,15 @@ const ManageEmployee = () => {
       .sort((a, b) => String(a.label).localeCompare(String(b.label)))
   }, [displayRows])
 
-  const visibleRows = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return displayRows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.name, row.designationName, row.phone, row.email, row.schoolName]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesName = !filters.name || String(row.name || '').toLowerCase().includes(filters.name.toLowerCase())
-      const matchesSchool = filters.school === 'All' || String(row.schoolId || '') === String(filters.school)
-      const matchesDesignation =
-        filters.designation === 'All' || String(row.designationName || '') === String(filters.designation)
-      const matchesEmail = !filters.email || String(row.email || '').toLowerCase().includes(filters.email.toLowerCase())
-      const matchesJoiningDate = !filters.joiningDate || String(row.joiningDate || '') === String(filters.joiningDate)
-      const matchesViewOnWeb =
-        filters.isViewOnWeb === 'All' ||
-        (filters.isViewOnWeb === 'Yes' ? String(row.isViewOnWeb || '').toLowerCase() === 'yes' : String(row.isViewOnWeb || '').toLowerCase() === 'no')
-      return matchesSearch && matchesName && matchesSchool && matchesDesignation && matchesEmail && matchesJoiningDate && matchesViewOnWeb
-    })
-  }, [displayRows, filters, search])
+  const schoolsToRender = displayRows
 
-  const pageSize = rowsPerPage === -1 ? Math.max(visibleRows.length, 1) : rowsPerPage
-  const totalPages = rowsPerPage === -1 ? 1 : Math.max(1, Math.ceil(visibleRows.length / pageSize))
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
-
-  const paginatedRows = useMemo(() => {
-    if (rowsPerPage === -1) return visibleRows
-    const start = (currentPage - 1) * pageSize
-    return visibleRows.slice(start, start + pageSize)
-  }, [currentPage, pageSize, rowsPerPage, visibleRows])
-
-  const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(row.id))
-
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p += 1) pages.push(p)
-    return pages
-  }
+  const allSelected = schoolsToRender.length > 0 && schoolsToRender.every((row) => selectedRows.includes(row.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => row.id)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...schoolsToRender.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => row.id === id)))
+      setSelectedRows((prev) => prev.filter((id) => !schoolsToRender.some((row) => row.id === id)))
     }
   }
 
@@ -1305,6 +1279,14 @@ const ManageEmployee = () => {
     return null
   }
 
+  const getVisiblePages = () => {
+    const pages = []
+    const start = Math.max(1, currentPage - 1)
+    const end = Math.min(totalPages, start + 2)
+    for (let p = start; p <= end; p += 1) pages.push(p)
+    return pages
+  }
+
   const emptyMessage =
     isHeadOfficeAdmin && !activeSchoolId
       ? 'Select a school to view employees.'
@@ -1456,14 +1438,14 @@ const ManageEmployee = () => {
                       {emptyMessage}
                     </td>
                   </tr>
-                ) : paginatedRows.length === 0 ? (
+                ) : schoolsToRender.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       {emptyMessage}
                     </td>
                   </tr>
                 ) : (
-                  paginatedRows.map((row) => (
+                  schoolsToRender.map((row) => (
                     <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -1533,7 +1515,7 @@ const ManageEmployee = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {visibleRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {rowsPerPage === -1 ? visibleRows.length : Math.min(currentPage * rowsPerPage, visibleRows.length)} of {visibleRows.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {rowsPerPage === -1 ? totalElements : Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>

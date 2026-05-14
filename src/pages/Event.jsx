@@ -1,31 +1,31 @@
-import { useRef, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { createEvent, deleteEvent, fetchEvents, updateEvent } from '../apis/eventApi'
+import { findSchoolById } from '../utils/schoolScope'
 import '../assets/css/addModalShared.css'
 
-const events = [
-  { sl: '01', school: 'Windsor Park High School', title: 'Annual Sports Day', eventFor: 'Students', eventPlace: 'Main Ground', fromDate: '2024-04-10', toDate: '2024-04-11', image: null, isViewOnWeb: true },
-  { sl: '02', school: 'Windsor Park High School', title: 'Science Exhibition', eventFor: 'All', eventPlace: 'Science Block', fromDate: '2024-04-15', toDate: '2024-04-16', image: null, isViewOnWeb: false },
-  { sl: '03', school: 'Windsor Park High School', title: 'Parent Teacher Meeting', eventFor: 'Parents', eventPlace: 'Conference Hall', fromDate: '2024-04-20', toDate: '2024-04-20', image: null, isViewOnWeb: true },
-  { sl: '04', school: 'Windsor Park High School', title: 'Cultural Fest', eventFor: 'Students', eventPlace: 'Auditorium', fromDate: '2024-05-01', toDate: '2024-05-03', image: null, isViewOnWeb: true },
-  { sl: '05', school: 'Windsor Park High School', title: 'Staff Training Day', eventFor: 'Staff', eventPlace: 'Training Room', fromDate: '2024-05-10', toDate: '2024-05-10', image: null, isViewOnWeb: false },
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
   title: '',
   eventFor: '',
   eventPlace: '',
   fromDate: '',
   toDate: '',
-  image: null,
+  image: '',
   note: '',
   isViewOnWeb: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: '',
   eventFor: 'Select',
   isViewOnWeb: 'Select',
 }
@@ -44,7 +44,7 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolName', label: 'School' },
   { key: 'title', label: 'Title' },
   { key: 'eventFor', label: 'Event for' },
   { key: 'eventPlace', label: 'Event Place' },
@@ -53,6 +53,8 @@ const columnOptions = [
   { key: 'image', label: 'Image' },
   { key: 'isViewOnWeb', label: 'Is View on Web?' },
 ]
+
+const eventForOptions = ['Students', 'Parents', 'Staff', 'All']
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -96,6 +98,22 @@ const eventForBadge = (val) => {
 }
 
 const Event = () => {
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const listSchoolId = isSuperAdmin
+    ? (activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId
+      ? String(activeSchoolId)
+      : authSchoolId
+        ? String(authSchoolId)
+        : ''
+
+  const [rows, setRows] = useState([])
+  const [schools, setSchools] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -104,49 +122,135 @@ const Event = () => {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
+  const [editingId, setEditingId] = useState(null)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
-  const [addPreview, setAddPreview] = useState(null)
-  const [editPreview, setEditPreview] = useState(null)
+  const [addPreview, setAddPreview] = useState('')
+  const [editPreview, setEditPreview] = useState('')
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const addPhotoRef = useRef(null)
   const editPhotoRef = useRef(null)
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(events.map((r) => r.school))),
-    [],
-  )
+  const schoolOptions = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    const fallback =
+      listSchoolId && authSchoolName && !list.some((school) => String(school.id) === listSchoolId)
+        ? [{ id: listSchoolId, schoolName: authSchoolName }]
+        : []
+    return [...list, ...fallback]
+  }, [schools, listSchoolId, authSchoolName, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.schoolOptions])
 
-  const filtered = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return events.filter((r) => {
-      const matchesSearch = !q || [r.school, r.title, r.eventFor, r.eventPlace, r.fromDate, r.toDate].join(' ').toLowerCase().includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesEventFor = filters.eventFor === 'Select' || r.eventFor === filters.eventFor
+    return rows.filter((row) => {
+      const matchesSearch =
+        !q ||
+        [row.schoolName, row.title, row.eventFor, row.eventPlace, row.fromDate, row.toDate, row.note]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      const matchesSchool = !filters.schoolId || String(row.schoolId ?? '') === String(filters.schoolId)
+      const matchesEventFor = filters.eventFor === 'Select' || row.eventFor === filters.eventFor
       const matchesViewOnWeb =
         filters.isViewOnWeb === 'Select' ||
-        (filters.isViewOnWeb === 'Yes' && r.isViewOnWeb) ||
-        (filters.isViewOnWeb === 'No' && !r.isViewOnWeb)
+        (filters.isViewOnWeb === 'Yes' ? row.isViewOnWeb : !row.isViewOnWeb)
       return matchesSearch && matchesSchool && matchesEventFor && matchesViewOnWeb
     })
-  }, [search, filters])
+  }, [rows, search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage))
+  const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    return filteredRows.slice(start, start + rowsPerPage)
+  }, [currentPage, filteredRows, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
+
+  const loadSchools = useCallback(async () => {
+    try {
+      const list = await fetchSchoolsLookup()
+      setSchools(Array.isArray(list) ? list : [])
+    } catch {
+      setSchools([])
+    }
+  }, [])
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      if (isSuperAdmin) {
+        const list = await fetchEvents(listSchoolId ? { schoolId: listSchoolId } : {})
+        setRows(
+          Array.isArray(list)
+            ? list.map((item) => ({
+                id: item?.id,
+                schoolId: item?.schoolId ?? null,
+                schoolName: item?.schoolName || '',
+                title: item?.title || '',
+                eventFor: item?.eventFor || '',
+                eventPlace: item?.eventPlace || '',
+                fromDate: item?.fromDate || '',
+                toDate: item?.toDate || '',
+                image: item?.image || '',
+                note: item?.note || '',
+                isViewOnWeb: Boolean(item?.isViewOnWeb),
+              }))
+            : [],
+        )
+        return
+      }
+      if (!listSchoolId) {
+        setRows([])
+        setError('Select a school before viewing events.')
+        return
+      }
+      const list = await fetchEvents({ schoolId: listSchoolId })
+      setRows(
+        Array.isArray(list)
+          ? list.map((item) => ({
+              id: item?.id,
+              schoolId: item?.schoolId ?? null,
+              schoolName: item?.schoolName || '',
+              title: item?.title || '',
+              eventFor: item?.eventFor || '',
+              eventPlace: item?.eventPlace || '',
+              fromDate: item?.fromDate || '',
+              toDate: item?.toDate || '',
+              image: item?.image || '',
+              note: item?.note || '',
+              isViewOnWeb: Boolean(item?.isViewOnWeb),
+            }))
+          : [],
+      )
+    } catch (err) {
+      setRows([])
+      setError(err?.message || 'Failed to load events')
+    } finally {
+      setLoading(false)
+    }
+  }, [listSchoolId, isSuperAdmin])
+
+  useEffect(() => {
+    void loadSchools()
+  }, [loadSchools])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId) setAddForm((prev) => ({ ...prev, schoolId: listSchoolId }))
+  }, [isSuperAdmin, listSchoolId])
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -159,11 +263,14 @@ const Event = () => {
   }
 
   const handlePhotoChange = (e, setPreview, setter) => {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
     if (!file) return
-    setter((prev) => ({ ...prev, image: file }))
     const reader = new FileReader()
-    reader.onload = (ev) => setPreview(ev.target.result)
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      setter((prev) => ({ ...prev, image: dataUrl }))
+      setPreview(dataUrl)
+    }
     reader.readAsDataURL(file)
   }
 
@@ -176,6 +283,7 @@ const Event = () => {
     e.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
   }
 
   const handleResetFilters = () => {
@@ -184,35 +292,71 @@ const Event = () => {
     setCurrentPage(1)
   }
 
+  const handleSave = async (form, isEdit = false) => {
+    const payload = {
+      schoolId: form.schoolId ? Number(form.schoolId) : null,
+      title: form.title,
+      eventFor: form.eventFor,
+      eventPlace: form.eventPlace,
+      fromDate: form.fromDate,
+      toDate: form.toDate,
+      image: form.image,
+      note: form.note,
+      isViewOnWeb: form.isViewOnWeb === 'Yes',
+    }
+    if (isEdit) await updateEvent(editingId, payload)
+    else await createEvent(payload)
+    await loadData()
+    setIsAddOpen(false)
+    setIsEditOpen(false)
+  }
+
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddPreview(null)
+    setEditingId(null)
+    setAddForm({
+      ...emptyForm,
+      schoolId: isSuperAdmin ? '' : listSchoolId || '',
+    })
+    setAddPreview('')
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setEditingId(row.id)
+    if (isSuperAdmin) {
+      const school = findSchoolById(schools, row.schoolId)
+      if (school?.headOfficeId != null) {
+        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
+      }
+    }
     setEditForm({
-      school: row.school,
+      schoolId: row.schoolId ? String(row.schoolId) : '',
       title: row.title,
       eventFor: row.eventFor,
       eventPlace: row.eventPlace,
       fromDate: row.fromDate,
       toDate: row.toDate,
-      image: null,
-      note: '',
+      image: row.image || '',
+      note: row.note || '',
       isViewOnWeb: row.isViewOnWeb ? 'Yes' : 'No',
     })
-    setEditPreview(null)
+    setEditPreview(row.image || '')
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this event?')) return
+    await deleteEvent(id)
+    await loadData()
   }
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
+    for (let page = start; page <= end; page += 1) pages.push(page)
     return pages
   }
 
@@ -222,171 +366,186 @@ const Event = () => {
       <div className="avm-grid">
         {step === 0 ? (
           <>
+            {isSuperAdmin ? (
+              <div className="avm-field full">
+                <ManualScopeSelectors
+                  enabled={isSuperAdmin}
+                  headOffices={manualScope.headOffices}
+                  schoolOptions={schoolOptions}
+                  selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+                  onHeadOfficeChange={(value) => {
+                    manualScope.setSelectedHeadOfficeId(value)
+                    manualScope.setSelectedSchoolId('')
+                    setter((prev) => ({ ...prev, schoolId: '' }))
+                  }}
+                  selectedSchoolId={form.schoolId}
+                  onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
+                />
+              </div>
+            ) : (
+              <FormField label="School Name" required full>
+                <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleChange(setter)}>
+                  <option value="">--Select School--</option>
+                  {schoolOptions.map((school) => (
+                    <option key={String(school.id)} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            )}
 
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+            <FormField label="Title" required full>
+              <input
+                type="text"
+                className="avm-input"
+                id="title"
+                placeholder="Title"
+                value={form.title}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
 
-        <FormField label="Title" required full>
-          <input
-            type="text"
-            className="avm-input"
-            id="title"
-            placeholder="Title"
-            value={form.title}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
+            <FormField label="Event for" required>
+              <select className="avm-select" id="eventFor" value={form.eventFor} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                {eventForOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </FormField>
 
-        <FormField label="Event for" required>
-          <select className="avm-select" id="eventFor" value={form.eventFor} onChange={handleChange(setter)}>
-            <option value="">--Select--</option>
-            <option value="Students">Students</option>
-            <option value="Parents">Parents</option>
-            <option value="Staff">Staff</option>
-            <option value="All">All</option>
-          </select>
-        </FormField>
+            <FormField label="Event Place" required>
+              <input
+                type="text"
+                className="avm-input"
+                id="eventPlace"
+                placeholder="Event Place"
+                value={form.eventPlace}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
 
-        <FormField label="Event Place" required>
-          <input
-            type="text"
-            className="avm-input"
-            id="eventPlace"
-            placeholder="Event Place"
-            value={form.eventPlace}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
+            <FormField label="From Date" required>
+              <input type="date" className="avm-input" id="fromDate" value={form.fromDate} onChange={handleChange(setter)} />
+            </FormField>
 
-        <FormField label="From Date" required>
-          <input
-            type="date"
-            className="avm-input"
-            id="fromDate"
-            value={form.fromDate}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="To Date" required>
-          <input
-            type="date"
-            className="avm-input"
-            id="toDate"
-            value={form.toDate}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
+            <FormField label="To Date" required>
+              <input type="date" className="avm-input" id="toDate" value={form.toDate} onChange={handleChange(setter)} />
+            </FormField>
           </>
         ) : (
           <>
-
-        {/* Image Upload */}
-        <div className="avm-field full">
-          <label className="avm-label">Image</label>
-          <input
-            ref={photoRef}
-            type="file"
-            accept=".jpg,.jpeg,.png,.gif"
-            style={{ display: 'none' }}
-            onChange={(e) => handlePhotoChange(e, setPreview, setter)}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button type="button" className="avm-btn light" onClick={() => photoRef.current.click()}>
-              <i className="ri-upload-2-line"></i> Upload Image
-            </button>
-            {preview && (
-              <img
-                src={preview}
-                alt="preview"
-                style={{ width: 80, height: 54, objectFit: 'cover', borderRadius: 8, border: '1px solid #d0d5dd' }}
+            <div className="avm-field full">
+              <label className="avm-label">Image</label>
+              <input
+                ref={photoRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.gif"
+                style={{ display: 'none' }}
+                onChange={(e) => handlePhotoChange(e, setPreview, setter)}
               />
-            )}
-          </div>
-          <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>
-            Dimension:- Max-W: 750px, Max-H: 500px — .jpg, .jpeg, .png or .gif
-          </span>
-        </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button type="button" className="avm-btn light" onClick={() => photoRef.current.click()}>
+                  <i className="ri-upload-2-line"></i> Upload Image
+                </button>
+                {preview ? (
+                  <img
+                    src={preview}
+                    alt="preview"
+                    style={{ width: 80, height: 54, objectFit: 'cover', borderRadius: 8, border: '1px solid #d0d5dd' }}
+                  />
+                ) : null}
+              </div>
+              <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>
+                Dimension:- Max-W: 750px, Max-H: 500px — .jpg, .jpeg, .png or .gif
+              </span>
+            </div>
 
-        <FormField label="Note" full>
-          <textarea
-            rows="4"
-            className="avm-input avm-textarea"
-            id="note"
-            placeholder="Note"
-            value={form.note}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
+            <FormField label="Note" full>
+              <textarea
+                rows="4"
+                className="avm-input avm-textarea"
+                id="note"
+                placeholder="Note"
+                value={form.note}
+                onChange={handleChange(setter)}
+              />
+            </FormField>
 
-        <FormField label="Is View on Web?" required full noIcon>
-          <select className="avm-select" id="isViewOnWeb" value={form.isViewOnWeb} onChange={handleChange(setter)}>
-            <option value="">--Select--</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-          </select>
-        </FormField>
+            <FormField label="Is View on Web?" required full noIcon>
+              <select className="avm-select" id="isViewOnWeb" value={form.isViewOnWeb} onChange={handleChange(setter)}>
+                <option value="">--Select--</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </FormField>
           </>
         )}
-
       </div>
     </>
   )
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Event</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">Dashboard</button>
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
+              Dashboard
+            </button>
             <span className="text-secondary-light"> / Event</span>
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-            <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+            disabled={!isSuperAdmin && !listSchoolId}
+            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
             Add Event
           </button>
         </div>
       </div>
 
-      {/* Table Card */}
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-
-          {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-
-              {/* Export */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm"><i className="ri-file-upload-line text-md line-height-1"></i> Export</span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                  </span>
                   <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"><i className="ri-file-3-line"></i> PDF</button></li>
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"><i className="ri-file-excel-2-line"></i> Excel</button></li>
+                  <li>
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                      <i className="ri-file-3-line"></i> PDF
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                      <i className="ri-file-excel-2-line"></i> Excel
+                    </button>
+                  </li>
                 </ul>
               </div>
 
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
@@ -396,12 +555,7 @@ const Event = () => {
                   {columnOptions.map((column) => (
                     <li key={column.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
                         {column.label}
                       </label>
                     </li>
@@ -409,30 +563,42 @@ const Event = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
               >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
+                {[5, 10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search events..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
               />
-              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light"><i className="ri-search-line"></i></span>
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
             </div>
           </div>
 
-          {/* Table */}
+          {error ? <div className="px-20 pt-16 text-danger-600">{error}</div> : null}
+          {loading ? <div className="px-20 pt-16 text-secondary-light">Loading events...</div> : null}
+
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 900 }}>
               <thead>
@@ -443,7 +609,7 @@ const Event = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.schoolName ? <th scope="col">School</th> : null}
                   {visibleColumns.title ? <th scope="col">Title</th> : null}
                   {visibleColumns.eventFor ? <th scope="col">Event for</th> : null}
                   {visibleColumns.eventPlace ? <th scope="col">Event Place</th> : null}
@@ -455,89 +621,105 @@ const Event = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">No events found.</td></tr>
-                ) : paginated.map((row) => (
-                  <tr key={row.sl}>
-                    <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.sl)} onChange={() => handleSelectRow(row.sl)} />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                    {visibleColumns.school ? <td>{row.school}</td> : null}
-                    {visibleColumns.title ? <td className="fw-medium text-primary-light">{row.title}</td> : null}
-                    {visibleColumns.eventFor ? (
-                      <td><span className={eventForBadge(row.eventFor)}>{row.eventFor}</span></td>
-                    ) : null}
-                    {visibleColumns.eventPlace ? <td>{row.eventPlace}</td> : null}
-                    {visibleColumns.fromDate ? <td>{row.fromDate}</td> : null}
-                    {visibleColumns.toDate ? <td>{row.toDate}</td> : null}
-                    {visibleColumns.image ? (
-                      <td>
-                        {row.image ? (
-                          <img src={row.image} alt="event" style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4 }} />
-                        ) : (
-                          <span className="text-secondary-light text-sm">—</span>
-                        )}
-                      </td>
-                    ) : null}
-                    {visibleColumns.isViewOnWeb ? (
-                      <td>
-                        <div className="form-check form-switch d-flex justify-content-center mb-0">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            defaultChecked={row.isViewOnWeb}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </div>
-                      </td>
-                    ) : null}
-                    <td>
-                      <div className="d-flex align-items-center gap-10">
-                        <button
-                          type="button"
-                          className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          onClick={() => openEdit(row)}
-                          title="Edit"
-                        >
-                          <i className="ri-edit-line"></i>
-                        </button>
-                        <button
-                          type="button"
-                          className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          title="Delete"
-                        >
-                          <i className="ri-delete-bin-line"></i>
-                        </button>
-                      </div>
+                {paginatedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      No events found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  paginatedRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={selectedRows.includes(String(row.id))}
+                            onChange={() => handleSelectRow(String(row.id))}
+                          />
+                          <label className="form-check-label">{String(row.id).padStart(2, '0')}</label>
+                        </div>
+                      </td>
+                      {visibleColumns.schoolName ? <td>{row.schoolName}</td> : null}
+                      {visibleColumns.title ? <td className="fw-medium text-primary-light">{row.title}</td> : null}
+                      {visibleColumns.eventFor ? (
+                        <td>
+                          <span className={eventForBadge(row.eventFor)}>{row.eventFor}</span>
+                        </td>
+                      ) : null}
+                      {visibleColumns.eventPlace ? <td>{row.eventPlace}</td> : null}
+                      {visibleColumns.fromDate ? <td>{row.fromDate}</td> : null}
+                      {visibleColumns.toDate ? <td>{row.toDate}</td> : null}
+                      {visibleColumns.image ? (
+                        <td>
+                          {row.image ? (
+                            <img src={row.image} alt="event" style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4 }} />
+                          ) : (
+                            <span className="text-secondary-light text-sm">—</span>
+                          )}
+                        </td>
+                      ) : null}
+                      {visibleColumns.isViewOnWeb ? (
+                        <td>
+                          <div className="form-check form-switch d-flex justify-content-center mb-0">
+                            <input className="form-check-input" type="checkbox" defaultChecked={row.isViewOnWeb} style={{ cursor: 'pointer' }} />
+                          </div>
+                        </td>
+                      ) : null}
+                      <td>
+                        <div className="d-flex align-items-center gap-10">
+                          <button
+                            type="button"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => openEdit(row)}
+                            title="Edit"
+                          >
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
+                            title="Delete"
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                Prev
+              </button>
               {getVisiblePages().map((p) => (
-                <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
+                <button
+                  key={p}
+                  type="button"
+                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                  onClick={() => setCurrentPage(p)}
+                >
+                  {p}
+                </button>
               ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                Next
+              </button>
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* Add Modal */}
       <WizardPopup
         modalWidth="540px"
         open={isAddOpen}
@@ -547,13 +729,12 @@ const Event = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(ADD_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={() => handleSave(addForm, false)}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm, addPhotoRef, addPreview, setAddPreview, addStep)}
       </WizardPopup>
 
-      {/* Edit Modal */}
       <WizardPopup
         modalWidth="540px"
         open={isEditOpen}
@@ -563,63 +744,63 @@ const Event = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(EDIT_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={() => handleSave(editForm, true)}
         submitLabel="Update"
       >
-        {renderForm(editForm, setEditForm, editPhotoRef, editPreview, setEditPreview)}
+        {renderForm(editForm, setEditForm, editPhotoRef, editPreview, setEditPreview, editStep)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Events"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
+      <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Events" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  headOfficeId: value,
+                  schoolId: '',
+                }))
+              }
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) => setPendingFilters((prev) => ({ ...prev, schoolId: value }))}
+            />
+          ) : (
+            <div>
+              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                School
+              </label>
+              <select id="schoolId" className="form-control form-select" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
+                <option value="">Select School</option>
+                {schoolOptions.map((option) => (
+                  <option key={String(option.id)} value={String(option.id)}>
+                    {option.schoolName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor="eventFor" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Event for
             </label>
-            <select
-              id="eventFor"
-              className="form-control form-select"
-              value={pendingFilters.eventFor}
-              onChange={handlePendingFilterChange}
-            >
+            <select id="eventFor" className="form-control form-select" value={pendingFilters.eventFor} onChange={handlePendingFilterChange}>
               <option value="Select">Select Event for</option>
-              <option value="Students">Students</option>
-              <option value="Parents">Parents</option>
-              <option value="Staff">Staff</option>
-              <option value="All">All</option>
+              {eventForOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
           <div>
             <label htmlFor="isViewOnWeb" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Is View on Web?
             </label>
-            <select
-              id="isViewOnWeb"
-              className="form-control form-select"
-              value={pendingFilters.isViewOnWeb}
-              onChange={handlePendingFilterChange}
-            >
+            <select id="isViewOnWeb" className="form-control form-select" value={pendingFilters.isViewOnWeb} onChange={handlePendingFilterChange}>
               <option value="Select">Select</option>
               <option value="Yes">Yes</option>
               <option value="No">No</option>
@@ -631,20 +812,14 @@ const Event = () => {
             </button>
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <button
-              type="submit"
-              className="btn btn-primary-600 w-100"
-              onClick={() => setIsFilterSidebarOpen(false)}
-            >
+            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>
               Apply
             </button>
           </div>
         </form>
       </SlideSidebar>
-
     </div>
   )
 }
 
 export default Event
-

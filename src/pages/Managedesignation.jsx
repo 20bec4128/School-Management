@@ -9,7 +9,7 @@ import { useAuth } from '../context/useAuth'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchSchoolRoles } from '../apis/schoolRbacApi'
-import { createDesignation, deleteDesignation, fetchDesignations, updateDesignation } from '../apis/designationsApi'
+import { createDesignation, deleteDesignation, fetchDesignationsPage, updateDesignation } from '../apis/designationsApi'
 import { normalizeRole } from '../utils/roles'
 
 const emptyForm = {
@@ -89,6 +89,8 @@ const ManageDesignation = () => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
   const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState('')
 
@@ -99,6 +101,7 @@ const ManageDesignation = () => {
   const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
@@ -154,9 +157,7 @@ const ManageDesignation = () => {
   }
 
   const loadLookups = async () => {
-    // School admins don't need lookup lists; the school is fixed.
     if (isSchoolAdmin) return
-
     const tasks = []
     if (isSuperAdmin) {
       tasks.push(
@@ -166,7 +167,6 @@ const ManageDesignation = () => {
         }),
       )
     } else if (isHeadOfficeAdmin) {
-      // Still load head office list so we can show the name (optional); ignore failure.
       tasks.push(
         fetchHeadOfficesPage(0, 500).then((page) => {
           const content = Array.isArray(page?.content) ? page.content : []
@@ -174,13 +174,16 @@ const ManageDesignation = () => {
         }).catch(() => {}),
       )
     }
-
     tasks.push(fetchSchoolsLookup().then((list) => setSchools(Array.isArray(list) ? list : [])))
-
     await Promise.all(tasks)
   }
 
-  const loadDesignations = async ({ schoolId } = {}) => {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const loadDesignations = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
     const effectiveSchoolId = (() => {
       if (isSchoolAdmin) return authSchoolId
       if (isHeadOfficeAdmin) return schoolId ?? null
@@ -188,14 +191,20 @@ const ManageDesignation = () => {
       return null
     })()
 
-    // SUPER_ADMIN can list everything without selecting a school.
     if (!effectiveSchoolId && !isSuperAdmin) {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
       return
     }
 
-    const data = await fetchDesignations(isSuperAdmin && !effectiveSchoolId ? {} : { schoolId: effectiveSchoolId })
-    const list = Array.isArray(data) ? data : []
+    const data = await fetchDesignationsPage({ 
+      schoolId: effectiveSchoolId, 
+      page: page, 
+      size: size === -1 ? 999999 : size,
+      search: search
+    })
+    const list = Array.isArray(data?.content) ? data.content : []
     setRows(
       list.map((d) => ({
         id: d?.id,
@@ -211,70 +220,58 @@ const ManageDesignation = () => {
         note: d?.note ?? '',
       })),
     )
+    setTotalElements(data?.totalElements ?? 0)
+    setTotalPages(data?.totalPages ?? 0)
   }
 
   useEffect(() => {
-    if (status !== 'ready') return
-    if (!token) return
+    if (status !== 'ready' || !token) return
     setLoadError('')
     setBusy(true)
     Promise.resolve()
       .then(loadLookups)
       .then(() => {
-        const initialSchoolId = (() => {
-          if (isSchoolAdmin) return authSchoolId
-          if (scopeSchoolId) return Number(scopeSchoolId)
-          return null
-        })()
-        return loadDesignations({ schoolId: initialSchoolId })
+        const initialSchoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : null)
+        return loadDesignations({ 
+          schoolId: initialSchoolId,
+          page: currentPage - 1,
+          size: rowsPerPage,
+          search: debouncedSearch
+        })
       })
       .catch((e) => setLoadError(e?.message || 'Failed to load designations'))
       .finally(() => setBusy(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, token, role])
+  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch])
 
   useEffect(() => {
-    if (status !== 'ready') return
-    if (!token) return
-    if (isSchoolAdmin) return
-    if (isSuperAdmin) return
+    if (status !== 'ready' || !token || isSchoolAdmin || isSuperAdmin) return
     if (!scopeSchoolId) {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
       return
     }
     setLoadError('')
     setBusy(true)
-    loadDesignations({ schoolId: Number(scopeSchoolId) })
+    loadDesignations({ 
+      schoolId: Number(scopeSchoolId),
+      page: currentPage - 1,
+      size: rowsPerPage,
+      search: debouncedSearch
+    })
       .catch((e) => setLoadError(e?.message || 'Failed to load designations'))
       .finally(() => setBusy(false))
-  }, [status, token, isSchoolAdmin, scopeSchoolId])
+  }, [status, token, isSchoolAdmin, scopeSchoolId, currentPage, rowsPerPage, debouncedSearch])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return rows.filter((r) => {
-      const matchesSearch = !q || [r.schoolName, r.designation, r.note].join(' ').toLowerCase().includes(q)
-      const matchesSchool = filters.school === 'All' || r.schoolName === filters.school
-      const matchesDesignation = filters.designation === 'All' || r.designation === filters.designation
-      return matchesSearch && matchesSchool && matchesDesignation
-    })
-  }, [filters, rows, search])
+  const schoolsToRender = rows
   const schoolOptions = useMemo(() => Array.from(new Set(rows.map((item) => item.schoolName).filter(Boolean))), [rows])
   const designationOptions = useMemo(() => Array.from(new Set(rows.map((item) => item.designation).filter(Boolean))), [rows])
 
-  const pageSize = rowsPerPage === -1 ? Math.max(filtered.length, 1) : rowsPerPage
-  const totalPages = rowsPerPage === -1 ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize))
-
-  const paginated = useMemo(() => {
-    if (rowsPerPage === -1) return filtered
-    const start = (currentPage - 1) * pageSize
-    return filtered.slice(start, start + pageSize)
-  }, [currentPage, filtered, pageSize, rowsPerPage])
-
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(String(r.id)))
+  const allSelected = schoolsToRender.length > 0 && schoolsToRender.every((r) => selectedRows.includes(String(r.id)))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => String(r.id))])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => String(r.id) === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...schoolsToRender.map((r) => String(r.id))])])
+    else setSelectedRows((prev) => prev.filter((id) => !schoolsToRender.some((r) => String(r.id) === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -338,24 +335,13 @@ const ManageDesignation = () => {
 
   const schoolOptionsForForm = useMemo(() => {
     if (isSchoolAdmin) return []
-
-    const selectedHeadOfficeId = (() => {
-      if (isSuperAdmin) return formHeadOfficeId(addForm, editForm, isAddOpen, isEditOpen)
-      if (isHeadOfficeAdmin) return authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-      return ''
-    })()
-
+    const selectedHeadOfficeId = isSuperAdmin 
+      ? (isAddOpen ? addForm?.headOfficeId : editForm?.headOfficeId) 
+      : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
     const list = Array.isArray(schools) ? schools : []
     if (!selectedHeadOfficeId) return list
     return list.filter((s) => String(s?.headOfficeId ?? '') === String(selectedHeadOfficeId))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schools, authHeadOfficeId, isSchoolAdmin, isHeadOfficeAdmin, isSuperAdmin, isAddOpen, isEditOpen, addForm.headOfficeId, editForm.headOfficeId])
-
-  function formHeadOfficeId(addForm, editForm, isAddOpen, isEditOpen) {
-    if (isAddOpen) return addForm?.headOfficeId || ''
-    if (isEditOpen) return editForm?.headOfficeId || ''
-    return ''
-  }
+  }, [schools, authHeadOfficeId, isSchoolAdmin, isSuperAdmin, isAddOpen, addForm.headOfficeId, editForm.headOfficeId])
 
   const renderForm = (form, setter) => (
     <>
@@ -377,7 +363,7 @@ const ManageDesignation = () => {
 
         {isHeadOfficeAdmin && !isSuperAdmin ? (
           <FormField label="Head Office" required full>
-            <input className="avm-input" value={headOfficeName || resolveHeadOfficeName(authHeadOfficeId) || (authHeadOfficeId != null ? `Head Office ${authHeadOfficeId}` : '')} readOnly />
+            <input className="avm-input" value={headOfficeName || resolveHeadOfficeName(authHeadOfficeId) || ''} readOnly />
           </FormField>
         ) : null}
 
@@ -428,18 +414,7 @@ const ManageDesignation = () => {
 
         <FormField label="Note" full noIcon>
           <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-            <span
-              style={{
-                position: 'absolute',
-                left: '0.85rem',
-                top: '1.15rem',
-                color: '#667085',
-                fontSize: '0.95rem',
-                lineHeight: 1,
-                pointerEvents: 'none',
-                zIndex: 1,
-              }}
-            >
+            <span style={{ position: 'absolute', left: '0.85rem', top: '1.15rem', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
               <i className="ri-sticky-note-line" />
             </span>
             <textarea
@@ -458,14 +433,11 @@ const ManageDesignation = () => {
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Manage Designation</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
-              Dashboard
-            </button>
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">Dashboard</button>
             <span className="text-secondary-light"> / Manage Designation</span>
           </div>
         </div>
@@ -493,16 +465,12 @@ const ManageDesignation = () => {
         </div>
       </div>
 
-      {/* Table Card */}
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {loadError ? (
-            <div className="px-20 py-12 text-danger">{loadError}</div>
-          ) : null}
-          {/* Toolbar */}
+          {loadError ? <div className="px-20 py-12 text-danger">{loadError}</div> : null}
+          
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
@@ -511,20 +479,11 @@ const ManageDesignation = () => {
                   <span><i className="ri-arrow-down-s-line" /></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-3-line" /> PDF
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
-                      <i className="ri-file-excel-2-line" /> Excel
-                    </button>
-                  </li>
+                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"><i className="ri-file-3-line" /> PDF</button></li>
+                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"><i className="ri-file-excel-2-line" /> Excel</button></li>
                 </ul>
               </div>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
@@ -534,28 +493,19 @@ const ManageDesignation = () => {
                   {columnOptions.map((column) => (
                     <li key={column.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
                         {column.label}
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
+
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line" /></span>
               </button>
 
-              {/* Rows per page */}
               <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
@@ -563,7 +513,6 @@ const ManageDesignation = () => {
               />
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
@@ -578,7 +527,6 @@ const ManageDesignation = () => {
             </div>
           </div>
 
-          {/* Table */}
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 700 }}>
               <thead>
@@ -597,18 +545,16 @@ const ManageDesignation = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {schoolsToRender.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
-                      No designations found.
-                    </td>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No designations found.</td>
                   </tr>
-                ) : paginated.map((row) => (
+                ) : schoolsToRender.map((row, idx) => (
                   <tr key={String(row.id)}>
                     <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input type="checkbox" className="form-check-input" checked={selectedRows.includes(String(row.id))} onChange={() => handleSelectRow(String(row.id))} />
-                          <label className="form-check-label">{row.id}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                     </td>
                     {visibleColumns.school ? <td>{row.schoolName}</td> : null}
@@ -617,35 +563,17 @@ const ManageDesignation = () => {
                     {visibleColumns.note ? <td>{row.note || '-'}</td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">
-                        <button
-                          type="button"
-                          className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          onClick={() => openEdit(row)}
-                          title="Edit"
-                        >
-                          <i className="ri-edit-line" />
-                        </button>
-                        <button
-                          type="button"
-                          className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          onClick={async () => {
+                        <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)} title="Edit"><i className="ri-edit-line" /></button>
+                        <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={async () => {
                             if (!row?.id) return
-                            setLoadError('')
-                            setBusy(true)
+                            setLoadError(''); setBusy(true)
                             try {
                               await deleteDesignation(row.id)
                               const nextSchoolId = isSchoolAdmin ? authSchoolId : row.schoolId
-                              await loadDesignations({ schoolId: nextSchoolId })
-                            } catch (e) {
-                              setLoadError(e?.message || 'Failed to delete designation')
-                            } finally {
-                              setBusy(false)
-                            }
-                          }}
-                          title="Delete"
-                        >
-                          <i className="ri-delete-bin-line" />
-                        </button>
+                              await loadDesignations({ schoolId: nextSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+                            } catch (e) { setLoadError(e?.message || 'Failed to delete designation') }
+                            finally { setBusy(false) }
+                          }} title="Delete"><i className="ri-delete-bin-line" /></button>
                       </div>
                     </td>
                   </tr>
@@ -654,35 +582,22 @@ const ManageDesignation = () => {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {rowsPerPage === -1 ? filtered.length : Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {rowsPerPage === -1 ? totalElements : Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                Prev
-              </button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
               {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
+                <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
               ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                Next
-              </button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Add Designation Modal */}
       <WizardPopup
         modalWidth="500px"
         open={isAddOpen}
@@ -694,47 +609,26 @@ const ManageDesignation = () => {
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
         onSubmit={async () => {
           setLoadError('')
-          if (isSuperAdmin && !String(addForm.headOfficeId || '').trim()) {
-            setLoadError('Head office is required')
-            return
-          }
-          const effectiveSchoolId = (() => {
-            if (isSchoolAdmin) return authSchoolId
-            const v = addForm.schoolId
-            return v ? Number(v) : null
-          })()
-          if (!effectiveSchoolId) {
-            setLoadError('School is required')
-            return
-          }
+          if (isSuperAdmin && !String(addForm.headOfficeId || '').trim()) { setLoadError('Head office is required'); return }
+          const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (addForm.schoolId ? Number(addForm.schoolId) : null)
+          if (!effectiveSchoolId) { setLoadError('School is required'); return }
           const name = (addForm.designation || '').trim()
-          if (!name) {
-            setLoadError('Designation name is required')
-            return
-          }
+          if (!name) { setLoadError('Designation name is required'); return }
           const roleValue = normalizeRoleValue(addForm.role)
-          if (!roleValue) {
-            setLoadError('Role is required')
-            return
-          }
+          if (!roleValue) { setLoadError('Role is required'); return }
           setBusy(true)
           try {
             await createDesignation({ schoolId: effectiveSchoolId, role: roleValue, name, note: addForm.note })
             setIsAddOpen(false)
-            await loadRolesForSchool(effectiveSchoolId)
-            await loadDesignations({ schoolId: effectiveSchoolId })
-          } catch (e) {
-            setLoadError(e?.message || 'Failed to create designation')
-          } finally {
-            setBusy(false)
-          }
+            await loadDesignations({ schoolId: effectiveSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+          } catch (e) { setLoadError(e?.message || 'Failed to create designation') }
+          finally { setBusy(false) }
         }}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* Edit Designation Modal */}
       <WizardPopup
         modalWidth="500px"
         open={isEditOpen}
@@ -747,106 +641,45 @@ const ManageDesignation = () => {
         onSubmit={async () => {
           setLoadError('')
           const id = editForm.designationId
-          if (!id) {
-            setLoadError('Invalid designation')
-            return
-          }
-          if (isSuperAdmin && !String(editForm.headOfficeId || '').trim()) {
-            setLoadError('Head office is required')
-            return
-          }
-          const effectiveSchoolId = (() => {
-            if (isSchoolAdmin) return authSchoolId
-            const v = editForm.schoolId
-            return v ? Number(v) : null
-          })()
-          if (!effectiveSchoolId) {
-            setLoadError('School is required')
-            return
-          }
+          if (!id) { setLoadError('Invalid designation'); return }
+          if (isSuperAdmin && !String(editForm.headOfficeId || '').trim()) { setLoadError('Head office is required'); return }
+          const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (editForm.schoolId ? Number(editForm.schoolId) : null)
+          if (!effectiveSchoolId) { setLoadError('School is required'); return }
           const name = (editForm.designation || '').trim()
-          if (!name) {
-            setLoadError('Designation name is required')
-            return
-          }
+          if (!name) { setLoadError('Designation name is required'); return }
           const roleValue = normalizeRoleValue(editForm.role)
-          if (!roleValue) {
-            setLoadError('Role is required')
-            return
-          }
+          if (!roleValue) { setLoadError('Role is required'); return }
           setBusy(true)
           try {
             await updateDesignation(id, { schoolId: effectiveSchoolId, role: roleValue, name, note: editForm.note })
             setIsEditOpen(false)
-            await loadRolesForSchool(effectiveSchoolId)
-            await loadDesignations({ schoolId: effectiveSchoolId })
-          } catch (e) {
-            setLoadError(e?.message || 'Failed to update designation')
-          } finally {
-            setBusy(false)
-          }
+            await loadDesignations({ schoolId: effectiveSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+          } catch (e) { setLoadError(e?.message || 'Failed to update designation') }
+          finally { setBusy(false) }
         }}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Designations"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
-        <form
-          className="p-20 d-grid grid-cols-2 gap-16"
-          onSubmit={(e) => {
-            e.preventDefault()
-            setFilters(pendingFilters)
-            setCurrentPage(1)
-            setIsFilterSidebarOpen(false)
-          }}
-        >
+      <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Designations" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
+        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={(e) => { e.preventDefault(); setFilters(pendingFilters); setCurrentPage(1); setIsFilterSidebarOpen(false) }}>
           <div>
             <label htmlFor="filterSchoolDesignation" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select
-              id="filterSchoolDesignation"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={(e) => setPendingFilters((prev) => ({ ...prev, school: e.target.value }))}
-            >
+            <select id="filterSchoolDesignation" className="form-control form-select" value={pendingFilters.school} onChange={(e) => setPendingFilters((prev) => ({ ...prev, school: e.target.value }))}>
               <option value="All">All</option>
               {schoolOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </div>
           <div>
             <label htmlFor="filterDesignation" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Designation</label>
-            <select
-              id="filterDesignation"
-              className="form-control form-select"
-              value={pendingFilters.designation}
-              onChange={(e) => setPendingFilters((prev) => ({ ...prev, designation: e.target.value }))}
-            >
+            <select id="filterDesignation" className="form-control form-select" value={pendingFilters.designation} onChange={(e) => setPendingFilters((prev) => ({ ...prev, designation: e.target.value }))}>
               <option value="All">All</option>
               {designationOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </div>
-          <div>
-            <button
-              type="button"
-              className="btn btn-danger-200 text-danger-600 w-100"
-              onClick={() => {
-                const reset = { school: 'All', designation: 'All' }
-                setPendingFilters(reset)
-                setFilters(reset)
-                setCurrentPage(1)
-              }}
-            >
-              Reset
-            </button>
-          </div>
-          <div>
-            <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
-          </div>
+          <div><button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={() => { const reset = { school: 'All', designation: 'All' }; setPendingFilters(reset); setFilters(reset); setCurrentPage(1) }}>Reset</button></div>
+          <div><button type="submit" className="btn btn-primary-600 w-100">Apply</button></div>
         </form>
       </SlideSidebar>
     </div>
@@ -854,4 +687,3 @@ const ManageDesignation = () => {
 }
 
 export default ManageDesignation
-

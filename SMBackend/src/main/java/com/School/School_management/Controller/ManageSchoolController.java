@@ -50,7 +50,9 @@ public class ManageSchoolController {
     @GetMapping
     public Page<ManageSchoolDto> getAllSchools(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status
     ) {
         CurrentUser user = CurrentUserHolder.get();
         Long schoolId = null;
@@ -59,7 +61,7 @@ public class ManageSchoolController {
             if (user.isSchoolScoped() && user.schoolId() != null) schoolId = user.schoolId();
             if (user.isHeadOfficeScopedAdmin() && user.headOfficeId() != null) headOfficeId = user.headOfficeId();
         }
-        return manageSchoolService.getAllSchools(page, size, headOfficeId, schoolId);
+        return manageSchoolService.getAllSchools(page, size, headOfficeId, schoolId, search, status);
     }
 
     @GetMapping("/{id}")

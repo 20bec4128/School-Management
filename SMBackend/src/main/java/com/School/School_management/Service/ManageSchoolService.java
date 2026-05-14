@@ -19,7 +19,7 @@ public interface ManageSchoolService {
             com.School.School_management.auth.CurrentUser user
     );
 
-    Page<ManageSchoolDto> getAllSchools(int page, int size, Long headOfficeId, Long schoolId);
+    Page<ManageSchoolDto> getAllSchools(int page, int size, Long headOfficeId, Long schoolId, String search, String status);
 
     ManageSchoolDto getSchoolById(Long id);
 

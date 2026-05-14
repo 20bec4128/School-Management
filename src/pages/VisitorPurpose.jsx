@@ -1,25 +1,28 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { useSchool } from '../context/useSchool'
+import { useAuth } from '../context/useAuth'
+import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import { 
+  fetchVisitorPurposes, 
+  createVisitorPurpose, 
+  updateVisitorPurpose, 
+  deleteVisitorPurpose 
+} from '../apis/visitorPurposeApi'
 import '../assets/css/addModalShared.css'
 
-const visitorPurposes = [
-  { sl: '01', school: 'Windsor Park High School', visitorPurpose: 'Meeting with Teacher' },
-  { sl: '02', school: 'Windsor Park High School', visitorPurpose: 'Parent-Teacher Conference' },
-  { sl: '03', school: 'Windsor Park High School', visitorPurpose: 'Admission Inquiry' },
-  { sl: '04', school: 'Windsor Park High School', visitorPurpose: 'Fee Payment' },
-  { sl: '05', school: 'Windsor Park High School', visitorPurpose: 'Document Collection' },
-  { sl: '06', school: 'Windsor Park High School', visitorPurpose: 'General Inquiry' },
-]
-
 const emptyForm = {
-  school: '',
-  visitorPurpose: '',
+  schoolId: '',
+  purpose: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: '',
 }
 
 const STEPS = ['Basic']
@@ -30,8 +33,8 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
-  { key: 'visitorPurpose', label: 'Visitor Purpose' },
+  { key: 'schoolId', label: 'School ID' },
+  { key: 'purpose', label: 'Visitor Purpose' },
 ]
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
@@ -69,6 +72,13 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const VisitorPurpose = () => {
+  const { role, schoolId: authSchoolId } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -83,20 +93,61 @@ const VisitorPurpose = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const listSchoolId = isSuperAdmin
+    ? (activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const isSchoolLocked = !isSuperAdmin && !!listSchoolId
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(visitorPurposes.map((r) => r.school))),
-    [],
-  )
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      if (isSuperAdmin) {
+        if (listSchoolId) {
+          const list = await fetchVisitorPurposes(listSchoolId)
+          setData(Array.isArray(list) ? list : [])
+        } else {
+          const schoolIds = normalizeSchoolIds(contextSchoolOptions)
+          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchVisitorPurposes(schoolId))
+          setData(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.purpose ?? ''}`)))
+        }
+      } else {
+        if (!listSchoolId) {
+          setData([])
+          setError('Select a school before viewing visitor purposes.')
+          return
+        }
+        const list = await fetchVisitorPurposes(listSchoolId)
+        setData(Array.isArray(list) ? list : [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch visitor purposes:', err)
+      setError(err?.message || 'Failed to fetch visitor purposes')
+      setData([])
+    } finally {
+      setLoading(false)
+    }
+  }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId) {
+      setAddForm((prev) => ({ ...prev, schoolId: listSchoolId }))
+    }
+  }, [isSuperAdmin, listSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return visitorPurposes.filter((r) => {
-      const matchesSearch = !q || [r.school, r.visitorPurpose].join(' ').toLowerCase().includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
+    return data.filter((r) => {
+      const matchesSearch = !q || [String(r.schoolId), r.purpose].join(' ').toLowerCase().includes(q)
+      const matchesSchool = !filters.schoolId || String(r.schoolId) === String(filters.schoolId)
       return matchesSearch && matchesSchool
     })
-  }, [search, filters])
+  }, [search, filters, data])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -105,11 +156,11 @@ const VisitorPurpose = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -138,12 +189,65 @@ const VisitorPurpose = () => {
     setCurrentPage(1)
   }
 
-  const openAdd = () => { setAddForm(emptyForm); setAddStep(0); setIsAddOpen(true) }
+  const openAdd = () => {
+    setError('')
+    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
+    setAddStep(0)
+    setIsAddOpen(true)
+  }
 
   const openEdit = (row) => {
-    setEditForm({ school: row.school, visitorPurpose: row.visitorPurpose })
+    setError('')
+    if (isSuperAdmin) {
+      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
+      if (school?.headOfficeId != null) {
+        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
+      }
+    }
+    setEditForm({ id: row.id, schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId, purpose: row.purpose })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    purpose: form.purpose || '',
+  })
+
+  const handleSave = async () => {
+    try {
+      if (!addForm.schoolId || !addForm.purpose) {
+        alert('Please fill all required fields')
+        return
+      }
+      await createVisitorPurpose(buildPayload(addForm))
+      setIsAddOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to save visitor purpose')
+      alert('Failed to save visitor purpose')
+    }
+  }
+
+  const handleUpdate = async () => {
+    try {
+      await updateVisitorPurpose(editForm.id, buildPayload(editForm))
+      setIsEditOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to update visitor purpose')
+      alert('Failed to update visitor purpose')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this purpose?')) return
+    try {
+      await deleteVisitorPurpose(id)
+      void loadData()
+    } catch (err) {
+      alert('Failed to delete visitor purpose')
+    }
   }
 
   const getVisiblePages = () => {
@@ -158,20 +262,46 @@ const VisitorPurpose = () => {
     <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+        {isSuperAdmin ? (
+          <div className="avm-field full">
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedHeadOfficeId(value)
+                manualScope.setSelectedSchoolId('')
+                setter((prev) => ({ ...prev, schoolId: '' }))
+              }}
+              selectedSchoolId={form.schoolId}
+              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
+            />
+          </div>
+        ) : (
+          <FormField label="School Name" required full>
+            <select 
+              className="avm-select" 
+              id="schoolId" 
+              value={form.schoolId} 
+              onChange={handleChange(setter)}
+              disabled={isSchoolLocked}
+            >
+              <option value="">--Select School--</option>
+              {schoolOptions.map(s => (
+                <option key={s.id} value={s.id}>{s.schoolName}</option>
+              ))}
+            </select>
+          </FormField>
+        )}
 
         <FormField label="Visitor Purpose" required full>
           <input
             type="text"
             className="avm-input"
-            id="visitorPurpose"
+            id="purpose"
             placeholder="Enter visitor purpose"
-            value={form.visitorPurpose}
+            value={form.purpose}
             onChange={handleChange(setter)}
           />
         </FormField>
@@ -191,12 +321,25 @@ const VisitorPurpose = () => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+          <button 
+            type="button" 
+            className="btn btn-primary-600 d-flex align-items-center gap-6" 
+            onClick={openAdd}
+            disabled={!isSuperAdmin && !listSchoolId}
+            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+          >
             <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
             Add Visitor Purpose
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {/* Table Card */}
       <div className="card h-100">
@@ -204,7 +347,6 @@ const VisitorPurpose = () => {
           {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm"><i className="ri-file-upload-line text-md line-height-1"></i> Export</span>
@@ -216,17 +358,11 @@ const VisitorPurpose = () => {
                 </ul>
               </div>
 
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
@@ -236,12 +372,7 @@ const VisitorPurpose = () => {
                   {columnOptions.map((column) => (
                     <li key={column.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
                         {column.label}
                       </label>
                     </li>
@@ -249,12 +380,7 @@ const VisitorPurpose = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-              >
+              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
                 {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
@@ -283,24 +409,26 @@ const VisitorPurpose = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.visitorPurpose ? <th scope="col">Visitor Purpose</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
+                  {visibleColumns.purpose ? <th scope="col">Visitor Purpose</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">No visitor purposes found.</td></tr>
-                ) : paginated.map((row) => (
-                  <tr key={row.sl}>
+                {loading ? (
+                   <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">Loading...</td></tr>
+                ) : paginated.length === 0 ? (
+                  <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No visitor purposes found.</td></tr>
+                ) : paginated.map((row, idx) => (
+                  <tr key={row.id}>
                     <td>
                         <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.sl)} onChange={() => handleSelectRow(row.sl)} />
-                          <label className="form-check-label">{row.sl}</label>
+                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.id)} onChange={() => handleSelectRow(row.id)} />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                    {visibleColumns.school ? <td>{row.school}</td> : null}
-                    {visibleColumns.visitorPurpose ? <td className="fw-medium text-primary-light">{row.visitorPurpose}</td> : null}
+                    {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
+                    {visibleColumns.purpose ? <td className="fw-medium text-primary-light">{row.purpose}</td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">
                         <button
@@ -314,6 +442,7 @@ const VisitorPurpose = () => {
                         <button
                           type="button"
                           className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                          onClick={() => handleDelete(row.id)}
                           title="Delete"
                         >
                           <i className="ri-delete-bin-line"></i>
@@ -353,7 +482,7 @@ const VisitorPurpose = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleSave}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
@@ -369,7 +498,7 @@ const VisitorPurpose = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}
@@ -383,22 +512,36 @@ const VisitorPurpose = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <div className="full">
+              <ManualScopeSelectors
+                enabled={isSuperAdmin}
+                headOffices={manualScope.headOffices}
+                schoolOptions={schoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId}
+                onHeadOfficeChange={(val) => setPendingFilters((p) => ({ ...p, headOfficeId: val, schoolId: '' }))}
+                selectedSchoolId={pendingFilters.schoolId}
+                onSchoolChange={(val) => setPendingFilters((p) => ({ ...p, schoolId: val }))}
+              />
+            </div>
+          ) : (
+            <div className="full">
+              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                School
+              </label>
+              <select
+                id="schoolId"
+                className="form-control form-select"
+                value={pendingFilters.schoolId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="">All Schools</option>
+                {(contextSchoolOptions || []).map((s) => (
+                  <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
