@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createSchoolWithAdmin, deleteSchool, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
@@ -196,6 +197,14 @@ const ManageSchool = () => {
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [search])
   const [addFrontendLogoPreview, setAddFrontendLogoPreview] = useState(null)
   const [editFrontendLogoPreview, setEditFrontendLogoPreview] = useState(null)
   const [addAdminLogoPreview, setAddAdminLogoPreview] = useState(null)
@@ -227,35 +236,15 @@ const ManageSchool = () => {
     return normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)))
   }, [currentHeadOfficeId, currentHeadOfficeName, headOffices, isHeadOfficeScoped])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+  const schoolsToRender = useMemo(() => schools, [schools])
 
-    return schools.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.schoolName, row.address, row.phone, row.email, row.status]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
-      const matchesStatus = filters.status === 'Select' || row.status === filters.status
-
-      return matchesSearch && matchesSchool && matchesStatus
-    })
-  }, [schools, search, filters])
-
-  const paginated = useMemo(() => {
-    return filtered
-  }, [filtered])
-
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
+  const allSelected = schoolsToRender.length > 0 && schoolsToRender.every((row) => selectedRows.includes(row.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.id)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...schoolsToRender.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.id === id)))
+      setSelectedRows((prev) => prev.filter((id) => !schoolsToRender.some((row) => row.id === id)))
     }
   }
 
@@ -372,7 +361,8 @@ const ManageSchool = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchSchoolsPage(currentPage - 1, rowsPerPage)
+      const effectiveSearch = filters.school !== 'Select' ? filters.school : debouncedSearch
+      const data = await fetchSchoolsPage(currentPage - 1, rowsPerPage, effectiveSearch, filters.status)
       const normalizeRows = (rows) =>
         (Array.isArray(rows) ? rows : []).map((r) => ({ ...r, status: toUiStatus(r?.status) }))
 
@@ -398,7 +388,7 @@ const ManageSchool = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, rowsPerPage])
+  }, [currentPage, rowsPerPage, debouncedSearch, filters])
 
   const loadHeadOffices = useCallback(async () => {
     if (!isSuperAdmin) {
@@ -1303,20 +1293,14 @@ const ManageSchool = () => {
                 </ul>
               </div>
 
-              <select
+              <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="position-relative">
@@ -1370,7 +1354,7 @@ const ManageSchool = () => {
                       Loading schools...
                     </td>
                   </tr>
-                ) : paginated.length === 0 ? (
+                ) : schoolsToRender.length === 0 ? (
                   <tr>
                     <td
                       colSpan={visibleColumnCount + 2}
@@ -1380,7 +1364,7 @@ const ManageSchool = () => {
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row, idx) => (
+                  schoolsToRender.map((row, idx) => (
                     <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -1460,7 +1444,7 @@ const ManageSchool = () => {
               Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
               {totalElements === 0
                 ? 0
-                : Math.min((currentPage - 1) * rowsPerPage + filtered.length, totalElements)} of {totalElements}
+                : Math.min((currentPage - 1) * rowsPerPage + schoolsToRender.length, totalElements)} of {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">

@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { normalizeRole } from '../utils/roles'
 
-const STORAGE_KEY = 'sm_active_school_id'
+const STORAGE_KEY_SCHOOL = 'sm_active_school_id'
 
 export const SchoolContext = createContext({
   activeSchoolId: null, // string | null (null means "ALL" for head-office/global roles)
@@ -12,9 +12,9 @@ export const SchoolContext = createContext({
   isSchoolSelectionEnabled: false,
 })
 
-const readStored = () => {
+const readStored = (key) => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(key)
     if (raw == null) return null
     const v = String(raw).trim()
     if (!v || v.toUpperCase() === 'ALL') return null
@@ -24,10 +24,10 @@ const readStored = () => {
   }
 }
 
-const writeStored = (value) => {
+const writeStored = (key, value) => {
   try {
-    if (value == null) localStorage.removeItem(STORAGE_KEY)
-    else localStorage.setItem(STORAGE_KEY, String(value))
+    if (value == null) localStorage.removeItem(key)
+    else localStorage.setItem(key, String(value))
   } catch {
     // ignore
   }
@@ -40,20 +40,19 @@ export const SchoolProvider = ({ user, children }) => {
 
   const isSchoolSelectionEnabled = isHeadOfficeAdmin || isSuperAdmin
 
-  const [activeSchoolId, setActiveSchoolIdState] = useState(() => readStored())
-  const [schoolOptions, setSchoolOptions] = useState([])
+  const [activeSchoolId, setActiveSchoolIdState] = useState(() => readStored(STORAGE_KEY_SCHOOL))
+  const [allSchools, setAllSchools] = useState([])
 
   const refreshSchools = useCallback(async () => {
     if (!isSchoolSelectionEnabled) {
-      setSchoolOptions([])
+      setAllSchools([])
       return
     }
     try {
       const list = await fetchSchoolsLookup()
-      const rows = Array.isArray(list) ? list : []
-      setSchoolOptions(rows)
+      setAllSchools(Array.isArray(list) ? list : [])
     } catch {
-      setSchoolOptions([])
+      setAllSchools([])
     }
   }, [isSchoolSelectionEnabled])
 
@@ -61,7 +60,7 @@ export const SchoolProvider = ({ user, children }) => {
     (value) => {
       const normalized = value == null || String(value).trim() === '' ? null : String(value)
       setActiveSchoolIdState(normalized)
-      writeStored(normalized)
+      writeStored(STORAGE_KEY_SCHOOL, normalized)
       window.dispatchEvent(new Event('sm:school-changed'))
     },
     [],
@@ -69,14 +68,15 @@ export const SchoolProvider = ({ user, children }) => {
 
   useEffect(() => {
     if (!isSchoolSelectionEnabled) {
-      // For school-scoped roles, always clear any stored global selection.
       setActiveSchoolIdState(null)
-      writeStored(null)
-      setSchoolOptions([])
-      return
+      writeStored(STORAGE_KEY_SCHOOL, null)
+      setAllSchools([])
+    } else {
+      void refreshSchools()
     }
-    void refreshSchools()
   }, [isSchoolSelectionEnabled, refreshSchools])
+
+  const schoolOptions = useMemo(() => allSchools, [allSchools])
 
   const value = useMemo(
     () => ({
@@ -86,9 +86,14 @@ export const SchoolProvider = ({ user, children }) => {
       refreshSchools,
       isSchoolSelectionEnabled,
     }),
-    [activeSchoolId, isSchoolSelectionEnabled, refreshSchools, schoolOptions, setActiveSchoolId],
+    [
+      activeSchoolId,
+      setActiveSchoolId,
+      schoolOptions,
+      refreshSchools,
+      isSchoolSelectionEnabled,
+    ],
   )
 
   return <SchoolContext.Provider value={value}>{children}</SchoolContext.Provider>
 }
-

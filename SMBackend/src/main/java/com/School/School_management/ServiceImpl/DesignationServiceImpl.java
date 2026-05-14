@@ -15,9 +15,13 @@ import com.School.School_management.auth.CurrentUserHolder;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 @Service
 @Transactional
 public class DesignationServiceImpl implements DesignationService {
@@ -30,7 +34,6 @@ public class DesignationServiceImpl implements DesignationService {
         this.schoolRepository = schoolRepository;
     }
 
-    @Override
     @Transactional(readOnly = true)
     public List<DesignationDto> list(Long schoolId, String role) {
         CurrentUser user = CurrentUserHolder.get();
@@ -51,6 +54,38 @@ public class DesignationServiceImpl implements DesignationService {
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DesignationDto> listPaginated(Long schoolId, int page, int size, String search) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        String normalizedSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
+
+        if (user.isSuperAdmin() && schoolId == null) {
+            List<DesignationDto> rows = designationRepository.findAllByOrderByIdDesc()
+                    .stream()
+                    .map(this::toDto)
+                    .filter(dto -> {
+                        if (normalizedSearch == null) return true;
+                        String haystack = String.join(" ",
+                                safe(dto.getSchoolName()),
+                                safe(dto.getRole()),
+                                safe(dto.getName()),
+                                safe(dto.getNote()))
+                                .toLowerCase();
+                        return haystack.contains(normalizedSearch.toLowerCase());
+                    })
+                    .toList();
+            return slice(rows, pageable);
+        }
+
+        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+        return designationRepository.searchDesignations(effectiveSchoolId, normalizedSearch, pageable)
+                .map(this::toDto);
     }
 
     @Override
@@ -200,5 +235,15 @@ public class DesignationServiceImpl implements DesignationService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Page<DesignationDto> slice(List<DesignationDto> rows, Pageable pageable) {
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), rows.size());
+        int end = Math.min(start + pageable.getPageSize(), rows.size());
+        return new PageImpl<>(rows.subList(start, end), pageable, rows.size());
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

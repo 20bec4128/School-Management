@@ -1,25 +1,28 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import {
+  createComplainType,
+  deleteComplainType,
+  fetchComplainTypes,
+  updateComplainType,
+} from '../apis/complainTypeApi'
 import '../assets/css/addModalShared.css'
 
-const complainTypes = [
-  { sl: '01', school: 'Windsor Park High School', complainType: 'Bullying' },
-  { sl: '02', school: 'Windsor Park High School', complainType: 'Academic Issue' },
-  { sl: '03', school: 'Windsor Park High School', complainType: 'Infrastructure Problem' },
-  { sl: '04', school: 'Windsor Park High School', complainType: 'Teacher Misconduct' },
-  { sl: '05', school: 'Windsor Park High School', complainType: 'Fee Dispute' },
-  { sl: '06', school: 'Windsor Park High School', complainType: 'Other' },
-]
-
 const emptyForm = {
-  school: '',
+  headOfficeId: '',
+  schoolId: '',
   complainType: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  schoolId: '',
 }
 
 const STEPS = ['Basic']
@@ -30,7 +33,7 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolId', label: 'School ID' },
   { key: 'complainType', label: 'Complain Type' },
 ]
 
@@ -69,6 +72,13 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ComplainType = () => {
+  const { role, schoolId: authSchoolId } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -83,20 +93,61 @@ const ComplainType = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const listSchoolId = isSuperAdmin
+    ? (activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const isSchoolLocked = !isSuperAdmin && !!listSchoolId
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(complainTypes.map((r) => r.school))),
-    [],
-  )
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      if (isSuperAdmin) {
+        if (listSchoolId) {
+          const list = await fetchComplainTypes(listSchoolId)
+          setData(Array.isArray(list) ? list : [])
+        } else {
+          const schoolIds = normalizeSchoolIds(contextSchoolOptions)
+          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchComplainTypes(schoolId))
+          setData(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.complainType ?? ''}`)))
+        }
+      } else {
+        if (!listSchoolId) {
+          setData([])
+          setError('Select a school before viewing complain types.')
+          return
+        }
+        const list = await fetchComplainTypes(listSchoolId)
+        setData(Array.isArray(list) ? list : [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch complain types:', err)
+      setError(err?.message || 'Failed to fetch complain types')
+      setData([])
+    } finally {
+      setLoading(false)
+    }
+  }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId) {
+      setAddForm((prev) => ({ ...prev, schoolId: listSchoolId }))
+    }
+  }, [isSuperAdmin, listSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return complainTypes.filter((r) => {
-      const matchesSearch = !q || [r.school, r.complainType].join(' ').toLowerCase().includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
+    return data.filter((row) => {
+      const matchesSearch = !q || [String(row.schoolId), row.complainType].join(' ').toLowerCase().includes(q)
+      const matchesSchool = !filters.schoolId || String(row.schoolId) === String(filters.schoolId)
       return matchesSearch && matchesSchool
     })
-  }, [search, filters])
+  }, [data, filters, search])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -105,29 +156,32 @@ const ComplainType = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
 
-  const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+  const handleSelectAll = (event) => {
+    if (event.target.checked) {
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.id)])])
+    } else {
+      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.id === id)))
+    }
   }
 
   const handleSelectRow = (id) => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
+  const handleChange = (setter) => (event) => {
+    const { id, value } = event.target
     setter((prev) => ({ ...prev, [id]: value }))
   }
 
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
+  const handlePendingFilterChange = (event) => {
+    const { id, value } = event.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
+  const handleApplyFilters = (event) => {
+    event.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
   }
@@ -138,19 +192,78 @@ const ComplainType = () => {
     setCurrentPage(1)
   }
 
-  const openAdd = () => { setAddForm(emptyForm); setAddStep(0); setIsAddOpen(true) }
+  const openAdd = () => {
+    setError('')
+    setAddForm({ ...emptyForm, headOfficeId: manualScope.selectedHeadOfficeId || '', schoolId: isSuperAdmin ? '' : listSchoolId || '' })
+    setAddStep(0)
+    setIsAddOpen(true)
+  }
 
   const openEdit = (row) => {
-    setEditForm({ school: row.school, complainType: row.complainType })
+    setError('')
+    const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
+    if (school?.headOfficeId != null) {
+      manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
+    }
+    setEditForm({
+      id: row.id,
+      headOfficeId:
+        row?.headOfficeId != null
+          ? String(row.headOfficeId)
+          : manualScope.selectedHeadOfficeId || '',
+      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
+      complainType: row.complainType || '',
+    })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    complainType: form.complainType || '',
+  })
+
+  const handleSave = async () => {
+    try {
+      if (!addForm.schoolId || !addForm.complainType) {
+        alert('Please fill all required fields')
+        return
+      }
+      await createComplainType(buildPayload(addForm))
+      setIsAddOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to save complain type')
+      alert('Failed to save complain type')
+    }
+  }
+
+  const handleUpdate = async () => {
+    try {
+      await updateComplainType(editForm.id, buildPayload(editForm))
+      setIsEditOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to update complain type')
+      alert('Failed to update complain type')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this complain type?')) return
+    try {
+      await deleteComplainType(id)
+      void loadData()
+    } catch (err) {
+      alert('Failed to delete complain type')
+    }
   }
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
+    for (let page = start; page <= end; page += 1) pages.push(page)
     return pages
   }
 
@@ -158,12 +271,40 @@ const ComplainType = () => {
     <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+        {isSuperAdmin ? (
+          <div className="avm-field full">
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedHeadOfficeId(value)
+                manualScope.setSelectedSchoolId('')
+                setter((prev) => ({ ...prev, schoolId: '' }))
+              }}
+              selectedSchoolId={form.schoolId}
+              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
+            />
+          </div>
+        ) : (
+          <FormField label="School Name" required full>
+            <select
+              className="avm-select"
+              id="schoolId"
+              value={form.schoolId}
+              onChange={handleChange(setter)}
+              disabled={isSchoolLocked}
+            >
+              <option value="">--Select School--</option>
+              {schoolOptions.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.schoolName}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        )}
 
         <FormField label="Complain Type" required full>
           <input
@@ -181,56 +322,125 @@ const ComplainType = () => {
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Complain Type</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">Dashboard</button>
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
+              Dashboard
+            </button>
             <span className="text-secondary-light"> / Complain Type</span>
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-            <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
+          {isSuperAdmin ? (
+            <div className="d-flex flex-wrap align-items-center gap-12">
+              <select
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                value={manualScope.selectedHeadOfficeId}
+                onChange={(event) => {
+                  manualScope.setSelectedHeadOfficeId(event.target.value)
+                  manualScope.setSelectedSchoolId('')
+                }}
+              >
+                <option value="">Select Head Office</option>
+                {manualScope.headOffices.map((ho) => (
+                  <option key={String(ho.id)} value={String(ho.id)}>
+                    {ho.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                value={manualScope.selectedSchoolId}
+                onChange={(event) => manualScope.setSelectedSchoolId(event.target.value)}
+                disabled={!manualScope.selectedHeadOfficeId}
+              >
+                <option value="">{manualScope.selectedHeadOfficeId ? 'Select School' : 'Select Head Office First'}</option>
+                {schoolOptions.map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.schoolName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+            disabled={!isSuperAdmin && !listSchoolId}
+            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
             Add Complain Type
           </button>
         </div>
       </div>
 
-      {/* Table Card */}
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm"><i className="ri-file-upload-line text-md line-height-1"></i> Export</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                  </span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"><i className="ri-file-3-line"></i> PDF</button></li>
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"><i className="ri-file-excel-2-line"></i> Excel</button></li>
+                  <li>
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                      <i className="ri-file-3-line"></i> PDF
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                      <i className="ri-file-excel-2-line"></i> Excel
+                    </button>
+                  </li>
                 </ul>
               </div>
 
-              {/* Filter */}
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
-                <span><i className="ri-arrow-right-line"></i></span>
+                <span>
+                  <i className="ri-arrow-right-line"></i>
+                </span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((column) => (
@@ -249,30 +459,39 @@ const ComplainType = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
+                onChange={(event) => {
+                  setRowsPerPage(Number(event.target.value))
+                  setCurrentPage(1)
+                }}
               >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
+                {[5, 10, 20, 50].map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search complain type..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setCurrentPage(1)
+                }}
               />
-              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light"><i className="ri-search-line"></i></span>
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
             </div>
           </div>
 
-          {/* Table */}
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 600 }}>
               <thead>
@@ -283,67 +502,99 @@ const ComplainType = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
                   {visibleColumns.complainType ? <th scope="col">Complain Type</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">No complain types found.</td></tr>
-                ) : paginated.map((row) => (
-                  <tr key={row.sl}>
-                    <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.sl)} onChange={() => handleSelectRow(row.sl)} />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                    {visibleColumns.school ? <td>{row.school}</td> : null}
-                    {visibleColumns.complainType ? <td className="fw-medium text-primary-light">{row.complainType}</td> : null}
-                    <td>
-                      <div className="d-flex align-items-center gap-10">
-                        <button
-                          type="button"
-                          className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          onClick={() => openEdit(row)}
-                          title="Edit"
-                        >
-                          <i className="ri-edit-line"></i>
-                        </button>
-                        <button
-                          type="button"
-                          className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          title="Delete"
-                        >
-                          <i className="ri-delete-bin-line"></i>
-                        </button>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      Loading...
                     </td>
                   </tr>
-                ))}
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      No complain types found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((row, index) => (
+                    <tr key={row.id}>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
+                          />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + index + 1}</label>
+                        </div>
+                      </td>
+                      {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
+                      {visibleColumns.complainType ? <td className="fw-medium text-primary-light">{row.complainType}</td> : null}
+                      <td>
+                        <div className="d-flex align-items-center gap-10">
+                          <button
+                            type="button"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => openEdit(row)}
+                            title="Edit"
+                          >
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
+                            title="Delete"
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
               Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
               {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              {getVisiblePages().map((p) => (
-                <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
+                Prev
+              </button>
+              {getVisiblePages().map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </button>
               ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Add Modal */}
       <WizardPopup
         modalWidth="480px"
         open={isAddOpen}
@@ -351,15 +602,14 @@ const ComplainType = () => {
         steps={STEPS}
         step={addStep}
         onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onBack={() => setAddStep((step) => Math.max(0, step - 1))}
+        onNext={() => setAddStep((step) => Math.min(STEPS.length - 1, step + 1))}
+        onSubmit={handleSave}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* Edit Modal */}
       <WizardPopup
         modalWidth="480px"
         open={isEditOpen}
@@ -367,15 +617,14 @@ const ComplainType = () => {
         steps={STEPS}
         step={editStep}
         onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onBack={() => setEditStep((step) => Math.max(0, step - 1))}
+        onNext={() => setEditStep((step) => Math.min(STEPS.length - 1, step + 1))}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Complain Types"
@@ -383,23 +632,41 @@ const ComplainType = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          <div className="full">
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={manualScope.setSelectedHeadOfficeId}
+              selectedSchoolId={manualScope.selectedSchoolId}
+              onSchoolChange={manualScope.setSelectedSchoolId}
+              schoolLabel="School"
+              showSchoolSelector={false}
+            />
+          </div>
+          <div className="full">
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School
+            </label>
+            <select id="schoolId" className="form-control form-select" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
+              <option value="">All Schools</option>
+              {schoolOptions.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.schoolName}
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">Reset</button>
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
+              Reset
+            </button>
           </div>
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>Apply</button>
+            <button type="submit" className="btn btn-primary-600 w-100">
+              Apply
+            </button>
           </div>
         </form>
       </SlideSidebar>
@@ -408,4 +675,3 @@ const ComplainType = () => {
 }
 
 export default ComplainType
-

@@ -43,3 +43,49 @@ export const apiFetch = async (url, options = {}) => {
   const credentials = options.credentials ?? 'omit'
   return fetch(resolvedUrl, { ...options, headers, credentials })
 }
+
+const parseJsonSafe = async (response) => {
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('application/json')) return null
+  try {
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
+const request = async (method, url, data, config = {}) => {
+  const headers = new Headers(config.headers || {})
+
+  const options = {
+    ...config,
+    method,
+    headers,
+  }
+
+  if (data !== undefined) {
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+    options.body = typeof data === 'string' ? data : JSON.stringify(data)
+  }
+
+  const response = await apiFetch(url, options)
+  const body = await parseJsonSafe(response)
+
+  if (!response.ok) {
+    const error = new Error(body?.message || `Request failed (${response.status})`)
+    error.status = response.status
+    error.data = body
+    throw error
+  }
+
+  return { data: body }
+}
+
+const apiClient = {
+  get: (url, config) => request('GET', url, undefined, config),
+  post: (url, data, config) => request('POST', url, data, config),
+  put: (url, data, config) => request('PUT', url, data, config),
+  delete: (url, config) => request('DELETE', url, undefined, config),
+}
+
+export default apiClient

@@ -37,7 +37,11 @@ const readTheme = () => {
 
 const Topbar = ({ user }) => {
   const { toggleSidebar } = useSidebar()
-  const { activeSchoolId, setActiveSchoolId, schoolOptions, isSchoolSelectionEnabled } = useSchool()
+  const {
+    activeSchoolId,
+    setActiveSchoolId,
+    schoolOptions,
+  } = useSchool()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerQuery, setPickerQuery] = useState('')
   const [theme, setTheme] = useState(readTheme)
@@ -53,6 +57,8 @@ const Topbar = ({ user }) => {
 
   const role = normalizeRole(user?.role || user?.userRole || user?.authority)
   const isParent = role === 'PARENT'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+
   const isWebView =
     typeof window !== 'undefined' &&
     (Boolean(window.ReactNativeWebView) || /WebView|wv/i.test(window.navigator?.userAgent || ''))
@@ -131,8 +137,7 @@ const Topbar = ({ user }) => {
     document.documentElement.dataset.theme = nextTheme
   }, [])
 
-  const selectorMode = role === 'HEAD_OFFICE_ADMIN' ? 'school' : null
-  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const selectorMode = isHeadOfficeAdmin ? 'school' : null
 
   const schoolLabelById = useMemo(() => {
     const map = new Map()
@@ -144,7 +149,7 @@ const Topbar = ({ user }) => {
     return map
   }, [schoolOptions])
 
-  const currentSelectionLabel =
+  const _currentSelectionLabel =
     selectorMode === 'school'
       ? (activeSchoolId ? schoolLabelById.get(String(activeSchoolId)) : 'All schools')
     : ''
@@ -180,7 +185,7 @@ const Topbar = ({ user }) => {
     localStorage.setItem('theme', next)
   }
 
-  const renderPickerList = () => {
+  const _renderPickerList = () => {
     if (selectorMode === 'school') {
       return (
         <div className="sm-topbar__picker-list" role="listbox" aria-label="Schools">
@@ -341,7 +346,7 @@ const Topbar = ({ user }) => {
           <iconify-icon icon="heroicons:bars-3-solid" className="icon"></iconify-icon>
         </button>
 
-        <div className="sm-topbar__mobile-actions">
+      <div className="sm-topbar__mobile-actions">
           {selectorMode ? (
             selectorMode === 'school' && isWebView ? (
               <div className="sm-topbar__search-shell sm-topbar__search-shell--mobile" ref={pickerShellRef}>

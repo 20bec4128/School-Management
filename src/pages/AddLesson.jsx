@@ -5,13 +5,8 @@ import { fetchAcademicYears } from "../apis/academicYearsApi";
 import { fetchClasses } from "../apis/classesApi";
 import { fetchSubjects } from "../apis/subjectsApi";
 import { createLesson } from "../apis/lessonsApi";
-import { useAuth } from "../context/useAuth";
-import { useSchool } from "../context/useSchool";
 
 const AddLesson = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId } = useAuth();
-  const { activeSchoolId } = useSchool();
-
   const [headOfficesLookup, setHeadOfficesLookup] = useState([]);
   const [schoolsLookup, setSchoolsLookup] = useState([]);
   const [allSchools, setAllSchools] = useState([]);

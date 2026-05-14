@@ -1,31 +1,33 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { useSchool } from '../context/useSchool'
+import { useAuth } from '../context/useAuth'
+import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import { 
+  fetchPostalReceives, 
+  createPostalReceive, 
+  updatePostalReceive, 
+  deletePostalReceive 
+} from '../apis/postalApi'
 import '../assets/css/addModalShared.css'
 
-const postalReceives = [
-  { sl: '01', school: 'Windsor Park High School', toTitle: 'Ministry of Education', reference: 'REF-2024-001', fromTitle: 'Principal', receiveDate: '2024-03-15' },
-  { sl: '02', school: 'Windsor Park High School', toTitle: 'District Office', reference: 'REF-2024-002', fromTitle: 'Vice Principal', receiveDate: '2024-03-16' },
-  { sl: '03', school: 'Windsor Park High School', toTitle: 'Parents Association', reference: '', fromTitle: 'Head Teacher', receiveDate: '2024-03-17' },
-  { sl: '04', school: 'Windsor Park High School', toTitle: 'Local Authority', reference: 'REF-2024-004', fromTitle: 'Principal', receiveDate: '2024-03-18' },
-  { sl: '05', school: 'Windsor Park High School', toTitle: 'Board of Governors', reference: 'REF-2024-005', fromTitle: 'Vice Principal', receiveDate: '2024-03-19' },
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
   toTitle: '',
-  reference: '',
+  referenceNo: '',
   address: '',
   fromTitle: '',
-  receiveDate: '',
+  date: new Date().toISOString().split('T')[0],
   note: '',
-  attachment: null,
 }
 
 const emptyFilters = {
-  school: 'Select',
-  fromTitle: 'Select',
+  headOfficeId: '',
+  schoolId: '',
 }
 
 const ADD_STEPS = ['Basic Info', 'Other Info']
@@ -42,14 +44,12 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolId', label: 'School ID' },
   { key: 'toTitle', label: 'To Title' },
-  { key: 'reference', label: 'Reference' },
+  { key: 'referenceNo', label: 'Reference' },
   { key: 'fromTitle', label: 'From Title' },
-  { key: 'receiveDate', label: 'Receive Date' },
+  { key: 'date', label: 'Receive Date' },
 ]
-
-const fromTitleOptions = ['Principal', 'Vice Principal', 'Head Teacher', 'Senior Teacher']
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -86,6 +86,13 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const PostalReceive = () => {
+  const { role, schoolId: authSchoolId } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -102,21 +109,60 @@ const PostalReceive = () => {
   const attachmentRef = useRef()
   const editAttachmentRef = useRef()
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const listSchoolId = isSuperAdmin
+    ? (activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const isSchoolLocked = !isSuperAdmin && !!listSchoolId
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(postalReceives.map((r) => r.school))),
-    [],
-  )
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      if (isSuperAdmin) {
+        if (listSchoolId) {
+          const list = await fetchPostalReceives(listSchoolId)
+          setData(Array.isArray(list) ? list : [])
+        } else {
+          const schoolIds = normalizeSchoolIds(contextSchoolOptions)
+          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchPostalReceives(schoolId))
+          setData(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.referenceNo ?? ''}-${row?.date ?? ''}`)))
+        }
+      } else {
+        if (!listSchoolId) {
+          setData([])
+          setError('Select a school before viewing postal receives.')
+          return
+        }
+        const list = await fetchPostalReceives(listSchoolId)
+        setData(Array.isArray(list) ? list : [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch postal receives:', err)
+      setError(err?.message || 'Failed to fetch postal receives')
+    } finally {
+      setLoading(false)
+    }
+  }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId) {
+      setAddForm(prev => ({ ...prev, schoolId: listSchoolId }))
+    }
+  }, [isSuperAdmin, listSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return postalReceives.filter((r) => {
-      const matchesSearch = !q || [r.school, r.toTitle, r.reference, r.fromTitle, r.receiveDate].join(' ').toLowerCase().includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesFromTitle = filters.fromTitle === 'Select' || r.fromTitle === filters.fromTitle
-      return matchesSearch && matchesSchool && matchesFromTitle
+    return data.filter((r) => {
+      const matchesSearch = !q || [String(r.schoolId), r.toTitle, r.referenceNo, r.fromTitle, r.date].join(' ').toLowerCase().includes(q)
+      const matchesSchool = !filters.schoolId || String(r.schoolId) === String(filters.schoolId)
+      return matchesSearch && matchesSchool
     })
-  }, [search, filters])
+  }, [search, filters, data])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -125,11 +171,11 @@ const PostalReceive = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -158,19 +204,75 @@ const PostalReceive = () => {
     setCurrentPage(1)
   }
 
-  const openAdd = () => { setAddForm(emptyForm); setAddStep(0); setIsAddOpen(true) }
+  const openAdd = () => { 
+    setError('')
+    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
+    setAddStep(0)
+    setIsAddOpen(true) 
+  }
 
   const openEdit = (row) => {
+    setError('')
+    if (isSuperAdmin) {
+      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
+      if (school?.headOfficeId != null) {
+        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
+      }
+    }
     setEditForm({
-      ...emptyForm,
-      school: row.school,
-      toTitle: row.toTitle,
-      reference: row.reference,
-      fromTitle: row.fromTitle,
-      receiveDate: row.receiveDate,
+      ...row,
+      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
+      date: row.date || new Date().toISOString().split('T')[0],
+      note: row.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    fromTitle: form.fromTitle || '',
+    referenceNo: form.referenceNo || '',
+    address: form.address || '',
+    toTitle: form.toTitle || '',
+    date: form.date || null,
+    note: form.note || '',
+  })
+
+  const handleSave = async () => {
+    try {
+      if (!addForm.schoolId || !addForm.toTitle || !addForm.fromTitle || !addForm.date) {
+        alert('Please fill all required fields')
+        return
+      }
+      await createPostalReceive(buildPayload(addForm))
+      setIsAddOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to save postal receive')
+      alert('Failed to save postal receive')
+    }
+  }
+
+  const handleUpdate = async () => {
+    try {
+      await updatePostalReceive(editForm.id, buildPayload(editForm))
+      setIsEditOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to update postal receive')
+      alert('Failed to update postal receive')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this receive?')) return
+    try {
+      await deletePostalReceive(id)
+      void loadData()
+    } catch (err) {
+      alert('Failed to delete postal receive')
+    }
   }
 
   const getVisiblePages = () => {
@@ -187,12 +289,38 @@ const PostalReceive = () => {
       <div className="avm-grid">
         {step === 0 ? (
           <>
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+        {isSuperAdmin ? (
+          <div className="avm-field full">
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedHeadOfficeId(value)
+                manualScope.setSelectedSchoolId('')
+                setter((prev) => ({ ...prev, schoolId: '' }))
+              }}
+              selectedSchoolId={form.schoolId}
+              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
+            />
+          </div>
+        ) : (
+          <FormField label="School Name" required full>
+            <select 
+              className="avm-select" 
+              id="schoolId" 
+              value={form.schoolId} 
+              onChange={handleChange(setter)}
+              disabled={isSchoolLocked}
+            >
+              <option value="">--Select School--</option>
+              {schoolOptions.map(s => (
+                <option key={s.id} value={s.id}>{s.schoolName}</option>
+              ))}
+            </select>
+          </FormField>
+        )}
 
         <FormField label="To Title" required>
           <input
@@ -209,9 +337,9 @@ const PostalReceive = () => {
           <input
             type="text"
             className="avm-input"
-            id="reference"
+            id="referenceNo"
             placeholder="Enter reference"
-            value={form.reference}
+            value={form.referenceNo}
             onChange={handleChange(setter)}
           />
         </FormField>
@@ -242,8 +370,8 @@ const PostalReceive = () => {
           <input
             type="date"
             className="avm-input"
-            id="receiveDate"
-            value={form.receiveDate}
+            id="date"
+            value={form.date}
             onChange={handleChange(setter)}
           />
         </FormField>
@@ -261,31 +389,6 @@ const PostalReceive = () => {
             onChange={handleChange(setter)}
           />
         </FormField>
-
-        <div className="avm-field full">
-          <label className="avm-label">Attachment</label>
-          <input
-            ref={aRef}
-            type="file"
-            style={{ display: 'none' }}
-            accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx"
-            onChange={(e) => setter((prev) => ({ ...prev, attachment: e.target.files[0] }))}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button type="button" className="avm-btn light" onClick={() => aRef.current.click()}>
-              <i className="ri-attachment-2"></i> Choose File
-            </button>
-            {form.attachment && (
-              <span style={{ fontSize: '0.82rem', color: '#45597a', fontWeight: 500 }}>
-                <i className="ri-file-line" style={{ marginRight: 4 }}></i>
-                {form.attachment.name}
-              </span>
-            )}
-          </div>
-          <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>
-            Please select a valid file format: .jpg, .jpeg, .png, .gif, .pdf, .doc/docx, .xls/xlsx
-          </span>
-        </div>
           </>
         )}
       </div>
@@ -304,12 +407,25 @@ const PostalReceive = () => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+          <button 
+            type="button" 
+            className="btn btn-primary-600 d-flex align-items-center gap-6" 
+            onClick={openAdd}
+            disabled={!isSuperAdmin && !listSchoolId}
+            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+          >
             <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
             Add Postal Receive
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {/* Table Card */}
       <div className="card h-100">
@@ -317,7 +433,6 @@ const PostalReceive = () => {
           {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm"><i className="ri-file-upload-line text-md line-height-1"></i> Export</span>
@@ -329,17 +444,11 @@ const PostalReceive = () => {
                 </ul>
               </div>
 
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
@@ -349,12 +458,7 @@ const PostalReceive = () => {
                   {columnOptions.map((column) => (
                     <li key={column.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
                         {column.label}
                       </label>
                     </li>
@@ -362,7 +466,6 @@ const PostalReceive = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
@@ -396,30 +499,32 @@ const PostalReceive = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
                   {visibleColumns.toTitle ? <th scope="col">To Title</th> : null}
-                  {visibleColumns.reference ? <th scope="col">Reference</th> : null}
+                  {visibleColumns.referenceNo ? <th scope="col">Reference</th> : null}
                   {visibleColumns.fromTitle ? <th scope="col">From Title</th> : null}
-                  {visibleColumns.receiveDate ? <th scope="col">Receive Date</th> : null}
+                  {visibleColumns.date ? <th scope="col">Receive Date</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">No postal receives found.</td></tr>
-                ) : paginated.map((row) => (
-                  <tr key={row.sl}>
+                {loading ? (
+                   <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">Loading...</td></tr>
+                ) : paginated.length === 0 ? (
+                  <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No postal receives found.</td></tr>
+                ) : paginated.map((row, idx) => (
+                  <tr key={row.id}>
                     <td>
                         <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.sl)} onChange={() => handleSelectRow(row.sl)} />
-                          <label className="form-check-label">{row.sl}</label>
+                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.id)} onChange={() => handleSelectRow(row.id)} />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                    {visibleColumns.school ? <td>{row.school}</td> : null}
+                    {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
                     {visibleColumns.toTitle ? <td className="fw-medium text-primary-light">{row.toTitle}</td> : null}
-                    {visibleColumns.reference ? <td>{row.reference || '-'}</td> : null}
+                    {visibleColumns.referenceNo ? <td>{row.referenceNo || '-'}</td> : null}
                     {visibleColumns.fromTitle ? <td>{row.fromTitle}</td> : null}
-                    {visibleColumns.receiveDate ? <td>{row.receiveDate}</td> : null}
+                    {visibleColumns.date ? <td>{row.date}</td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">
                         <button
@@ -433,6 +538,7 @@ const PostalReceive = () => {
                         <button
                           type="button"
                           className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                          onClick={() => handleDelete(row.id)}
                           title="Delete"
                         >
                           <i className="ri-delete-bin-line"></i>
@@ -472,7 +578,7 @@ const PostalReceive = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(ADD_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleSave}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm, attachmentRef, addStep)}
@@ -488,7 +594,7 @@ const PostalReceive = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(EDIT_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm, editAttachmentRef, editStep)}
@@ -502,30 +608,32 @@ const PostalReceive = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="fromTitle" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">From Title</label>
-            <select
-              id="fromTitle"
-              className="form-control form-select"
-              value={pendingFilters.fromTitle}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select From Title</option>
-              {fromTitleOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <div className="full">
+              <ManualScopeSelectors
+                enabled={isSuperAdmin}
+                headOffices={manualScope.headOffices}
+                schoolOptions={schoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId}
+                onHeadOfficeChange={(val) => setPendingFilters((p) => ({ ...p, headOfficeId: val, schoolId: '' }))}
+                selectedSchoolId={pendingFilters.schoolId}
+                onSchoolChange={(val) => setPendingFilters((p) => ({ ...p, schoolId: val }))}
+              />
+            </div>
+          ) : (
+            <div className="full">
+              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
+              <select
+                id="schoolId"
+                className="form-control form-select"
+                value={pendingFilters.schoolId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="">All Schools</option>
+                {(contextSchoolOptions || []).map((s) => <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">Reset</button>
           </div>

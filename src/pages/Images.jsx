@@ -1,73 +1,50 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
-import PhoneField from '../components/PhoneField'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { fetchGalleries } from '../apis/galleryApi'
+import { findSchoolById } from '../utils/schoolScope'
+import {
+  createGalleryImage,
+  deleteGalleryImage,
+  fetchGalleryImages,
+  updateGalleryImage,
+} from '../apis/galleryImageApi'
 import '../assets/css/addModalShared.css'
 
-const imageList = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    title: 'Quick Link: Manage Gallery',
-    image: null,
-    caption: 'Annual day stage decorations and student performances',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    title: 'Annual Day Highlights',
-    image: null,
-    caption: 'Main event opening ceremony image',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    title: 'Sports Meet 2026',
-    image: null,
-    caption: 'Students participating in relay competition',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    title: 'Science Expo',
-    image: null,
-    caption: 'Project models displayed by students',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    title: 'Classroom Moments',
-    image: null,
-    caption: 'Interactive classroom activities snapshot',
-  },
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
+  galleryId: '',
   title: '',
   image: null,
   caption: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
-  title: 'Select',
+  headOfficeId: '',
+  schoolId: '',
+  galleryId: '',
 }
 
 const STEPS = ['Basic']
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
+  Gallery: 'ri-gallery-line',
   Title: 'ri-image-line',
-  Image: 'ri-gallery-line',
+  Image: 'ri-upload-2-line',
   Caption: 'ri-chat-quote-line',
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolName', label: 'School' },
+  { key: 'galleryTitle', label: 'Gallery' },
   { key: 'title', label: 'Title' },
-  { key: 'image', label: 'Image' },
+  { key: 'imagePath', label: 'Image' },
   { key: 'caption', label: 'Caption' },
 ]
 
@@ -106,6 +83,15 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Images = () => {
+  const { role, schoolId: authSchoolId } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
+  const [rows, setRows] = useState([])
+  const [galleries, setGalleries] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -114,6 +100,7 @@ const Images = () => {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
+  const [editingId, setEditingId] = useState(null)
   const [addForm, setAddForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
   const [addPreview, setAddPreview] = useState(null)
@@ -127,44 +114,88 @@ const Images = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(() => Array.from(new Set(imageList.map((item) => item.school))), [])
-  const titleOptions = useMemo(() => Array.from(new Set(imageList.map((item) => item.title))), [])
+  const schoolOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.schoolOptions
+    return contextSchoolOptions || []
+  }, [isSuperAdmin, manualScope.schoolOptions, contextSchoolOptions])
 
-  const filtered = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-
-    return imageList.filter((row) => {
+    return rows.filter((row) => {
       const matchesSearch =
-        !q || [row.school, row.title, row.caption].join(' ').toLowerCase().includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
-      const matchesTitle = filters.title === 'Select' || row.title === filters.title
-
-      return matchesSearch && matchesSchool && matchesTitle
+        !q ||
+        [row.schoolName, row.galleryTitle, row.title, row.caption]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      
+      const matchesHeadOffice = !filters.headOfficeId || String(row.headOfficeId) === String(filters.headOfficeId)
+      const matchesSchool = !filters.schoolId || String(row.schoolId) === String(filters.schoolId)
+      const matchesGallery = !filters.galleryId || String(row.galleryId) === String(filters.galleryId)
+      
+      return matchesSearch && matchesHeadOffice && matchesSchool && matchesGallery
     })
-  }, [search, filters])
+  }, [rows, search, filters])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage))
+  const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    return filteredRows.slice(start, start + rowsPerPage)
+  }, [currentPage, filteredRows, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      let schoolIdToFetch = null
+      if (!isSuperAdmin) {
+        schoolIdToFetch = activeSchoolId || authSchoolId
+      }
+      const list = await fetchGalleryImages(schoolIdToFetch ? { schoolId: schoolIdToFetch } : {})
+      setRows(Array.isArray(list) ? list : [])
+    } catch (err) {
+      setRows([])
+      setError(err?.message || 'Failed to load gallery images')
+    } finally {
+      setLoading(false)
+    }
+  }, [activeSchoolId, authSchoolId, isSuperAdmin])
+
+  const loadGalleries = useCallback(async (schoolId) => {
+    if (!schoolId) {
+      setGalleries([])
+      return
+    }
+    try {
+      const list = await fetchGalleries({ schoolId })
+      setGalleries(Array.isArray(list) ? list : [])
+    } catch {
+      setGalleries([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    const sid = isAddOpen ? addForm.schoolId : isEditOpen ? editForm.schoolId : null
+    if (sid) void loadGalleries(sid)
+    else setGalleries([])
+  }, [isAddOpen, addForm.schoolId, isEditOpen, editForm.schoolId, loadGalleries])
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
     }
   }
 
   const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
+    setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
   const handleChange = (setter) => (e) => {
@@ -197,56 +228,130 @@ const Images = () => {
     setCurrentPage(1)
   }
 
+  const handleSave = async (form, isEdit = false) => {
+    try {
+      const payload = {
+        schoolId: form.schoolId ? Number(form.schoolId) : null,
+        galleryId: form.galleryId ? Number(form.galleryId) : null,
+        title: form.title,
+        caption: form.caption,
+      }
+      if (isEdit) await updateGalleryImage(editingId, payload, form.image)
+      else await createGalleryImage(payload, form.image)
+      
+      await loadData()
+      setIsAddOpen(false)
+      setIsEditOpen(false)
+    } catch (err) {
+      alert(err.message || 'Operation failed')
+    }
+  }
+
   const openAdd = () => {
-    setAddForm(emptyForm)
+    setEditingId(null)
+    setAddForm({
+      ...emptyForm,
+      schoolId: isSuperAdmin ? '' : activeSchoolId ? String(activeSchoolId) : '',
+    })
     setAddPreview(null)
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setEditingId(row.id)
+    if (isSuperAdmin) {
+      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
+      if (school?.headOfficeId != null) {
+        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId ? String(row.schoolId) : '')
+      }
+    }
     setEditForm({
-      school: row.school,
+      schoolId: row.schoolId ? String(row.schoolId) : '',
+      galleryId: row.galleryId ? String(row.galleryId) : '',
       title: row.title,
-      image: row.image,
-      caption: row.caption,
+      image: null,
+      caption: row.caption || '',
     })
-    setEditPreview(row.image || null)
+    setEditPreview(row.imagePath ? `/uploads/gallery_images/${row.imagePath}` : null)
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this image?')) return
+    try {
+      await deleteGalleryImage(id)
+      await loadData()
+    } catch (err) {
+      alert(err.message || 'Delete failed')
+    }
   }
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-
-    for (let page = start; page <= end; page++) pages.push(page)
-
+    for (let page = start; page <= end; page += 1) pages.push(page)
     return pages
   }
 
   const renderForm = (form, setter, preview, imageRef, setPreview) => (
     <>
       <p className="avm-section-title">Basic Information</p>
-
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
+        <div className="avm-field full" style={{ display: isSuperAdmin ? 'block' : 'none' }}>
+           <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(val) => {
+                manualScope.setSelectedHeadOfficeId(val)
+                manualScope.setSelectedSchoolId('')
+                setter((prev) => ({ ...prev, schoolId: '', galleryId: '' }))
+              }}
+              selectedSchoolId={form.schoolId}
+              onSchoolChange={(val) => setter(prev => ({ ...prev, schoolId: val, galleryId: '' }))}
+           />
+        </div>
+
+        {!isSuperAdmin && (
+          <FormField label="School Name" required full>
+            <select className="avm-select" id="schoolId" value={form.schoolId} onChange={(e) => {
+               const val = e.target.value
+               setter(prev => ({ ...prev, schoolId: val, galleryId: '' }))
+            }}>
+              <option value="">--Select School--</option>
+              {schoolOptions.map((school) => (
+                <option key={String(school.id)} value={String(school.id)}>
+                  {school.schoolName}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        )}
+
+        <FormField label="Gallery" required full>
+          <select className="avm-select" id="galleryId" value={form.galleryId} onChange={handleChange(setter)}>
+            <option value="">--Select Gallery--</option>
+            {galleries.map((g) => (
+              <option key={String(g.id)} value={String(g.id)}>
+                {g.title}
+              </option>
+            ))}
           </select>
         </FormField>
 
         <FormField label="Title" required full>
-          <select className="avm-select" id="title" value={form.title} onChange={handleChange(setter)}>
-            <option value="">--Select--</option>
-            <option>Quick Link: Manage Gallery</option>
-            <option>Annual Day Highlights</option>
-            <option>Sports Meet 2026</option>
-            <option>Science Expo</option>
-            <option>Classroom Moments</option>
-          </select>
+          <input
+            type="text"
+            className="avm-input"
+            id="title"
+            placeholder="Image Title"
+            value={form.title}
+            onChange={handleChange(setter)}
+          />
         </FormField>
 
         <div className="avm-field full">
@@ -307,10 +412,7 @@ const Images = () => {
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Images</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Images</span>
@@ -318,11 +420,7 @@ const Images = () => {
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-          >
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
             <span className="d-flex text-md">
               <i className="ri-add-large-line"></i>
             </span>
@@ -336,76 +434,41 @@ const Images = () => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
                     <i className="ri-file-upload-line text-md line-height-1"></i> Export
                   </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
                       <i className="ri-file-3-line"></i> PDF
                     </button>
                   </li>
                   <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
                       <i className="ri-file-excel-2-line"></i> Excel
                     </button>
                   </li>
                 </ul>
               </div>
 
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
-                <span>
-                  <i className="ri-arrow-right-line"></i>
-                </span>
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
+                <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
               <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((column) => (
                     <li key={column.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
                         {column.label}
                       </label>
                     </li>
@@ -456,51 +519,48 @@ const Images = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.schoolName ? <th scope="col">School</th> : null}
+                  {visibleColumns.galleryTitle ? <th scope="col">Gallery</th> : null}
                   {visibleColumns.title ? <th scope="col">Title</th> : null}
-                  {visibleColumns.image ? <th scope="col">Image</th> : null}
+                  {visibleColumns.imagePath ? <th scope="col">Image</th> : null}
                   {visibleColumns.caption ? <th scope="col">Caption</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {paginatedRows.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No images found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginatedRows.map((row) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(String(row.id))}
+                            onChange={() => handleSelectRow(String(row.id))}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{String(row.id).padStart(2, '0')}</label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.title ? (
-                        <td className="fw-medium text-primary-light">{row.title}</td>
-                      ) : null}
-                      {visibleColumns.image ? (
+                      {visibleColumns.schoolName ? <td>{row.schoolName}</td> : null}
+                      {visibleColumns.galleryTitle ? <td>{row.galleryTitle}</td> : null}
+                      {visibleColumns.title ? <td className="fw-medium text-primary-light">{row.title}</td> : null}
+                      {visibleColumns.imagePath ? (
                         <td>
                           <div
                             className="radius-8 border border-neutral-200 bg-neutral-50 d-flex align-items-center justify-content-center overflow-hidden"
                             style={{ width: 70, height: 50, minWidth: 70 }}
                           >
-                            {row.image ? (
+                            {row.imagePath ? (
                               <img
-                                src={row.image}
+                                src={`/uploads/gallery_images/${row.imagePath}`}
                                 alt={row.title}
                                 className="w-100 h-100 object-fit-cover"
                               />
@@ -524,6 +584,7 @@ const Images = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
                             title="Delete"
                           >
                             <i className="ri-delete-bin-line"></i>
@@ -539,17 +600,11 @@ const Images = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
             </span>
 
             <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
                 Prev
               </button>
               {getVisiblePages().map((page) => (
@@ -562,12 +617,7 @@ const Images = () => {
                   {page}
                 </button>
               ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
                 Next
               </button>
             </div>
@@ -584,7 +634,7 @@ const Images = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={() => handleSave(addForm, false)}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm, addPreview, addImageRef, setAddPreview)}
@@ -599,68 +649,72 @@ const Images = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={() => handleSave(editForm, true)}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm, editPreview, editImageRef, setEditPreview)}
       </WizardPopup>
 
-      <SlideSidebar
-        isOpen={isFilterSidebarOpen}
-        title="Filter Images"
-        onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
-      >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+      <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Images" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+           <div style={{ display: isSuperAdmin ? 'block' : 'none' }}>
+             <ManualScopeSelectors
+                enabled={isSuperAdmin}
+                headOffices={manualScope.headOffices}
+                schoolOptions={manualScope.schoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId}
+                onHeadOfficeChange={(val) => {
+                  manualScope.setSelectedHeadOfficeId(val)
+                  manualScope.setSelectedSchoolId('')
+                  setPendingFilters(p => ({ ...p, headOfficeId: val, schoolId: '', galleryId: '' }))
+                  setGalleries([])
+                }}
+                selectedSchoolId={pendingFilters.schoolId}
+                onSchoolChange={(val) => {
+                   setPendingFilters(p => ({ ...p, schoolId: val, galleryId: '' }))
+                   loadGalleries(val)
+                }}
+             />
+          </div>
+
+          {!isSuperAdmin && (
+            <div>
+              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                School
+              </label>
+              <select id="schoolId" className="form-control form-select" value={pendingFilters.schoolId} onChange={(e) => {
+                 const val = e.target.value
+                 setPendingFilters(p => ({ ...p, schoolId: val, galleryId: '' }))
+                 loadGalleries(val)
+              }}>
+                <option value="">Select School</option>
+                {schoolOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.schoolName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
+            <label htmlFor="galleryId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Gallery
             </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+            <select id="galleryId" className="form-control form-select" value={pendingFilters.galleryId} onChange={handlePendingFilterChange}>
+              <option value="">Select Gallery</option>
+              {galleries.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.title}
                 </option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label htmlFor="title" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Title
-            </label>
-            <select
-              id="title"
-              className="form-control form-select"
-              value={pendingFilters.title}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {titleOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
+          <div className="d-flex gap-16">
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
-          </div>
-
-          <div>
             <button type="submit" className="btn btn-primary-600 w-100">
               Apply
             </button>
@@ -672,4 +726,3 @@ const Images = () => {
 }
 
 export default Images
-

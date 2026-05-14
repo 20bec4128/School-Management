@@ -1,31 +1,35 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import PhoneField from '../components/PhoneField'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { useSchool } from '../context/useSchool'
+import { useAuth } from '../context/useAuth'
+import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import { 
+  fetchCallLogs, 
+  createCallLog, 
+  updateCallLog, 
+  deleteCallLog 
+} from '../apis/callLogApi'
 import '../assets/css/addModalShared.css'
 
-const callLogs = [
-  { sl: '01', school: 'Windsor Park High School', callType: 'Incoming', name: 'Alice Brown', phone: '+1 234 567 8901', callDuration: '5 min', callDate: '2024-03-15' },
-  { sl: '02', school: 'Windsor Park High School', callType: 'Outgoing', name: 'Bob Wilson', phone: '+1 234 567 8902', callDuration: '12 min', callDate: '2024-03-16' },
-  { sl: '03', school: 'Windsor Park High School', callType: 'Incoming', name: 'Charlie Davis', phone: '+1 234 567 8903', callDuration: '3 min', callDate: '2024-03-17' },
-  { sl: '04', school: 'Windsor Park High School', callType: 'Outgoing', name: 'Diana Prince', phone: '+1 234 567 8904', callDuration: '8 min', callDate: '2024-03-18' },
-  { sl: '05', school: 'Windsor Park High School', callType: 'Incoming', name: 'Ethan Hunt', phone: '+1 234 567 8905', callDuration: '20 min', callDate: '2024-03-19' },
-]
-
 const emptyForm = {
-  school: '',
+  schoolId: '',
   name: '',
   phone: '',
   callDuration: '',
-  callDate: '',
-  followUp: '',
-  callType: '',
+  date: new Date().toISOString().split('T')[0],
+  followUpDate: '',
+  callType: 'Incoming',
   note: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: '',
   callType: 'Select',
 }
 
@@ -43,12 +47,12 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolId', label: 'School ID' },
   { key: 'callType', label: 'Call Type' },
   { key: 'name', label: 'Name' },
   { key: 'phone', label: 'Phone' },
   { key: 'callDuration', label: 'Call Duration' },
-  { key: 'callDate', label: 'Call Date' },
+  { key: 'date', label: 'Call Date' },
 ]
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
@@ -92,6 +96,13 @@ const callTypeBadge = (type) => {
 }
 
 const CallLog = () => {
+  const { role, schoolId: authSchoolId } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -106,21 +117,61 @@ const CallLog = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const listSchoolId = isSuperAdmin
+    ? (activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const isSchoolLocked = !isSuperAdmin && !!listSchoolId
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(callLogs.map((r) => r.school))),
-    [],
-  )
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      if (isSuperAdmin) {
+        if (listSchoolId) {
+          const list = await fetchCallLogs(listSchoolId)
+          setData(Array.isArray(list) ? list : [])
+        } else {
+          const schoolIds = normalizeSchoolIds(contextSchoolOptions)
+          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchCallLogs(schoolId))
+          setData(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.phone ?? ''}-${row?.date ?? ''}`)))
+        }
+      } else {
+        if (!listSchoolId) {
+          setData([])
+          setError('Select a school before viewing call logs.')
+          return
+        }
+        const list = await fetchCallLogs(listSchoolId)
+        setData(Array.isArray(list) ? list : [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch call logs:', err)
+      setError(err?.message || 'Failed to fetch call logs')
+    } finally {
+      setLoading(false)
+    }
+  }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId) {
+      setAddForm(prev => ({ ...prev, schoolId: listSchoolId }))
+    }
+  }, [isSuperAdmin, listSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return callLogs.filter((r) => {
-      const matchesSearch = !q || [r.school, r.callType, r.name, r.phone, r.callDuration, r.callDate].join(' ').toLowerCase().includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
+    return data.filter((r) => {
+      const matchesSearch = !q || [String(r.schoolId), r.callType, r.name, r.phone, r.callDuration, r.date].join(' ').toLowerCase().includes(q)
+      const matchesSchool = !filters.schoolId || String(r.schoolId) === String(filters.schoolId)
       const matchesCallType = filters.callType === 'Select' || r.callType === filters.callType
       return matchesSearch && matchesSchool && matchesCallType
     })
-  }, [search, filters])
+  }, [search, filters, data])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -129,11 +180,11 @@ const CallLog = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -162,21 +213,78 @@ const CallLog = () => {
     setCurrentPage(1)
   }
 
-  const openAdd = () => { setAddForm(emptyForm); setAddStep(0); setIsAddOpen(true) }
+  const openAdd = () => { 
+    setError('')
+    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
+    setAddStep(0)
+    setIsAddOpen(true) 
+  }
 
   const openEdit = (row) => {
+    setError('')
+    if (isSuperAdmin) {
+      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
+      if (school?.headOfficeId != null) {
+        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
+      }
+    }
     setEditForm({
-      school: row.school,
-      name: row.name,
-      phone: row.phone,
-      callDuration: row.callDuration,
-      callDate: row.callDate,
-      followUp: '',
-      callType: row.callType,
-      note: '',
+      ...row,
+      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
+      date: row.date || new Date().toISOString().split('T')[0],
+      followUpDate: row.followUpDate || '',
+      callType: row.callType || 'Incoming',
+      note: row.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    name: form.name || '',
+    phone: form.phone || '',
+    callDuration: form.callDuration || '',
+    date: form.date || null,
+    followUpDate: form.followUpDate || null,
+    callType: form.callType || 'Incoming',
+    note: form.note || '',
+  })
+
+  const handleSave = async () => {
+    try {
+      if (!addForm.schoolId || !addForm.name || !addForm.date) {
+        alert('Please fill all required fields')
+        return
+      }
+      await createCallLog(buildPayload(addForm))
+      setIsAddOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to save call log')
+      alert('Failed to save call log')
+    }
+  }
+
+  const handleUpdate = async () => {
+    try {
+      await updateCallLog(editForm.id, buildPayload(editForm))
+      setIsEditOpen(false)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to update call log')
+      alert('Failed to update call log')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this call log?')) return
+    try {
+      await deleteCallLog(id)
+      void loadData()
+    } catch (err) {
+      alert('Failed to delete call log')
+    }
   }
 
   const getVisiblePages = () => {
@@ -193,12 +301,38 @@ const CallLog = () => {
       <div className="avm-grid">
         {step === 0 ? (
           <>
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+        {isSuperAdmin ? (
+          <div className="avm-field full">
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedHeadOfficeId(value)
+                manualScope.setSelectedSchoolId('')
+                setter((prev) => ({ ...prev, schoolId: '' }))
+              }}
+              selectedSchoolId={form.schoolId}
+              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
+            />
+          </div>
+        ) : (
+          <FormField label="School Name" required full>
+            <select 
+              className="avm-select" 
+              id="schoolId" 
+              value={form.schoolId} 
+              onChange={handleChange(setter)}
+              disabled={isSchoolLocked}
+            >
+              <option value="">--Select School--</option>
+              {schoolOptions.map(s => (
+                <option key={s.id} value={s.id}>{s.schoolName}</option>
+              ))}
+            </select>
+          </FormField>
+        )}
 
         <FormField label="Name" required>
           <input
@@ -234,8 +368,8 @@ const CallLog = () => {
           <input
             type="date"
             className="avm-input"
-            id="callDate"
-            value={form.callDate}
+            id="date"
+            value={form.date}
             onChange={handleChange(setter)}
           />
         </FormField>
@@ -247,8 +381,8 @@ const CallLog = () => {
           <input
             type="date"
             className="avm-input"
-            id="followUp"
-            value={form.followUp}
+            id="followUpDate"
+            value={form.followUpDate}
             onChange={handleChange(setter)}
           />
         </FormField>
@@ -313,12 +447,25 @@ const CallLog = () => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+            disabled={!isSuperAdmin && !listSchoolId}
+            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+          >
             <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
             Add Call Log
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       {/* Table Card */}
       <div className="card h-100">
@@ -326,7 +473,6 @@ const CallLog = () => {
           {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm"><i className="ri-file-upload-line text-md line-height-1"></i> Export</span>
@@ -338,17 +484,11 @@ const CallLog = () => {
                 </ul>
               </div>
 
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
@@ -358,12 +498,7 @@ const CallLog = () => {
                   {columnOptions.map((column) => (
                     <li key={column.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
-                        />
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
                         {column.label}
                       </label>
                     </li>
@@ -371,7 +506,6 @@ const CallLog = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
@@ -405,34 +539,36 @@ const CallLog = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
                   {visibleColumns.callType ? <th scope="col">Call Type</th> : null}
                   {visibleColumns.name ? <th scope="col">Name</th> : null}
                   {visibleColumns.phone ? <th scope="col">Phone</th> : null}
                   {visibleColumns.callDuration ? <th scope="col">Call Duration</th> : null}
-                  {visibleColumns.callDate ? <th scope="col">Call Date</th> : null}
+                  {visibleColumns.date ? <th scope="col">Call Date</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">No call logs found.</td></tr>
-                ) : paginated.map((row) => (
-                  <tr key={row.sl}>
+                {loading ? (
+                   <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">Loading...</td></tr>
+                ) : paginated.length === 0 ? (
+                  <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No call logs found.</td></tr>
+                ) : paginated.map((row, idx) => (
+                  <tr key={row.id}>
                     <td>
                         <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.sl)} onChange={() => handleSelectRow(row.sl)} />
-                          <label className="form-check-label">{row.sl}</label>
+                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.id)} onChange={() => handleSelectRow(row.id)} />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                    {visibleColumns.school ? <td>{row.school}</td> : null}
+                    {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
                     {visibleColumns.callType ? (
                       <td><span className={callTypeBadge(row.callType)}>{row.callType}</span></td>
                     ) : null}
                     {visibleColumns.name ? <td className="fw-medium text-primary-light">{row.name}</td> : null}
                     {visibleColumns.phone ? <td>{row.phone}</td> : null}
                     {visibleColumns.callDuration ? <td>{row.callDuration}</td> : null}
-                    {visibleColumns.callDate ? <td>{row.callDate}</td> : null}
+                    {visibleColumns.date ? <td>{row.date}</td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">
                         <button
@@ -446,6 +582,7 @@ const CallLog = () => {
                         <button
                           type="button"
                           className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                          onClick={() => handleDelete(row.id)}
                           title="Delete"
                         >
                           <i className="ri-delete-bin-line"></i>
@@ -485,7 +622,7 @@ const CallLog = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(ADD_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={handleSave}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm, addStep)}
@@ -501,7 +638,7 @@ const CallLog = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(EDIT_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={handleUpdate}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm, editStep)}
@@ -515,22 +652,36 @@ const CallLog = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <div className="full">
+              <ManualScopeSelectors
+                enabled={isSuperAdmin}
+                headOffices={manualScope.headOffices}
+                schoolOptions={schoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId}
+                onHeadOfficeChange={(val) => setPendingFilters((p) => ({ ...p, headOfficeId: val, schoolId: '' }))}
+                selectedSchoolId={pendingFilters.schoolId}
+                onSchoolChange={(val) => setPendingFilters((p) => ({ ...p, schoolId: val }))}
+              />
+            </div>
+          ) : (
+            <div className="full">
+              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                School
+              </label>
+              <select
+                id="schoolId"
+                className="form-control form-select"
+                value={pendingFilters.schoolId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="">All Schools</option>
+                {(contextSchoolOptions || []).map((s) => (
+                  <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor="callType" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Call Type

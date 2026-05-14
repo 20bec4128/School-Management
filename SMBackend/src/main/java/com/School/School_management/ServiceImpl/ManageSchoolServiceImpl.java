@@ -141,21 +141,47 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
     }
 
     @Override
-    public Page<ManageSchoolDto> getAllSchools(int page, int size, Long headOfficeId, Long schoolId) {
+    public Page<ManageSchoolDto> getAllSchools(int page, int size, Long headOfficeId, Long schoolId, String search, String status) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
 
+        // Normalize status to uppercase (e.g., "Active" -> "ACTIVE") if provided
+        String normalizedStatus = (status == null || status.trim().isEmpty() || "Select".equalsIgnoreCase(status)) ? null : status.trim().toUpperCase();
+        String normalizedSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
+
         if (schoolId != null) {
+            // When scoped to a single school, we can still filter that one school by status/search if needed, 
+            // but usually it's just that one record.
             return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                    .filter(s -> normalizedStatus == null || normalizedStatus.equalsIgnoreCase(s.getStatus()))
+                    .filter(s -> normalizedSearch == null || s.getSchoolName().toLowerCase().contains(normalizedSearch.toLowerCase()))
                     .map(s -> new PageImpl<>(List.of(toDto(s)), pageable, 1))
                     .orElseGet(() -> new PageImpl<>(List.of(), pageable, 0));
         }
 
-        if (headOfficeId != null) {
-            return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(headOfficeId, pageable)
-                    .map(this::toDto);
-        }
+        List<ManageSchool> schools = headOfficeId == null
+                ? schoolRepository.findAllByIsDeletedFalse()
+                : schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(headOfficeId);
 
-        return schoolRepository.findAll(pageable).map(this::toDto);
+        List<ManageSchoolDto> filtered = schools.stream()
+                .filter(s -> normalizedStatus == null || normalizedStatus.equalsIgnoreCase(s.getStatus()))
+                .filter(s -> {
+                    if (normalizedSearch == null) return true;
+                    String schoolName = s.getSchoolName() == null ? "" : s.getSchoolName();
+                    String email = s.getEmail() == null ? "" : s.getEmail();
+                    String phone = s.getPhone() == null ? "" : s.getPhone();
+                    String haystack = (schoolName + " " + email + " " + phone).toLowerCase();
+                    return haystack.contains(normalizedSearch.toLowerCase());
+                })
+                .sorted((left, right) -> Long.compare(
+                        right.getId() == null ? Long.MIN_VALUE : right.getId(),
+                        left.getId() == null ? Long.MIN_VALUE : left.getId()
+                ))
+                .map(this::toDto)
+                .toList();
+
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override

@@ -23,8 +23,18 @@ public class EmployeeController {
     }
 
     @GetMapping
-    public List<EmployeeDto> list(@RequestParam(required = false) Long schoolId) {
+    public java.util.List<EmployeeDto> list(@RequestParam(required = false) Long schoolId) {
         return employeeService.list(schoolId);
+    }
+
+    @GetMapping("/page")
+    public org.springframework.data.domain.Page<EmployeeDto> listPaginated(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search
+    ) {
+        return employeeService.listPaginated(schoolId, page, size, search);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

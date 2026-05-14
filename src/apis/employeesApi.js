@@ -35,6 +35,19 @@ export const fetchEmployees = async ({ schoolId } = {}) => {
   return Array.isArray(data) ? data : []
 }
 
+export const fetchEmployeesPage = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+  const qs = new URLSearchParams()
+  if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
+  qs.set('page', String(page))
+  qs.set('size', String(size))
+  if (search) qs.set('search', search)
+  const url = `${BASE}/page?${qs.toString()}`
+
+  const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const createEmployee = async (payload, { photo, resume } = {}) => {
   const res = await apiFetch(BASE, {
     method: 'POST',

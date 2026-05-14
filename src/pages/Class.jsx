@@ -3,6 +3,7 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createClass, deleteClass, fetchClasses, updateClass } from '../apis/classesApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { useAuth } from '../context/useAuth'
@@ -10,6 +11,7 @@ import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
 const emptyForm = {
+  headOfficeId: '',
   schoolId: '',
   className: '',
   numericName: '',
@@ -25,6 +27,7 @@ const emptyFilters = {
 const STEPS = ['Basic']
 
 const FIELD_ICONS = {
+  'Head Office': 'ri-building-4-line',
   'School Name': 'ri-school-line',
   'Class Name': 'ri-building-line',
   'Numeric Name': 'ri-hashtag',
@@ -74,11 +77,15 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Class = () => {
-  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
-  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
+  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
+  const { activeSchoolId } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
   const [classes, setClasses] = useState([])
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
-  const [teachersLookup, setTeachersLookup] = useState([])
+  const [_teachersLookup, setTeachersLookup] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -99,24 +106,42 @@ const Class = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const resolvedSchoolName = authSchoolName || ''
-  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+  const resolvedHeadOfficeId = authHeadOfficeId ? String(authHeadOfficeId) : ''
+  const isSchoolLocked = isSchoolAdmin
+  const isHeadOfficeLocked = isHeadOfficeAdmin
 
-  const effectiveSchoolsLookup = useMemo(() => {
-    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
-    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
-      byId.set(String(resolvedSchoolId), {
-        id: resolvedSchoolId,
-        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
-      })
-    }
-    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
-  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
+  const getSchoolOptionsForHeadOffice = useCallback((headOfficeId) => {
+    const rows = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    const normalizedHeadOfficeId = String(headOfficeId || '').trim()
+    if (!normalizedHeadOfficeId) return rows
+    return rows.filter((school) => String(school?.headOfficeId ?? '') === normalizedHeadOfficeId)
+  }, [schoolsLookup])
+
+  const getSchoolHeadOfficeId = useCallback((schoolId) => {
+    if (schoolId == null || String(schoolId).trim() === '') return ''
+    return String(
+      Array.isArray(schoolsLookup)
+        ? schoolsLookup.find((school) => String(school?.id ?? '') === String(schoolId))?.headOfficeId ?? ''
+        : '',
+    )
+  }, [schoolsLookup])
 
   const loadLookups = useCallback(async () => {
-    const [schoolsResult, teachersResult] = await Promise.allSettled([fetchSchoolsLookup(), fetchTeachers()])
+    const [headOfficeResult, schoolsResult, teachersResult] = await Promise.allSettled([
+      fetchHeadOfficesPage(0, 500),
+      fetchSchoolsLookup(),
+      fetchTeachers(),
+    ])
+    const headOfficeRows = headOfficeResult.status === 'fulfilled' ? headOfficeResult.value : null
+    const headOffices = Array.isArray(headOfficeRows?.content) ? headOfficeRows.content : []
     const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
     const teachers = teachersResult.status === 'fulfilled' ? teachersResult.value : []
+    setHeadOfficesLookup(
+      headOffices
+        .map((ho) => ({ id: ho?.id, name: ho?.name }))
+        .filter((ho) => ho.id != null && ho.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     const teacherRows = Array.isArray(teachers) ? teachers : []
     setTeachersLookup(
@@ -128,12 +153,16 @@ const Class = () => {
   }, [])
 
   const loadClasses = useCallback(async () => {
+    if (!resolvedSchoolId && !isSuperAdmin) {
+      setClasses([])
+      setError('Select a school before viewing classes.')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      const data = await fetchClasses({
-        schoolId: isSchoolSelectionEnabled ? activeSchoolId : resolvedSchoolId || undefined,
-      })
+      const data = await fetchClasses(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {})
       setClasses(Array.isArray(data) ? data : [])
     } catch (e) {
       setClasses([])
@@ -141,7 +170,7 @@ const Class = () => {
     } finally {
       setLoading(false)
     }
-  }, [activeSchoolId, isSchoolSelectionEnabled, resolvedSchoolId])
+  }, [isSuperAdmin, resolvedSchoolId])
 
   useEffect(() => {
     void loadLookups()
@@ -151,7 +180,7 @@ const Class = () => {
     void loadClasses()
   }, [loadClasses])
 
-  const schoolOptions = useMemo(() => {
+  const schoolNameOptions = useMemo(() => {
     const fromRows = classes.map((r) => r?.schoolName).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
   }, [classes])
@@ -225,7 +254,11 @@ const Class = () => {
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
+    setAddForm({
+      ...emptyForm,
+      headOfficeId: isSuperAdmin ? '' : resolvedHeadOfficeId,
+      schoolId: isSchoolAdmin ? resolvedSchoolId : activeSchoolId ? String(activeSchoolId) : '',
+    })
     setAddStep(0)
     setIsAddOpen(true)
   }
@@ -234,7 +267,16 @@ const Class = () => {
     setError('')
     setEditingId(row?.id ?? null)
     setEditForm({
-      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId,
+      ...emptyForm,
+      headOfficeId:
+        row?.headOfficeId != null
+          ? String(row.headOfficeId)
+          : row?.schoolId != null
+            ? getSchoolHeadOfficeId(row.schoolId)
+            : isSuperAdmin
+              ? ''
+              : resolvedHeadOfficeId,
+      schoolId: row?.schoolId != null ? String(row.schoolId) : isSchoolAdmin ? resolvedSchoolId : activeSchoolId ? String(activeSchoolId) : '',
       className: row?.className || '',
       numericName: row?.numericName || '',
       teacherId: row?.teacherId != null ? String(row.teacherId) : '',
@@ -322,6 +364,26 @@ const Class = () => {
     <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
+        <FormField label="Head Office" required full>
+          <select
+            className="avm-select"
+            id="headOfficeId"
+            value={form.headOfficeId}
+            onChange={(event) => {
+              const { id, value } = event.target
+              setter((prev) => ({ ...prev, [id]: value, schoolId: '' }))
+            }}
+            disabled={saving || isHeadOfficeLocked}
+          >
+            <option value="">--Select Head Office--</option>
+            {Array.isArray(headOfficesLookup) ? headOfficesLookup.map((ho) => (
+              <option key={ho.id} value={String(ho.id)}>
+                {ho.name}
+              </option>
+            )) : null}
+          </select>
+        </FormField>
+
         <FormField label="School Name" required full>
           <select
             className="avm-select"
@@ -331,61 +393,12 @@ const Class = () => {
             disabled={saving || isSchoolLocked}
           >
             <option value="">--Select School--</option>
-            {effectiveSchoolsLookup.map((s) => (
+            {getSchoolOptionsForHeadOffice(isHeadOfficeAdmin ? resolvedHeadOfficeId : form.headOfficeId).map((s) => (
               <option key={s.id} value={String(s.id)}>
-                {s.schoolName}
+                {s.schoolName || s.name || `School ${s.id}`}
               </option>
             ))}
           </select>
-        </FormField>
-
-        <FormField label="Class Name" required>
-          <input
-            type="text"
-            className="avm-input"
-            id="className"
-            placeholder="Class Name"
-            value={form.className}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Numeric Name" required>
-          <input
-            type="text"
-            className="avm-input"
-            id="numericName"
-            placeholder="Numeric Name"
-            value={form.numericName}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Class Teacher" required full>
-          <select
-            className="avm-select"
-            id="teacherId"
-            value={form.teacherId}
-            onChange={handleChange(setter)}
-          >
-            <option value="">--Select--</option>
-            {teachersLookup.map((t) => (
-              <option key={t.id} value={String(t.id)}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Note" full>
-          <textarea
-            rows={4}
-            className="avm-input avm-textarea"
-            id="note"
-            placeholder="Note"
-            value={form.note}
-            onChange={handleChange(setter)}
-          />
         </FormField>
       </div>
     </>
@@ -393,7 +406,6 @@ const Class = () => {
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Class</h1>
@@ -739,7 +751,7 @@ const Class = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
+              {schoolNameOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
