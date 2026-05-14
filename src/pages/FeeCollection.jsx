@@ -1,93 +1,60 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import {
+  fetchFeeCollectionsBySchool,
+  createFeeCollection,
+  deleteFeeCollection,
+  updateFeeCollection,
+} from '../apis/feeCollectionApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import { fetchFeeTypes } from '../apis/feeTypesApi'
+import { fetchDiscounts } from '../apis/discountsApi'
+import { normalizeRole } from '../utils/roles'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import '../assets/css/addModalShared.css'
 
-const feeCollectionData = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    invoiceNumber: 'INV-2024-001',
-    studentSaleTo: 'Alice Johnson',
-    month: 'January 2024',
-    grossAmount: 15000,
-    discount: 1500,
-    netAmount: 13500,
-    dueAmount: 0,
-    status: 'Paid',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    invoiceNumber: 'INV-2024-002',
-    studentSaleTo: 'Bob Smith',
-    month: 'January 2024',
-    grossAmount: 15000,
-    discount: 0,
-    netAmount: 15000,
-    dueAmount: 5000,
-    status: 'Partial',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    invoiceNumber: 'INV-2024-003',
-    studentSaleTo: 'Charlie Davis',
-    month: 'February 2024',
-    grossAmount: 15000,
-    discount: 1500,
-    netAmount: 13500,
-    dueAmount: 13500,
-    status: 'Unpaid',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    invoiceNumber: 'INV-2024-004',
-    studentSaleTo: 'Diana Wilson',
-    month: 'February 2024',
-    grossAmount: 15000,
-    discount: 0,
-    netAmount: 15000,
-    dueAmount: 0,
-    status: 'Paid',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    invoiceNumber: 'INV-2024-005',
-    studentSaleTo: 'Ethan Brown',
-    month: 'March 2024',
-    grossAmount: 15000,
-    discount: 1500,
-    netAmount: 13500,
-    dueAmount: 2000,
-    status: 'Partial',
-  },
-]
+// Removed dummy data
 
 const emptyForm = {
-  school: '',
-  className: '',
-  student: '',
-  feeType: '',
+  headOfficeId: '',
+  schoolId: '',
+  classId: '',
+  studentId: '',
+  feeTypeId: '',
+  discountId: '',
   feeAmount: '0.00',
   month: '',
-  isApplicableDiscount: '',
-  paidStatus: '',
+  isApplicableDiscount: 'No',
+  paidStatus: 'Unpaid',
   note: '',
+  grossAmount: '0.00',
+  discount: '0.00',
+  netAmount: '0.00',
+  dueAmount: '0.00',
 }
 
 const emptyBulkForm = {
-  school: '',
-  className: '',
-  feeType: '',
+  headOfficeId: '',
+  schoolId: '',
+  classId: '',
+  feeTypeId: '',
+  discountId: '',
   feeAmount: '0.00',
-  student: '',
-  isApplicableDiscount: '',
+  studentId: '',
+  isApplicableDiscount: 'No',
   month: '',
-  paidStatus: '',
+  paidStatus: 'Unpaid',
   note: '',
 }
 
@@ -124,11 +91,11 @@ const columnOptions = [
   { key: 'status', label: 'Status' },
 ]
 
-const feeTypeOptions = ['Tuition Fee', 'Admission Fee', 'Exam Fee', 'Library Fee', 'Sports Fee', 'Transport Fee']
-const monthOptions = ['January 2024', 'February 2024', 'March 2024', 'April 2024', 'May 2024', 'June 2024']
-const classOptions = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10']
-const studentOptions = ['Alice Johnson', 'Bob Smith', 'Charlie Davis', 'Diana Wilson', 'Ethan Brown']
-const discountOptions = ['Yes', 'No']
+const monthOptions = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
+const applicableDiscountOptions = ['Yes', 'No']
 const paidStatusOptions = ['Paid', 'Unpaid', 'Partial']
 
 const getStatusBadge = (status) => {
@@ -176,6 +143,14 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const FeeCollection = () => {
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId } = useAuth()
+  const { activeSchoolId } = useSchool()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -183,41 +158,203 @@ const FeeCollection = () => {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isBulkOpen, setIsBulkOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
   const [bulkStep, setBulkStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [addForm, setAddForm] = useState(emptyForm)
   const [bulkForm, setBulkForm] = useState(emptyBulkForm)
   const [editForm, setEditForm] = useState(emptyForm)
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
+  const [feeCollections, setFeeCollections] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
+  const [schools, setSchools] = useState([])
+  const [allSchools, setAllSchools] = useState([])
+  const [formSchoolOptions, setFormSchoolOptions] = useState([])
+  const [classes, setClasses] = useState([])
+  const [students, setStudents] = useState([])
+  const [feeTypes, setFeeTypes] = useState([])
+  const [discounts, setDiscounts] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentForm = isEditOpen ? editForm : (isBulkOpen ? bulkForm : addForm)
+  const currentFormHeadOfficeId = currentForm.headOfficeId
+  const currentFormSchoolId = currentForm.schoolId
+  const currentFormClassId = currentForm.classId
+  const listSchoolId = isSuperAdmin
+    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const schoolOptions = useMemo(() => (Array.isArray(schools) ? schools : []), [schools])
+  const classOptions = useMemo(() => {
+    const list = Array.isArray(classes) ? classes : []
+    if (!currentFormSchoolId) return list
+    return list.filter((row) => String(row?.schoolId ?? '') === String(currentFormSchoolId))
+  }, [classes, currentFormSchoolId])
+  const feeTypeOptions = useMemo(() => (Array.isArray(feeTypes) ? feeTypes : []), [feeTypes])
+  const discountMasterOptions = useMemo(() => (Array.isArray(discounts) ? discounts : []), [discounts])
 
-  const schoolOptions = useMemo(
-    () => ['Windsor Park High School', 'Riverside Academy', 'Sunrise Public School'],
-    [],
-  )
+  const calculateDiscountAmount = useCallback((form, discountId) => {
+    const selected = discountMasterOptions.find((item) => String(item?.id ?? '') === String(discountId))
+    if (!selected || form?.isApplicableDiscount !== 'Yes') return 0
+    const feeAmount = Number(form?.feeAmount || 0)
+    const baseAmount = Number(selected?.amount || 0)
+    if (String(selected?.discountType || '').toLowerCase() === 'percentage') {
+      return (feeAmount * baseAmount) / 100
+    }
+    return baseAmount
+  }, [discountMasterOptions])
+
+  const recalcTotals = useCallback((form, nextDiscountId = form?.discountId) => {
+    const feeAmount = Number(form?.feeAmount || 0)
+    const discountAmount = form?.isApplicableDiscount === 'Yes' ? calculateDiscountAmount(form, nextDiscountId) : 0
+    const netAmount = Math.max(feeAmount - discountAmount, 0)
+    const dueAmount = form?.paidStatus === 'Paid' ? 0 : netAmount
+    return {
+      discountId: form?.isApplicableDiscount === 'Yes' ? (nextDiscountId || '') : '',
+      grossAmount: feeAmount.toFixed(2),
+      discount: discountAmount.toFixed(2),
+      netAmount: netAmount.toFixed(2),
+      dueAmount: dueAmount.toFixed(2),
+    }
+  }, [calculateDiscountAmount])
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const schoolsData = await fetchSchoolsLookup()
+      const nextSchools = Array.isArray(schoolsData) ? schoolsData : []
+      setSchools(nextSchools)
+      setAllSchools(nextSchools)
+
+      if (isSuperAdmin) {
+        if (listSchoolId) {
+          const data = await fetchFeeCollectionsBySchool(listSchoolId)
+          setFeeCollections(Array.isArray(data) ? data : [])
+        } else {
+          const schoolIds = normalizeSchoolIds(nextSchools)
+          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchFeeCollectionsBySchool(schoolId))
+          setFeeCollections(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.invoiceNumber ?? ''}-${row?.studentId ?? ''}`)))
+        }
+      } else {
+        if (!listSchoolId) {
+          setFeeCollections([])
+          setError('Select a school before viewing fee collections.')
+          return
+        }
+        const data = await fetchFeeCollectionsBySchool(listSchoolId)
+        setFeeCollections(Array.isArray(data) ? data : [])
+      }
+
+      const classesData = await fetchClasses()
+      setClasses(Array.isArray(classesData) ? classesData : [])
+    } catch (err) {
+      console.error('Failed to load data:', err)
+      setError('Failed to load fee collections')
+    } finally {
+      setLoading(false)
+    }
+  }, [isSuperAdmin, listSchoolId])
+
+  useEffect(() => {
+    const rows = Array.isArray(allSchools) ? allSchools : []
+    if (isSuperAdmin) {
+      if (!currentFormHeadOfficeId) {
+        setFormSchoolOptions([])
+        return
+      }
+      setFormSchoolOptions(rows.filter((school) => String(school.headOfficeId ?? '') === String(currentFormHeadOfficeId)))
+      return
+    }
+    if (isHeadOfficeAdmin) {
+      setFormSchoolOptions(rows.filter((school) => String(school.headOfficeId ?? '') === String(authHeadOfficeId)))
+      return
+    }
+    if (isSchoolAdmin) {
+      setFormSchoolOptions(rows.filter((school) => String(school.id ?? '') === String(authSchoolId)))
+      return
+    }
+    setFormSchoolOptions(rows)
+  }, [allSchools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, currentFormHeadOfficeId, authHeadOfficeId, authSchoolId])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    if (isSchoolAdmin) return
+    const tasks = []
+    if (isSuperAdmin || isHeadOfficeAdmin) {
+      tasks.push(
+        fetchHeadOfficesPage(0, 500)
+          .then((page) => {
+            const content = Array.isArray(page?.content) ? page.content : []
+            setHeadOffices(content)
+          })
+          .catch(() => {}),
+      )
+    }
+    Promise.all(tasks).catch(() => {})
+  }, [status, token, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId) {
+      setAddForm((prev) => ({ ...prev, headOfficeId: authHeadOfficeId != null ? String(authHeadOfficeId) : prev.headOfficeId, schoolId: listSchoolId }))
+      setBulkForm((prev) => ({ ...prev, headOfficeId: authHeadOfficeId != null ? String(authHeadOfficeId) : prev.headOfficeId, schoolId: listSchoolId }))
+    }
+  }, [isSuperAdmin, listSchoolId, authHeadOfficeId])
+
+  useEffect(() => {
+    if (!currentFormSchoolId) {
+      setFeeTypes([])
+      setDiscounts([])
+      return
+    }
+    fetchFeeTypes({ schoolId: currentFormSchoolId }).then(data => setFeeTypes(Array.isArray(data) ? data : []))
+  }, [currentFormSchoolId])
+
+  useEffect(() => {
+    if (!currentFormSchoolId) {
+      setDiscounts([])
+      return
+    }
+    fetchDiscounts({ schoolId: currentFormSchoolId })
+      .then((data) => setDiscounts(Array.isArray(data) ? data : []))
+      .catch(() => setDiscounts([]))
+  }, [currentFormSchoolId])
+
+  useEffect(() => {
+    if (!currentFormSchoolId || !currentFormClassId) {
+      setStudents([])
+      return
+    }
+    fetchStudentsByClassSection({ schoolId: currentFormSchoolId, classId: currentFormClassId })
+      .then(data => setStudents(Array.isArray(data) ? data : []))
+  }, [currentFormSchoolId, currentFormClassId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
 
-    return feeCollectionData.filter((row) => {
+    return feeCollections.filter((row) => {
       const matchesSearch =
         !q ||
-        [row.school, row.invoiceNumber, row.studentSaleTo, row.month, row.status]
+        [row.schoolName, row.invoiceNumber, row.studentName, row.month, row.paidStatus]
           .join(' ')
           .toLowerCase()
           .includes(q)
 
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
-      const matchesStatus = filters.status === 'Select' || row.status === filters.status
+      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
+      const matchesStatus = filters.status === 'Select' || row.paidStatus === filters.status
       const matchesMonth = filters.month === 'Select' || row.month === filters.month
 
       return matchesSearch && matchesSchool && matchesStatus && matchesMonth
     })
-  }, [search, filters])
+  }, [search, filters, feeCollections])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -226,13 +363,13 @@ const FeeCollection = () => {
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.id === id)))
     }
   }
 
@@ -242,9 +379,83 @@ const FeeCollection = () => {
     )
   }
 
+  const handleDownloadInvoice = (row) => {
+    const doc = new jsPDF()
+    doc.setFontSize(20)
+    doc.text('INVOICE', 105, 20, { align: 'center' })
+    
+    doc.setFontSize(12)
+    doc.text(`School: ${row.schoolName}`, 20, 40)
+    doc.text(`Invoice No: ${row.invoiceNumber}`, 20, 50)
+    doc.text(`Date: ${new Date(row.createdAt).toLocaleDateString()}`, 20, 60)
+    
+    doc.text(`Student: ${row.studentName}`, 20, 80)
+    doc.text(`Class: ${row.className}`, 20, 90)
+    doc.text(`Month: ${row.month}`, 20, 100)
+
+    const tableData = [
+      ['Fee Type', 'Amount'],
+      [row.feeTypeTitle || 'School Fee', `$${row.feeAmount.toFixed(2)}`],
+      ['Gross Amount', `$${row.grossAmount.toFixed(2)}`],
+      ['Discount', `$${row.discount.toFixed(2)}`],
+      ['Net Amount', `$${row.netAmount.toFixed(2)}`],
+      ['Paid Status', row.paidStatus],
+      ['Due Amount', `$${row.dueAmount.toFixed(2)}`],
+    ]
+
+    autoTable(doc, {
+      startY: 110,
+      head: [tableData[0]],
+      body: tableData.slice(1),
+    })
+
+    doc.save(`Invoice_${row.invoiceNumber}.pdf`)
+  }
+
+  const handleCreate = async () => {
+    setSaving(true)
+    try {
+      const payload = {
+        ...addForm,
+        schoolId: Number(addForm.schoolId),
+        classId: Number(addForm.classId),
+        studentId: Number(addForm.studentId),
+        feeTypeId: Number(addForm.feeTypeId),
+        discountId: addForm.discountId ? Number(addForm.discountId) : null,
+        feeAmount: Number(addForm.feeAmount),
+        isApplicableDiscount: addForm.isApplicableDiscount === 'Yes',
+        grossAmount: Number(addForm.grossAmount || addForm.feeAmount || 0),
+        netAmount: Number(addForm.netAmount || addForm.feeAmount || 0),
+        discount: Number(addForm.discount || 0),
+        dueAmount: Number(addForm.dueAmount || 0),
+      }
+      await createFeeCollection(payload)
+      setIsAddOpen(false)
+      loadData()
+    } catch (err) {
+      console.error('Failed to create:', err)
+      setError('Failed to create invoice')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
+    setter((prev) => ({
+      ...prev,
+      [id]: value,
+      ...(id === 'headOfficeId' ? { schoolId: '', classId: '', studentId: '', feeTypeId: '', discountId: '' } : {}),
+      ...(id === 'schoolId' ? { classId: '', studentId: '', feeTypeId: '', discountId: '' } : {}),
+      ...(id === 'classId' ? { studentId: '' } : {}),
+      ...(id === 'discountId' ? recalcTotals({ ...prev, [id]: value, isApplicableDiscount: 'Yes' }, value) : {}),
+      ...((id === 'feeAmount' || id === 'isApplicableDiscount' || id === 'paidStatus')
+        ? recalcTotals({ ...prev, [id]: value }, prev.discountId)
+        : {}),
+    }))
+    if (id === 'headOfficeId' && isSuperAdmin) {
+      manualScope.setSelectedScope(value, '')
+    }
   }
 
   const handlePendingFilterChange = (e) => {
@@ -266,28 +477,57 @@ const FeeCollection = () => {
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
+    const base = { ...emptyForm }
+    if (isSchoolAdmin) {
+      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+      base.schoolId = authSchoolId != null ? String(authSchoolId) : ''
+    } else if (isHeadOfficeAdmin) {
+      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+    } else if (isSuperAdmin) {
+      base.headOfficeId = manualScope.selectedHeadOfficeId || ''
+      base.schoolId = manualScope.selectedSchoolId || ''
+    }
+    Object.assign(base, recalcTotals(base, base.discountId))
+    setAddForm(base)
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openBulk = () => {
-    setBulkForm(emptyBulkForm)
+    const base = { ...emptyBulkForm }
+    if (isSchoolAdmin) {
+      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+      base.schoolId = authSchoolId != null ? String(authSchoolId) : ''
+    } else if (isHeadOfficeAdmin) {
+      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+    } else if (isSuperAdmin) {
+      base.headOfficeId = manualScope.selectedHeadOfficeId || ''
+      base.schoolId = manualScope.selectedSchoolId || ''
+    }
+    Object.assign(base, recalcTotals(base, base.discountId))
+    setBulkForm(base)
     setBulkStep(0)
     setIsBulkOpen(true)
   }
 
   const openEdit = (row) => {
+    const s = row?.schoolId != null ? schoolOptions.find((item) => String(item.id) === String(row.schoolId)) : null
+    if (isSuperAdmin && s?.headOfficeId != null) {
+      manualScope.setSelectedScope(String(s.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
+    }
     setEditForm({
-      school: row.school,
-      className: '',
-      student: row.studentSaleTo,
-      feeType: '',
-      feeAmount: row.netAmount,
+      id: row.id,
+      headOfficeId: s?.headOfficeId != null ? String(s.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : ''),
+      schoolId: row.schoolId,
+      classId: row.classId,
+      studentId: row.studentId,
+      feeTypeId: row.feeTypeId,
+      discountId: row.discountId != null ? String(row.discountId) : '',
+      feeAmount: row.feeAmount,
       month: row.month,
-      isApplicableDiscount: row.discount > 0 ? 'Yes' : 'No',
-      paidStatus: row.status,
-      note: '',
+      isApplicableDiscount: row.isApplicableDiscount ? 'Yes' : 'No',
+      paidStatus: row.paidStatus,
+      note: row.note,
     })
     setEditStep(0)
     setIsEditOpen(true)
@@ -308,17 +548,44 @@ const FeeCollection = () => {
           <>
             <p className="avm-section-title">{INVOICE_STEPS[0]}</p>
             <div className="avm-grid">
+              {isSuperAdmin ? (
+                <FormField label="Head Office" required full>
+                  <select
+                    className="avm-select"
+                    id="headOfficeId"
+                    value={form.headOfficeId}
+                    onChange={handleChange(setter)}
+                  >
+                    <option value="">--Select Head Office--</option>
+                    {headOffices.map((ho) => (
+                      <option key={ho.id} value={String(ho.id)}>
+                        {ho.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : isHeadOfficeAdmin ? (
+                <FormField label="Head Office" required full>
+                  <input className="avm-input" value={headOfficeName || ''} readOnly />
+                </FormField>
+              ) : isSchoolAdmin ? (
+                <FormField label="Head Office" required full>
+                  <input className="avm-input" value={headOfficeName || ''} readOnly />
+                </FormField>
+              ) : null}
+
               <FormField label="School Name" required full>
                 <select
                   className="avm-select"
-                  id="school"
-                  value={form.school}
+                  id="schoolId"
+                  value={form.schoolId}
                   onChange={handleChange(setter)}
+                  disabled={isSchoolAdmin || isHeadOfficeAdmin ? true : !form.headOfficeId}
                 >
                   <option value="">--Select School--</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {formSchoolOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.schoolName}
                     </option>
                   ))}
                 </select>
@@ -327,14 +594,15 @@ const FeeCollection = () => {
               <FormField label="Class" required>
                 <select
                   className="avm-select"
-                  id="className"
-                  value={form.className}
+                  id="classId"
+                  value={form.classId}
                   onChange={handleChange(setter)}
+                  disabled={!form.schoolId}
                 >
                   <option value="">--Select--</option>
                   {classOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.id} value={option.id}>
+                      {option.className}
                     </option>
                   ))}
                 </select>
@@ -343,15 +611,15 @@ const FeeCollection = () => {
               <FormField label="Student" required>
                 <select
                   className="avm-select"
-                  id="student"
-                  value={form.student}
+                  id="studentId"
+                  value={form.studentId}
                   onChange={handleChange(setter)}
-                  disabled={!form.className}
+                  disabled={!form.classId}
                 >
                   <option value="">--Select--</option>
-                  {studentOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {students.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
                     </option>
                   ))}
                 </select>
@@ -367,14 +635,15 @@ const FeeCollection = () => {
               <FormField label="Fee Type" required>
                 <select
                   className="avm-select"
-                  id="feeType"
-                  value={form.feeType}
+                  id="feeTypeId"
+                  value={form.feeTypeId}
                   onChange={handleChange(setter)}
+                  disabled={!form.schoolId}
                 >
                   <option value="">--Select--</option>
                   {feeTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.id} value={option.id}>
+                      {option.title || option.feeType}
                     </option>
                   ))}
                 </select>
@@ -422,13 +691,32 @@ const FeeCollection = () => {
                   onChange={handleChange(setter)}
                 >
                   <option value="">--Select--</option>
-                  {discountOptions.map((option) => (
+                  {applicableDiscountOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
                 </select>
               </FormField>
+
+              {form.isApplicableDiscount === 'Yes' ? (
+                <FormField label="Discount Type" required>
+                  <select
+                    className="avm-select"
+                    id="discountId"
+                    value={form.discountId}
+                    onChange={handleChange(setter)}
+                    disabled={!form.schoolId}
+                  >
+                    <option value="">--Select Discount Type--</option>
+                    {discountMasterOptions.map((option) => (
+                      <option key={option.id} value={String(option.id)}>
+                        {option.title} ({option.discountType === 'Percentage' ? `${option.amount}%` : `₹${Number(option.amount || 0).toFixed(2)}`})
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : null}
 
               <FormField label="Paid Status" required>
                 <select
@@ -470,17 +758,44 @@ const FeeCollection = () => {
           <>
             <p className="avm-section-title">{BULK_STEPS[0]}</p>
             <div className="avm-grid">
+              {isSuperAdmin ? (
+                <FormField label="Head Office" required full>
+                  <select
+                    className="avm-select"
+                    id="headOfficeId"
+                    value={form.headOfficeId}
+                    onChange={handleChange(setter)}
+                  >
+                    <option value="">--Select Head Office--</option>
+                    {headOffices.map((ho) => (
+                      <option key={ho.id} value={String(ho.id)}>
+                        {ho.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : isHeadOfficeAdmin ? (
+                <FormField label="Head Office" required full>
+                  <input className="avm-input" value={headOfficeName || ''} readOnly />
+                </FormField>
+              ) : isSchoolAdmin ? (
+                <FormField label="Head Office" required full>
+                  <input className="avm-input" value={headOfficeName || ''} readOnly />
+                </FormField>
+              ) : null}
+
               <FormField label="School Name" required full>
                 <select
                   className="avm-select"
-                  id="school"
-                  value={form.school}
+                  id="schoolId"
+                  value={form.schoolId}
                   onChange={handleChange(setter)}
+                  disabled={isSchoolAdmin || isHeadOfficeAdmin ? true : !form.headOfficeId}
                 >
                   <option value="">--Select School--</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {formSchoolOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.schoolName}
                     </option>
                   ))}
                 </select>
@@ -489,14 +804,15 @@ const FeeCollection = () => {
               <FormField label="Class" required full>
                 <select
                   className="avm-select"
-                  id="className"
-                  value={form.className}
+                  id="classId"
+                  value={form.classId}
                   onChange={handleChange(setter)}
+                  disabled={!form.schoolId}
                 >
                   <option value="">--Select--</option>
                   {classOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.id} value={option.id}>
+                      {option.className}
                     </option>
                   ))}
                 </select>
@@ -512,14 +828,15 @@ const FeeCollection = () => {
               <FormField label="Fee Type" required>
                 <select
                   className="avm-select"
-                  id="feeType"
-                  value={form.feeType}
+                  id="feeTypeId"
+                  value={form.feeTypeId}
                   onChange={handleChange(setter)}
+                  disabled={!form.schoolId}
                 >
                   <option value="">--Select--</option>
                   {feeTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.id} value={option.id}>
+                      {option.title || option.feeType}
                     </option>
                   ))}
                 </select>
@@ -567,13 +884,32 @@ const FeeCollection = () => {
                   onChange={handleChange(setter)}
                 >
                   <option value="">--Select--</option>
-                  {discountOptions.map((option) => (
+                  {applicableDiscountOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
                 </select>
               </FormField>
+
+              {form.isApplicableDiscount === 'Yes' ? (
+                <FormField label="Discount Type" required>
+                  <select
+                    className="avm-select"
+                    id="discountId"
+                    value={form.discountId}
+                    onChange={handleChange(setter)}
+                    disabled={!form.schoolId}
+                  >
+                    <option value="">--Select Discount Type--</option>
+                    {discountMasterOptions.map((option) => (
+                      <option key={option.id} value={String(option.id)}>
+                        {option.title} ({option.discountType === 'Percentage' ? `${option.amount}%` : `₹${Number(option.amount || 0).toFixed(2)}`})
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : null}
 
               <FormField label="Paid Status" required>
                 <select
@@ -801,42 +1137,42 @@ const FeeCollection = () => {
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  paginated.map((row, index) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + index + 1}</label>
                         </div>
                       </td>
                       {visibleColumns.school ? (
-                        <td className="fw-medium text-primary-light">{row.school}</td>
+                        <td className="fw-medium text-primary-light">{row.schoolName}</td>
                       ) : null}
                       {visibleColumns.invoiceNumber ? (
                         <td className="fw-medium">{row.invoiceNumber}</td>
                       ) : null}
-                      {visibleColumns.studentSaleTo ? <td className="fw-medium">{row.studentSaleTo}</td> : null}
+                      {visibleColumns.studentSaleTo ? <td className="fw-medium">{row.studentName}</td> : null}
                       {visibleColumns.month ? <td>{row.month}</td> : null}
                       {visibleColumns.grossAmount ? (
-                        <td className="text-end fw-semibold">₹{row.grossAmount.toLocaleString()}</td>
+                        <td className="text-end fw-semibold">₹{row.grossAmount?.toLocaleString()}</td>
                       ) : null}
                       {visibleColumns.discount ? (
-                        <td className="text-end text-danger-600">-₹{row.discount.toLocaleString()}</td>
+                        <td className="text-end text-danger-600">-₹{row.discount?.toLocaleString()}</td>
                       ) : null}
                       {visibleColumns.netAmount ? (
-                        <td className="text-end fw-semibold">₹{row.netAmount.toLocaleString()}</td>
+                        <td className="text-end fw-semibold">₹{row.netAmount?.toLocaleString()}</td>
                       ) : null}
                       {visibleColumns.dueAmount ? (
                         <td className={`text-end fw-semibold ${row.dueAmount > 0 ? 'text-danger-600' : 'text-success-600'}`}>
-                          ₹{row.dueAmount.toLocaleString()}
+                          ₹{row.dueAmount?.toLocaleString()}
                         </td>
                       ) : null}
-                      {visibleColumns.status ? <td>{getStatusBadge(row.status)}</td> : null}
+                      {visibleColumns.status ? <td>{getStatusBadge(row.paidStatus)}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
@@ -849,7 +1185,21 @@ const FeeCollection = () => {
                           </button>
                           <button
                             type="button"
+                            className="bg-success-focus bg-hover-success-200 text-success-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDownloadInvoice(row)}
+                            title="Download Invoice"
+                          >
+                            <i className="ri-download-2-line"></i>
+                          </button>
+                          <button
+                            type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to delete this invoice?')) {
+                                await deleteFeeCollection(row.id)
+                                loadData()
+                              }
+                            }}
                             title="Delete"
                           >
                             <i className="ri-delete-bin-line"></i>
@@ -915,8 +1265,8 @@ const FeeCollection = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(INVOICE_STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Create Invoice"
+        onSubmit={handleCreate}
+        submitLabel={saving ? 'Creating...' : 'Create Invoice'}
       >
         {renderInvoiceForm(addForm, setAddForm, addStep)}
       </WizardPopup>
@@ -961,6 +1311,20 @@ const FeeCollection = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <ManualScopeSelectors
+                enabled
+                headOffices={manualScope.headOffices}
+                schoolOptions={manualScope.schoolOptions}
+                selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+                onHeadOfficeChange={(val) => manualScope.setSelectedScope(val, '')}
+                selectedSchoolId={manualScope.selectedSchoolId}
+                onSchoolChange={(val) => manualScope.setSelectedSchoolId(val)}
+              />
+            </div>
+          ) : null}
+
           <div style={{ gridColumn: '1 / -1' }}>
             <label
               htmlFor="school"
@@ -975,9 +1339,9 @@ const FeeCollection = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {schools.map((option) => (
+                <option key={option.id} value={option.schoolName}>
+                  {option.schoolName}
                 </option>
               ))}
             </select>
