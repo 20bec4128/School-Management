@@ -184,7 +184,6 @@ const ManageSchool = ({ onNavigate }) => {
   const [editingSchoolId, setEditingSchoolId] = useState(null)
 
   const [search, setSearch] = useState('')
-  const debouncedSearch = search
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -339,7 +338,7 @@ const ManageSchool = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      const effectiveSearch = filters.school !== 'Select' ? filters.school : debouncedSearch
+      const effectiveSearch = filters.school !== 'Select' ? filters.school : search
       const data = await fetchSchoolsPage(currentPage - 1, rowsPerPage, effectiveSearch, filters.status)
       const normalizeRows = (rows) =>
         (Array.isArray(rows) ? rows : []).map((r) => ({ ...r, status: toUiStatus(r?.status) }))
@@ -366,7 +365,7 @@ const ManageSchool = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, rowsPerPage, debouncedSearch, filters])
+  }, [currentPage, rowsPerPage, search, filters])
 
   const loadHeadOffices = useCallback(async () => {
     if (!isSuperAdmin) {

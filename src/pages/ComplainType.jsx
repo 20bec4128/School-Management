@@ -333,38 +333,6 @@ const ComplainType = () => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isSuperAdmin ? (
-            <div className="d-flex flex-wrap align-items-center gap-12">
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={manualScope.selectedHeadOfficeId}
-                onChange={(event) => {
-                  manualScope.setSelectedHeadOfficeId(event.target.value)
-                  manualScope.setSelectedSchoolId('')
-                }}
-              >
-                <option value="">Select Head Office</option>
-                {manualScope.headOffices.map((ho) => (
-                  <option key={String(ho.id)} value={String(ho.id)}>
-                    {ho.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={manualScope.selectedSchoolId}
-                onChange={(event) => manualScope.setSelectedSchoolId(event.target.value)}
-                disabled={!manualScope.selectedHeadOfficeId}
-              >
-                <option value="">{manualScope.selectedHeadOfficeId ? 'Select School' : 'Select Head Office First'}</option>
-                {schoolOptions.map((school) => (
-                  <option key={school.id} value={school.id}>
-                    {school.schoolName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"

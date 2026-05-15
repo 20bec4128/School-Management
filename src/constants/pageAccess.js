@@ -25,7 +25,7 @@ export const PAGE_GROUPS = [
   {
     key: 'academic-management',
     label: 'Academic Management',
-    pageKeys: ['class', 'section', 'subject', 'syllabus', 'study-material', 'live-class', 'assignment', 'submission'],
+    pageKeys: ['class', 'section', 'subject', 'syllabus', 'add-syllabus', 'study-material', 'add-study-material', 'live-class', 'assignment', 'submission'],
   },
   {
     key: 'teacher-management',
@@ -75,7 +75,7 @@ export const PAGE_GROUPS = [
   {
     key: 'communication',
     label: 'Communication',
-    pageKeys: ['visitor-purpose', 'call-log', 'visitor-info', 'postal-dispatch', 'postal-receive', 'complain-type', 'manage-complain', 'notice', 'news', 'holiday', 'event', 'gallery', 'images', 'videos'],
+    pageKeys: ['visitor-purpose', 'call-log', 'visitor-info', 'postal-dispatch', 'postal-receive', 'complain-type', 'manage-complain', 'notice', 'news', 'holiday', 'event', 'gallery', 'images', 'videos', 'add-videos', 'absent-email', 'add-absent-email'],
   },
   {
     key: 'certificates',
@@ -107,7 +107,9 @@ export const PAGE_KEY_PERMISSIONS = {
   section: ['SECTION_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   subject: ['SUBJECT_VIEW_OWN', 'SUBJECT_VIEW_CHILD', 'SUBJECT_VIEW_ASSIGNED', 'SUBJECT_MANAGE', 'SUBJECT_MANAGE_ASSIGNED', '*'],
   syllabus: ['SYLLABUS_VIEW_OWN', 'SYLLABUS_VIEW_CHILD', 'SYLLABUS_MANAGE', 'SYLLABUS_MANAGE_ASSIGNED', '*'],
+  'add-syllabus': ['SYLLABUS_VIEW_OWN', 'SYLLABUS_VIEW_CHILD', 'SYLLABUS_MANAGE', 'SYLLABUS_MANAGE_ASSIGNED', '*'],
   'study-material': ['STUDY_MATERIAL_VIEW_OWN', 'STUDY_MATERIAL_VIEW_CHILD', 'STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'],
+  'add-study-material': ['STUDY_MATERIAL_VIEW_OWN', 'STUDY_MATERIAL_VIEW_CHILD', 'STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'],
   'live-class': ['LIVE_CLASS_JOIN', 'LIVE_CLASS_VIEW_OWN', 'LIVE_CLASS_VIEW_CHILD', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'],
   assignment: ['ASSIGNMENT_SUBMIT', 'ASSIGNMENT_VIEW_OWN', 'ASSIGNMENT_VIEW_CHILD', 'ASSIGNMENT_MANAGE', 'ASSIGNMENT_MANAGE_ASSIGNED', '*'],
   submission: [
@@ -190,6 +192,9 @@ export const PAGE_KEY_PERMISSIONS = {
   gallery: ['GALLERY_VIEW', '*'],
   images: ['GALLERY_VIEW', '*'],
   videos: ['GALLERY_VIEW', '*'],
+  'add-videos': ['GALLERY_VIEW', '*'],
+  'absent-email': ['NOTICE_VIEW', 'NEWS_VIEW', '*'],
+  'add-absent-email': ['NOTICE_VIEW', 'NEWS_VIEW', '*'],
 
   // Certificates
   'id-card-setting': ['ID_CARD_SETTING', '*'],

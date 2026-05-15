@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -8,40 +7,17 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { fetchAcademicYears } from '../apis/academicYearsApi'
 import { fetchComplainTypes } from '../apis/complainTypeApi'
-import { createComplain, deleteComplain, fetchComplains, updateComplain } from '../apis/complainApi'
-import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy, uniqueStrings } from '../utils/schoolScope'
+import { deleteComplain, fetchComplains } from '../apis/complainApi'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy, uniqueStrings } from '../utils/schoolScope'
 import '../assets/css/addModalShared.css'
 
-const emptyForm = {
-  schoolId: '',
-  academicYear: '',
-  userType: '',
-  complainBy: '',
-  complainTypeId: '',
-  complainDate: '',
-  actionDate: '',
-  complain: '',
-}
+const EDIT_STORAGE_KEY = 'manage-complain-edit-row'
 
 const emptyFilters = {
   schoolId: '',
   academicYear: 'Select',
   complainTypeId: 'Select',
   userType: 'Select',
-}
-
-const ADD_STEPS = ['Basic Info', 'Other Info']
-const EDIT_STEPS = ['Basic Info', 'Other Info']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Academic Year': 'ri-calendar-2-line',
-  'User Type': 'ri-user-settings-line',
-  'Complain By': 'ri-user-3-line',
-  'Complain Type': 'ri-error-warning-line',
-  'Complain Date': 'ri-calendar-check-line',
-  'Action Date': 'ri-calendar-event-line',
-  Complain: 'ri-chat-3-line',
 }
 
 const columnOptions = [
@@ -55,48 +31,8 @@ const columnOptions = [
 ]
 
 const userTypeOptions = ['Student', 'Teacher', 'Employee', 'Parent']
-const complainByOptions = {
-  Student: ['Alice Brown', 'Bob Wilson', 'Charlie Davis', 'Diana Prince', 'Ethan Hunt'],
-  Teacher: ['John Smith', 'Sarah Johnson', 'David Lee', 'Emily Clark', 'Michael Brown'],
-  Employee: ['James Carter', 'Linda Brooks', 'Marcus Hill', 'Nina Walsh'],
-  Parent: ['Mr. Thompson', 'Mrs. Garcia', 'Mr. Patel', 'Mrs. Lee'],
-}
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const ManageComplain = () => {
+const ManageComplain = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -110,12 +46,6 @@ const ManageComplain = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -124,7 +54,6 @@ const ManageComplain = () => {
     ? (activeSchoolId ? String(activeSchoolId) : '')
     : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
-  const isSchoolLocked = !isSuperAdmin && !!listSchoolId
 
   const academicYearSuggestions = useMemo(
     () => uniqueStrings(academicYears.map((year) => year?.academicYear)),
@@ -192,14 +121,9 @@ const ManageComplain = () => {
   }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData()
   }, [loadData])
-
-  useEffect(() => {
-    if (!isSuperAdmin && listSchoolId) {
-      setAddForm((prev) => ({ ...prev, schoolId: listSchoolId }))
-    }
-  }, [isSuperAdmin, listSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -241,15 +165,6 @@ const ManageComplain = () => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (event) => {
-    const { id, value } = event.target
-    setter((prev) => {
-      const next = { ...prev, [id]: value }
-      if (id === 'userType') next.complainBy = ''
-      return next
-    })
-  }
-
   const handlePendingFilterChange = (event) => {
     const { id, value } = event.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
@@ -268,74 +183,14 @@ const ManageComplain = () => {
   }
 
   const openAdd = () => {
-    setError('')
-    setAddForm({
-      ...emptyForm,
-      schoolId: isSuperAdmin ? '' : listSchoolId || '',
-      academicYear: academicYearSuggestions[0] || '',
-    })
-    setAddStep(0)
-    setIsAddOpen(true)
+    sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    onNavigate?.('add-complain')
   }
 
   const openEdit = (row) => {
-    setError('')
-    if (isSuperAdmin) {
-      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      id: row.id,
-      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
-      academicYear: row.academicYear || '',
-      userType: row.userType || '',
-      complainBy: row.complainBy || '',
-      complainTypeId: row.complainTypeId != null ? String(row.complainTypeId) : '',
-      complainDate: row.complainDate || '',
-      actionDate: row.actionDate || '',
-      complain: row.complain || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    academicYear: form.academicYear || '',
-    userType: form.userType || '',
-    complainBy: form.complainBy || '',
-    complainTypeId: form.complainTypeId ? Number(form.complainTypeId) : null,
-    complainDate: form.complainDate || null,
-    actionDate: form.actionDate || null,
-    complain: form.complain || '',
-  })
-
-  const handleSave = async () => {
-    try {
-      if (!addForm.schoolId || !addForm.academicYear || !addForm.userType || !addForm.complainBy || !addForm.complainTypeId || !addForm.complainDate || !addForm.complain) {
-        alert('Please fill all required fields')
-        return
-      }
-      await createComplain(buildPayload(addForm))
-      setIsAddOpen(false)
-      void loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to save complain')
-      alert('Failed to save complain')
-    }
-  }
-
-  const handleUpdate = async () => {
-    try {
-      await updateComplain(editForm.id, buildPayload(editForm))
-      setIsEditOpen(false)
-      void loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to update complain')
-      alert('Failed to update complain')
-    }
+    if (!row?.id) return
+    sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    onNavigate?.('add-complain')
   }
 
   const handleDelete = async (id) => {
@@ -343,7 +198,7 @@ const ManageComplain = () => {
     try {
       await deleteComplain(id)
       void loadData()
-    } catch (err) {
+    } catch {
       alert('Failed to delete complain')
     }
   }
@@ -354,140 +209,6 @@ const ManageComplain = () => {
     const end = Math.min(totalPages, start + 2)
     for (let page = start; page <= end; page += 1) pages.push(page)
     return pages
-  }
-
-  const renderForm = (form, setter, step = 0) => {
-    const availableComplainBy = form.userType ? (complainByOptions[form.userType] || []) : []
-    const selectedAcademicYear = form.academicYear || ''
-
-    return (
-      <>
-        <p className="avm-section-title">{step === 0 ? 'Basic Information' : 'Other Information'}</p>
-        <div className="avm-grid">
-          {step === 0 ? (
-            <>
-              {isSuperAdmin ? (
-                <div className="avm-field full">
-                  <ManualScopeSelectors
-                    enabled={isSuperAdmin}
-                    headOffices={manualScope.headOffices}
-                    schoolOptions={schoolOptions}
-                    selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-                    onHeadOfficeChange={(value) => {
-                      manualScope.setSelectedHeadOfficeId(value)
-                      manualScope.setSelectedSchoolId('')
-                      setter((prev) => ({ ...prev, schoolId: '' }))
-                    }}
-                    selectedSchoolId={form.schoolId}
-                    onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
-                  />
-                </div>
-              ) : (
-                <FormField label="School Name" required full>
-                  <select
-                    className="avm-select"
-                    id="schoolId"
-                    value={form.schoolId}
-                    onChange={handleChange(setter)}
-                    disabled={isSchoolLocked}
-                  >
-                    <option value="">--Select School--</option>
-                    {schoolOptions.map((school) => (
-                      <option key={school.id} value={school.id}>
-                        {school.schoolName}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-              )}
-
-              <FormField label="Academic Year" required>
-                <input
-                  type="text"
-                  className="avm-input"
-                  id="academicYear"
-                  list="complain-academic-years"
-                  placeholder="Enter academic year"
-                  value={selectedAcademicYear}
-                  onChange={handleChange(setter)}
-                />
-                <datalist id="complain-academic-years">
-                  {academicYearSuggestions.map((year) => (
-                    <option key={year} value={year} />
-                  ))}
-                </datalist>
-              </FormField>
-
-              <FormField label="User Type" required>
-                <select className="avm-select" id="userType" value={form.userType} onChange={handleChange(setter)}>
-                  <option value="">--Select--</option>
-                  {userTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Complain By" required>
-                <select className="avm-select" id="complainBy" value={form.complainBy} onChange={handleChange(setter)} disabled={!form.userType}>
-                  <option value="">--Select--</option>
-                  {availableComplainBy.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Complain Type" required>
-                <select className="avm-select" id="complainTypeId" value={form.complainTypeId} onChange={handleChange(setter)}>
-                  <option value="">--Select--</option>
-                  {complainTypeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Complain Date" required full>
-                <input
-                  type="date"
-                  className="avm-input"
-                  id="complainDate"
-                  value={form.complainDate}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </>
-          ) : (
-            <>
-              <FormField label="Action Date" full>
-                <input
-                  type="date"
-                  className="avm-input"
-                  id="actionDate"
-                  value={form.actionDate}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Complain" required full>
-                <textarea
-                  rows="4"
-                  className="avm-input avm-textarea"
-                  id="complain"
-                  placeholder="Enter complain details"
-                  value={form.complain}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </>
-          )}
-        </div>
-      </>
-    )
   }
 
   return (
@@ -736,36 +457,6 @@ const ManageComplain = () => {
           </div>
         </div>
       </div>
-
-      <WizardPopup
-        modalWidth="560px"
-        open={isAddOpen}
-        title="Add Complain"
-        steps={ADD_STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((step) => Math.max(0, step - 1))}
-        onNext={() => setAddStep((step) => Math.min(ADD_STEPS.length - 1, step + 1))}
-        onSubmit={handleSave}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="560px"
-        open={isEditOpen}
-        title="Edit Complain"
-        steps={EDIT_STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((step) => Math.max(0, step - 1))}
-        onNext={() => setEditStep((step) => Math.min(EDIT_STEPS.length - 1, step + 1))}
-        onSubmit={handleUpdate}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}

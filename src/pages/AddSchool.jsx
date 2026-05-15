@@ -369,7 +369,7 @@ const AddSchool = ({ onNavigate }) => {
       }
 
       setSuccess(true);
-      setTimeout(() => onNavigate("manage-school"), 2000);
+      setTimeout(() => onNavigate("manage-school"), 1000);
     } catch (err) {
       setError(err?.message || (isEditing ? "Failed to update school" : "Failed to create school"));
     } finally {

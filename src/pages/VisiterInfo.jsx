@@ -91,7 +91,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const VisitorInfo = () => {
+const VisitorInfo = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -104,12 +104,6 @@ const VisitorInfo = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -167,11 +161,6 @@ const VisitorInfo = () => {
     void loadData()
   }, [loadData])
 
-  useEffect(() => {
-    if (!isSuperAdmin && listSchoolId) {
-      setAddForm(prev => ({ ...prev, schoolId: listSchoolId }))
-    }
-  }, [isSuperAdmin, listSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -223,73 +212,14 @@ const VisitorInfo = () => {
   }
 
   const openAdd = () => { 
-    setError('')
-    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
-    setAddStep(0)
-    setIsAddOpen(true) 
+    onNavigate("add-visitor-info");
   }
 
   const openEdit = (row) => {
-    setError('')
-    if (isSuperAdmin) {
-      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      ...row,
-      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
-      purposeId: row.purposeId != null ? String(row.purposeId) : '',
-      numOfPerson: row.numOfPerson ?? 1,
-      date: row.date || new Date().toISOString().split('T')[0],
-      inTime: row.inTime || '',
-      outTime: row.outTime || '',
-      note: row.note || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+    sessionStorage.setItem("visitor-info-edit-row", JSON.stringify(row));
+    onNavigate("add-visitor-info");
   }
 
-  const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    name: form.name || '',
-    phone: form.phone || '',
-    purposeId: form.purposeId ? Number(form.purposeId) : null,
-    comingFrom: form.comingFrom || '',
-    idCard: form.idCard || '',
-    numOfPerson: form.numOfPerson ? Number(form.numOfPerson) : 1,
-    date: form.date || null,
-    inTime: form.inTime || null,
-    outTime: form.outTime || null,
-    note: form.note || '',
-  })
-
-  const handleSave = async () => {
-    try {
-      if (!addForm.schoolId || !addForm.name || !addForm.date) {
-        alert('Please fill all required fields')
-        return
-      }
-      await createVisitorInfo(buildPayload(addForm))
-      setIsAddOpen(false)
-      void loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to save visitor info')
-      alert('Failed to save visitor info')
-    }
-  }
-
-  const handleUpdate = async () => {
-    try {
-      await updateVisitorInfo(editForm.id, buildPayload(editForm))
-      setIsEditOpen(false)
-      void loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to update visitor info')
-      alert('Failed to update visitor info')
-    }
-  }
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this visitor?')) return
@@ -309,144 +239,6 @@ const VisitorInfo = () => {
     return pages
   }
 
-  const renderForm = (form, setter) => (
-    <>
-      <p className="avm-section-title">Basic Information</p>
-      <div className="avm-grid">
-        {isSuperAdmin ? (
-          <div className="avm-field full">
-            <ManualScopeSelectors
-              enabled={isSuperAdmin}
-              headOffices={manualScope.headOffices}
-              schoolOptions={schoolOptions}
-              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-              onHeadOfficeChange={(value) => {
-                manualScope.setSelectedHeadOfficeId(value)
-                manualScope.setSelectedSchoolId('')
-                setter((prev) => ({ ...prev, schoolId: '' }))
-              }}
-              selectedSchoolId={form.schoolId}
-              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
-            />
-          </div>
-        ) : (
-          <FormField label="School Name" required full>
-            <select
-              className="avm-select"
-              id="schoolId"
-              value={form.schoolId}
-              onChange={handleChange(setter)}
-              disabled={isSchoolLocked}
-            >
-              <option value="">--Select School--</option>
-              {schoolOptions.map(s => (
-                <option key={s.id} value={s.id}>{s.schoolName}</option>
-              ))}
-            </select>
-          </FormField>
-        )}
-
-        <FormField label="Name" required>
-          <input
-            type="text"
-            className="avm-input"
-            id="name"
-            placeholder="Enter name"
-            value={form.name}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <PhoneField
-          id="phone"
-          label="Phone number"
-          required
-          value={form.phone}
-          onChange={(fullValue) => setter((prev) => ({ ...prev, phone: fullValue }))}
-        />
-
-        <FormField label="Visitor Purpose" required full>
-          <select className="avm-select" id="purposeId" value={form.purposeId} onChange={handleChange(setter)}>
-            <option value="">--Select Purpose--</option>
-            {purposes.map((p) => <option key={p.id} value={p.id}>{p.purpose}</option>)}
-          </select>
-        </FormField>
-
-        <FormField label="Coming From">
-          <input
-            type="text"
-            className="avm-input"
-            id="comingFrom"
-            placeholder="Enter coming from"
-            value={form.comingFrom}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="ID Card">
-          <input
-            type="text"
-            className="avm-input"
-            id="idCard"
-            placeholder="Enter ID card info"
-            value={form.idCard}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Number of Person">
-          <input
-            type="number"
-            className="avm-input"
-            id="numOfPerson"
-            value={form.numOfPerson}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Date" required>
-          <input
-            type="date"
-            className="avm-input"
-            id="date"
-            value={form.date}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="In Time">
-          <input
-            type="time"
-            className="avm-input"
-            id="inTime"
-            value={form.inTime}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Out Time">
-          <input
-            type="time"
-            className="avm-input"
-            id="outTime"
-            value={form.outTime}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Note" full>
-          <textarea
-            rows="3"
-            className="avm-input avm-textarea"
-            id="note"
-            placeholder="Enter note"
-            value={form.note}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-      </div>
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -637,37 +429,6 @@ const VisitorInfo = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
-      <WizardPopup
-        modalWidth="540px"
-        open={isAddOpen}
-        title="Add Visitor"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleSave}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm)}
-      </WizardPopup>
-
-      {/* Edit Modal */}
-      <WizardPopup
-        modalWidth="540px"
-        open={isEditOpen}
-        title="Edit Visitor"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm)}
-      </WizardPopup>
 
       {/* Filter Sidebar */}
       <SlideSidebar

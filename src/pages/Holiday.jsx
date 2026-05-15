@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -7,18 +6,10 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { createHoliday, deleteHoliday, fetchHolidays, updateHoliday } from '../apis/holidayApi'
-import { findSchoolById } from '../utils/schoolScope'
+import { deleteHoliday, fetchHolidays } from '../apis/holidayApi'
 import '../assets/css/addModalShared.css'
 
-const emptyForm = {
-  schoolId: '',
-  title: '',
-  fromDate: '',
-  toDate: '',
-  note: '',
-  isViewOnWeb: '',
-}
+
 
 const emptyFilters = {
   headOfficeId: '',
@@ -26,8 +17,7 @@ const emptyFilters = {
   isViewOnWeb: 'Select',
 }
 
-const ADD_STEPS = ['Basic Info', 'Other Info']
-const EDIT_STEPS = ['Basic Info', 'Other Info']
+
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
@@ -46,41 +36,7 @@ const columnOptions = [
   { key: 'isViewOnWeb', label: 'Is View on Web?' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const Holiday = () => {
+const Holiday = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth()
   const { activeSchoolId } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -95,13 +51,6 @@ const Holiday = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [editingId, setEditingId] = useState(null)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -114,8 +63,8 @@ const Holiday = () => {
       : authSchoolId
         ? String(authSchoolId)
         : ''
-  const canChooseSchool = isSuperAdmin || isHeadOfficeAdmin
-  const isSchoolLocked = !canChooseSchool && !!listSchoolId
+
+
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
@@ -131,7 +80,7 @@ const Holiday = () => {
       ? [{ id: authSchoolId, schoolName: authSchoolName }]
       : []
     return [...filtered, ...fallback]
-  }, [isSuperAdmin, manualScope.schoolOptions, schools, isHeadOfficeAdmin, authHeadOfficeId, listSchoolId, authSchoolName, authSchoolId])
+  }, [isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, schools, isHeadOfficeAdmin, authHeadOfficeId, listSchoolId, authSchoolName, authSchoolId])
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -217,9 +166,15 @@ const Holiday = () => {
     }
   }, [listSchoolId, isSuperAdmin])
 
-  useEffect(() => { void loadSchools() }, [loadSchools])
-  useEffect(() => { void loadData() }, [loadData])
-  useEffect(() => { if (!isSuperAdmin && listSchoolId) setAddForm((prev) => ({ ...prev, schoolId: listSchoolId })) }, [isSuperAdmin, listSchoolId])
+  useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSchools() 
+  }, [loadSchools])
+  useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData() 
+  }, [loadData])
+
 
   const handleSelectAll = (e) => {
     if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
@@ -230,10 +185,7 @@ const Holiday = () => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
+
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
@@ -254,82 +206,19 @@ const Holiday = () => {
   }
 
   const openAdd = () => {
-    setError('')
-    setEditingId(null)
-    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
-    setAddStep(0)
-    setIsAddOpen(true)
+    sessionStorage.removeItem('edit-holiday-row')
+    onNavigate('add-holiday')
   }
 
   const openEdit = (row) => {
-    setError('')
-    setEditingId(row.id)
-    if (isSuperAdmin) {
-      const school = findSchoolById(schools, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId || '',
-      title: row.title || '',
-      fromDate: row.fromDate || '',
-      toDate: row.toDate || '',
-      note: row.note || '',
-      isViewOnWeb: row.isViewOnWeb ? 'Yes' : 'No',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+    sessionStorage.setItem('edit-holiday-row', JSON.stringify({
+      ...row,
+      isViewOnWeb: row.isViewOnWeb ? 'Yes' : 'No'
+    }))
+    onNavigate('add-holiday')
   }
 
-  const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    title: String(form.title || '').trim(),
-    fromDate: form.fromDate || null,
-    toDate: form.toDate || null,
-    note: String(form.note || '').trim(),
-    isViewOnWeb: form.isViewOnWeb === 'Yes',
-  })
 
-  const validateForm = (form) => {
-    if (!form.schoolId) return 'School is required.'
-    if (!form.title || !String(form.title).trim()) return 'Title is required.'
-    if (!form.fromDate) return 'From date is required.'
-    if (!form.toDate) return 'To date is required.'
-    return ''
-  }
-
-  const handleCreate = async () => {
-    const validationError = validateForm(addForm)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-    try {
-      await createHoliday(buildPayload(addForm))
-      setIsAddOpen(false)
-      await loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to create holiday')
-    }
-  }
-
-  const handleUpdate = async () => {
-    const validationError = validateForm(editForm)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-    try {
-      if (editingId == null) throw new Error('Unable to determine the record to update')
-      await updateHoliday(editingId, buildPayload(editForm))
-      setIsEditOpen(false)
-      setEditingId(null)
-      await loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to update holiday')
-    }
-  }
 
   const handleDelete = async (row) => {
     if (!window.confirm('Delete this holiday? This cannot be undone.')) return
@@ -350,63 +239,7 @@ const Holiday = () => {
     return pages
   }
 
-  const renderForm = (form, setter) => (
-    <>
-      <p className="avm-section-title">Basic Information</p>
-      <div className="avm-grid">
-        {isSuperAdmin ? (
-          <div className="avm-field full">
-            <ManualScopeSelectors
-              enabled={isSuperAdmin}
-              headOffices={manualScope.headOffices}
-              schoolOptions={schoolOptions}
-              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-              onHeadOfficeChange={(value) => {
-                manualScope.setSelectedHeadOfficeId(value)
-                manualScope.setSelectedSchoolId('')
-                setter((prev) => ({ ...prev, schoolId: '' }))
-              }}
-              selectedSchoolId={form.schoolId}
-              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
-            />
-          </div>
-        ) : (
-          <FormField label="School Name" required full>
-            <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleChange(setter)} disabled={isSchoolLocked}>
-              <option value="">--Select School--</option>
-              {schoolOptions.map((school) => (
-                <option key={String(school.id)} value={String(school.id)}>{school.schoolName}</option>
-              ))}
-            </select>
-          </FormField>
-        )}
 
-        <FormField label="Title" required full>
-          <input className="avm-input" id="title" value={form.title} onChange={handleChange(setter)} placeholder="Enter title" />
-        </FormField>
-
-        <FormField label="From Date" required>
-          <input type="date" className="avm-input" id="fromDate" value={form.fromDate} onChange={handleChange(setter)} />
-        </FormField>
-
-        <FormField label="To Date" required>
-          <input type="date" className="avm-input" id="toDate" value={form.toDate} onChange={handleChange(setter)} />
-        </FormField>
-
-        <FormField label="Note" required full>
-          <textarea rows="4" className="avm-input avm-textarea" id="note" value={form.note} onChange={handleChange(setter)} placeholder="Enter note" />
-        </FormField>
-
-        <FormField label="Is View on Web?" full>
-          <select className="avm-select" id="isViewOnWeb" value={form.isViewOnWeb} onChange={handleChange(setter)}>
-            <option value="">--Select--</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-          </select>
-        </FormField>
-      </div>
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -527,13 +360,7 @@ const Holiday = () => {
         </div>
       </div>
 
-      <WizardPopup modalWidth="540px" open={isAddOpen} title="Add Holiday" steps={ADD_STEPS} step={addStep} onClose={() => setIsAddOpen(false)} onBack={() => setAddStep((step) => Math.max(0, step - 1))} onNext={() => setAddStep((step) => Math.min(ADD_STEPS.length - 1, step + 1))} onSubmit={handleCreate} submitLabel="Save">
-        {renderForm(addForm, setAddForm)}
-      </WizardPopup>
 
-      <WizardPopup modalWidth="540px" open={isEditOpen} title="Edit Holiday" steps={EDIT_STEPS} step={editStep} onClose={() => setIsEditOpen(false)} onBack={() => setEditStep((step) => Math.max(0, step - 1))} onNext={() => setEditStep((step) => Math.min(EDIT_STEPS.length - 1, step + 1))} onSubmit={handleUpdate} submitLabel="Update">
-        {renderForm(editForm, setEditForm)}
-      </WizardPopup>
 
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Holidays" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>

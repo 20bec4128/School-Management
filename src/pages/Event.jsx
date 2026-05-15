@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -7,40 +6,15 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { createEvent, deleteEvent, fetchEvents, updateEvent } from '../apis/eventApi'
-import { findSchoolById } from '../utils/schoolScope'
-import '../assets/css/addModalShared.css'
+import { deleteEvent, fetchEvents } from '../apis/eventApi'
 
-const emptyForm = {
-  schoolId: '',
-  title: '',
-  eventFor: '',
-  eventPlace: '',
-  fromDate: '',
-  toDate: '',
-  image: '',
-  note: '',
-  isViewOnWeb: '',
-}
+const EDIT_STORAGE_KEY = 'event-edit-row'
 
 const emptyFilters = {
   headOfficeId: '',
   schoolId: '',
   eventFor: 'Select',
   isViewOnWeb: 'Select',
-}
-
-const ADD_STEPS = ['Basic Info', 'Other Info']
-const EDIT_STEPS = ['Basic Info', 'Other Info']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Title: 'ri-calendar-event-line',
-  'Event for': 'ri-group-line',
-  'Event Place': 'ri-map-pin-line',
-  'From Date': 'ri-calendar-2-line',
-  'To Date': 'ri-calendar-check-line',
-  Note: 'ri-sticky-note-line',
 }
 
 const columnOptions = [
@@ -56,40 +30,6 @@ const columnOptions = [
 
 const eventForOptions = ['Students', 'Parents', 'Staff', 'All']
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
 const eventForBadge = (val) => {
   if (val === 'Students') return 'bg-info-100 text-info-600 px-12 py-4 radius-4 fw-medium text-sm'
   if (val === 'Parents') return 'bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm'
@@ -97,18 +37,11 @@ const eventForBadge = (val) => {
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
 }
 
-const Event = () => {
+const Event = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
-  const { activeSchoolId } = useSchool()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
-  const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId
-      ? String(activeSchoolId)
-      : authSchoolId
-        ? String(authSchoolId)
-        : ''
 
   const [rows, setRows] = useState([])
   const [schools, setSchools] = useState([])
@@ -118,22 +51,18 @@ const Event = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [editingId, setEditingId] = useState(null)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [addPreview, setAddPreview] = useState('')
-  const [editPreview, setEditPreview] = useState('')
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-
-  const addPhotoRef = useRef(null)
-  const editPhotoRef = useRef(null)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+
+  const listSchoolId = isSuperAdmin
+    ? (activeSchoolId ? String(activeSchoolId) : '')
+    : activeSchoolId
+      ? String(activeSchoolId)
+      : authSchoolId
+        ? String(authSchoolId)
+        : ''
 
   const schoolOptions = useMemo(() => {
     const list = Array.isArray(schools) ? schools : []
@@ -237,50 +166,34 @@ const Event = () => {
   }, [listSchoolId, isSuperAdmin])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSchools()
   }, [loadSchools])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData()
   }, [loadData])
 
-  useEffect(() => {
-    if (!isSuperAdmin && listSchoolId) setAddForm((prev) => ({ ...prev, schoolId: listSchoolId }))
-  }, [isSuperAdmin, listSchoolId])
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
+  const handleSelectAll = (event) => {
+    if (event.target.checked) {
+      setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
+    } else {
+      setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
+    }
   }
 
   const handleSelectRow = (id) => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handlePhotoChange = (e, setPreview, setter) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '')
-      setter((prev) => ({ ...prev, image: dataUrl }))
-      setPreview(dataUrl)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
+  const handlePendingFilterChange = (event) => {
+    const { id, value } = event.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
+  const handleApplyFilters = (event) => {
+    event.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
@@ -290,66 +203,29 @@ const Event = () => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setCurrentPage(1)
-  }
-
-  const handleSave = async (form, isEdit = false) => {
-    const payload = {
-      schoolId: form.schoolId ? Number(form.schoolId) : null,
-      title: form.title,
-      eventFor: form.eventFor,
-      eventPlace: form.eventPlace,
-      fromDate: form.fromDate,
-      toDate: form.toDate,
-      image: form.image,
-      note: form.note,
-      isViewOnWeb: form.isViewOnWeb === 'Yes',
-    }
-    if (isEdit) await updateEvent(editingId, payload)
-    else await createEvent(payload)
-    await loadData()
-    setIsAddOpen(false)
-    setIsEditOpen(false)
+    manualScope.setSelectedHeadOfficeId('')
+    manualScope.setSelectedSchoolId('')
   }
 
   const openAdd = () => {
-    setEditingId(null)
-    setAddForm({
-      ...emptyForm,
-      schoolId: isSuperAdmin ? '' : listSchoolId || '',
-    })
-    setAddPreview('')
-    setAddStep(0)
-    setIsAddOpen(true)
+    sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    onNavigate?.('add-event')
   }
 
   const openEdit = (row) => {
-    setEditingId(row.id)
-    if (isSuperAdmin) {
-      const school = findSchoolById(schools, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      schoolId: row.schoolId ? String(row.schoolId) : '',
-      title: row.title,
-      eventFor: row.eventFor,
-      eventPlace: row.eventPlace,
-      fromDate: row.fromDate,
-      toDate: row.toDate,
-      image: row.image || '',
-      note: row.note || '',
-      isViewOnWeb: row.isViewOnWeb ? 'Yes' : 'No',
-    })
-    setEditPreview(row.image || '')
-    setEditStep(0)
-    setIsEditOpen(true)
+    if (!row?.id) return
+    sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    onNavigate?.('add-event')
   }
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this event?')) return
-    await deleteEvent(id)
-    await loadData()
+    try {
+      await deleteEvent(id)
+      void loadData()
+    } catch (err) {
+      setError(err?.message || 'Failed to delete event')
+    }
   }
 
   const getVisiblePages = () => {
@@ -359,134 +235,6 @@ const Event = () => {
     for (let page = start; page <= end; page += 1) pages.push(page)
     return pages
   }
-
-  const renderForm = (form, setter, photoRef, preview, setPreview, step = 0) => (
-    <>
-      <p className="avm-section-title">{step === 0 ? 'Basic Information' : 'Other Information'}</p>
-      <div className="avm-grid">
-        {step === 0 ? (
-          <>
-            {isSuperAdmin ? (
-              <div className="avm-field full">
-                <ManualScopeSelectors
-                  enabled={isSuperAdmin}
-                  headOffices={manualScope.headOffices}
-                  schoolOptions={schoolOptions}
-                  selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-                  onHeadOfficeChange={(value) => {
-                    manualScope.setSelectedHeadOfficeId(value)
-                    manualScope.setSelectedSchoolId('')
-                    setter((prev) => ({ ...prev, schoolId: '' }))
-                  }}
-                  selectedSchoolId={form.schoolId}
-                  onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
-                />
-              </div>
-            ) : (
-              <FormField label="School Name" required full>
-                <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleChange(setter)}>
-                  <option value="">--Select School--</option>
-                  {schoolOptions.map((school) => (
-                    <option key={String(school.id)} value={String(school.id)}>
-                      {school.schoolName}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-            )}
-
-            <FormField label="Title" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="title"
-                placeholder="Title"
-                value={form.title}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Event for" required>
-              <select className="avm-select" id="eventFor" value={form.eventFor} onChange={handleChange(setter)}>
-                <option value="">--Select--</option>
-                {eventForOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Event Place" required>
-              <input
-                type="text"
-                className="avm-input"
-                id="eventPlace"
-                placeholder="Event Place"
-                value={form.eventPlace}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="From Date" required>
-              <input type="date" className="avm-input" id="fromDate" value={form.fromDate} onChange={handleChange(setter)} />
-            </FormField>
-
-            <FormField label="To Date" required>
-              <input type="date" className="avm-input" id="toDate" value={form.toDate} onChange={handleChange(setter)} />
-            </FormField>
-          </>
-        ) : (
-          <>
-            <div className="avm-field full">
-              <label className="avm-label">Image</label>
-              <input
-                ref={photoRef}
-                type="file"
-                accept=".jpg,.jpeg,.png,.gif"
-                style={{ display: 'none' }}
-                onChange={(e) => handlePhotoChange(e, setPreview, setter)}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button type="button" className="avm-btn light" onClick={() => photoRef.current.click()}>
-                  <i className="ri-upload-2-line"></i> Upload Image
-                </button>
-                {preview ? (
-                  <img
-                    src={preview}
-                    alt="preview"
-                    style={{ width: 80, height: 54, objectFit: 'cover', borderRadius: 8, border: '1px solid #d0d5dd' }}
-                  />
-                ) : null}
-              </div>
-              <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>
-                Dimension:- Max-W: 750px, Max-H: 500px — .jpg, .jpeg, .png or .gif
-              </span>
-            </div>
-
-            <FormField label="Note" full>
-              <textarea
-                rows="4"
-                className="avm-input avm-textarea"
-                id="note"
-                placeholder="Note"
-                value={form.note}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Is View on Web?" required full noIcon>
-              <select className="avm-select" id="isViewOnWeb" value={form.isViewOnWeb} onChange={handleChange(setter)}>
-                <option value="">--Select--</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </FormField>
-          </>
-        )}
-      </div>
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -515,6 +263,13 @@ const Event = () => {
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
@@ -566,14 +321,14 @@ const Event = () => {
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(event) => {
+                  setRowsPerPage(Number(event.target.value))
                   setCurrentPage(1)
                 }}
               >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
+                {[5, 10, 20, 50].map((option) => (
+                  <option key={option} value={option}>
+                    {option}
                   </option>
                 ))}
               </select>
@@ -585,8 +340,8 @@ const Event = () => {
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search events..."
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
+                onChange={(event) => {
+                  setSearch(event.target.value)
                   setCurrentPage(1)
                 }}
               />
@@ -595,9 +350,6 @@ const Event = () => {
               </span>
             </div>
           </div>
-
-          {error ? <div className="px-20 pt-16 text-danger-600">{error}</div> : null}
-          {loading ? <div className="px-20 pt-16 text-secondary-light">Loading events...</div> : null}
 
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 900 }}>
@@ -621,75 +373,74 @@ const Event = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedRows.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading events...
+                    </td>
+                  </tr>
+                ) : paginatedRows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No events found.
                     </td>
                   </tr>
-                ) : (
-                  paginatedRows.map((row) => (
-                    <tr key={row.id}>
+                ) : paginatedRows.map((row, index) => (
+                  <tr key={row.id}>
+                    <td>
+                      <div className="form-check style-check d-flex align-items-center">
+                        <input type="checkbox" className="form-check-input" checked={selectedRows.includes(String(row.id))} onChange={() => handleSelectRow(String(row.id))} />
+                        <label className="form-check-label">{(currentPage - 1) * rowsPerPage + index + 1}</label>
+                      </div>
+                    </td>
+                    {visibleColumns.schoolName ? <td>{row.schoolName}</td> : null}
+                    {visibleColumns.title ? <td className="fw-medium text-primary-light">{row.title}</td> : null}
+                    {visibleColumns.eventFor ? (
                       <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            type="checkbox"
-                            className="form-check-input"
-                            checked={selectedRows.includes(String(row.id))}
-                            onChange={() => handleSelectRow(String(row.id))}
-                          />
-                          <label className="form-check-label">{String(row.id).padStart(2, '0')}</label>
+                        <span className={eventForBadge(row.eventFor)}>{row.eventFor}</span>
+                      </td>
+                    ) : null}
+                    {visibleColumns.eventPlace ? <td>{row.eventPlace}</td> : null}
+                    {visibleColumns.fromDate ? <td>{row.fromDate}</td> : null}
+                    {visibleColumns.toDate ? <td>{row.toDate}</td> : null}
+                    {visibleColumns.image ? (
+                      <td>
+                        {row.image ? (
+                          <img src={row.image} alt="event" style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4 }} />
+                        ) : (
+                          <span className="text-secondary-light text-sm">-</span>
+                        )}
+                      </td>
+                    ) : null}
+                    {visibleColumns.isViewOnWeb ? (
+                      <td>
+                        <div className="form-check form-switch d-flex justify-content-center mb-0">
+                          <input className="form-check-input" type="checkbox" checked={row.isViewOnWeb} readOnly style={{ cursor: 'pointer' }} />
                         </div>
                       </td>
-                      {visibleColumns.schoolName ? <td>{row.schoolName}</td> : null}
-                      {visibleColumns.title ? <td className="fw-medium text-primary-light">{row.title}</td> : null}
-                      {visibleColumns.eventFor ? (
-                        <td>
-                          <span className={eventForBadge(row.eventFor)}>{row.eventFor}</span>
-                        </td>
-                      ) : null}
-                      {visibleColumns.eventPlace ? <td>{row.eventPlace}</td> : null}
-                      {visibleColumns.fromDate ? <td>{row.fromDate}</td> : null}
-                      {visibleColumns.toDate ? <td>{row.toDate}</td> : null}
-                      {visibleColumns.image ? (
-                        <td>
-                          {row.image ? (
-                            <img src={row.image} alt="event" style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 4 }} />
-                          ) : (
-                            <span className="text-secondary-light text-sm">—</span>
-                          )}
-                        </td>
-                      ) : null}
-                      {visibleColumns.isViewOnWeb ? (
-                        <td>
-                          <div className="form-check form-switch d-flex justify-content-center mb-0">
-                            <input className="form-check-input" type="checkbox" defaultChecked={row.isViewOnWeb} style={{ cursor: 'pointer' }} />
-                          </div>
-                        </td>
-                      ) : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDelete(row.id)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                    ) : null}
+                    <td>
+                      <div className="d-flex align-items-center gap-10">
+                        <button
+                          type="button"
+                          className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                          onClick={() => openEdit(row)}
+                          title="Edit"
+                        >
+                          <i className="ri-edit-line"></i>
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                          onClick={() => handleDelete(row.id)}
+                          title="Delete"
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -699,20 +450,15 @@ const Event = () => {
               Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
                 Prev
               </button>
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
+              {getVisiblePages().map((page) => (
+                <button key={page} type="button" className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(page)}>
+                  {page}
                 </button>
               ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage === totalPages}>
                 Next
               </button>
             </div>
@@ -720,64 +466,37 @@ const Event = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="540px"
-        open={isAddOpen}
-        title="Add Event"
-        steps={ADD_STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(ADD_STEPS.length - 1, s + 1))}
-        onSubmit={() => handleSave(addForm, false)}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addPhotoRef, addPreview, setAddPreview, addStep)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="540px"
-        open={isEditOpen}
-        title="Edit Event"
-        steps={EDIT_STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(EDIT_STEPS.length - 1, s + 1))}
-        onSubmit={() => handleSave(editForm, true)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editPhotoRef, editPreview, setEditPreview, editStep)}
-      </WizardPopup>
-
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Events" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           {isSuperAdmin ? (
-            <ManualScopeSelectors
-              enabled={isSuperAdmin}
-              headOffices={manualScope.headOffices}
-              schoolOptions={schoolOptions}
-              selectedHeadOfficeId={pendingFilters.headOfficeId}
-              onHeadOfficeChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  headOfficeId: value,
-                  schoolId: '',
-                }))
-              }
-              selectedSchoolId={pendingFilters.schoolId}
-              onSchoolChange={(value) => setPendingFilters((prev) => ({ ...prev, schoolId: value }))}
-            />
+            <div className="full">
+              <ManualScopeSelectors
+                enabled={isSuperAdmin}
+                headOffices={manualScope.headOffices}
+                schoolOptions={schoolOptions}
+                selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+                onHeadOfficeChange={(value) => {
+                  manualScope.setSelectedHeadOfficeId(value)
+                  manualScope.setSelectedSchoolId('')
+                  setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
+                }}
+                selectedSchoolId={pendingFilters.schoolId}
+                onSchoolChange={(value) => {
+                  manualScope.setSelectedSchoolId(value)
+                  setPendingFilters((prev) => ({ ...prev, schoolId: value }))
+                }}
+              />
+            </div>
           ) : (
-            <div>
+            <div className="full">
               <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
                 School
               </label>
               <select id="schoolId" className="form-control form-select" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
                 <option value="">Select School</option>
-                {schoolOptions.map((option) => (
-                  <option key={String(option.id)} value={String(option.id)}>
-                    {option.schoolName}
+                {contextSchoolOptions.map((school) => (
+                  <option key={String(school.id)} value={String(school.id)}>
+                    {school.schoolName}
                   </option>
                 ))}
               </select>
@@ -812,7 +531,7 @@ const Event = () => {
             </button>
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>
+            <button type="submit" className="btn btn-primary-600 w-100">
               Apply
             </button>
           </div>
