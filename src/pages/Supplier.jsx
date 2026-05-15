@@ -5,6 +5,7 @@ import 'jspdf-autotable'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import PhoneField from '../components/PhoneField'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
@@ -802,13 +803,12 @@ const Supplier = () => {
           </FormField>
 
           <FormField label="Phone" required>
-            <input
-              type="text"
-              className="avm-input"
+            <PhoneField
               id="phone"
-              placeholder="Phone"
+              label=""
               value={addForm.phone}
-              onChange={(e) => setAddForm((prev) => ({ ...prev, phone: e.target.value }))}
+              onChange={(value) => setAddForm((prev) => ({ ...prev, phone: value }))}
+              required
             />
           </FormField>
 
@@ -939,13 +939,12 @@ const Supplier = () => {
           </FormField>
 
           <FormField label="Phone" required>
-            <input
-              type="text"
-              className="avm-input"
+            <PhoneField
               id="phone"
-              placeholder="Phone"
+              label=""
               value={editForm.phone}
-              onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+              onChange={(value) => setEditForm((prev) => ({ ...prev, phone: value }))}
+              required
             />
           </FormField>
 

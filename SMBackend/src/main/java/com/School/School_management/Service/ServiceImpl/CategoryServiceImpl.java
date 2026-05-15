@@ -1,114 +1,107 @@
 package com.School.School_management.Service.ServiceImpl;
 
-import com.School.School_management.Dto.SupplierDto;
+import com.School.School_management.Dto.CategoryDto;
+import com.School.School_management.Entity.Category;
 import com.School.School_management.Entity.HeadOffice;
 import com.School.School_management.Entity.ManageSchool;
-import com.School.School_management.Entity.Supplier;
 import com.School.School_management.Exception.BadRequestException;
 import com.School.School_management.Exception.ForbiddenException;
 import com.School.School_management.Exception.NotFoundException;
+import com.School.School_management.Repository.CategoryRepository;
 import com.School.School_management.Repository.HeadOfficeRepository;
 import com.School.School_management.Repository.SchoolRepository;
-import com.School.School_management.Repository.SupplierRepository;
-import com.School.School_management.Service.SupplierService;
+import com.School.School_management.Service.CategoryService;
 import com.School.School_management.auth.CurrentUser;
-import java.util.Objects;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
+
 @Service
 @Transactional
-public class SupplierServiceImpl implements SupplierService {
+public class CategoryServiceImpl implements CategoryService {
 
-    private final SupplierRepository supplierRepository;
+    private final CategoryRepository categoryRepository;
     private final SchoolRepository schoolRepository;
     private final HeadOfficeRepository headOfficeRepository;
 
-    public SupplierServiceImpl(
-            SupplierRepository supplierRepository,
+    public CategoryServiceImpl(
+            CategoryRepository categoryRepository,
             SchoolRepository schoolRepository,
             HeadOfficeRepository headOfficeRepository
     ) {
-        this.supplierRepository = supplierRepository;
+        this.categoryRepository = categoryRepository;
         this.schoolRepository = schoolRepository;
         this.headOfficeRepository = headOfficeRepository;
     }
 
     @Override
-    public Page<SupplierDto> list(Long headOfficeId, Long schoolId, String search, int page, int size, CurrentUser user) {
+    @Transactional(readOnly = true)
+    public Page<CategoryDto> list(Long headOfficeId, Long schoolId, String search, int page, int size, CurrentUser user) {
         ResolvedScope scope = resolveListScope(user, headOfficeId, schoolId);
         String normalizedSearch = normalizeSearch(search);
         PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "id"));
-        return supplierRepository.searchSuppliers(scope.headOfficeId(), scope.schoolId(), normalizedSearch, pageable).map(this::toDto);
+        return categoryRepository.searchCategories(scope.headOfficeId(), scope.schoolId(), normalizedSearch, pageable).map(this::toDto);
     }
 
     @Override
-    public SupplierDto getById(Long id, CurrentUser user) {
-        Supplier supplier = supplierRepository.findById(id)
+    @Transactional(readOnly = true)
+    public CategoryDto getById(Long id, CurrentUser user) {
+        Category category = categoryRepository.findById(id)
                 .orElseThrow(NotFoundException::new);
-        ensureVisibleToUser(supplier, user);
-        return toDto(supplier);
+        ensureVisibleToUser(category, user);
+        return toDto(category);
     }
 
     @Override
-    public SupplierDto create(SupplierDto dto, CurrentUser user) {
+    public CategoryDto create(CategoryDto dto, CurrentUser user) {
         ResolvedScope scope = resolveWriteScope(user, dto);
-        Supplier supplier = new Supplier();
-        applyDto(dto, supplier);
-        supplier.setHeadOfficeId(scope.headOfficeId());
-        supplier.setSchoolId(scope.schoolId());
-        return toDto(supplierRepository.save(supplier));
+        Category category = new Category();
+        applyDto(dto, category);
+        category.setHeadOfficeId(scope.headOfficeId());
+        category.setSchoolId(scope.schoolId());
+        return toDto(categoryRepository.save(category));
     }
 
     @Override
-    public SupplierDto update(Long id, SupplierDto dto, CurrentUser user) {
-        Supplier supplier = supplierRepository.findById(id)
+    public CategoryDto update(Long id, CategoryDto dto, CurrentUser user) {
+        Category category = categoryRepository.findById(id)
                 .orElseThrow(NotFoundException::new);
-        ensureVisibleToUser(supplier, user);
+        ensureVisibleToUser(category, user);
         ResolvedScope scope = resolveWriteScope(user, dto);
-        applyDto(dto, supplier);
-        supplier.setHeadOfficeId(scope.headOfficeId());
-        supplier.setSchoolId(scope.schoolId());
-        return toDto(supplierRepository.save(supplier));
+        applyDto(dto, category);
+        category.setHeadOfficeId(scope.headOfficeId());
+        category.setSchoolId(scope.schoolId());
+        return toDto(categoryRepository.save(category));
     }
 
     @Override
     public void delete(Long id, CurrentUser user) {
-        Supplier supplier = supplierRepository.findById(id)
+        Category category = categoryRepository.findById(id)
                 .orElseThrow(NotFoundException::new);
-        ensureVisibleToUser(supplier, user);
-        supplierRepository.delete(supplier);
+        ensureVisibleToUser(category, user);
+        categoryRepository.delete(category);
     }
 
-    private void ensureVisibleToUser(Supplier supplier, CurrentUser user) {
-        if (user == null) {
-            throw new ForbiddenException();
-        }
-        if (user.isSuperAdmin()) {
-            return;
-        }
+    private void ensureVisibleToUser(Category category, CurrentUser user) {
+        if (user == null) throw new ForbiddenException();
+        if (user.isSuperAdmin()) return;
         if (user.isHeadOfficeScopedAdmin()) {
-            if (!Objects.equals(user.headOfficeId(), supplier.getHeadOfficeId())) {
-                throw new NotFoundException();
-            }
+            if (!Objects.equals(user.headOfficeId(), category.getHeadOfficeId())) throw new NotFoundException();
             return;
         }
         if (user.isSchoolScopedAdminUser()) {
-            if (!Objects.equals(user.schoolId(), supplier.getSchoolId())) {
-                throw new NotFoundException();
-            }
+            if (!Objects.equals(user.schoolId(), category.getSchoolId())) throw new NotFoundException();
             return;
         }
         throw new ForbiddenException();
     }
 
     private ResolvedScope resolveListScope(CurrentUser user, Long requestedHeadOfficeId, Long requestedSchoolId) {
-        if (user == null) {
-            throw new ForbiddenException();
-        }
+        if (user == null) throw new ForbiddenException();
 
         if (user.isSuperAdmin()) {
             if (requestedSchoolId != null) {
@@ -129,7 +122,7 @@ public class SupplierServiceImpl implements SupplierService {
             if (requestedSchoolId != null) {
                 ManageSchool school = requireSchool(requestedSchoolId);
                 if (!Objects.equals(authHeadOfficeId, school.getHeadOfficeId())) {
-                    throw new BadRequestException("School does not belong to the selected head office");
+                    throw new BadRequestException("School does not belong to your head office");
                 }
                 return new ResolvedScope(authHeadOfficeId, school.getId());
             }
@@ -137,26 +130,26 @@ public class SupplierServiceImpl implements SupplierService {
         }
 
         if (user.isSchoolScopedAdminUser()) {
-            ManageSchool school = requireSchool(user.schoolId());
-            if (requestedSchoolId != null && !Objects.equals(user.schoolId(), requestedSchoolId)) {
+            Long authSchoolId = user.schoolId();
+            if (authSchoolId == null) throw new ForbiddenException();
+            ManageSchool school = requireSchool(authSchoolId);
+            if (requestedSchoolId != null && !Objects.equals(requestedSchoolId, authSchoolId)) {
                 throw new ForbiddenException();
             }
-            if (requestedHeadOfficeId != null && !Objects.equals(school.getHeadOfficeId(), requestedHeadOfficeId)) {
+            if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, school.getHeadOfficeId())) {
                 throw new ForbiddenException();
             }
-            return new ResolvedScope(school.getHeadOfficeId(), school.getId());
+            return new ResolvedScope(school.getHeadOfficeId(), authSchoolId);
         }
 
         throw new ForbiddenException();
     }
 
-    private ResolvedScope resolveWriteScope(CurrentUser user, SupplierDto dto) {
-        if (user == null) {
-            throw new ForbiddenException();
-        }
+    private ResolvedScope resolveWriteScope(CurrentUser user, CategoryDto dto) {
+        if (user == null) throw new ForbiddenException();
 
-        Long requestedHeadOfficeId = normalizeId(dto.getHeadOfficeId());
-        Long requestedSchoolId = normalizeId(dto.getSchoolId());
+        Long requestedHeadOfficeId = normalizeId(dto == null ? null : dto.getHeadOfficeId());
+        Long requestedSchoolId = normalizeId(dto == null ? null : dto.getSchoolId());
 
         if (user.isSuperAdmin()) {
             ManageSchool school = requireSchool(requiredId(requestedSchoolId, "School is required"));
@@ -179,33 +172,35 @@ public class SupplierServiceImpl implements SupplierService {
         }
 
         if (user.isSchoolScopedAdminUser()) {
-            ManageSchool school = requireSchool(user.schoolId());
-            if (requestedSchoolId != null && !Objects.equals(requestedSchoolId, user.schoolId())) {
+            Long authSchoolId = user.schoolId();
+            if (authSchoolId == null) throw new ForbiddenException();
+            ManageSchool school = requireSchool(authSchoolId);
+            if (requestedSchoolId != null && !Objects.equals(requestedSchoolId, authSchoolId)) {
                 throw new ForbiddenException();
             }
             if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, school.getHeadOfficeId())) {
                 throw new ForbiddenException();
             }
-            return new ResolvedScope(school.getHeadOfficeId(), school.getId());
+            return new ResolvedScope(school.getHeadOfficeId(), authSchoolId);
         }
 
         throw new ForbiddenException();
     }
 
+    private void applyDto(CategoryDto dto, Category category) {
+        if (dto == null) throw new BadRequestException("Category data is required");
+        category.setCategoryName(required(dto.getCategoryName(), "Category name is required"));
+        category.setNote(normalizeOptional(dto.getNote()));
+    }
+
     private ManageSchool requireSchool(Long schoolId) {
+        if (schoolId == null) throw new BadRequestException("schoolId is required");
         return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
                 .orElseThrow(NotFoundException::new);
     }
 
-    private HeadOffice requireHeadOffice(Long headOfficeId) {
-        return headOfficeRepository.findById(headOfficeId)
-                .orElseThrow(NotFoundException::new);
-    }
-
     private Long requiredId(Long value, String message) {
-        if (value == null) {
-            throw new BadRequestException(message);
-        }
+        if (value == null) throw new BadRequestException(message);
         return value;
     }
 
@@ -218,53 +213,44 @@ public class SupplierServiceImpl implements SupplierService {
         return value.isEmpty() ? null : value;
     }
 
-    private void applyDto(SupplierDto dto, Supplier supplier) {
-        supplier.setSupplierName(safeTrim(dto.getSupplierName()));
-        supplier.setContactName(safeTrim(dto.getContactName()));
-        supplier.setEmail(safeTrim(dto.getEmail()));
-        supplier.setPhone(safeTrim(dto.getPhone()));
-        supplier.setAddress(safeTrim(dto.getAddress()));
-        supplier.setNote(safeTrim(dto.getNote()));
+    private String required(String value, String message) {
+        String trimmed = normalizeOptional(value);
+        if (trimmed == null) throw new BadRequestException(message);
+        return trimmed;
     }
 
-    private SupplierDto toDto(Supplier supplier) {
-        SupplierDto dto = new SupplierDto();
-        dto.setId(supplier.getId());
-        dto.setHeadOfficeId(supplier.getHeadOfficeId());
-        dto.setHeadOfficeName(resolveHeadOfficeName(supplier.getHeadOfficeId()));
-        dto.setSchoolId(supplier.getSchoolId());
-        dto.setSchoolName(resolveSchoolName(supplier.getSchoolId()));
-        dto.setSupplierName(supplier.getSupplierName());
-        dto.setContactName(supplier.getContactName());
-        dto.setEmail(supplier.getEmail());
-        dto.setPhone(supplier.getPhone());
-        dto.setAddress(supplier.getAddress());
-        dto.setNote(supplier.getNote());
-        dto.setCreatedAt(supplier.getCreatedAt());
-        dto.setUpdatedAt(supplier.getUpdatedAt());
+    private String normalizeOptional(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private CategoryDto toDto(Category category) {
+        CategoryDto dto = new CategoryDto();
+        dto.setId(category.getId());
+        dto.setHeadOfficeId(category.getHeadOfficeId());
+        dto.setHeadOfficeName(resolveHeadOfficeName(category.getHeadOfficeId()));
+        dto.setSchoolId(category.getSchoolId());
+        dto.setSchoolName(resolveSchoolName(category.getSchoolId()));
+        dto.setCategoryName(category.getCategoryName());
+        dto.setNote(category.getNote());
+        dto.setCreatedAt(category.getCreatedAt());
+        dto.setUpdatedAt(category.getUpdatedAt());
         return dto;
     }
 
     private String resolveHeadOfficeName(Long headOfficeId) {
-        if (headOfficeId == null) {
-            return null;
-        }
+        if (headOfficeId == null) return null;
         return headOfficeRepository.findById(headOfficeId)
                 .map(HeadOffice::getName)
                 .orElse("Head Office " + headOfficeId);
     }
 
     private String resolveSchoolName(Long schoolId) {
-        if (schoolId == null) {
-            return null;
-        }
+        if (schoolId == null) return null;
         return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
                 .map(ManageSchool::getSchoolName)
                 .orElse("School " + schoolId);
-    }
-
-    private String safeTrim(String value) {
-        return value == null ? null : value.trim();
     }
 
     private record ResolvedScope(Long headOfficeId, Long schoolId) {

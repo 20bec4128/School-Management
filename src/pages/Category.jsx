@@ -1,43 +1,49 @@
-import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import WizardPopup from '../components/WizardPopup';
-import SlideSidebar from '../components/SlideSidebar';
-import useColumnVisibility from '../hooks/useColumnVisibility';
-import '../assets/css/addModalShared.css';
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+import WizardPopup from '../components/WizardPopup'
+import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { normalizeRole } from '../utils/roles'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { createCategory, deleteCategory, fetchCategoriesPage, updateCategory } from '../apis/categoriesApi'
+import '../assets/css/addModalShared.css'
 
-/** * 1. Configuration & Constants
- */
 const emptyForm = {
+  headOfficeId: '',
   schoolId: '',
   categoryName: '',
   note: '',
-};
+}
 
 const emptyFilters = {
-  school: 'Select',
-};
+  headOfficeId: '',
+  schoolId: '',
+}
 
-const STEPS = ['Basic Information'];
+const STEPS = ['Basic Information']
 
 const FIELD_ICONS = {
+  'Head Office': 'ri-building-4-line',
   'School Name': 'ri-school-line',
-  'Name': 'ri-list-check-line',
-  'Note': 'ri-sticky-note-line',
-};
+  Name: 'ri-list-check-line',
+  Note: 'ri-sticky-note-line',
+}
 
 const columnOptions = [
   { key: 'schoolName', label: 'School' },
   { key: 'categoryName', label: 'Name' },
   { key: 'note', label: 'Note' },
-];
+]
 
-/**
- * Standardized FormField wrapper with absolute positioned Remix Icons
- */
 const FormField = ({ label, required, children, full = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line';
+  const icon = FIELD_ICONS[label] || 'ri-edit-line'
   return (
     <div className={`avm-field${full ? ' full' : ''}`}>
       <label className="avm-label">
@@ -45,115 +51,400 @@ const FormField = ({ label, required, children, full = false }) => {
         {required && <span className="req"> *</span>}
       </label>
       <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-        <span style={{ 
-          position: 'absolute', 
-          left: '0.85rem', 
-          top: '50%', 
-          transform: 'translateY(-50%)', 
-          color: '#667085', 
-          fontSize: '0.95rem', 
-          zIndex: 1 
-        }}>
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: '0.85rem',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#667085',
+            fontSize: '0.95rem',
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        >
           <i className={icon}></i>
         </span>
         {children}
       </div>
     </div>
-  );
-};
+  )
+}
+
+const getById = (rows, id) => (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(id ?? '')) || null
 
 const Category = () => {
-  /** * 2. State Management
-   */
-  const [data, setData] = useState([]); 
-  const [search, setSearch] = useState('');
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
-  
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState(emptyForm);
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false);
-  const [filters, setFilters] = useState(emptyFilters);
-  
-  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
-  /** * 3. Logic: Filtering & Pagination
-   */
-  const filteredData = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data.filter((row) => {
-      const matchesSearch = !q || Object.values(row).some((v) => String(v).toLowerCase().includes(q));
-      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school;
-      return matchesSearch && matchesSchool;
-    });
-  }, [data, search, filters]);
+  const [rows, setRows] = useState([])
+  const [allSchools, setAllSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [addForm, setAddForm] = useState(emptyForm)
+  const [editForm, setEditForm] = useState(emptyForm)
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
+  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
+  const [filters, setFilters] = useState(emptyFilters)
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(start, start + rowsPerPage);
-  }, [currentPage, filteredData, rowsPerPage]);
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  /** * 4. Export Logic
-   */
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Categories");
-    XLSX.writeFile(workbook, "Category_List.xlsx");
-  };
+  const loadLookups = useCallback(async () => {
+    setLookupLoading(true)
+    try {
+      const [headOfficePage, schools] = await Promise.all([
+        fetchHeadOfficesPage(0, 500),
+        fetchSchoolsLookup(),
+      ])
+      setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
+      setAllSchools(Array.isArray(schools) ? schools : [])
+    } catch (err) {
+      console.error('Failed to load category lookups:', err)
+      setHeadOffices([])
+      setAllSchools([])
+    } finally {
+      setLookupLoading(false)
+    }
+  }, [])
 
-  const handleExportPDF = () => {
-    const doc = new jsPDF();
-    doc.text("Category Report", 14, 10);
-    doc.autoTable({
-      head: [['S.L', ...columnOptions.filter(c => visibleColumns[c.key]).map(col => col.label)]],
-      body: filteredData.map((row, i) => [
-        i + 1, 
-        ...columnOptions.filter(c => visibleColumns[c.key]).map(col => row[col.key])
-      ]),
-      headStyles: { fillColor: [31, 41, 55] },
-    });
-    doc.save('Category_Report.pdf');
-  };
+  const resolveSchoolName = useCallback(
+    (schoolId) => {
+      if (schoolId == null) return ''
+      const match = getById(allSchools, schoolId)
+      return match?.schoolName || (String(schoolId) === String(authSchoolId ?? '') ? authSchoolName || '' : '')
+    },
+    [allSchools, authSchoolId, authSchoolName],
+  )
 
-  const renderForm = () => (
-    <div className="avm-grid">
-      <FormField label="School Name" required full>
-        <select 
-          className="avm-select" 
-          id="schoolId" 
-          value={addForm.schoolId} 
-          onChange={(e) => setAddForm({...addForm, schoolId: e.target.value})}
-        >
-          <option value="">--Select School--</option>
-          <option value="1">Windsor Park High School</option>
-        </select>
-      </FormField>
+  const schoolOptionsFor = useCallback(
+    (headOfficeId, fallbackSchoolId) => {
+      const rowsList = Array.isArray(allSchools) ? allSchools : []
+      if (isSuperAdmin) {
+        if (!headOfficeId) return []
+        return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(headOfficeId))
+      }
+      if (isHeadOfficeAdmin) {
+        return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+      }
+      if (isSchoolAdmin) {
+        return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? fallbackSchoolId ?? ''))
+      }
+      return rowsList
+    },
+    [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+  )
 
-      <FormField label="Name" required full>
-        <input 
-          type="text" 
-          className="avm-input" 
-          id="categoryName" 
-          placeholder="Name" 
-          value={addForm.categoryName} 
-          onChange={(e) => setAddForm({...addForm, categoryName: e.target.value})} 
-        />
-      </FormField>
+  const addSchoolOptions = useMemo(
+    () => schoolOptionsFor(addForm.headOfficeId, addForm.schoolId),
+    [addForm.headOfficeId, addForm.schoolId, schoolOptionsFor],
+  )
 
-      <FormField label="Note" full>
-        <textarea 
-          className="avm-input avm-textarea" 
-          id="note" 
-          rows="4" 
-          placeholder="Note" 
-          value={addForm.note} 
-          onChange={(e) => setAddForm({...addForm, note: e.target.value})}
-        ></textarea>
-      </FormField>
-    </div>
-  );
+  const editSchoolOptions = useMemo(
+    () => schoolOptionsFor(editForm.headOfficeId, editForm.schoolId),
+    [editForm.headOfficeId, editForm.schoolId, schoolOptionsFor],
+  )
+
+  const filterSchoolOptions = useMemo(
+    () => schoolOptionsFor(pendingFilters.headOfficeId, pendingFilters.schoolId),
+    [pendingFilters.headOfficeId, pendingFilters.schoolId, schoolOptionsFor],
+  )
+
+  const loadCategories = useCallback(async () => {
+    if (status !== 'ready' || !token) return
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchCategoriesPage({
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search: debouncedSearch,
+        headOfficeId: filters.headOfficeId || undefined,
+        schoolId: filters.schoolId || undefined,
+      })
+      setRows(Array.isArray(data?.content) ? data.content : [])
+      setTotalElements(Number(data?.totalElements ?? 0))
+      setTotalPages(Number(data?.totalPages ?? 0))
+    } catch (err) {
+      console.error('Failed to load categories:', err)
+      setError(err?.message || 'Failed to load categories')
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, debouncedSearch, filters.headOfficeId, filters.schoolId, rowsPerPage, status, token])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    void loadLookups()
+  }, [loadLookups, status, token])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    void loadCategories()
+  }, [loadCategories, status, token])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    if (!activeSchoolId) return
+    const school = getById(allSchools, activeSchoolId)
+    if (school?.headOfficeId == null) return
+    setAddForm((prev) => ({
+      ...prev,
+      headOfficeId: String(school.headOfficeId),
+      schoolId: String(activeSchoolId),
+    }))
+  }, [activeSchoolId, allSchools, isSuperAdmin])
+
+  useEffect(() => {
+    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+      setAddForm((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
+      setEditForm((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
+      setPendingFilters((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
+      setFilters((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
+    }
+  }, [authHeadOfficeId, isHeadOfficeAdmin])
+
+  useEffect(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return
+    const school = getById(allSchools, authSchoolId)
+    setAddForm((prev) => ({
+      ...prev,
+      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
+      schoolId: String(authSchoolId),
+    }))
+    setEditForm((prev) => ({
+      ...prev,
+      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
+      schoolId: String(authSchoolId),
+    }))
+    setPendingFilters((prev) => ({ ...prev, schoolId: String(authSchoolId) }))
+    setFilters((prev) => ({ ...prev, schoolId: String(authSchoolId) }))
+  }, [allSchools, authSchoolId, isSchoolAdmin])
+
+  useEffect(() => {
+    if (currentPage > 1 && totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const buildPayload = (form) => ({
+    headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    categoryName: String(form.categoryName || '').trim(),
+    note: String(form.note || '').trim(),
+  })
+
+  const openAdd = () => {
+    const base = { ...emptyForm }
+    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+      base.headOfficeId = String(authHeadOfficeId)
+    }
+    if (isSchoolAdmin && authSchoolId != null) {
+      const school = getById(allSchools, authSchoolId)
+      base.schoolId = String(authSchoolId)
+      base.headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    }
+    if (isSuperAdmin && activeSchoolId) {
+      const school = getById(allSchools, activeSchoolId)
+      if (school?.headOfficeId != null) {
+        base.headOfficeId = String(school.headOfficeId)
+        base.schoolId = String(activeSchoolId)
+      }
+    }
+    setAddForm(base)
+    setIsAddOpen(true)
+  }
+
+  const openEdit = (row) => {
+    const school = getById(allSchools, row?.schoolId)
+    setEditForm({
+      id: row?.id != null ? String(row.id) : '',
+      headOfficeId: row?.headOfficeId != null ? String(row.headOfficeId) : school?.headOfficeId != null ? String(school.headOfficeId) : '',
+      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
+      categoryName: row?.categoryName || '',
+      note: row?.note || '',
+    })
+    setIsEditOpen(true)
+  }
+
+  const handleSaveAdd = async () => {
+    const payload = buildPayload(addForm)
+    if (!payload.categoryName || !payload.schoolId) {
+      setError('Category name and school are required.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await createCategory(payload)
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      await loadCategories()
+    } catch (err) {
+      console.error('Failed to create category:', err)
+      setError(err?.message || 'Failed to create category')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    const payload = buildPayload(editForm)
+    if (!payload.categoryName || !payload.schoolId) {
+      setError('Category name and school are required.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await updateCategory(editForm.id, payload)
+      setIsEditOpen(false)
+      await loadCategories()
+    } catch (err) {
+      console.error('Failed to update category:', err)
+      setError(err?.message || 'Failed to update category')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    if (!window.confirm(`Delete category "${row?.categoryName || 'this category'}"?`)) return
+    setSaving(true)
+    setError('')
+    try {
+      await deleteCategory(row.id)
+      await loadCategories()
+    } catch (err) {
+      console.error('Failed to delete category:', err)
+      setError(err?.message || 'Failed to delete category')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleApplyFilters = (e) => {
+    e.preventDefault()
+    setFilters(pendingFilters)
+    setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
+  }
+
+  const handleResetFilters = () => {
+    const next = {
+      headOfficeId: isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : '',
+      schoolId: isSchoolAdmin ? String(authSchoolId ?? '') : '',
+    }
+    setPendingFilters(next)
+    setFilters(next)
+    setCurrentPage(1)
+  }
+
+  const exportRows = async () => {
+    const size = Math.max(totalElements, rowsPerPage, 1)
+    const data = await fetchCategoriesPage({
+      page: 0,
+      size,
+      search: debouncedSearch,
+      headOfficeId: filters.headOfficeId || undefined,
+      schoolId: filters.schoolId || undefined,
+    })
+    return Array.isArray(data?.content) ? data.content : []
+  }
+
+  const handleExportExcel = async () => {
+    try {
+      const exportData = await exportRows()
+      const worksheet = XLSX.utils.json_to_sheet(
+        exportData.map((row) =>
+          columnOptions.reduce(
+            (acc, column) => {
+              if (visibleColumns[column.key]) {
+                acc[column.label] =
+                  column.key === 'schoolName'
+                    ? row.schoolName || resolveSchoolName(row.schoolId)
+                    : row[column.key] ?? ''
+              }
+              return acc
+            },
+            { S_L: row.id ?? '' },
+          ),
+        ),
+      )
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Categories')
+      XLSX.writeFile(workbook, 'Category_List.xlsx')
+    } catch (err) {
+      console.error('Failed to export categories:', err)
+      setError(err?.message || 'Failed to export categories')
+    }
+  }
+
+  const handleExportPDF = async () => {
+    try {
+      const exportData = await exportRows()
+      const doc = new jsPDF({ orientation: 'landscape' })
+      const visibleColumnsForExport = columnOptions.filter((column) => visibleColumns[column.key])
+      doc.text('Category Report', 14, 10)
+      doc.autoTable({
+        head: [['S.L', ...visibleColumnsForExport.map((column) => column.label)]],
+        body: exportData.map((row, index) => [
+          index + 1,
+          ...visibleColumnsForExport.map((column) =>
+            column.key === 'schoolName' ? row.schoolName || resolveSchoolName(row.schoolId) : row[column.key] ?? '',
+          ),
+        ]),
+        headStyles: { fillColor: [31, 41, 55] },
+      })
+      doc.save('Category_Report.pdf')
+    } catch (err) {
+      console.error('Failed to export categories:', err)
+      setError(err?.message || 'Failed to export categories')
+    }
+  }
+
+  const handleSchoolChange = (setter, value) => {
+    const selectedSchool = getById(allSchools, value)
+    setter((prev) => ({
+      ...prev,
+      schoolId: value,
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+    }))
+  }
+
+  const handleHeadOfficeChange = (setter, value) => {
+    setter((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: '',
+    }))
+  }
+
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   return (
     <div className="dashboard-main-body">
@@ -162,42 +453,58 @@ const Category = () => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Category</h1>
           <span className="text-secondary-light">Inventory / Category Management</span>
         </div>
-        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => setIsAddOpen(true)}>
+        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
           <i className="ri-add-large-line"></i> Add Category
         </button>
       </div>
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              
               <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown" aria-expanded="false">
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
                     <i className="ri-file-upload-line text-md line-height-1"></i> Export
                   </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10" onClick={handleExportExcel}><i className="ri-file-excel-2-line"></i> Excel</button></li>
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10" onClick={handleExportPDF}><i className="ri-file-3-line"></i> PDF</button></li>
+                  <li>
+                    <button
+                      type="button"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
+                      onClick={() => void handleExportExcel()}
+                    >
+                      <i className="ri-file-excel-2-line"></i> Excel
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
+                      onClick={() => void handleExportPDF()}
+                    >
+                      <i className="ri-file-3-line"></i> PDF
+                    </button>
+                  </li>
                 </ul>
               </div>
 
-              <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="text-secondary-light text-sm">Find</span>
                 <i className="ri-arrow-right-line"></i>
               </button>
 
               <div className="dropdown">
-                <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
                   <span className="text-secondary-light text-sm">Columns</span>
                   <i className="ri-arrow-down-s-line"></i>
                 </button>
                 <ul className="dropdown-menu p-12 border shadow">
-                  {columnOptions.map(col => (
+                  {columnOptions.map((col) => (
                     <li key={col.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
                         <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
@@ -208,18 +515,35 @@ const Category = () => {
                 </ul>
               </div>
 
-              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
-                {[10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(value) => {
+                  setRowsPerPage(value)
+                  setCurrentPage(1)
+                }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
-              <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
+              <input
+                type="text"
+                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
+                placeholder="Search categories..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
+              />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
               </span>
             </div>
           </div>
+
+          {error ? <div className="px-20 py-12 text-danger">{error}</div> : null}
+          {lookupLoading ? <div className="px-20 py-12 text-secondary-light">Loading lookups...</div> : null}
 
           <div className="table-responsive">
             <table className="table bordered-table mb-0 data-table">
@@ -231,33 +555,62 @@ const Category = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {columnOptions.map(col => visibleColumns[col.key] && <th key={col.key}>{col.label}</th>)}
+                  {columnOptions.map((col) => visibleColumns[col.key] && <th key={col.key}>{col.label}</th>)}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading categories...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      No records found.
+                    </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row, idx) => (
-                    <tr key={idx}>
+                  rows.map((row, idx) => (
+                    <tr key={row.id ?? idx}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input className="form-check-input" type="checkbox" />
-                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
+                          <label className="form-check-label">{currentStart + idx}</label>
                         </div>
                       </td>
-                      {columnOptions.map(col => visibleColumns[col.key] && (
-                        <td key={col.key}>
-                          {col.key === 'categoryName' ? <span className="fw-medium text-primary-light">{row[col.key]}</span> : row[col.key]}
-                        </td>
-                      ))}
+                      {columnOptions.map(
+                        (col) =>
+                          visibleColumns[col.key] && (
+                            <td key={col.key}>
+                              {col.key === 'categoryName' ? (
+                                <span className="fw-medium text-primary-light">{row[col.key]}</span>
+                              ) : col.key === 'schoolName' ? (
+                                resolveSchoolName(row.schoolId) || row.schoolName || '--'
+                              ) : (
+                                row[col.key] || '--'
+                              )}
+                            </td>
+                          ),
+                      )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button className="bg-info-focus bg-hover-info-200 text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"><i className="ri-edit-line"></i></button>
-                          <button className="bg-danger-focus bg-hover-danger-200 text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"><i className="ri-delete-bin-line"></i></button>
+                          <button
+                            type="button"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => openEdit(row)}
+                          >
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row)}
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -267,46 +620,241 @@ const Category = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} – {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length} entries</span>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+            <span className="text-sm text-secondary-light">
+              Showing {totalElements === 0 ? 0 : currentStart} - {totalElements === 0 ? 0 : Math.min(currentEnd, totalElements)} of {totalElements} entries
+            </span>
             <div className="d-flex align-items-center gap-8">
-              <button className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              <button className="btn btn-sm btn-primary-600">{currentPage}</button>
-              <button className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || totalPages < 1}
+              >
+                Prev
+              </button>
+              {Array.from({ length: Math.min(totalPages || 0, 3) }, (_, index) => {
+                const base = Math.max(1, currentPage - 1)
+                const pageNumber = Math.min(totalPages, base + index)
+                return pageNumber > 0 ? (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                    onClick={() => setCurrentPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                ) : null
+              })}
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.min(Math.max(1, totalPages), p + 1))}
+                disabled={currentPage === totalPages || totalPages < 1}
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
       </div>
 
       <WizardPopup
-        modalWidth="620px"
+        modalWidth="760px"
         open={isAddOpen}
         title="Add Category"
         steps={STEPS}
         step={0}
         onClose={() => setIsAddOpen(false)}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onSubmit={handleSaveAdd}
+        submitLabel={saving ? 'Saving...' : 'Save'}
       >
-        {renderForm()}
+        <div className="avm-grid">
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOffices.map((row) => ({ id: row.id, name: row.name || row.headOfficeName || '' }))}
+              schoolOptions={addSchoolOptions}
+              selectedHeadOfficeId={addForm.headOfficeId}
+              onHeadOfficeChange={(value) => handleHeadOfficeChange(setAddForm, value)}
+              selectedSchoolId={addForm.schoolId}
+              onSchoolChange={(value) => handleSchoolChange(setAddForm, value)}
+              schoolLabel="School"
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <FormField label="Head Office" full>
+                  <input className="avm-input" value={authHeadOfficeName || String(authHeadOfficeId || '')} disabled />
+                </FormField>
+              ) : null}
+
+              <FormField label="School Name" required full>
+                <select
+                  className="avm-select"
+                  value={addForm.schoolId}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, schoolId: e.target.value }))}
+                  disabled={isSchoolAdmin}
+                >
+                  <option value="">--Select School--</option>
+                  {addSchoolOptions.map((school) => (
+                    <option key={String(school.id)} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </>
+          )}
+
+          <FormField label="Name" required full>
+            <input
+              type="text"
+              className="avm-input"
+              id="categoryName"
+              placeholder="Name"
+              value={addForm.categoryName}
+              onChange={(e) => setAddForm((prev) => ({ ...prev, categoryName: e.target.value }))}
+            />
+          </FormField>
+
+          <FormField label="Note" full>
+            <textarea
+              className="avm-input avm-textarea"
+              id="note"
+              rows="3"
+              placeholder="Note"
+              value={addForm.note}
+              onChange={(e) => setAddForm((prev) => ({ ...prev, note: e.target.value }))}
+            ></textarea>
+          </FormField>
+        </div>
+      </WizardPopup>
+
+      <WizardPopup
+        modalWidth="760px"
+        open={isEditOpen}
+        title="Edit Category"
+        steps={STEPS}
+        step={0}
+        onClose={() => setIsEditOpen(false)}
+        onSubmit={handleSaveEdit}
+        submitLabel={saving ? 'Updating...' : 'Update'}
+      >
+        <div className="avm-grid">
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOffices.map((row) => ({ id: row.id, name: row.name || row.headOfficeName || '' }))}
+              schoolOptions={editSchoolOptions}
+              selectedHeadOfficeId={editForm.headOfficeId}
+              onHeadOfficeChange={(value) => handleHeadOfficeChange(setEditForm, value)}
+              selectedSchoolId={editForm.schoolId}
+              onSchoolChange={(value) => handleSchoolChange(setEditForm, value)}
+              schoolLabel="School"
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <FormField label="Head Office" full>
+                  <input className="avm-input" value={authHeadOfficeName || String(authHeadOfficeId || '')} disabled />
+                </FormField>
+              ) : null}
+
+              <FormField label="School Name" required full>
+                <select
+                  className="avm-select"
+                  value={editForm.schoolId}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, schoolId: e.target.value }))}
+                  disabled={isSchoolAdmin}
+                >
+                  <option value="">--Select School--</option>
+                  {editSchoolOptions.map((school) => (
+                    <option key={String(school.id)} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </>
+          )}
+
+          <FormField label="Name" required full>
+            <input
+              type="text"
+              className="avm-input"
+              id="categoryName"
+              placeholder="Name"
+              value={editForm.categoryName}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, categoryName: e.target.value }))}
+            />
+          </FormField>
+
+          <FormField label="Note" full>
+            <textarea
+              className="avm-input avm-textarea"
+              id="note"
+              rows="3"
+              placeholder="Note"
+              value={editForm.note}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, note: e.target.value }))}
+            ></textarea>
+          </FormField>
+        </div>
       </WizardPopup>
 
       <SlideSidebar isOpen={isFilterSidebarOpen} onClose={() => setIsFilterSidebarOpen(false)} title="Find Category">
-        <form className="p-20 d-grid gap-16" onSubmit={(e) => { e.preventDefault(); setIsFilterSidebarOpen(false); }}>
-          <FormField label="School Name">
-            <select className="avm-select" value={filters.school} onChange={(e) => setFilters({ school: e.target.value })}>
-              <option value="Select">All Schools</option>
-              <option value="1">Windsor Park High School</option>
-            </select>
-          </FormField>
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOffices.map((row) => ({ id: row.id, name: row.name || row.headOfficeName || '' }))}
+              schoolOptions={filterSchoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) => setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) => handleSchoolChange(setPendingFilters, value)}
+              schoolLabel="School"
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <FormField label="Head Office" full>
+                  <input className="avm-input" value={authHeadOfficeName || String(authHeadOfficeId || '')} disabled />
+                </FormField>
+              ) : null}
+
+              <FormField label="School Name" full>
+                <select
+                  className="avm-select"
+                  value={pendingFilters.schoolId}
+                  onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value }))}
+                  disabled={isSchoolAdmin}
+                >
+                  <option value="">All Schools</option>
+                  {filterSchoolOptions.map((school) => (
+                    <option key={String(school.id)} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </>
+          )}
+
           <div className="d-flex gap-8 mt-12">
-            <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={() => setFilters(emptyFilters)}>Reset</button>
-            <button type="submit" className="btn btn-primary-600 w-100">Apply Filter</button>
+            <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={handleResetFilters}>
+              Reset
+            </button>
+            <button type="submit" className="btn btn-primary-600 w-100">
+              Apply
+            </button>
           </div>
         </form>
       </SlideSidebar>
     </div>
-  );
-};
+  )
+}
 
-export default Category;
+export default Category
