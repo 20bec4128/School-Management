@@ -382,7 +382,6 @@ const IncomeHead = () => {
                   setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-                options={[5, 10, 20, 50]}
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
               />
             </div>

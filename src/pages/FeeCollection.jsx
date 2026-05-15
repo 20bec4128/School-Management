@@ -1079,7 +1079,6 @@ const FeeCollection = () => {
 
               <RowsPerPageSelect
                 value={rowsPerPage}
-                options={[5, 10, 20, 50]}
                 onChange={(v) => {
                   setRowsPerPage(v)
                   setCurrentPage(1)
