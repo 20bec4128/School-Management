@@ -1,5 +1,5 @@
 import ManualScopeSelectors from './ManualScopeSelectors'
-import PhoneField from './PhoneField'
+import PhoneCodeField from './PhoneCodeField'
 
 const FIELD_ICONS = {
   'Head Office': 'ri-building-4-line',
@@ -67,20 +67,6 @@ const VehicleFormFields = ({
       ...(id === 'schoolId' ? { driverEmployeeId: '' } : {}),
     }))
   }
-
-  const handlePhoneChange = (value) => {
-    const trimmed = String(value || '').trim()
-    const parts = trimmed ? trimmed.split(/\s+/) : []
-    const code = parts.length > 0 ? parts[0] : '+91'
-    const number = parts.length > 1 ? parts.slice(1).join(' ') : ''
-    setForm((prev) => ({
-      ...prev,
-      vehicleContactCountryCode: code,
-      vehicleContactNumber: number,
-    }))
-  }
-
-  const phoneValue = `${form.vehicleContactCountryCode || '+91'}${form.vehicleContactNumber ? ` ${form.vehicleContactNumber}` : ''}`
 
   return (
     <div className="avm-grid">
@@ -176,12 +162,24 @@ const VehicleFormFields = ({
         />
       </FormField>
 
-      <PhoneField
+      <PhoneCodeField
         id="vehicleContact"
         label="Vehicle Contact"
         required
-        value={phoneValue}
-        onChange={handlePhoneChange}
+        code={form.vehicleContactCountryCode || '+91'}
+        value={form.vehicleContactNumber || ''}
+        onCodeChange={(code) =>
+          setForm((prev) => ({
+            ...prev,
+            vehicleContactCountryCode: code,
+          }))
+        }
+        onValueChange={(value) =>
+          setForm((prev) => ({
+            ...prev,
+            vehicleContactNumber: value,
+          }))
+        }
       />
 
       <FormField label="Note" >
