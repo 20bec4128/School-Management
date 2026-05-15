@@ -12,8 +12,6 @@ import { createSupplier } from '../apis/suppliersApi'
 
 const DEFAULT_PHONE_CODE = '+91'
 
-const DEFAULT_PHONE_CODE = '+91';
-
 const emptyForm = {
   headOfficeId: '',
   schoolId: '',
