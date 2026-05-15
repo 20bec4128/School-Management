@@ -474,7 +474,7 @@ const menuSections = [
         title: "Inventory",
         icon: "ri:box-3-line",
         submenu: [
-          { label: "Supplier", href: "#", page: "supplier" },
+          { label: "Supplier", href: "#", page: "supplier", perm: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"] },
           { label: "Warehouse", href: "#", page: "warehouse" },
           { label: "Category", href: "#", page: "category" },
           { label: "Product", href: "#", page: "product" },

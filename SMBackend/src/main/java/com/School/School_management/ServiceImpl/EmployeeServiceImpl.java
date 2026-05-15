@@ -6,6 +6,7 @@ import com.School.School_management.Exception.BadRequestException;
 import com.School.School_management.Exception.ForbiddenException;
 import com.School.School_management.Exception.NotFoundException;
 import com.School.School_management.Repository.EmployeeRepository;
+import com.School.School_management.Repository.SalaryGradeRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Service.EmployeeService;
 import com.School.School_management.auth.CurrentUser;
@@ -35,17 +36,20 @@ import org.springframework.web.multipart.MultipartFile;
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeRepository employeeRepository;
+    private final SalaryGradeRepository salaryGradeRepository;
     private final SchoolRepository schoolRepository;
     private final PasswordEncoder passwordEncoder;
     private final Path employeeUploadDir;
 
     public EmployeeServiceImpl(
             EmployeeRepository employeeRepository,
+            SalaryGradeRepository salaryGradeRepository,
             SchoolRepository schoolRepository,
             PasswordEncoder passwordEncoder,
             UploadProperties uploadProperties
     ) {
         this.employeeRepository = employeeRepository;
+        this.salaryGradeRepository = salaryGradeRepository;
         this.schoolRepository = schoolRepository;
         this.passwordEncoder = passwordEncoder;
         this.employeeUploadDir = Paths.get(uploadProperties.getDir(), "employees").toAbsolutePath().normalize();
@@ -107,6 +111,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (user == null) throw new ForbiddenException();
 
         Long effectiveSchoolId = effectiveSchoolIdForWrite(user, dto == null ? null : dto.getSchoolId());
+        validateSalaryGradeForSchool(effectiveSchoolId, dto == null ? null : dto.getSalaryGrade());
 
         Employee e = new Employee();
         applyDto(e, dto);
@@ -135,6 +140,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         Employee existing = employeeRepository.findById(id).orElseThrow(NotFoundException::new);
 
         Long effectiveSchoolId = effectiveSchoolIdForWrite(user, dto == null ? null : dto.getSchoolId());
+        validateSalaryGradeForSchool(effectiveSchoolId, dto == null ? null : dto.getSalaryGrade());
 
         // Prevent cross-school update unless SUPER_ADMIN
         if (!user.isSuperAdmin() && !Objects.equals(existing.getSchoolId(), effectiveSchoolId)) {
@@ -310,6 +316,16 @@ public class EmployeeServiceImpl implements EmployeeService {
         String t = trim(v);
         if (t == null) throw new BadRequestException(msg);
         return t;
+    }
+
+    private void validateSalaryGradeForSchool(Long schoolId, String salaryGrade) {
+        String normalized = trim(salaryGrade);
+        if (normalized == null) return;
+
+        boolean exists = salaryGradeRepository.existsBySchoolIdAndGradeNameIgnoreCase(schoolId, normalized);
+        if (!exists) {
+            throw new BadRequestException("Invalid salary grade for the selected school");
+        }
     }
 
     private Page<EmployeeDto> slice(List<EmployeeDto> rows, Pageable pageable) {

@@ -1,304 +1,274 @@
-import React, { useState } from "react";
-import "../assets/css/addModalShared.css";
-
-const FIELD_ICONS = {
-  "Head Office": "ri-building-4-line",
-  "School Name": "ri-school-line",
-  "Route Name": "ri-map-pin-line",
-  "Route Start": "ri-map-pin-range-line",
-  "Route End": "ri-map-pin-5-line",
-  "Vehicle for Route": "ri-bus-2-line",
-  Note: "ri-sticky-note-line",
-  "Stop Name": "ri-road-map-line",
-  "Stop KM": "ri-pin-distance-line",
-  "Stop Fare": "ri-money-dollar-circle-line",
-};
-
-const emptyStop = { stopName: "", stopKm: "", stopFare: "" };
+import { useEffect, useMemo, useState } from 'react'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchVehicles } from '../apis/vehiclesApi'
+import { createTransportRoute } from '../apis/transportRoutesApi'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { normalizeRole } from '../utils/roles'
+import TransportRouteFormFields from '../components/TransportRouteFormFields'
 
 const emptyForm = {
-  headOfficeId: "",
-  schoolId: "",
-  routeName: "",
-  routeStart: "",
-  routeEnd: "",
-  vehicle: "",
-  note: "",
-  stops: [{ ...emptyStop }],
-};
-
-const FormField = ({ label, required, children, full = false }) => {
-  const icon = FIELD_ICONS[label] || "ri-edit-line";
-  return (
-    <div className={`avm-field${full ? " full" : ""}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="text-danger-600"> *</span>}
-      </label>
-      <div className="avm-input-with-icon" style={{ position: "relative" }}>
-        <span
-          style={{
-            position: "absolute",
-            left: "0.85rem",
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "#667085",
-            zIndex: 1,
-          }}
-        >
-          <i className={icon}></i>
-        </span>
-        {children}
-      </div>
-    </div>
-  );
-};
+  headOfficeId: '',
+  schoolId: '',
+  routeName: '',
+  routeStart: '',
+  routeEnd: '',
+  vehicleId: '',
+  note: '',
+  stops: [{ stopName: '', stopKm: '', stopFare: '' }],
+}
 
 const TransportRouteCreate = ({ onNavigate }) => {
-  const [formData, setFormData] = useState(emptyForm);
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
 
-  const handleChange = (e) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
+  const [headOffices, setHeadOffices] = useState([])
+  const [allSchools, setAllSchools] = useState([])
+  const [vehicleOptions, setVehicleOptions] = useState([])
+  const [form, setForm] = useState(emptyForm)
+  const [loadingLookups, setLoadingLookups] = useState(false)
+  const [loadingVehicles, setLoadingVehicles] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleStopChange = (index, field, value) => {
-    setFormData((prev) => {
-      const stops = prev.stops.map((stop, i) =>
-        i === index ? { ...stop, [field]: value } : stop,
-      );
-      return { ...prev, stops };
-    });
-  };
+  const currentSchoolId = isSuperAdmin
+    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : '')
+    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
 
-  const addStopRow = () => {
-    setFormData((prev) => ({
+  const currentHeadOfficeId = isSuperAdmin
+    ? (manualScope.selectedHeadOfficeId ? String(manualScope.selectedHeadOfficeId) : '')
+    : authHeadOfficeId != null
+      ? String(authHeadOfficeId)
+      : ''
+
+  const schoolOptions = useMemo(() => {
+    const rows = Array.isArray(allSchools) ? allSchools : []
+    if (isSuperAdmin) {
+      if (!currentHeadOfficeId) return []
+      return rows.filter((school) => String(school.headOfficeId ?? '') === String(currentHeadOfficeId))
+    }
+    if (isHeadOfficeAdmin) {
+      return rows.filter((school) => String(school.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+    if (isSchoolAdmin) {
+      return rows.filter((school) => String(school.id ?? '') === String(authSchoolId))
+    }
+    return rows
+  }, [allSchools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, currentHeadOfficeId, authHeadOfficeId, authSchoolId])
+
+  const selectedSchoolName = useMemo(() => {
+    const match = Array.isArray(allSchools)
+      ? allSchools.find((school) => String(school.id ?? '') === String(form.schoolId))
+      : null
+    return match?.schoolName || authSchoolName || ''
+  }, [allSchools, form.schoolId, authSchoolName])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    let cancelled = false
+
+    const loadLookups = async () => {
+      setLoadingLookups(true)
+      try {
+        const [headOfficePage, schoolsData] = await Promise.all([
+          isSuperAdmin || isHeadOfficeAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+          fetchSchoolsLookup(),
+        ])
+        if (cancelled) return
+        setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
+        setAllSchools(Array.isArray(schoolsData) ? schoolsData : [])
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to load transport route lookups:', err)
+        setHeadOffices([])
+        setAllSchools([])
+      } finally {
+        if (!cancelled) setLoadingLookups(false)
+      }
+    }
+
+    void loadLookups()
+    return () => {
+      cancelled = true
+    }
+  }, [status, token, isSuperAdmin, isHeadOfficeAdmin])
+
+  useEffect(() => {
+    if (!isSchoolAdmin) return
+    if (authSchoolId == null) return
+    setForm((prev) => ({
       ...prev,
-      stops: [...prev.stops, { ...emptyStop }],
-    }));
-  };
+      headOfficeId: authHeadOfficeId != null ? String(authHeadOfficeId) : prev.headOfficeId,
+      schoolId: String(authSchoolId),
+    }))
+  }, [authHeadOfficeId, authSchoolId, isSchoolAdmin])
 
-  const removeStopRow = (index) => {
-    setFormData((prev) => {
-      if (prev.stops.length === 1) return prev;
-      return {
-        ...prev,
-        stops: prev.stops.filter((_, i) => i !== index),
-      };
-    });
-  };
+  useEffect(() => {
+    if (!form.schoolId) {
+      setVehicleOptions([])
+      return
+    }
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Save logic goes here.
-  };
+    let cancelled = false
+    const loadVehicles = async () => {
+      setLoadingVehicles(true)
+      try {
+        const rows = await fetchVehicles({ schoolId: form.schoolId })
+        if (cancelled) return
+        setVehicleOptions(Array.isArray(rows) ? rows : [])
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to load route vehicles:', err)
+        setVehicleOptions([])
+      } finally {
+        if (!cancelled) setLoadingVehicles(false)
+      }
+    }
+
+    void loadVehicles()
+    return () => {
+      cancelled = true
+    }
+  }, [form.schoolId])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.schoolId || !form.routeName || !form.routeStart || !form.routeEnd || !form.vehicleId) {
+      setError('School, route name, route start, route end, and vehicle are required.')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await createTransportRoute({
+        headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
+        schoolId: Number(form.schoolId),
+        routeName: String(form.routeName || '').trim(),
+        routeStart: String(form.routeStart || '').trim(),
+        routeEnd: String(form.routeEnd || '').trim(),
+        vehicleId: Number(form.vehicleId),
+        note: form.note,
+        stops: Array.isArray(form.stops)
+          ? form.stops.map((stop) => ({
+              stopName: String(stop.stopName || '').trim(),
+              stopKm: stop.stopKm === '' || stop.stopKm == null ? null : Number(stop.stopKm),
+              stopFare: stop.stopFare === '' || stop.stopFare == null ? null : Number(stop.stopFare),
+            }))
+          : [],
+      })
+      onNavigate?.('transport-route')
+    } catch (err) {
+      console.error('Failed to create transport route:', err)
+      setError(err?.message || 'Failed to create transport route')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">
-            Add Transport Route
-          </h1>
-          <span className="text-secondary-light">
-            Transport / Route Management / Add
-          </span>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Add Transport Route</h1>
+          <div className="text-secondary-light">
+            <button
+              type="button"
+              className="text-secondary-light border-0 bg-transparent p-0"
+              onClick={() => onNavigate?.('dashboard')}
+            >
+              Dashboard
+            </button>{' '}
+            /{' '}
+            <button
+              type="button"
+              className="text-secondary-light border-0 bg-transparent p-0"
+              onClick={() => onNavigate?.('transport-route')}
+            >
+              Transport Route
+            </button>{' '}
+            / Add
+          </div>
         </div>
         <button
           type="button"
-          className="btn btn-outline-neutral border border-neutral-300 radius-8 text-sm"
-          onClick={() => onNavigate?.("transport-route")}
+          className="btn btn-light border d-flex align-items-center gap-2"
+          onClick={() => onNavigate?.('transport-route')}
         >
           <i className="ri-arrow-left-line"></i> Back to List
         </button>
       </div>
 
       <div className="card">
-        <div className="card-body">
-          <form className="avm-grid" onSubmit={handleSubmit}>
-            <FormField label="Head Office" required>
-              <select
-                className="avm-select"
-                id="headOfficeId"
-                value={formData.headOfficeId}
-                onChange={handleChange}
-              >
-                <option value="">--Select Head Office--</option>
-                <option value="1">Main Head Office</option>
-              </select>
-            </FormField>
+        <div className="card-body p-24">
+          {error ? <div className="alert alert-danger mb-24">{error}</div> : null}
 
-            <FormField label="School Name" required>
-              <select
-                className="avm-select"
-                id="schoolId"
-                value={formData.schoolId}
-                onChange={handleChange}
-              >
-                <option value="">--Select School--</option>
-                <option value="1">Windsor Park High School</option>
-              </select>
-            </FormField>
+          <form onSubmit={handleSubmit}>
+            <TransportRouteFormFields
+              form={form}
+              setForm={setForm}
+              isSuperAdmin={isSuperAdmin}
+              isHeadOfficeAdmin={isHeadOfficeAdmin}
+              isSchoolAdmin={isSchoolAdmin}
+              headOffices={headOffices}
+              schoolOptions={schoolOptions}
+              vehicleOptions={vehicleOptions}
+              selectedHeadOfficeId={form.headOfficeId}
+              selectedSchoolId={form.schoolId}
+              onHeadOfficeChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  headOfficeId: value,
+                  schoolId: '',
+                  vehicleId: '',
+                }))
+                if (isSuperAdmin) {
+                  manualScope.setSelectedScope(value, '')
+                }
+              }}
+              onSchoolChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  schoolId: value,
+                  vehicleId: '',
+                }))
+                if (isSuperAdmin) {
+                  manualScope.setSelectedScope(form.headOfficeId, value)
+                }
+              }}
+              headOfficeName={authHeadOfficeName || ''}
+              schoolName={selectedSchoolName}
+              vehicleLoading={loadingVehicles}
+            />
 
-            <FormField label="Route Name" required >
-              <input
-                type="text"
-                className="avm-input"
-                id="routeName"
-                placeholder="Route Name"
-                value={formData.routeName}
-                onChange={handleChange}
-              />
-            </FormField>
-
-            <FormField label="Route Start" required>
-              <input
-                type="text"
-                className="avm-input"
-                id="routeStart"
-                placeholder="Route Start"
-                value={formData.routeStart}
-                onChange={handleChange}
-              />
-            </FormField>
-
-            <FormField label="Route End" required>
-              <input
-                type="text"
-                className="avm-input"
-                id="routeEnd"
-                placeholder="Route End"
-                value={formData.routeEnd}
-                onChange={handleChange}
-              />
-            </FormField>
-
-            <FormField label="Vehicle for Route" required>
-              <select
-                className="avm-select"
-                id="vehicle"
-                value={formData.vehicle}
-                onChange={handleChange}
-              >
-                <option value="">--Select Vehicle--</option>
-                <option value="Bus-01">School Bus - 01</option>
-                <option value="Bus-02">School Bus - 02</option>
-                <option value="Van-01">Mini Van - 01</option>
-              </select>
-            </FormField>
-
-            <div className="avm-field full">
-              <label className="avm-label">Route Stop Fare</label>
-              <div className="table-responsive">
-                <table className="table bordered-table mb-0 data-table">
-                  <thead>
-                    <tr>
-                      <th>Stop Name</th>
-                      <th>Stop KM</th>
-                      <th>Stop Fare</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.stops.map((stop, index) => (
-                      <tr key={index}>
-                        <td>
-                          <input
-                            type="text"
-                            className="form-control avm-input"
-                            placeholder="Stop Name"
-                            value={stop.stopName}
-                            onChange={(e) =>
-                              handleStopChange(
-                                index,
-                                "stopName",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            className="form-control avm-input"
-                            placeholder="Stop KM"
-                            value={stop.stopKm}
-                            onChange={(e) =>
-                              handleStopChange(index, "stopKm", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            className="form-control avm-input"
-                            placeholder="Stop Fare"
-                            value={stop.stopFare}
-                            onChange={(e) =>
-                              handleStopChange(
-                                index,
-                                "stopFare",
-                                e.target.value,
-                              )
-                            }
-                          />
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="text-danger-600 bg-transparent border-0"
-                            onClick={() => removeStopRow(index)}
-                            disabled={formData.stops.length === 1}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
+            <div className="d-flex justify-content-end gap-12 mt-24">
               <button
                 type="button"
-                className="btn btn-sm btn-outline-primary mt-12"
-                onClick={addStopRow}
-              >
-                <i className="ri-add-line"></i> Add Stop
-              </button>
-            </div>
-
-            <FormField label="Note" full>
-              <textarea
-                className="avm-input avm-textarea"
-                id="note"
-                rows="3"
-                placeholder="Note"
-                value={formData.note}
-                onChange={handleChange}
-              />
-            </FormField>
-
-            <div className="d-flex justify-content-end gap-12 mt-24 full">
-              <button
-                type="button"
-                className="btn btn-outline-neutral px-24 py-12 radius-8"
-                onClick={() => onNavigate?.("transport-route")}
+                className="btn btn-light border px-32"
+                onClick={() => onNavigate?.('transport-route')}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="btn btn-primary-600 px-24 py-12 radius-8"
+                className="btn btn-primary-600 px-32"
+                disabled={saving || loadingLookups}
               >
-                Save Route
+                {saving ? 'Saving...' : 'Save Route'}
               </button>
             </div>
           </form>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default TransportRouteCreate;
+export default TransportRouteCreate

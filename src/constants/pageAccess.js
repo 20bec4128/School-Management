@@ -177,6 +177,9 @@ export const PAGE_KEY_PERMISSIONS = {
   'manage-invoice': ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
   'due-invoice': ['FEES_VIEW_OWN', 'FEES_VIEW_CHILD', '*'],
 
+  // Inventory
+  supplier: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
+
   // Communication
   'visitor-purpose': ['NOTICE_VIEW', 'NEWS_VIEW', '*'],
   'call-log': ['NOTICE_VIEW', 'NEWS_VIEW', '*'],
