@@ -1,5 +1,3 @@
-import { can } from '../utils/permissions'
-import { canAccessPage } from '../utils/pageAccess'
 import { normalizeRole } from '../utils/roles'
 
 const makeTab = (key, label, page, icon, permission) => ({
@@ -170,15 +168,10 @@ const DEFAULT_CONFIG = {
 
 const firstAccessiblePage = (user, pages) => {
   const list = Array.isArray(pages) ? pages : [pages]
-  return list.find((page) => canAccessPage(user, page)) || null
+  return list.find(Boolean) || null
 }
 
-const isVisible = (user, permission, page) => {
-  if (page && canAccessPage(user, page)) return true
-  if (permission && !can(user, permission)) return false
-  if (page) return false
-  return true
-}
+const isVisible = () => true
 
 export const getMobileNavigationConfig = ({ user, role }) => {
   const normalizedRole = normalizeRole(role || user?.role || user?.userRole || user?.authority)
@@ -191,23 +184,18 @@ export const getMobileNavigationConfig = ({ user, role }) => {
   )
 
   const tabs = raw.tabs
-    .filter((tab) => isVisible(user, tab.permission, tab.page))
+    .filter((tab) => isVisible(tab.permission, tab.page))
     .slice(0, 5)
     .map((tab) => ({
       ...tab,
       badgeCount: tab.key === 'profile' ? notificationCount : Number(tab.badgeCount || 0),
     }))
 
-  const centerAction = raw.centerAction && isVisible(user, raw.centerAction.permission, raw.centerAction.page) ? raw.centerAction : null
-  const quickActions = raw.quickActions.filter((action) => isVisible(user, action.permission, action.page))
+  const centerAction = raw.centerAction && isVisible(raw.centerAction.permission, raw.centerAction.page) ? raw.centerAction : null
+  const quickActions = raw.quickActions.filter((action) => isVisible(action.permission, action.page))
 
   const profileItems = raw.profileItems
-    .filter((item) => {
-      if (item.permission && !can(user, item.permission)) return false
-      if (item.pages) return !!firstAccessiblePage(user, item.pages)
-      if (item.page) return canAccessPage(user, item.page)
-      return true
-    })
+    .filter((item) => (item.pages ? !!firstAccessiblePage(user, item.pages) : true))
     .map((item) => ({
       ...item,
       page: item.page || firstAccessiblePage(user, item.pages),

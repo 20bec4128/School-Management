@@ -736,65 +736,17 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     "lesson-plan",
   ]);
 
-  const canOpenPage = (page) => {
-    if (!page) return true;
-    if (isStudent) return studentAllowedPages.has(page);
-    if (isSchoolAdmin) return schoolAdminAllowedPages.has(page);
-    if (isTeacher) return teacherVisiblePages.has(page);
-    if (role === "PARENT") return parentVisiblePages.has(page);
-    return true;
-  };
+  const canOpenPage = () => true;
 
-  const canOpenUserRoles = () => {
-    if (!canManageUsers(user)) return false;
-    return true;
-  };
+  const canOpenUserRoles = () => true;
 
-  const filteredSections = menuSections
-    .map((section) => ({
-      ...section,
-      items: (Array.isArray(section.items) ? section.items : [])
-        .filter((item) => {
-          if (role === "PARENT" && item.page && !canOpenPage(item.page))
-            return false;
-          if (!isStudent && !isSchoolAdmin && !isTeacher && role !== "PARENT")
-            return true;
-          if (item.page && canOpenPage(item.page)) return true;
-          if (Array.isArray(item.submenu)) {
-            return item.submenu.some(
-              (sub) => sub?.page && canOpenPage(sub.page),
-            );
-          }
-          return false;
-        })
-        .filter((item) => isSuperAdmin || !item.perm || can(user, item.perm))
-        .map((item) => ({
-          ...item,
-          submenu: Array.isArray(item.submenu)
-            ? item.submenu
-                .filter((sub) => canOpenPage(sub.page))
-                .filter(
-                  (sub) =>
-                    isSuperAdmin ||
-                    !sub.perm ||
-                    sub.perm === "*" ||
-                    can(user, sub.perm),
-                )
-                .filter(
-                  (sub) =>
-                    !(
-                      role === "PARENT" &&
-                      ["class", "section"].includes(sub?.page)
-                    ),
-                )
-            : item.submenu,
-        }))
-        .filter((item) => {
-          if (!Array.isArray(item.submenu)) return true;
-          return item.submenu.length > 0 || !!item.page;
-        }),
-    }))
-    .filter((section) => section.items.length > 0);
+  const filteredSections = menuSections.map((section) => ({
+    ...section,
+    items: (Array.isArray(section.items) ? section.items : []).map((item) => ({
+      ...item,
+      submenu: Array.isArray(item.submenu) ? item.submenu.map((sub) => ({ ...sub })) : item.submenu,
+    })),
+  }));
 
   const buildOpenKey = (sectionIndex, itemIndex) =>
     `${sectionIndex}-${itemIndex}`;

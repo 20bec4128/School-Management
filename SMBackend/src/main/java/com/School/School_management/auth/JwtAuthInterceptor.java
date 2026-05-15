@@ -181,6 +181,7 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
                 "LESSON_PLAN_VIEW_OWN",
                 "LESSON_PLAN_VIEW_CHILD",
                 "CLASS_ROUTINE_VIEW",
+                "ASSIGNMENT_SUBMIT",
                 "CLASS_ROUTINE_MANAGE"
         );
     }
@@ -188,6 +189,9 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
     private Set<String> defaultStudentAcademicPermissions() {
         return Set.of(
                 "CLASS_ROUTINE_VIEW",
+                "SECTION_VIEW_ASSIGNED",
+                "SECTION_VIEW_OWN",
+                "SECTION_VIEW_CHILD",
                 "SUBJECT_VIEW_OWN",
                 "SUBJECT_VIEW_CHILD",
                 "SYLLABUS_VIEW_OWN",

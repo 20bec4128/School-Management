@@ -71,6 +71,7 @@ import AddStudyMaterial from "./pages/AddStudyMaterial";
 import Liveclass from "./pages/Liveclass";
 import AddLiveClass from "./pages/AddLiveClass";
 import Assignment from "./pages/Assignment";
+import AddAssignment from "./pages/AddAssignment";
 import Submission from "./pages/Submission";
 import Lesson from "./pages/Lesson";
 import Topic from "./pages/Topic";
@@ -211,6 +212,7 @@ import AddPostalDispatch from "./pages/AddPostalDispatch.jsx";
 import AddNotice from "./pages/AddNotice.jsx";
 import AddEvent from "./pages/AddEvent.jsx";
 import AddPostalReceive from "./pages/AddPostalReceive.jsx";
+import AddSubmission from "./pages/AddSubmission.jsx";
 
 const routeEntries = [
   {
@@ -311,6 +313,7 @@ const routeEntries = [
   { pageKey: "live-class", component: Liveclass },
   { pageKey: "add-live-class", component: AddLiveClass },
   { pageKey: "assignment", component: Assignment },
+  { pageKey: "add-assignment", component: AddAssignment },
   { pageKey: "submission", component: Submission },
   { pageKey: "lesson", component: Lesson },
   { pageKey: "add-lesson", component: AddLesson },
@@ -692,7 +695,7 @@ const routeEntries = [
   { pageKey: "add-notice", component: AddNotice },
   { pageKey: "add-postal-receive", component: AddPostalReceive },
   { pageKey: "add-teacher", component: AddTeacher },
-
+  { pageKey: "add-submission", component: AddSubmission },
 ];
 
 const AppRoute = ({

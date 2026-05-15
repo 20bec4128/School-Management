@@ -25,7 +25,7 @@ export const PAGE_GROUPS = [
   {
     key: 'academic-management',
     label: 'Academic Management',
-    pageKeys: ['class', 'section', 'subject', 'syllabus', 'add-syllabus', 'study-material', 'add-study-material', 'live-class', 'assignment', 'submission'],
+    pageKeys: ['class', 'section', 'subject', 'syllabus', 'add-syllabus', 'study-material', 'add-study-material', 'live-class', 'assignment', 'add-assignment', 'submission'],
   },
   {
     key: 'teacher-management',
@@ -112,6 +112,7 @@ export const PAGE_KEY_PERMISSIONS = {
   'add-study-material': ['STUDY_MATERIAL_VIEW_OWN', 'STUDY_MATERIAL_VIEW_CHILD', 'STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'],
   'live-class': ['LIVE_CLASS_JOIN', 'LIVE_CLASS_VIEW_OWN', 'LIVE_CLASS_VIEW_CHILD', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'],
   assignment: ['ASSIGNMENT_SUBMIT', 'ASSIGNMENT_VIEW_OWN', 'ASSIGNMENT_VIEW_CHILD', 'ASSIGNMENT_MANAGE', 'ASSIGNMENT_MANAGE_ASSIGNED', '*'],
+  'add-assignment': ['ASSIGNMENT_MANAGE', 'ASSIGNMENT_MANAGE_ASSIGNED', '*'],
   submission: [
     'ASSIGNMENT_SUBMIT',
     'SUBMISSION_MANAGE',

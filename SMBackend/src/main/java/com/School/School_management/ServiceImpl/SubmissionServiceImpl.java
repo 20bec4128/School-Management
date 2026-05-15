@@ -55,9 +55,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     public Submission createSubmission(SubmissionRequestDto dto, MultipartFile file) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
-        if (!user.isRole("STUDENT") || user.studentId() == null) throw new ForbiddenException();
-
-        Student student = studentRepository.findById(user.studentId()).orElseThrow(NotFoundException::new);
+        Student student = resolveSubmissionStudentForCreate(user, dto);
         dto.setStudentId(student.getId());
         dto.setSchoolId(student.getSchool() == null ? null : student.getSchool().getId());
         dto.setClassId(student.getSchoolClass() == null ? null : student.getSchoolClass().getId());
@@ -167,10 +165,9 @@ public class SubmissionServiceImpl implements SubmissionService {
     public Submission updateSubmission(Long id, SubmissionRequestDto dto, MultipartFile file) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
-        if (!user.isRole("STUDENT") || user.studentId() == null) throw new ForbiddenException();
 
         Submission submission = submissionRepository.findById(id).orElseThrow(NotFoundException::new);
-        if (!user.studentId().equals(submission.getStudentId())) throw new NotFoundException();
+        ensureCanEditSubmission(user, submission);
 
         if (dto != null && dto.getAssignmentId() != null && !dto.getAssignmentId().equals(submission.getAssignmentId())) {
             throw new ForbiddenException();
@@ -230,6 +227,49 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     private void ensureTeacherOwnsAssignment(Long teacherId, Long assignmentId) {
         if (!teacherOwnsAssignment(teacherId, assignmentId)) throw new ForbiddenException();
+    }
+
+    private Student resolveSubmissionStudentForCreate(CurrentUser user, SubmissionRequestDto dto) {
+        if (user.isSuperAdmin()) {
+            Long requestedStudentId = dto == null ? null : dto.getStudentId();
+            if (requestedStudentId == null) throw new ForbiddenException();
+            return studentRepository.findById(requestedStudentId).orElseThrow(NotFoundException::new);
+        }
+
+        if (user.isRole("STUDENT")) {
+            if (user.studentId() == null) throw new ForbiddenException();
+            return studentRepository.findById(user.studentId()).orElseThrow(NotFoundException::new);
+        }
+
+        if (user.isRole("PARENT")) {
+            if (user.parentId() == null) throw new ForbiddenException();
+            Long requestedStudentId = dto == null ? null : dto.getStudentId();
+            if (requestedStudentId == null) throw new ForbiddenException();
+            if (!parentStudentRepository.findStudentIdsByParentId(user.parentId()).contains(requestedStudentId)) {
+                throw new ForbiddenException();
+            }
+            return studentRepository.findById(requestedStudentId).orElseThrow(NotFoundException::new);
+        }
+
+        throw new ForbiddenException();
+    }
+
+    private void ensureCanEditSubmission(CurrentUser user, Submission submission) {
+        if (user.isSuperAdmin()) {
+            return;
+        }
+        if (user.isRole("STUDENT")) {
+            if (user.studentId() == null || !user.studentId().equals(submission.getStudentId())) throw new NotFoundException();
+            return;
+        }
+        if (user.isRole("PARENT")) {
+            if (user.parentId() == null) throw new ForbiddenException();
+            if (!parentStudentRepository.findStudentIdsByParentId(user.parentId()).contains(submission.getStudentId())) {
+                throw new NotFoundException();
+            }
+            return;
+        }
+        throw new ForbiddenException();
     }
 
     private boolean teacherOwnsAssignment(Long teacherId, Long assignmentId) {

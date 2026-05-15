@@ -28,6 +28,14 @@ public class SchoolSectionController {
   }
 
   @GetMapping
+  @RequirePermission({
+    "SECTION_MANAGE",
+    "SECTION_VIEW_ASSIGNED",
+    "SECTION_VIEW_OWN",
+    "SECTION_VIEW_CHILD",
+    "HEAD_OFFICE_SCHOOL_MANAGE",
+    "*"
+  })
   public List<SchoolSectionDto> getAll(
       @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long classId) {
     CurrentUser user = CurrentUserHolder.get();
