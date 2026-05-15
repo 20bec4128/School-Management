@@ -107,7 +107,7 @@ const HostelFormFields = ({
         </>
       )}
 
-      <FormField label="Name" required >
+      <FormField label="Name" required>
         <input
           type="text"
           className="avm-input"
