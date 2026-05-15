@@ -95,7 +95,7 @@ const callTypeBadge = (type) => {
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
 }
 
-const CallLog = () => {
+const CallLog = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -215,29 +215,27 @@ const CallLog = () => {
 
   const openAdd = () => { 
     setError('')
-    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
-    setAddStep(0)
-    setIsAddOpen(true) 
+    sessionStorage.removeItem('call-log-edit-row')
+    onNavigate?.('add-call-log')
   }
 
   const openEdit = (row) => {
-    setError('')
-    if (isSuperAdmin) {
-      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      ...row,
-      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
-      date: row.date || new Date().toISOString().split('T')[0],
-      followUpDate: row.followUpDate || '',
-      callType: row.callType || 'Incoming',
-      note: row.note || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+    if (!row?.id) return
+    sessionStorage.setItem(
+      'call-log-edit-row',
+      JSON.stringify({
+        id: row.id,
+        schoolId: row.schoolId != null ? String(row.schoolId) : '',
+        name: row.name || '',
+        phone: row.phone || '',
+        callDuration: row.callDuration || '',
+        date: row.date || new Date().toISOString().split('T')[0],
+        followUpDate: row.followUpDate || '',
+        callType: row.callType || 'Incoming',
+        note: row.note || '',
+      }),
+    )
+    onNavigate?.('add-call-log')
   }
 
   const buildPayload = (form) => ({

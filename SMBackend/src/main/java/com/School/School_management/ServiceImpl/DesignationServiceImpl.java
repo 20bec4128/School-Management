@@ -84,8 +84,21 @@ public class DesignationServiceImpl implements DesignationService {
         }
 
         Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return designationRepository.searchDesignations(effectiveSchoolId, normalizedSearch, pageable)
-                .map(this::toDto);
+        List<DesignationDto> rows = designationRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
+                .stream()
+                .map(this::toDto)
+                .filter(dto -> {
+                    if (normalizedSearch == null) return true;
+                    String haystack = String.join(" ",
+                            safe(dto.getSchoolName()),
+                            safe(dto.getRole()),
+                            safe(dto.getName()),
+                            safe(dto.getNote()))
+                            .toLowerCase();
+                    return haystack.contains(normalizedSearch.toLowerCase());
+                })
+                .toList();
+        return slice(rows, pageable);
     }
 
     @Override

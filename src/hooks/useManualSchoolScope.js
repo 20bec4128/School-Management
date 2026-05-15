@@ -32,7 +32,10 @@ export const useManualSchoolScope = (enabled) => {
         const nextHeadOffices = Array.isArray(headOfficePage?.content) ? headOfficePage.content : []
         setHeadOffices(
           nextHeadOffices
-            .map((ho) => ({ id: ho?.id, name: ho?.name }))
+            .map((ho) => ({
+              id: ho?.id,
+              name: ho?.name || ho?.headOfficeName || '',
+            }))
             .filter((ho) => ho.id != null && ho.name)
             .sort((a, b) => String(a.name).localeCompare(String(b.name))),
         )

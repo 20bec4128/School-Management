@@ -1,16 +1,24 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
-import { createStudent } from '../apis/studentsApi'
+import { createStudent, updateStudent } from '../apis/studentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchStudentTypesLookup } from '../apis/studentTypeApi'
 import PhoneCodeField from '../components/PhoneCodeField'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { findSchoolById } from '../utils/schoolScope'
+import '../assets/css/addModalShared.css'
+
+const TABS = ['Basic Information', 'Academic Information', 'Guardian Information', 'Address Information', 'Previous School', 'Other Information']
+const EDIT_STORAGE_KEY = 'edit-student-row'
+const DEFAULT_PHONE_CODE = '+91'
 
 const emptyForm = {
   id: null,
-  school: '',
+  schoolId: '',
   name: '',
   admissionNo: '',
   admissionDate: '',
@@ -61,27 +69,24 @@ const emptyForm = {
   photo: null,
 }
 
-const DEFAULT_PHONE_CODE = '+91'
-const PHONE_LENGTH_BY_ISO = {
-  IN: { min: 10, max: 10 },
-  US: { min: 10, max: 10 },
-  CA: { min: 10, max: 10 },
-  GB: { min: 10, max: 10 },
-  AU: { min: 9, max: 9 },
-  DE: { min: 10, max: 11 },
-  FR: { min: 9, max: 9 },
-  BR: { min: 10, max: 11 },
-}
-const DEFAULT_PHONE_LENGTH = { min: 6, max: 15 }
-
 const combinePhoneValue = (code, number) => {
   const normalizedNumber = String(number || '').replace(/\D/g, '').trim()
   const normalizedCode = String(code || DEFAULT_PHONE_CODE).trim() || DEFAULT_PHONE_CODE
   return normalizedNumber ? `${normalizedCode} ${normalizedNumber}` : null
 }
 
+const splitPhoneValue = (fullValue) => {
+  const trimmed = String(fullValue || '').trim()
+  if (!trimmed) return { code: DEFAULT_PHONE_CODE, number: '' }
+  if (!trimmed.startsWith('+')) return { code: DEFAULT_PHONE_CODE, number: trimmed.replace(/\D/g, '') }
+  const parts = trimmed.split(/\s+/)
+  const code = parts[0] || DEFAULT_PHONE_CODE
+  const number = parts.slice(1).join('').replace(/\D/g, '')
+  return { code, number }
+}
+
 const buildPayload = (form, phoneCodes) => ({
-  schoolId: form.school ? Number(form.school) : null,
+  schoolId: form.schoolId ? Number(form.schoolId) : null,
   name: form.name,
   admissionNo: form.admissionNo,
   admissionDate: form.admissionDate || null,
@@ -128,11 +133,6 @@ const buildPayload = (form, phoneCodes) => ({
   otherInfo: form.otherInfo || null,
 })
 
-const getClassOptionValue = (item) => String(item?.id ?? item?.classId ?? item?.numericName ?? item?.className ?? item?.name ?? '')
-const getClassOptionLabel = (item) => item?.className || item?.numericName || item?.name || String(item?.id ?? '')
-const getSectionOptionValue = (item) => String(item?.id ?? item?.sectionId ?? item?.name ?? item?.sectionName ?? item?.section ?? '')
-const getSectionOptionLabel = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
-
 const findMatchingClassOption = (value, classOptions) =>
   classOptions.find((item) =>
     [String(item?.id ?? ''), item?.className, item?.numericName, item?.name].some(
@@ -140,537 +140,730 @@ const findMatchingClassOption = (value, classOptions) =>
     ),
   )
 
-const findMatchingSectionOption = (value, sectionOptions) =>
-  sectionOptions.find((item) =>
-    [String(item?.id ?? ''), item?.name, item?.sectionName, item?.section].some(
-      (candidate) => String(candidate) === String(value),
-    ),
+const readEditRow = () => {
+  try {
+    const raw = sessionStorage.getItem(EDIT_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+const FIELD_ICONS = {
+  'School Name': 'ri-school-line',
+  Name: 'ri-user-3-line',
+  'Admission No': 'ri-profile-line',
+  'Admission Date': 'ri-calendar-check-line',
+  'Birth Date': 'ri-calendar-2-line',
+  Gender: 'ri-user-settings-line',
+  'Blood Group': 'ri-heart-pulse-line',
+  Religion: 'ri-bookmark-3-line',
+  Caste: 'ri-group-line',
+  Email: 'ri-mail-line',
+  'National ID': 'ri-fingerprint-line',
+  'Student Type': 'ri-team-line',
+  Class: 'ri-building-line',
+  Section: 'ri-layout-grid-line',
+  Group: 'ri-group-2-line',
+  'Roll No': 'ri-hashtag',
+  'Registration No': 'ri-file-list-3-line',
+  Discount: 'ri-percent-line',
+  'Second Language': 'ri-translate-2',
+  'Father Name': 'ri-user-line',
+  'Mother Name': 'ri-user-line',
+  'Is Guardian?': 'ri-shield-user-line',
+  'Relation With Guardian': 'ri-links-line',
+  'Present Address': 'ri-map-pin-2-line',
+  'Permanent Address': 'ri-home-4-line',
+  Username: 'ri-at-line',
+  Password: 'ri-lock-2-line',
+  'Student Username': 'ri-at-line',
+  'Student Password': 'ri-lock-2-line',
+  'Parent Mobile': 'ri-smartphone-line',
+  'Parent Password': 'ri-lock-password-line',
+  'Health Condition': 'ri-heart-add-line',
+  'Other Info': 'ri-information-line',
+}
+
+const FormField = ({ label, required, children, full = false, noIcon = false }) => {
+  const icon = FIELD_ICONS[label] || 'ri-edit-line'
+  return (
+    <div className={full ? 'col-12 mb-20' : 'col-md-6 mb-20'}>
+      <label className="form-label fw-semibold text-primary-light mb-8 d-block">
+        {label} {required && <span className="text-danger-600">*</span>}
+      </label>
+      <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+        {!noIcon && (
+          <span
+            style={{
+              position: 'absolute',
+              left: '0.85rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#667085',
+              zIndex: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <i className={icon}></i>
+          </span>
+        )}
+        {children}
+      </div>
+    </div>
   )
+}
+
+const ImageUploadField = ({ label, id, preview, onChange, helperText }) => {
+  const inputRef = useRef(null)
+  return (
+    <div className="col-md-6 mb-20">
+      <label className="form-label fw-semibold text-primary-light mb-8 d-block">{label}</label>
+      <div
+        className="border border-neutral-300 radius-8 p-16 text-center cursor-pointer"
+        style={{ minHeight: 140, background: '#f9fafb', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+        onClick={() => inputRef.current?.click()}
+      >
+        {preview ? (
+          <img src={preview} alt="Preview" style={{ maxHeight: 100, maxWidth: '100%', borderRadius: 6 }} />
+        ) : (
+          <>
+            <i className="ri-image-add-line text-3xl text-secondary-light d-block mb-8" />
+            <span className="text-xs text-secondary-light">Click to upload {label}</span>
+          </>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".jpg,.jpeg,.png,.gif"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files[0]
+          if (file) onChange(id, file)
+        }}
+      />
+      {helperText ? <div className="text-xs text-secondary-light mt-8">{helperText}</div> : null}
+    </div>
+  )
+}
 
 const AddStudent = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
-  const { activeSchoolId } = useSchool()
-  const [form, setForm] = useState(emptyForm)
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
+  const [initialEditRow] = useState(() => readEditRow())
+  const [activeTab, setActiveTab] = useState(0)
+  const [schools, setSchools] = useState([])
+  const [studentTypeOptions, setStudentTypeOptions] = useState([])
+  const [classOptions, setClassOptions] = useState([])
+  const [sectionOptions, setSectionOptions] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  
   const [phoneCodes, setPhoneCodes] = useState({
     phone: DEFAULT_PHONE_CODE,
     fatherPhone: DEFAULT_PHONE_CODE,
     motherPhone: DEFAULT_PHONE_CODE,
     parentUsername: DEFAULT_PHONE_CODE,
   })
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
-  const [isParentPasswordVisible, setIsParentPasswordVisible] = useState(false)
-  const [submitError, setSubmitError] = useState(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const [schoolList, setSchoolList] = useState([])
-  const [studentTypeOptions, setStudentTypeOptions] = useState([])
-  const [classOptions, setClassOptions] = useState([])
-  const [sectionOptions, setSectionOptions] = useState([])
 
   const [previews, setPreviews] = useState({
     fatherPhoto: null, motherPhoto: null, transferCertificate: null, photo: null,
   })
 
-  const fatherPhotoRef = useRef(null)
-  const motherPhotoRef = useRef(null)
-  const transferCertificateRef = useRef(null)
-  const studentPhotoRef = useRef(null)
-
-  const resolvedSchoolId = activeSchoolId || authSchoolId || ''
-  const resolvedSchoolName = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
-  const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const isSchoolLocked = Boolean(scopedSchoolId) && role !== 'SUPER_ADMIN'
+  const [form, setForm] = useState(() => {
+    if (initialEditRow) {
+      const pPhone = splitPhoneValue(initialEditRow.phone)
+      const fPhone = splitPhoneValue(initialEditRow.fatherPhone)
+      const mPhone = splitPhoneValue(initialEditRow.motherPhone)
+      const uPhone = splitPhoneValue(initialEditRow.parentUsername)
+      
+      return {
+        ...initialEditRow,
+        schoolId: initialEditRow.schoolId ? String(initialEditRow.schoolId) : '',
+        phone: pPhone.number,
+        fatherPhone: fPhone.number,
+        motherPhone: mPhone.number,
+        parentUsername: uPhone.number,
+        password: '',
+        parentPassword: '',
+      }
+    }
+    const listSchoolId = isSuperAdmin ? (activeSchoolId ? String(activeSchoolId) : '') : (authSchoolId ? String(authSchoolId) : '')
+    return { ...emptyForm, schoolId: listSchoolId }
+  })
 
   useEffect(() => {
-    setForm(prev => ({ ...prev, school: scopedSchoolId ? String(scopedSchoolId) : '' }))
-  }, [scopedSchoolId])
+    if (initialEditRow) {
+      const pPhone = splitPhoneValue(initialEditRow.phone)
+      const fPhone = splitPhoneValue(initialEditRow.fatherPhone)
+      const mPhone = splitPhoneValue(initialEditRow.motherPhone)
+      const uPhone = splitPhoneValue(initialEditRow.parentUsername)
+      setPhoneCodes({
+        phone: pPhone.code,
+        fatherPhone: fPhone.code,
+        motherPhone: mPhone.code,
+        parentUsername: uPhone.code,
+      })
+      setPreviews({
+        fatherPhoto: initialEditRow.fatherPhotoUrl || null,
+        motherPhoto: initialEditRow.motherPhotoUrl || null,
+        transferCertificate: initialEditRow.transferCertificateUrl || null,
+        photo: initialEditRow.photoUrl || null,
+      })
+    }
+  }, [initialEditRow])
+
+  useEffect(() => () => sessionStorage.removeItem(EDIT_STORAGE_KEY), [])
 
   useEffect(() => {
-    fetchSchoolsLookup().then(setSchoolList).catch(() => {})
-    fetchStudentTypesLookup().then((data) => {
-        setStudentTypeOptions(Array.isArray(data) ? data : [])
-    }).catch(() => {})
+    const loadLookups = async () => {
+      try {
+        const [schoolList, types] = await Promise.all([
+          fetchSchoolsLookup(),
+          fetchStudentTypesLookup(),
+        ])
+        setSchools(Array.isArray(schoolList) ? schoolList : [])
+        setStudentTypeOptions(Array.isArray(types) ? types : [])
+      } catch {
+        setSchools([])
+        setStudentTypeOptions([])
+      }
+    }
+    void loadLookups()
   }, [])
+
+  useEffect(() => {
+    if (!initialEditRow || !isSuperAdmin || schools.length === 0) return
+    const school = findSchoolById(schools, initialEditRow.schoolId)
+    if (school?.headOfficeId != null) {
+      manualScope.setSelectedScope(String(school.headOfficeId), String(initialEditRow.schoolId ?? ''))
+    }
+  }, [initialEditRow, isSuperAdmin, schools, manualScope])
 
   useEffect(() => {
     let cancelled = false
     const loadClasses = async () => {
-      if (!form.school) {
+      if (!form.schoolId) {
         setClassOptions([])
-        setSectionOptions([])
         return
       }
       try {
-        const data = await fetchClasses({ schoolId: form.school })
+        const data = await fetchClasses({ schoolId: form.schoolId })
         if (!cancelled) setClassOptions(Array.isArray(data) ? data : [])
       } catch {
         if (!cancelled) setClassOptions([])
       }
     }
-    loadClasses()
+    void loadClasses()
     return () => { cancelled = true }
-  }, [form.school])
+  }, [form.schoolId])
 
   useEffect(() => {
     let cancelled = false
     const loadSections = async () => {
       const selectedClass = findMatchingClassOption(form.classId || form.className, classOptions)
-      if (!form.school || !selectedClass?.id) {
+      if (!form.schoolId || !selectedClass?.id) {
         setSectionOptions([])
         return
       }
       try {
-        const data = await fetchSections({ schoolId: form.school, classId: selectedClass.id })
+        const data = await fetchSections({ schoolId: form.schoolId, classId: selectedClass.id })
         if (!cancelled) setSectionOptions(Array.isArray(data) ? data : [])
       } catch {
         if (!cancelled) setSectionOptions([])
       }
     }
-    loadSections()
+    void loadSections()
     return () => { cancelled = true }
-  }, [form.school, form.classId, form.className, classOptions])
+  }, [form.schoolId, form.classId, form.className, classOptions])
 
-  const effectiveSchoolList = useMemo(() => {
-    const list = Array.isArray(schoolList) ? schoolList.slice() : []
-    if (!scopedSchoolId) return list
-    const selected = list.find((s) => String(s?.id) === String(scopedSchoolId))
-    return selected
-      ? [selected]
-      : [{
-          id: scopedSchoolId,
-          schoolName: resolvedSchoolName || `School ${scopedSchoolId}`,
-        }]
-  }, [resolvedSchoolName, schoolList, scopedSchoolId])
+  const schoolOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.schoolOptions
+    return contextSchoolOptions || []
+  }, [isSuperAdmin, manualScope.schoolOptions, contextSchoolOptions])
 
   const handleChange = (e) => {
     const { id, value, type, checked } = e.target
     setForm((prev) => ({ ...prev, [id]: type === 'checkbox' ? checked : value }))
   }
 
-  const handlePhotoChange = (e, key) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setForm((prev) => ({ ...prev, [key]: file }))
-    setPreviews((prev) => ({ ...prev, [key]: URL.createObjectURL(file) }))
+  const handleFileChange = (id, file) => {
+    setForm((prev) => ({ ...prev, [id]: file }))
+    setPreviews((prev) => ({ ...prev, [id]: URL.createObjectURL(file) }))
+  }
+
+  const validateCurrentTab = () => {
+    setError('')
+    if (activeTab === 0) {
+      if (!form.schoolId) return 'School is required'
+      if (!form.name.trim()) return 'Name is required'
+      if (!form.admissionNo.trim()) return 'Admission No is required'
+      if (!form.admissionDate) return 'Admission Date is required'
+      if (!form.birthDate) return 'Birth Date is required'
+      if (!form.gender) return 'Gender is required'
+    }
+    if (activeTab === 1) {
+      if (!form.classId) return 'Class is required'
+      if (!form.sectionId) return 'Section is required'
+      if (!form.rollNo.trim()) return 'Roll No is required'
+    }
+    if (activeTab === 2) {
+      if (!form.isGuardian) return 'Is Guardian? is required'
+    }
+    if (activeTab === 5) {
+      if (!form.username.trim()) return 'Student Username is required'
+      if (!initialEditRow && !form.password.trim()) return 'Student Password is required'
+    }
+    return null
+  }
+
+  const handleTabChange = (index) => {
+    if (index > activeTab) {
+      const err = validateCurrentTab()
+      if (err) {
+        setError(err)
+        return
+      }
+    }
+    setActiveTab(index)
+    setError('')
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setSubmitError(null)
-    setIsSubmitting(true)
+    if (loading) return
+    setError('')
+    setSuccess(false)
+
+    const err = validateCurrentTab()
+    if (err) {
+      setError(err)
+      return
+    }
+
+    setLoading(true)
     try {
-      await createStudent(buildPayload(form, phoneCodes))
-      onNavigate?.('student-list')
+      const payload = buildPayload(form, phoneCodes)
+      if (initialEditRow) {
+        await updateStudent(initialEditRow.id, payload, form)
+      } else {
+        await createStudent(payload, form)
+      }
+      setSuccess(true)
+      setTimeout(() => onNavigate('student-list'), 1000)
     } catch (err) {
-      setSubmitError(err.message)
+      setError(err?.message || 'Failed to process student registration')
     } finally {
-      setIsSubmitting(false)
+      setLoading(false)
     }
   }
 
-  const renderUploadField = (label, id, fileRef, preview, onSelect, note1, note2) => (
-    <div className="col-12 mt-8">
-      <label className="form-label fw-semibold text-primary-light">{label}</label>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".jpg,.jpeg,.png,.gif"
-        className="d-none"
-        onChange={onSelect}
-      />
-      <div className="d-flex align-items-center gap-12">
-        <button type="button" className="btn btn-light border" onClick={() => fileRef.current.click()}>
-          <i className="ri-upload-2-line"></i> Upload {label}
-        </button>
-        {preview && (
-          <img
-            src={preview}
-            alt="preview"
-            style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: '1px solid #d0d5dd' }}
-          />
-        )}
-      </div>
-      <div className="text-sm text-secondary-light mt-4">
-        <div>{note1}</div>
-        <div>{note2}</div>
-      </div>
-    </div>
-  )
+  const isEditing = Boolean(initialEditRow)
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">Add Student</h1>
-          <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0" onClick={() => onNavigate?.('dashboard')}>
-              Dashboard
-            </button>
-            <span className="text-secondary-light"> / <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0" onClick={() => onNavigate?.('student-list')}>Student</button> / Add</span>
-          </div>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">{isEditing ? 'Edit' : 'Add'} Student</h1>
+          <span className="text-secondary-light">Student / {isEditing ? 'Edit' : 'Add'}</span>
         </div>
-        <div className="d-flex flex-wrap align-items-center gap-12">
-          <button type="button" className="btn btn-light border d-flex align-items-center gap-6" onClick={() => onNavigate?.('student-list')}>
-            <span className="d-flex text-md"><i className="ri-arrow-left-line"></i></span>
-            Back to List
-          </button>
-        </div>
+        <button className="btn btn-light border px-20 d-flex align-items-center gap-6" onClick={() => onNavigate('student-list')}>
+          <i className="ri-arrow-left-line"></i> Back to List
+        </button>
       </div>
 
-      <div className="card">
+      {error && (
+        <div className="alert alert-danger d-flex align-items-center gap-10 mb-24 radius-8">
+          <i className="ri-error-warning-line text-lg" />
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="alert alert-success d-flex align-items-center gap-10 mb-24 radius-8">
+          <i className="ri-checkbox-circle-line text-lg" />
+          Student {isEditing ? 'updated' : 'registered'} successfully! Redirecting...
+        </div>
+      )}
+
+      <div className="card h-100">
+        <div className="card-header border-bottom border-neutral-200 px-20 py-0 d-flex gap-0 scroll-x-mobile">
+          {TABS.map((tab, i) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => handleTabChange(i)}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === i ? '2px solid var(--primary-600, #4f46e5)' : '2px solid transparent',
+                color: activeTab === i ? 'var(--primary-600, #4f46e5)' : 'var(--secondary-light, #667085)',
+                fontWeight: activeTab === i ? 600 : 400,
+                padding: '14px 20px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s',
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
         <div className="card-body p-24">
           <form onSubmit={handleSubmit}>
-            {submitError && <div className="alert alert-danger mb-24">{submitError}</div>}
+            {/* ═══ TAB 0 – Basic Information ═══ */}
+            {activeTab === 0 && (
+            <div className="row g-20">
+                {isSuperAdmin ? (
+                  <div className="col-12 mb-20">
+                    <ManualScopeSelectors
+                      enabled={isSuperAdmin}
+                      headOffices={manualScope.headOffices}
+                      schoolOptions={schoolOptions}
+                      selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+                      onHeadOfficeChange={(val) => { manualScope.setSelectedHeadOfficeId(val); setForm(p => ({ ...p, schoolId: '', classId: '', sectionId: '' })) }}
+                      selectedSchoolId={form.schoolId}
+                      onSchoolChange={(val) => setForm(p => ({ ...p, schoolId: val, classId: '', sectionId: '' }))}
+                      compact
+                    />
+                  </div>
+                ) : (
+                  <FormField label="School Name" required full>
+                    <select className="form-control form-select ps-40" id="schoolId" value={form.schoolId} onChange={(e) => setForm(p => ({ ...p, schoolId: e.target.value, classId: '', sectionId: '' }))}>
+                      <option value="">--Select School--</option>
+                      {schoolOptions.map((s) => (
+                        <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
+                      ))}
+                    </select>
+                  </FormField>
+                )}
 
-            {/* Basic Information */}
-            <h5 className="fw-semibold text-primary-light mb-16 border-bottom pb-8">Basic Information</h5>
-            <div className="row g-20 mb-32">
-              <div className="col-12">
-                <label htmlFor="school" className="form-label fw-semibold text-primary-light">School <span className="text-danger">*</span></label>
-                <select
-                  className="form-control form-select"
-                  id="school"
-                  value={form.school}
-                  disabled={isSchoolLocked}
-                  onChange={(e) => setForm((prev) => ({ ...prev, school: e.target.value, classId: '', className: '', sectionId: '', section: '' }))}
-                  required
-                >
-                  <option value="">--Select School--</option>
-                  {effectiveSchoolList.map((s) => (
-                    <option key={s.id} value={s.id}>{s.schoolName}</option>
-                  ))}
-                </select>
-              </div>
+                <FormField label="Name" required>
+                  <input type="text" id="name" className="form-control ps-40" placeholder="Student Name" value={form.name} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="name" className="form-label fw-semibold text-primary-light">Name <span className="text-danger">*</span></label>
-                <input type="text" className="form-control" id="name" placeholder="Name" value={form.name} onChange={handleChange} required />
-              </div>
+                <FormField label="Admission No" required>
+                  <input type="text" id="admissionNo" className="form-control ps-40" placeholder="Admission No" value={form.admissionNo} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="admissionNo" className="form-label fw-semibold text-primary-light">Admission No <span className="text-danger">*</span></label>
-                <input type="text" className="form-control" id="admissionNo" placeholder="Admission No" value={form.admissionNo} onChange={handleChange} required />
-              </div>
+                <FormField label="Admission Date" required>
+                  <input type="date" id="admissionDate" className="form-control ps-40" value={form.admissionDate} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="admissionDate" className="form-label fw-semibold text-primary-light">Admission Date <span className="text-danger">*</span></label>
-                <input type="date" className="form-control" id="admissionDate" value={form.admissionDate} onChange={handleChange} required />
-              </div>
+                <FormField label="Birth Date" required>
+                  <input type="date" id="birthDate" className="form-control ps-40" value={form.birthDate} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="birthDate" className="form-label fw-semibold text-primary-light">Birth Date <span className="text-danger">*</span></label>
-                <input type="date" className="form-control" id="birthDate" value={form.birthDate} onChange={handleChange} required />
-              </div>
+                <FormField label="Gender" required>
+                  <select id="gender" className="form-control form-select ps-40" value={form.gender} onChange={handleChange}>
+                    <option value="">--Select--</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Other</option>
+                  </select>
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="gender" className="form-label fw-semibold text-primary-light">Gender <span className="text-danger">*</span></label>
-                <select className="form-control form-select" id="gender" value={form.gender} onChange={handleChange} required>
-                  <option value="">--Select--</option>
-                  <option>Male</option>
-                  <option>Female</option>
-                  <option>Other</option>
-                </select>
-              </div>
+                <FormField label="Blood Group">
+                  <select id="bloodGroup" className="form-control form-select ps-40" value={form.bloodGroup} onChange={handleChange}>
+                    <option value="">--Select--</option>
+                    <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+                    <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
+                  </select>
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="bloodGroup" className="form-label fw-semibold text-primary-light">Blood Group</label>
-                <select className="form-control form-select" id="bloodGroup" value={form.bloodGroup} onChange={handleChange}>
-                  <option value="">--Select--</option>
-                  <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-                  <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
-                </select>
-              </div>
+                <FormField label="Religion">
+                  <input type="text" id="religion" className="form-control ps-40" placeholder="Religion" value={form.religion} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="religion" className="form-label fw-semibold text-primary-light">Religion</label>
-                <input type="text" className="form-control" id="religion" placeholder="Religion" value={form.religion} onChange={handleChange} />
-              </div>
+                <FormField label="Caste">
+                  <input type="text" id="caste" className="form-control ps-40" placeholder="Caste" value={form.caste} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="caste" className="form-label fw-semibold text-primary-light">Caste</label>
-                <input type="text" className="form-control" id="caste" placeholder="Caste" value={form.caste} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-4">
-                <PhoneCodeField
-                  id="phone"
-                  label="Phone number"
-                  required
-                  code={phoneCodes.phone}
-                  value={form.phone}
-                  onCodeChange={(value) => setPhoneCodes((prev) => ({ ...prev, phone: value }))}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, phone: value }))}
-                />
-              </div>
-
-              <div className="col-md-4">
-                <label htmlFor="email" className="form-label fw-semibold text-primary-light">Email</label>
-                <input type="email" className="form-control" id="email" placeholder="Email" value={form.email} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-4">
-                <label htmlFor="nationalId" className="form-label fw-semibold text-primary-light">National ID</label>
-                <input type="text" className="form-control" id="nationalId" placeholder="National ID" value={form.nationalId} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-6">
-                <label htmlFor="username" className="form-label fw-semibold text-primary-light">Student Username <span className="text-danger">*</span></label>
-                <input type="text" className="form-control" id="username" placeholder="Student Username" value={form.username} onChange={handleChange} required />
-              </div>
-
-              <div className="col-md-6">
-                <label htmlFor="password" className="form-label fw-semibold text-primary-light">Student Password <span className="text-danger">*</span></label>
-                <div className="position-relative">
-                  <input
-                    type={isPasswordVisible ? 'text' : 'password'}
-                    className="form-control pe-48"
-                    id="password"
-                    placeholder="Student Password"
-                    value={form.password}
-                    onChange={handleChange}
-                    required
+                <div className="col-md-6 mb-20">
+                  <PhoneCodeField
+                    id="phone"
+                    label="Phone number"
+                    code={phoneCodes.phone}
+                    value={form.phone}
+                    onCodeChange={(val) => setPhoneCodes(p => ({ ...p, phone: val }))}
+                    onValueChange={(val) => setForm(p => ({ ...p, phone: val }))}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setIsPasswordVisible((prev) => !prev)}
-                    className="position-absolute end-0 top-50 translate-middle-y border-0 bg-transparent pe-16 text-secondary-light"
-                    style={{ zIndex: 5 }}
-                  >
-                    <i className={isPasswordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
-                  </button>
                 </div>
-              </div>
-            </div>
 
-            {/* Address Information */}
-            <h5 className="fw-semibold text-primary-light mb-16 border-bottom pb-8">Address Information</h5>
-            <div className="row g-20 mb-32">
-              <div className="col-12">
-                <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="sameAsGuardianAddress" checked={form.sameAsGuardianAddress} onChange={handleChange} />
-                  <label className="form-check-label fw-medium" htmlFor="sameAsGuardianAddress">
-                    Same as Guardian Address
-                  </label>
-                </div>
-              </div>
+                <FormField label="Email">
+                  <input type="email" id="email" className="form-control ps-40" placeholder="Email Address" value={form.email} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-6">
-                <label htmlFor="presentAddress" className="form-label fw-semibold text-primary-light">Present Address</label>
-                <textarea rows="3" className="form-control" id="presentAddress" placeholder="Present Address" value={form.presentAddress} onChange={handleChange} />
-              </div>
+                <FormField label="National ID">
+                  <input type="text" id="nationalId" className="form-control ps-40" placeholder="National ID" value={form.nationalId} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-6">
-                <label htmlFor="permanentAddress" className="form-label fw-semibold text-primary-light">Permanent Address</label>
-                <textarea rows="3" className="form-control" id="permanentAddress" placeholder="Permanent Address" value={form.permanentAddress} onChange={handleChange} />
               </div>
+            )}
 
-              <div className="col-md-6">
-                <label htmlFor="previousSchoolName" className="form-label fw-semibold text-primary-light">Previous School Name</label>
-                <input type="text" className="form-control" id="previousSchoolName" placeholder="School Name" value={form.previousSchoolName} onChange={handleChange} />
-              </div>
+            {/* ═══ TAB 1 – Academic Information ═══ */}
+            {activeTab === 1 && (
+            <div className="row g-20">
+                <h6 className="col-12 text-primary-light mt-0 mb-16 border-bottom pb-8">Academic Information</h6>
+                <FormField label="Student Type">
+                  <select id="studentType" className="form-control form-select ps-40" value={form.studentType} onChange={handleChange}>
+                    <option value="">--Select--</option>
+                    {studentTypeOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                </FormField>
 
-              <div className="col-md-6">
-                <label htmlFor="previousClass" className="form-label fw-semibold text-primary-light">Previous Class</label>
-                <input type="text" className="form-control" id="previousClass" placeholder="Previous Class" value={form.previousClass} onChange={handleChange} />
-              </div>
+                <FormField label="Class" required>
+                  <select id="classId" className="form-control form-select ps-40" value={form.classId} onChange={(e) => setForm(p => ({ ...p, classId: e.target.value, sectionId: '' }))}>
+                    <option value="">--Select--</option>
+                    {classOptions.map((item) => <option key={item.id} value={String(item.id)}>{item.className || item.name}</option>)}
+                  </select>
+                </FormField>
 
-              {renderUploadField(
-                'Transfer Certificate', 'transferCertificate', transferCertificateRef, previews.transferCertificate,
-                (e) => handlePhotoChange(e, 'transferCertificate'),
-                'Max-W: 1200px, Max-H: 600px', 'Format: .jpg, .jpeg, .png or .gif'
-              )}
-            </div>
+                <FormField label="Section" required>
+                  <select id="sectionId" className="form-control form-select ps-40" value={form.sectionId} onChange={handleChange} disabled={!form.classId}>
+                    <option value="">--Select--</option>
+                    {sectionOptions.map((item) => <option key={item.id} value={String(item.id)}>{item.name || item.sectionName}</option>)}
+                  </select>
+                </FormField>
 
-            {/* Academic Information */}
-            <h5 className="fw-semibold text-primary-light mb-16 border-bottom pb-8">Academic Information</h5>
-            <div className="row g-20 mb-32">
-              <div className="col-md-4">
-                <label htmlFor="studentType" className="form-label fw-semibold text-primary-light">Student Type</label>
-                <select className="form-control form-select" id="studentType" value={form.studentType} onChange={handleChange}>
-                  <option value="">--Select--</option>
-                  {studentTypeOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
+                <FormField label="Group">
+                  <select id="group" className="form-control form-select ps-40" value={form.group} onChange={handleChange}>
+                    <option value="">--Select--</option>
+                    <option>Science</option><option>Commerce</option><option>Arts</option>
+                  </select>
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="classId" className="form-label fw-semibold text-primary-light">Class <span className="text-danger">*</span></label>
-                <select
-                  className="form-control form-select"
-                  id="classId"
-                  value={form.classId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, classId: e.target.value, section: '', sectionId: '' }))}
-                  required
-                >
-                  <option value="">--Select--</option>
-                  {classOptions.map((item) => (
-                    <option key={item.id || getClassOptionValue(item)} value={getClassOptionValue(item)}>
-                      {getClassOptionLabel(item)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <FormField label="Roll No" required>
+                  <input type="text" id="rollNo" className="form-control ps-40" placeholder="Roll No" value={form.rollNo} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-4">
-                <label htmlFor="sectionId" className="form-label fw-semibold text-primary-light">Section <span className="text-danger">*</span></label>
-                <select className="form-control form-select" id="sectionId" value={form.sectionId} onChange={handleChange} disabled={!form.classId} required>
-                  <option value="">--Select--</option>
-                  {sectionOptions.map((item) => (
-                    <option key={item.id || getSectionOptionValue(item)} value={getSectionOptionValue(item)}>
-                      {getSectionOptionLabel(item)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <FormField label="Registration No">
+                  <input type="text" id="registrationNo" className="form-control ps-40" placeholder="Registration No" value={form.registrationNo} onChange={handleChange} />
+                </FormField>
 
-              <div className="col-md-3">
-                <label htmlFor="group" className="form-label fw-semibold text-primary-light">Group</label>
-                <select className="form-control form-select" id="group" value={form.group} onChange={handleChange}>
-                  <option value="">--Select--</option>
-                  <option>Science</option><option>Commerce</option><option>Arts</option>
-                </select>
-              </div>
+                <FormField label="Discount">
+                  <select id="discount" className="form-control form-select ps-40" value={form.discount} onChange={handleChange}>
+                    <option value="">--Select--</option>
+                    <option>No Discount</option><option>10%</option><option>20%</option><option>50%</option>
+                  </select>
+                </FormField>
 
-              <div className="col-md-3">
-                <label htmlFor="rollNo" className="form-label fw-semibold text-primary-light">Roll No <span className="text-danger">*</span></label>
-                <input type="text" className="form-control" id="rollNo" placeholder="Roll No" value={form.rollNo} onChange={handleChange} required />
+                <FormField label="Second Language">
+                  <input type="text" id="secondLanguage" className="form-control ps-40" placeholder="Second Language" value={form.secondLanguage} onChange={handleChange} />
+                </FormField>
               </div>
+            )}
 
-              <div className="col-md-3">
-                <label htmlFor="registrationNo" className="form-label fw-semibold text-primary-light">Registration No</label>
-                <input type="text" className="form-control" id="registrationNo" placeholder="Registration No" value={form.registrationNo} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-3">
-                <label htmlFor="discount" className="form-label fw-semibold text-primary-light">Discount</label>
-                <select className="form-control form-select" id="discount" value={form.discount} onChange={handleChange}>
-                  <option value="">--Select--</option>
-                  <option>No Discount</option><option>10%</option><option>20%</option><option>50%</option>
-                </select>
-              </div>
-
-              <div className="col-md-4">
-                <label htmlFor="secondLanguage" className="form-label fw-semibold text-primary-light">Second Language</label>
-                <input type="text" className="form-control" id="secondLanguage" placeholder="Second Language" value={form.secondLanguage} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-4">
-                <label htmlFor="isGuardian" className="form-label fw-semibold text-primary-light">Is Guardian? <span className="text-danger">*</span></label>
-                <select className="form-control form-select" id="isGuardian" value={form.isGuardian} onChange={handleChange} required>
-                  <option value="">--Select--</option>
-                  <option>Father</option><option>Mother</option><option>Other</option>
-                </select>
-              </div>
-
-              <div className="col-md-4">
-                <label htmlFor="relationWithGuardian" className="form-label fw-semibold text-primary-light">Relation With Guardian</label>
-                <input type="text" className="form-control" id="relationWithGuardian" placeholder="Relation With Guardian" value={form.relationWithGuardian} onChange={handleChange} />
-              </div>
-            </div>
-
-            {/* Parent Information */}
-            <h5 className="fw-semibold text-primary-light mb-16 border-bottom pb-8">Parent Information</h5>
-            <div className="row g-20 mb-32">
-              <div className="col-md-4">
-                <label htmlFor="fatherName" className="form-label fw-semibold text-primary-light">Father Name</label>
-                <input type="text" className="form-control" id="fatherName" placeholder="Father Name" value={form.fatherName} onChange={handleChange} />
-              </div>
-              <div className="col-md-4">
-                <PhoneCodeField
-                  id="fatherPhone"
-                  label="Father Phone"
-                  code={phoneCodes.fatherPhone}
-                  value={form.fatherPhone}
-                  onCodeChange={(value) => setPhoneCodes((prev) => ({ ...prev, fatherPhone: value }))}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, fatherPhone: value }))}
-                />
-              </div>
-              <div className="col-md-4">
-                <label htmlFor="fatherProfession" className="form-label fw-semibold text-primary-light">Father Profession</label>
-                <input type="text" className="form-control" id="fatherProfession" placeholder="Father Profession" value={form.fatherProfession} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-4">
-                <label htmlFor="motherName" className="form-label fw-semibold text-primary-light">Mother Name</label>
-                <input type="text" className="form-control" id="motherName" placeholder="Mother Name" value={form.motherName} onChange={handleChange} />
-              </div>
-              <div className="col-md-4">
-                <PhoneCodeField
-                  id="motherPhone"
-                  label="Mother Phone"
-                  code={phoneCodes.motherPhone}
-                  value={form.motherPhone}
-                  onCodeChange={(value) => setPhoneCodes((prev) => ({ ...prev, motherPhone: value }))}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, motherPhone: value }))}
-                />
-              </div>
-              <div className="col-md-4">
-                <label htmlFor="motherProfession" className="form-label fw-semibold text-primary-light">Mother Profession</label>
-                <input type="text" className="form-control" id="motherProfession" placeholder="Mother Profession" value={form.motherProfession} onChange={handleChange} />
-              </div>
-
-              <div className="col-md-6">
-                <PhoneCodeField
-                  id="parentUsername"
-                  label="Parent Login Mobile (Username)"
-                  code={phoneCodes.parentUsername}
-                  value={form.parentUsername}
-                  onCodeChange={(value) => setPhoneCodes((prev) => ({ ...prev, parentUsername: value }))}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, parentUsername: value }))}
-                />
-              </div>
-              <div className="col-md-6">
-                <label htmlFor="parentPassword" className="form-label fw-semibold text-primary-light">Parent Password</label>
-                <div className="position-relative">
-                  <input
-                    type={isParentPasswordVisible ? 'text' : 'password'}
-                    className="form-control pe-48"
-                    id="parentPassword"
-                    placeholder="Parent Password"
-                    value={form.parentPassword}
-                    onChange={handleChange}
+            {/* ═══ TAB 2 – Guardian Information ═══ */}
+            {activeTab === 2 && (
+            <div className="row g-20">
+                <h6 className="col-12 text-primary-light mt-0 mb-16 border-bottom pb-8">Father Information</h6>
+                <FormField label="Father Name">
+                  <input type="text" id="fatherName" className="form-control ps-40" placeholder="Father Name" value={form.fatherName} onChange={handleChange} />
+                </FormField>
+                <div className="col-md-6 mb-20">
+                  <PhoneCodeField
+                    id="fatherPhone"
+                    label="Father Phone"
+                    code={phoneCodes.fatherPhone}
+                    value={form.fatherPhone}
+                    onCodeChange={(val) => setPhoneCodes(p => ({ ...p, fatherPhone: val }))}
+                    onValueChange={(val) => setForm(p => ({ ...p, fatherPhone: val }))}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setIsParentPasswordVisible((prev) => !prev)}
-                    className="position-absolute end-0 top-50 translate-middle-y border-0 bg-transparent pe-16 text-secondary-light"
-                    style={{ zIndex: 5 }}
-                  >
-                    <i className={isParentPasswordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
-                  </button>
                 </div>
+                <FormField label="Father Education">
+                  <input type="text" id="fatherEducation" className="form-control ps-40" placeholder="Father Education" value={form.fatherEducation} onChange={handleChange} />
+                </FormField>
+                <FormField label="Father Profession">
+                  <input type="text" id="fatherProfession" className="form-control ps-40" placeholder="Father Profession" value={form.fatherProfession} onChange={handleChange} />
+                </FormField>
+                <FormField label="Father Designation">
+                  <input type="text" id="fatherDesignation" className="form-control ps-40" placeholder="Father Designation" value={form.fatherDesignation} onChange={handleChange} />
+                </FormField>
+                <ImageUploadField
+                  label="Father Photo"
+                  id="fatherPhoto"
+                  preview={previews.fatherPhoto}
+                  onChange={handleFileChange}
+                  helperText="Dimension:- Max-W: 120px, Max-H: 130px. Image file format: .jpg, .jpeg, .png or .gif"
+                />
+
+                <h6 className="col-12 text-primary-light mt-12 mb-16 border-bottom pb-8">Mother Information</h6>
+                <FormField label="Mother Name">
+                  <input type="text" id="motherName" className="form-control ps-40" placeholder="Mother Name" value={form.motherName} onChange={handleChange} />
+                </FormField>
+                <div className="col-md-6 mb-20">
+                  <PhoneCodeField
+                    id="motherPhone"
+                    label="Mother Phone"
+                    code={phoneCodes.motherPhone}
+                    value={form.motherPhone}
+                    onCodeChange={(val) => setPhoneCodes(p => ({ ...p, motherPhone: val }))}
+                    onValueChange={(val) => setForm(p => ({ ...p, motherPhone: val }))}
+                  />
+                </div>
+                <FormField label="Mother Education">
+                  <input type="text" id="motherEducation" className="form-control ps-40" placeholder="Mother Education" value={form.motherEducation} onChange={handleChange} />
+                </FormField>
+                <FormField label="Mother Profession">
+                  <input type="text" id="motherProfession" className="form-control ps-40" placeholder="Mother Profession" value={form.motherProfession} onChange={handleChange} />
+                </FormField>
+                <FormField label="Mother Designation">
+                  <input type="text" id="motherDesignation" className="form-control ps-40" placeholder="Mother Designation" value={form.motherDesignation} onChange={handleChange} />
+                </FormField>
+                <ImageUploadField
+                  label="Mother Photo"
+                  id="motherPhoto"
+                  preview={previews.motherPhoto}
+                  onChange={handleFileChange}
+                  helperText="Dimension:- Max-W: 120px, Max-H: 130px. Image file format: .jpg, .jpeg, .png or .gif"
+                />
+
+                <h6 className="col-12 text-primary-light mt-12 mb-16 border-bottom pb-8">Guardian Information</h6>
+                <FormField label="Is Guardian?" required>
+                  <select id="isGuardian" className="form-control form-select ps-40" value={form.isGuardian} onChange={handleChange}>
+                    <option value="">--Select--</option>
+                    <option>Father</option><option>Mother</option><option>Other</option>
+                  </select>
+                </FormField>
+
+                <FormField label="Relation With Guardian">
+                  <input type="text" id="relationWithGuardian" className="form-control ps-40" placeholder="Relation" value={form.relationWithGuardian} onChange={handleChange} />
+                </FormField>
+                <h6 className="col-12 text-primary-light mt-12 mb-16 border-bottom pb-8">Parent Login Details</h6>
+                <div className="col-md-6 mb-20">
+                  <PhoneCodeField
+                    id="parentUsername"
+                    label="Parent Mobile (Username)"
+                    code={phoneCodes.parentUsername}
+                    value={form.parentUsername}
+                    onCodeChange={(val) => setPhoneCodes(p => ({ ...p, parentUsername: val }))}
+                    onValueChange={(val) => setForm(p => ({ ...p, parentUsername: val }))}
+                  />
+                </div>
+                <FormField label="Parent Password">
+                  <input type="password" id="parentPassword" className="form-control ps-40" placeholder={isEditing ? 'Leave blank to keep current' : 'Password'} value={form.parentPassword} onChange={handleChange} />
+                </FormField>
               </div>
-            </div>
+            )}
 
-            {/* Other Information */}
-            <h5 className="fw-semibold text-primary-light mb-16 border-bottom pb-8">Other Information</h5>
-            <div className="row g-20 mb-32">
-              <div className="col-md-6">
-                <label htmlFor="healthCondition" className="form-label fw-semibold text-primary-light">Health Condition</label>
-                <input type="text" className="form-control" id="healthCondition" placeholder="Health Condition" value={form.healthCondition} onChange={handleChange} />
+            {/* ═══ TAB 3 – Address Information ═══ */}
+            {activeTab === 3 && (
+            <div className="row g-20">
+                <h6 className="col-12 text-primary-light mt-0 mb-16 border-bottom pb-8">Address Information</h6>
+                <div className="col-12 mb-20">
+                  <div className="form-check d-flex align-items-center gap-10 m-0 ps-0">
+                    <input
+                      className="form-check-input m-0"
+                      style={{ marginTop: 0 }}
+                      type="checkbox"
+                      id="sameAsGuardianAddress"
+                      checked={form.sameAsGuardianAddress}
+                      onChange={handleChange}
+                    />
+                    <label className="form-check-label fw-medium mb-0" htmlFor="sameAsGuardianAddress">
+                      Same as Guardian Address
+                    </label>
+                  </div>
+                </div>
+
+                <FormField label="Present Address" full>
+                  <textarea id="presentAddress" rows="3" className="form-control ps-40 pt-10" placeholder="Present Address" value={form.presentAddress} onChange={handleChange} />
+                </FormField>
+
+                <FormField label="Permanent Address" full>
+                  <textarea id="permanentAddress" rows="3" className="form-control ps-40 pt-10" placeholder="Permanent Address" value={form.permanentAddress} onChange={handleChange} />
+                </FormField>
               </div>
-              <div className="col-md-6">
-                <label htmlFor="otherInfo" className="form-label fw-semibold text-primary-light">Other Info</label>
-                <textarea rows="2" className="form-control" id="otherInfo" placeholder="Other Info" value={form.otherInfo} onChange={handleChange} />
+            )}
+
+            {/* ═══ TAB 4 – Previous School ═══ */}
+            {activeTab === 4 && (
+            <div className="row g-20">
+                <h6 className="col-12 text-primary-light mt-0 mb-16 border-bottom pb-8">Previous School</h6>
+                <FormField label="School Name" full>
+                  <input type="text" id="previousSchoolName" className="form-control ps-40" placeholder="Previous School Name" value={form.previousSchoolName} onChange={handleChange} />
+                </FormField>
+
+                <FormField label="Class">
+                  <input type="text" id="previousClass" className="form-control ps-40" placeholder="Previous Class" value={form.previousClass} onChange={handleChange} />
+                </FormField>
+
+                <ImageUploadField
+                  label="Transfer Certificate"
+                  id="transferCertificate"
+                  preview={previews.transferCertificate}
+                  onChange={handleFileChange}
+                  helperText="Dimension:- Max-W: 1200px, Max-H: 600px. Image file format: .jpg, .jpeg, .png or .gif"
+                />
               </div>
+            )}
 
-              {renderUploadField(
-                'Student Photo', 'photo', studentPhotoRef, previews.photo,
-                (e) => handlePhotoChange(e, 'photo'),
-                'Max-W: 120px, Max-H: 130px', 'Format: .jpg, .jpeg, .png or .gif'
-              )}
-            </div>
+            {/* ═══ TAB 5 – Other Information ═══ */}
+            {activeTab === 5 && (
+            <div className="row g-20">
+                <h6 className="col-12 text-primary-light mt-0 mb-16 border-bottom pb-8">Other Information</h6>
+                <FormField label="Student Username" required>
+                  <input type="text" id="username" className="form-control ps-40" placeholder="Username" value={form.username} onChange={handleChange} />
+                </FormField>
 
-            <div className="alert alert-warning mb-32">
-                Instruction: Please add Guardian, Class & Section before add Student.
-            </div>
+                <FormField label="Student Password" required={!isEditing}>
+                  <input type="password" id="password" className="form-control ps-40" placeholder={isEditing ? 'Leave blank to keep current' : 'Password'} value={form.password} onChange={handleChange} />
+                </FormField>
 
-            <div className="d-flex justify-content-end gap-12">
-              <button type="button" className="btn btn-light border px-32" onClick={() => onNavigate?.('student-list')}>Cancel</button>
-              <button type="submit" className="btn btn-primary-600 px-32" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Student'}
+                <FormField label="Health Condition" full>
+                  <input type="text" id="healthCondition" className="form-control ps-40" placeholder="Health Condition" value={form.healthCondition} onChange={handleChange} />
+                </FormField>
+                <FormField label="Other Info" full>
+                  <textarea id="otherInfo" rows="3" className="form-control ps-40 pt-10" placeholder="Other Info" value={form.otherInfo} onChange={handleChange} />
+                </FormField>
+                <ImageUploadField
+                  label="Photo"
+                  id="photo"
+                  preview={previews.photo}
+                  onChange={handleFileChange}
+                  helperText="Dimension:- Max-W: 120px, Max-H: 130px. Image file format: .jpg, .jpeg, .png or .gif"
+                />
+              </div>
+            )}
+
+            {/* ─── Footer Buttons ─── */}
+            <div className="d-flex align-items-center justify-content-between mt-24 pt-20 border-top border-neutral-200">
+              <button
+                type="button"
+                className="btn btn-light border px-20 d-flex align-items-center gap-8"
+                onClick={() => setActiveTab((t) => Math.max(0, t - 1))}
+                disabled={activeTab === 0}
+              >
+                <i className="ri-arrow-left-line" /> Previous
               </button>
+
+              <div className="d-flex align-items-center gap-10">
+                {activeTab < TABS.length - 1 ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary-600 px-20 d-flex align-items-center gap-8"
+                    onClick={() => handleTabChange(activeTab + 1)}
+                  >
+                    Next <i className="ri-arrow-right-line" />
+                  </button>
+                ) : (
+                  <button type="submit" className="btn btn-primary-600 px-24 d-flex align-items-center gap-8" disabled={loading}>
+                    {loading ? (
+                      <><span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...</>
+                    ) : (
+                      <><i className="ri-save-line" /> {isEditing ? 'Update' : 'Save'} Student</>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </form>
         </div>

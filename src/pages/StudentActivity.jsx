@@ -1,51 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { fetchClasses } from '../apis/classesApi'
-import { fetchSchoolsPage } from '../apis/schoolsApi'
-import { fetchSections } from '../apis/sectionsApi'
-import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
-  createStudentActivity,
   deleteStudentActivity,
   fetchStudentActivitiesPage,
-  updateStudentActivity,
 } from '../apis/studentActivityApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
-const emptyForm = {
-  schoolId: '',
-  schoolName: '',
-  classId: '',
-  className: '',
-  sectionId: '',
-  section: '',
-  studentId: '',
-  studentName: '',
-  date: '',
-  activity: '',
-  description: '',
-}
-
 const emptyFilters = {
   schoolId: 'Select',
   className: 'Select',
   section: 'Select',
-}
-
-const STEPS = ['Basic']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Class: 'ri-book-open-line',
-  Section: 'ri-layout-grid-line',
-  Student: 'ri-user-3-line',
-  Date: 'ri-calendar-2-line',
-  Activity: 'ri-medal-line',
-  Description: 'ri-file-text-line',
 }
 
 const columnOptions = [
@@ -57,368 +26,65 @@ const columnOptions = [
   { key: 'date', label: 'Date' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const getClassOptionValue = (item) => item?.numericName || item?.className || item?.name || String(item?.id ?? '')
-const getClassOptionLabel = (item) => item?.className || item?.numericName || item?.name || String(item?.id ?? '')
-const getSectionOptionValue = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
-const getSectionOptionLabel = (item) => item?.name || item?.sectionName || item?.section || String(item?.id ?? '')
-
-const findMatchingClassOption = (value, classOptions) =>
-  classOptions.find((item) =>
-    [item?.id, item?.className, item?.numericName, item?.name].some(
-      (candidate) => String(candidate) === String(value),
-    ),
-  )
-
-const findMatchingSectionOption = (value, sectionOptions) =>
-  sectionOptions.find((item) =>
-    [item?.id, item?.name, item?.sectionName, item?.section].some(
-      (candidate) => String(candidate) === String(value),
-    ),
-  )
-
-const useStudentActivityLookups = (form, enabled) => {
-  const [classOptions, setClassOptions] = useState([])
-  const [sectionOptions, setSectionOptions] = useState([])
-  const [students, setStudents] = useState([])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadClasses = async () => {
-      if (!enabled || !form.schoolId) {
-        setClassOptions([])
-        setSectionOptions([])
-        setStudents([])
-        return
-      }
-
-      try {
-        const data = await fetchClasses({ schoolId: form.schoolId })
-        if (!cancelled) {
-          setClassOptions(Array.isArray(data) ? data : [])
-        }
-      } catch {
-        if (!cancelled) {
-          setClassOptions([])
-          setSectionOptions([])
-          setStudents([])
-        }
-      }
-    }
-
-    loadClasses()
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, form.schoolId])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadSections = async () => {
-      const selectedClass = findMatchingClassOption(form.classId || form.className, classOptions)
-
-      if (!enabled || !form.schoolId || !selectedClass?.id) {
-        setSectionOptions([])
-        setStudents([])
-        return
-      }
-
-      try {
-        const data = await fetchSections({ schoolId: form.schoolId, classId: selectedClass.id })
-        if (!cancelled) {
-          setSectionOptions(Array.isArray(data) ? data : [])
-        }
-      } catch {
-        if (!cancelled) {
-          setSectionOptions([])
-          setStudents([])
-        }
-      }
-    }
-
-    loadSections()
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, form.schoolId, form.classId, form.className, classOptions])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadStudents = async () => {
-      const selectedClass = findMatchingClassOption(form.classId || form.className, classOptions)
-      const selectedSection = findMatchingSectionOption(form.sectionId || form.section, sectionOptions)
-
-      if (!enabled || !form.schoolId || !selectedClass?.id || !selectedSection?.id) {
-        setStudents([])
-        return
-      }
-
-      try {
-        const data = await fetchStudentsByClassSection({
-          schoolId: form.schoolId,
-          classId: selectedClass.id,
-          sectionId: selectedSection.id,
-        })
-        if (!cancelled) {
-          setStudents(data)
-        }
-      } catch {
-        if (!cancelled) {
-          setStudents([])
-        }
-      }
-    }
-
-    loadStudents()
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, form.schoolId, form.classId, form.className, form.sectionId, form.section, classOptions, sectionOptions])
-
-  return { classOptions, sectionOptions, students }
-}
-
-const StudentActivity = () => {
-  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+const StudentActivity = ({ onNavigate }) => {
+  const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId } = useSchool()
-  // ── Data state ──────────────────────────────────────────────────────────────
+  
   const [activities, setActivities] = useState([])
-  const [schools, setSchools] = useState([])
-  const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [editingId, setEditingId] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const resolvedSchoolId = activeSchoolId || authSchoolId || ''
-  const resolvedSchoolName = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
-  const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const isSchoolLocked = Boolean(scopedSchoolId)
-
-  // ── Table state ──────────────────────────────────────────────────────────────
+  
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
-
-  // ── Modal / sidebar state ────────────────────────────────────────────────────
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
+  
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [schoolList, setSchoolList] = useState([])
 
+  const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const isSchoolLocked = Boolean(scopedSchoolId) && role !== 'SUPER_ADMIN'
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  // ── Derived options ──────────────────────────────────────────────────────────
-  const effectiveSchoolList = useMemo(() => {
-    const list = (Array.isArray(schools) ? schools : [])
-      .map((school) => ({ id: school?.id, name: school?.schoolName || school?.name || '' }))
-      .filter((school) => school.id != null && school.name)
-
-    if (!scopedSchoolId) {
-      return list.sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    }
-
-    const selected = list.find((school) => String(school.id) === String(scopedSchoolId))
-    if (selected) return [selected]
-    return [{ id: scopedSchoolId, name: resolvedSchoolName || `School ${scopedSchoolId}` }]
-  }, [resolvedSchoolName, schools, scopedSchoolId])
-  
-  const filterClassOptions = useMemo(() => {
-    const classes = new Set()
-    activities.forEach(item => {
-      if (item.className) classes.add(item.className)
-    })
-    return Array.from(classes).sort()
-  }, [activities])
-  
-  const filterSectionOptions = useMemo(() => {
-    const sections = new Set()
-    activities.forEach(item => {
-      if (item.section) sections.add(item.section)
-    })
-    return Array.from(sections).sort()
-  }, [activities])
-
-  const addLookups = useStudentActivityLookups(addForm, isAddOpen)
-  const editLookups = useStudentActivityLookups(editForm, isEditOpen)
-
-  // ── Dynamic dropdown options ─────────────────────────────────────────────────
-  const getClassOptions = () => {
-    if (!addForm.schoolId) return []
-    const school = schools.find(s => s.id === Number(addForm.schoolId))
-    if (!school || !school.classes) return []
-    return school.classes || []
-  }
-
-  const getSectionOptions = () => {
-    if (!addForm.schoolId || !addForm.className) return []
-    const school = schools.find(s => s.id === Number(addForm.schoolId))
-    if (!school || !school.sections || !school.sections[addForm.className]) return []
-    return school.sections[addForm.className] || []
-  }
-
-  // ── Fetch students when class and section change ─────────────────────────────
-  useEffect(() => {
-    let cancelled = false
-    const loadStudents = async () => {
-      if (!addForm.schoolId || !addForm.className || !addForm.section) {
-        setStudents([])
-        return
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const apiFilters = {
+        schoolId: scopedSchoolId || (filters.schoolId !== 'Select' ? filters.schoolId : null),
+        className: filters.className !== 'Select' ? filters.className : null,
+        section: filters.section !== 'Select' ? filters.section : null,
+        q: search.trim() || undefined,
       }
-      try {
-        const data = await fetchStudentsByClassSection({
-          schoolId: addForm.schoolId,
-          classId: addForm.classId,
-          sectionId: addForm.sectionId,
-        })
-        if (!cancelled) setStudents(data)
-      } catch {
-        if (!cancelled) setStudents([])
-      }
-    }
-    loadStudents()
-    return () => { cancelled = true }
-  }, [addForm.schoolId, addForm.className, addForm.section])
-
-  useEffect(() => {
-    let cancelled = false
-    const loadStudents = async () => {
-      if (!editForm.schoolId || !editForm.className || !editForm.section) {
-        return
-      }
-      try {
-        const data = await fetchStudentsByClassSection({
-          schoolId: editForm.schoolId,
-          classId: editForm.classId,
-          sectionId: editForm.sectionId,
-        })
-        if (!cancelled) setStudents(data)
-      } catch {
-        if (!cancelled) setStudents([])
-      }
-    }
-    loadStudents()
-    return () => { cancelled = true }
-  }, [editForm.schoolId, editForm.className, editForm.section])
-
-  // ── Filtering (client-side within the current page) ──────────────────────────
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return activities.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.schoolName, row.studentName, row.className, row.section, row.activity, row.date]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-
-      const matchesSchool = filters.schoolId === 'Select' || 
-        (filters.schoolId && row.schoolId === Number(filters.schoolId))
-      const matchesClass = filters.className === 'Select' || row.className === filters.className
-      const matchesSection = filters.section === 'Select' || row.section === filters.section
-
-      return matchesSearch && matchesSchool && matchesClass && matchesSection
-    })
-  }, [activities, search, filters])
-
-  const allSelected = filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
-
-  // ── Data fetching ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      setLoading(true)
-      setError('')
-      try {
-        const apiFilters = {
-          schoolId: scopedSchoolId || (filters.schoolId !== 'Select' ? filters.schoolId : null),
-          className: filters.className !== 'Select' ? filters.className : null,
-          section: filters.section !== 'Select' ? filters.section : null,
-        }
-        const data = await fetchStudentActivitiesPage(currentPage - 1, rowsPerPage, apiFilters)
-        if (cancelled) return
-        if (Array.isArray(data)) {
-          setActivities(data)
-          setTotalElements(data.length)
-          setTotalPages(1)
-        } else {
-          setActivities(Array.isArray(data?.content) ? data.content : [])
-          setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
-          setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
-        }
-      } catch (e) {
-        if (cancelled) return
-        setActivities([])
-        setTotalElements(0)
+      const data = await fetchStudentActivitiesPage(currentPage - 1, rowsPerPage, apiFilters)
+      if (Array.isArray(data)) {
+        setActivities(data)
+        setTotalElements(data.length)
         setTotalPages(1)
-        setError(e?.message || 'Failed to load student activities')
-      } finally {
-        if (!cancelled) setLoading(false)
+      } else {
+        setActivities(Array.isArray(data?.content) ? data.content : [])
+        setTotalElements(data?.totalElements || 0)
+        setTotalPages(data?.totalPages || 1)
       }
+    } catch (e) {
+      setActivities([])
+      setError(e?.message || 'Failed to load student activities')
+    } finally {
+      setLoading(false)
     }
-    load()
-    return () => { cancelled = true }
-  }, [currentPage, rowsPerPage, refreshKey, filters, scopedSchoolId])
+  }, [currentPage, rowsPerPage, filters, search, scopedSchoolId])
 
-  // ── Load schools for dropdown ────────────────────────────────────────────────
   useEffect(() => {
-    fetchSchoolsPage(0, 200)
-      .then((data) => {
-        const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
-        setSchools(
-          list.filter((school) => {
-            const status = String(school?.status || '').trim().toUpperCase()
-            const isDeleted =
-              school?.isDeleted === true || String(school?.isDeleted || '').trim().toLowerCase() === 'true'
-            return !isDeleted && (status === '' || status === 'ACTIVE')
-          }),
-        )
-      })
-      .catch(() => setSchools([]))
+    void loadData()
+  }, [loadData, refreshKey])
+
+  useEffect(() => {
+    fetchSchoolsLookup().then(setSchoolList).catch(() => setSchoolList([]))
   }, [])
 
   useEffect(() => {
@@ -426,12 +92,31 @@ const StudentActivity = () => {
     setSelectedRows([])
   }, [scopedSchoolId])
 
-  // ── Selection helpers ────────────────────────────────────────────────────────
+  const effectiveSchoolList = useMemo(() => {
+    const list = Array.isArray(schoolList) ? schoolList.slice() : []
+    if (!scopedSchoolId) return list
+    const selected = list.find((s) => String(s?.id) === String(scopedSchoolId))
+    return selected ? [selected] : list
+  }, [schoolList, scopedSchoolId])
+
+  const displayed = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return activities
+    return activities.filter((row) =>
+      [row.schoolName, row.studentName, row.className, row.section, row.activity, row.date]
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    )
+  }, [search, activities])
+
+  const allSelected = displayed.length > 0 && displayed.every((row) => selectedRows.includes(row.id))
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...filtered.map((row) => row.id)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...displayed.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !filtered.some((row) => row.id === id)))
+      setSelectedRows((prev) => prev.filter((id) => !displayed.some((row) => row.id === id)))
     }
   }
 
@@ -441,189 +126,38 @@ const StudentActivity = () => {
     )
   }
 
-  // ── Form helpers ─────────────────────────────────────────────────────────────
-  const handleChange = (setter, lookupStudents = []) => (e) => {
-    const { id, value } = e.target
-
-    setter((prev) => {
-      if (id === 'schoolId') {
-        const selectedSchool = schools.find(s => s.id === Number(value))
-        return {
-          ...prev,
-          schoolId: value,
-          schoolName: selectedSchool?.schoolName || '',
-          classId: '',
-          className: '',
-          sectionId: '',
-          section: '',
-          studentId: '',
-          studentName: '',
-        }
-      }
-
-      if (id === 'className') {
-        return {
-          ...prev,
-          classId: value,
-          className: '',
-          sectionId: '',
-          section: '',
-          studentId: '',
-          studentName: '',
-        }
-      }
-
-      if (id === 'section') {
-        return {
-          ...prev,
-          sectionId: value,
-          section: '',
-          studentId: '',
-          studentName: '',
-        }
-      }
-
-      if (id === 'studentId') {
-        const selectedStudent = lookupStudents.find(s => s.id === Number(value))
-        return {
-          ...prev,
-          schoolId: selectedStudent?.schoolId ? String(selectedStudent.schoolId) : '',
-          schoolName: selectedStudent?.schoolName || '',
-          classId: selectedStudent?.classId ? String(selectedStudent.classId) : '',
-          className: selectedStudent?.className || '',
-          sectionId: selectedStudent?.sectionId ? String(selectedStudent.sectionId) : '',
-          section: selectedStudent?.section || '',
-          studentId: value,
-          studentName: selectedStudent?.name || '',
-        }
-      }
-
-      return { ...prev, [id]: value }
-    })
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
   const handleApplyFilters = (e) => {
     e.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
-    setRefreshKey((k) => k + 1)
   }
 
   const handleResetFilters = () => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setCurrentPage(1)
-    setRefreshKey((k) => k + 1)
   }
 
-  // ── Open modals ──────────────────────────────────────────────────────────────
   const openAdd = () => {
-    setError('')
-    setEditingId(null)
-    setAddForm({
-      ...emptyForm,
-      schoolId: scopedSchoolId ? String(scopedSchoolId) : '',
-      schoolName: resolvedSchoolName || '',
-    })
-    setStudents([])
-    setAddStep(0)
-    setIsAddOpen(true)
+    sessionStorage.removeItem('edit-student-activity-row')
+    onNavigate('add-student-activity')
   }
 
   const openEdit = (row) => {
-    setError('')
-    setEditingId(row.id)
-    setEditForm({
-      id: row.id,
-      schoolId: row.schoolId || (scopedSchoolId ? String(scopedSchoolId) : ''),
-      schoolName: row.schoolName || resolvedSchoolName || '',
-      classId: row.classId ? String(row.classId) : '',
-      className: row.className || '',
-      sectionId: row.sectionId ? String(row.sectionId) : '',
-      section: row.section || '',
-      studentId: row.studentId || '',
-      studentName: row.studentName || '',
-      date: row.date || '',
-      activity: row.activity || '',
-      description: row.description || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  // ── CRUD handlers ────────────────────────────────────────────────────────────
-  const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    studentId: form.studentId ? Number(form.studentId) : null,
-    className: form.className || '',
-    section: form.section || '',
-    date: form.date || '',
-    activity: form.activity || '',
-    description: form.description || '',
-  })
-
-  const handleCreate = async () => {
-    if (saving) return
-    setSaving(true)
-    setError('')
-    try {
-      await createStudentActivity(buildPayload(addForm))
-      setIsAddOpen(false)
-      setAddForm(emptyForm)
-      setAddStep(0)
-      setCurrentPage(1)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to create student activity')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdate = async () => {
-    if (saving) return
-    if (!editingId) { setError('No record selected for update'); return }
-    setSaving(true)
-    setError('')
-    try {
-      await updateStudentActivity(editingId, buildPayload(editForm))
-      setIsEditOpen(false)
-      setEditForm(emptyForm)
-      setEditStep(0)
-      setEditingId(null)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to update student activity')
-    } finally {
-      setSaving(false)
-    }
+    sessionStorage.setItem('edit-student-activity-row', JSON.stringify(row))
+    onNavigate('add-student-activity')
   }
 
   const handleDelete = async (id) => {
-    if (!id) return
-    if (!window.confirm('Delete this student activity? This cannot be undone.')) return
-    setSaving(true)
-    setError('')
+    if (!window.confirm('Delete this student activity?')) return
     try {
       await deleteStudentActivity(id)
-      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
       setRefreshKey((k) => k + 1)
     } catch (e) {
-      setError(e?.message || 'Failed to delete student activity')
-    } finally {
-      setSaving(false)
+      alert(e.message)
     }
   }
-
-  // ── Pagination ───────────────────────────────────────────────────────────────
-  // Backend paging already returns the current page; avoid client-side slicing here.
-  const rowsToShow = filtered
 
   const getVisiblePages = () => {
     const pages = []
@@ -633,278 +167,108 @@ const StudentActivity = () => {
     return pages
   }
 
-  // ── Form renderer ─────────────────────────────────────────────────────────────
-  const renderForm = (form, setter, lookups) => {
-    const classOptions = lookups?.classOptions || []
-    const sectionOptions = lookups?.sectionOptions || []
-    const currentStudents = lookups?.students || []
-    const selectedStudent = currentStudents.find((student) => String(student.id) === String(form.studentId))
-    const studentOptions =
-      form.studentId && form.studentName && !selectedStudent
-        ? [{ id: form.studentId, name: form.studentName, admissionNo: '' }, ...currentStudents]
-        : currentStudents
-
-    return (
-      <>
-        <p className="avm-section-title">Basic Information</p>
-        <div className="avm-grid">
-          <FormField label="School Name" required full>
-              <select 
-                className="avm-select" 
-                id="schoolId" 
-                value={form.schoolId} 
-                disabled={isSchoolLocked}
-              onChange={handleChange(setter, currentStudents)}
-              >
-              <option value="">--Select School--</option>
-              {effectiveSchoolList.map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.name}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Class" required>
-              <select
-              className="avm-select"
-              id="className"
-              value={form.classId || ''}
-              onChange={(e) => {
-                const selectedClass = classOptions.find((item) => String(item.id) === String(e.target.value))
-                setter((prev) => ({
-                  ...prev,
-                  classId: e.target.value,
-                  className: selectedClass ? getClassOptionLabel(selectedClass) : '',
-                  sectionId: '',
-                  section: '',
-                  studentId: '',
-                  studentName: '',
-                }))
-              }}
-              disabled={!form.schoolId}
-            >
-              <option value="">--Select--</option>
-              {classOptions.map((item) => {
-                const label = getClassOptionLabel(item)
-                return (
-                  <option key={item.id} value={item.id}>
-                    {label}
-                  </option>
-                )
-              })}
-            </select>
-          </FormField>
-
-          <FormField label="Section" required>
-              <select
-              className="avm-select"
-              id="section"
-              value={form.sectionId || ''}
-              onChange={(e) => {
-                const selectedSection = sectionOptions.find((item) => String(item.id) === String(e.target.value))
-                setter((prev) => ({
-                  ...prev,
-                  sectionId: e.target.value,
-                  section: selectedSection ? getSectionOptionLabel(selectedSection) : '',
-                  studentId: '',
-                  studentName: '',
-                }))
-              }}
-              disabled={!form.classId}
-            >
-              <option value="">--Select--</option>
-              {sectionOptions.map((item) => {
-                const label = getSectionOptionLabel(item)
-                return (
-                  <option key={item.id} value={item.id}>
-                    {label}
-                  </option>
-                )
-              })}
-            </select>
-          </FormField>
-
-          <FormField label="Student" required full>
-            <select
-              className="avm-select"
-              id="studentId"
-              value={form.studentId}
-              onChange={handleChange(setter, currentStudents)}
-              disabled={!form.sectionId}
-            >
-              <option value="">--Select Student--</option>
-              {studentOptions.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name}
-                  {student.admissionNo ? ` (${student.admissionNo})` : ''}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Date" required>
-            <input
-              type="date"
-              className="avm-input"
-              id="date"
-              value={form.date}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-
-          <FormField label="Activity" required full>
-            <input
-              type="text"
-              className="avm-input"
-              id="activity"
-              placeholder="Enter activity (e.g., Science Exhibition, Football Practice)"
-              value={form.activity}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-
-          <FormField label="Description" full noIcon>
-            <textarea
-              rows="3"
-              className="avm-input avm-textarea"
-              id="description"
-              placeholder="Additional details about the activity..."
-              value={form.description}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-        </div>
-      </>
-    )
-  }
-
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Student Activity</h1>
-          <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
-              Dashboard
-            </button>
-            <span className="text-secondary-light"> / Student Activity</span>
-          </div>
+          <span className="text-secondary-light">Student / Student Activity</span>
         </div>
-
-        <div className="d-flex flex-wrap align-items-center gap-12">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line"></i>
-            </span>
-            Add Student Activity
-          </button>
-        </div>
+        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+          <i className="ri-add-large-line"></i> Add Activity
+        </button>
       </div>
-
-      {error && (
-        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
-          <i className="ri-error-warning-line"></i>
-          <span>{error}</span>
-        </div>
-      )}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* ── Toolbar ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
                     <i className="ri-file-upload-line text-md line-height-1"></i> Export
                   </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                    <button
+                      type="button"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
+                    >
                       <i className="ri-file-3-line"></i> PDF
                     </button>
                   </li>
                   <li>
-                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                    <button
+                      type="button"
+                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
+                    >
                       <i className="ri-file-excel-2-line"></i> Excel
                     </button>
                   </li>
                 </ul>
               </div>
 
-              {/* Filter */}
-              <button
-                type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                onClick={() => setIsFilterSidebarOpen(true)}
-              >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
-                <span><i className="ri-arrow-right-line"></i></span>
-              </button>
-
-              {/* Columns */}
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    Columns
+                  </span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
-                  {columnOptions.map((column) => (
-                    <li key={column.key}>
+                  {columnOptions.map((col) => (
+                    <li key={col.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
                         <input
                           type="checkbox"
                           className="form-check-input mt-0"
-                          checked={visibleColumns[column.key]}
-                          onChange={() => toggleColumn(column.key)}
+                          checked={visibleColumns[col.key]}
+                          onChange={() => toggleColumn(col.key)}
                         />
-                        {column.label}
+                        {col.label}
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              {/* Rows per page */}
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
+              <button
+                type="button"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                onClick={() => setIsFilterSidebarOpen(true)}
               >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                  Filter
+                </span>
+                <span>
+                  <i className="ri-arrow-right-line"></i>
+                </span>
+              </button>
+
+              <RowsPerPageSelect value={rowsPerPage} onChange={(v) => { setRowsPerPage(v); setCurrentPage(1) }} />
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search student activity..."
+                placeholder="Search activity..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
               />
@@ -914,12 +278,11 @@ const StudentActivity = () => {
             </div>
           </div>
 
-          {/* ── Table ── */}
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1050 }}>
+          <div className="table-responsive">
+            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1100 }}>
               <thead>
                 <tr>
-                  <th scope="col">
+                  <th scope="col" style={{ width: 80 }}>
                     <div className="form-check style-check d-flex align-items-center">
                       <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
                       <label className="form-check-label">S.L</label>
@@ -931,25 +294,16 @@ const StudentActivity = () => {
                   {visibleColumns.section && <th scope="col">Section</th>}
                   {visibleColumns.activity && <th scope="col">Activity</th>}
                   {visibleColumns.date && <th scope="col">Date</th>}
-                  <th scope="col">Action</th>
+                  <th scope="col" style={{ width: 100 }}>Action</th>
                 </tr>
               </thead>
-
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
-                      Loading student activities...
-                    </td>
-                  </tr>
-                ) : rowsToShow.length === 0 ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
-                      No student activities found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40">Loading...</td></tr>
+                ) : displayed.length === 0 ? (
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40">No records found.</td></tr>
                 ) : (
-                  rowsToShow.map((row, idx) => (
+                  displayed.map((row, idx) => (
                     <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -959,24 +313,20 @@ const StudentActivity = () => {
                             checked={selectedRows.includes(row.id)}
                             onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">
-                            {(currentPage - 1) * rowsPerPage + idx + 1}
-                          </label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.schoolName && <td>{row.schoolName}</td>}
-                      {visibleColumns.studentName && (
-                        <td className="fw-medium text-primary-light">{row.studentName}</td>
-                      )}
-                      {visibleColumns.className && <td>{row.className}</td>}
-                      {visibleColumns.section && <td>{row.section}</td>}
-                      {visibleColumns.activity && <td>{row.activity}</td>}
-                      {visibleColumns.date && <td>{row.date}</td>}
+                      {visibleColumns.schoolName && <td>{row.schoolName || '-'}</td>}
+                      {visibleColumns.studentName && <td className="fw-medium text-primary-light">{row.studentName || '-'}</td>}
+                      {visibleColumns.className && <td>{row.className || '-'}</td>}
+                      {visibleColumns.section && <td>{row.section || '-'}</td>}
+                      {visibleColumns.activity && <td>{row.activity || '-'}</td>}
+                      {visibleColumns.date && <td>{row.date || '-'}</td>}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
                             type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             onClick={() => openEdit(row)}
                             title="Edit"
                           >
@@ -984,10 +334,9 @@ const StudentActivity = () => {
                           </button>
                           <button
                             type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             onClick={() => handleDelete(row.id)}
                             title="Delete"
-                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -1000,11 +349,9 @@ const StudentActivity = () => {
             </table>
           </div>
 
-          {/* ── Pagination ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} –{' '}
-              {totalElements === 0 ? 0 : Math.min((currentPage - 1) * rowsPerPage + rowsToShow.length, totalElements)} of {totalElements}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
@@ -1038,118 +385,43 @@ const StudentActivity = () => {
         </div>
       </div>
 
-      {/* ── Add Modal ── */}
-      <WizardPopup
-        modalWidth="600px"
-        open={isAddOpen}
-        title="Add Student Activity"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleCreate}
-        submitLabel={saving ? 'Saving…' : 'Save'}
-      >
-        {renderForm(addForm, setAddForm, addLookups)}
-      </WizardPopup>
-
-      {/* ── Edit Modal ── */}
-      <WizardPopup
-        modalWidth="600px"
-        open={isEditOpen}
-        title="Edit Student Activity"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel={saving ? 'Saving…' : 'Update'}
-      >
-        {renderForm(editForm, setEditForm, editLookups)}
-      </WizardPopup>
-
-      {/* ── Filter Sidebar ── */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
-        title="Filter Student Activity"
+        title="Filter Activity"
         onClose={() => setIsFilterSidebarOpen(false)}
-        className="filter-sidebar"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
           <div>
-            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
+            <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
             <select
               id="schoolId"
               className="form-control form-select"
-              value={isSchoolLocked ? scopedSchoolId : pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
+              value={scopedSchoolId || pendingFilters.schoolId}
+              onChange={(e) => setPendingFilters(p => ({ ...p, schoolId: e.target.value }))}
               disabled={isSchoolLocked}
             >
               <option value="Select">Select School</option>
-              {effectiveSchoolList.map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.name}
-                </option>
+              {effectiveSchoolList.map((s) => (
+                <option key={s.id} value={String(s.id)}>{s.schoolName || s.name}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Class
-            </label>
-            <select
+            <label className="text-sm fw-semibold text-primary-light mb-8">Class</label>
+            <input
+              type="text"
               id="className"
-              className="form-control form-select"
-              value={pendingFilters.className}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select Class</option>
-              {filterClassOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              className="form-control"
+              placeholder="Class name"
+              value={pendingFilters.className === 'Select' ? '' : pendingFilters.className}
+              onChange={(e) => setPendingFilters(p => ({ ...p, className: e.target.value || 'Select' }))}
+            />
           </div>
 
-          <div>
-            <label htmlFor="section" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Section
-            </label>
-            <select
-              id="section"
-              className="form-control form-select"
-              value={pendingFilters.section}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select Section</option>
-              {filterSectionOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
-              Reset
-            </button>
-          </div>
-
-          <div>
-            <button type="submit" className="btn btn-primary-600 w-100">
-              Apply
-            </button>
+          <div className="d-flex gap-8 mt-12">
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">Reset</button>
+            <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
           </div>
         </form>
       </SlideSidebar>

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createStudyMaterial, deleteStudyMaterial, fetchStudyMaterials, updateStudyMaterial } from '../apis/studyMaterialsApi'
+import { deleteStudyMaterial, fetchStudyMaterials } from '../apis/studyMaterialsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
@@ -11,32 +11,10 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 
-const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.txt'
-const ACCEPTED_DOC_LABEL = '.pdf, .doc/docx, .ppt/pptx or .txt'
-
-const emptyForm = {
-  schoolId: 'Select',
-  classId: 'Select',
-  subjectId: 'Select',
-  title: '',
-  description: '',
-}
-
 const emptyFilters = {
   schoolId: 'Select',
   classId: 'Select',
   subjectId: 'Select',
-}
-
-const STEPS = ['Basic Info']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Class: 'ri-building-line',
-  Subject: 'ri-book-open-line',
-  Title: 'ri-file-list-2-line',
-  Description: 'ri-align-left',
-  Material: 'ri-attachment-2',
 }
 
 const columnOptions = [
@@ -57,6 +35,22 @@ const getFileIcon = (fileName) => {
   return 'ri-file-line'
 }
 
+const getStudyMaterialFileUrl = (row) =>
+  row?.fileUrl ||
+  row?.materialUrl ||
+  row?.filePath ||
+  row?.attachmentUrl ||
+  row?.url ||
+  ''
+
+const getStudyMaterialFileName = (row) =>
+  row?.fileName ||
+  String(getStudyMaterialFileUrl(row))
+    .split('/')
+    .filter(Boolean)
+    .pop() ||
+  ''
+
 const getChildScope = (children, selectedChildId) => {
   const list = Array.isArray(children) ? children : []
   const selected =
@@ -66,43 +60,9 @@ const getChildScope = (children, selectedChildId) => {
   return selected || list[0] || null
 }
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const StudyMaterial = () => {
-  const { user, role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren } = useAuth()
-  const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
+const StudyMaterial = ({ onNavigate }) => {
+  const { user, role, schoolId, selectedChildId, parentChildren, studentClassId } = useAuth()
+  const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
@@ -116,74 +76,42 @@ const StudyMaterial = () => {
   const [subjectsLookup, setSubjectsLookup] = useState([])
 
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
 
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [editingId, setEditingId] = useState(null)
-  const [addFile, setAddFile] = useState(null)
-  const [editFile, setEditFile] = useState(null)
-  const addFileRef = useRef(null)
-  const editFileRef = useRef(null)
-
-  const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-  const [findErrors, setFindErrors] = useState({})
-  const [hasSearched, setHasSearched] = useState(false)
+  const [hasSearched, setHasSearched] = useState(true)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : schoolId ? String(schoolId) : ''
-  const resolvedSchoolName = schoolName || ''
-  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
-  const effectiveSchoolsLookup = useMemo(() => {
-    const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((school) => [String(school?.id), school]))
-    if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
-      byId.set(String(resolvedSchoolId), {
-        id: resolvedSchoolId,
-        schoolName: resolvedSchoolName || `School ${resolvedSchoolId}`,
-      })
-    }
-    return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
-  }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
   const loadLookups = useCallback(async () => {
-    const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
-      fetchSchoolsLookup(),
-      fetchClasses(),
-      fetchSubjects(),
+    const [schools, classes, subjects] = await Promise.all([
+      fetchSchoolsLookup().catch(() => []),
+      fetchClasses().catch(() => []),
+      fetchSubjects().catch(() => []),
     ])
-    const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
-    const classes = classesResult.status === 'fulfilled' ? classesResult.value : []
-    const subjects = subjectsResult.status === 'fulfilled' ? subjectsResult.value : []
-    setSchoolsLookup(Array.isArray(schools) ? schools : [])
-    setClassesLookup(Array.isArray(classes) ? classes : [])
-    setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
+    setSchoolsLookup(schools)
+    setClassesLookup(classes)
+    setSubjectsLookup(subjects)
   }, [])
 
   const loadRows = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchStudyMaterials(
-        isStudentScope && effectiveSchoolId && effectiveClassId
-          ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
-          : resolvedSchoolId
-            ? { schoolId: resolvedSchoolId }
-            : {},
-      )
+      const params = isStudentScope && effectiveSchoolId && effectiveClassId
+        ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
+        : resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}
+      const data = await fetchStudyMaterials(params)
       setRows(Array.isArray(data) ? data : [])
-      if (isStudentScope) setHasSearched(true)
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load study materials')
@@ -193,17 +121,13 @@ const StudyMaterial = () => {
   }, [effectiveClassId, effectiveSchoolId, isStudentScope, resolvedSchoolId])
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (canManage) void loadLookups()
-      void loadRows()
-    }, 0)
-    return () => clearTimeout(t)
-  }, [canManage, loadLookups, loadRows])
+    if (canManage) loadLookups()
+    loadRows()
+  }, [canManage, loadLookups, loadRows, refreshKey])
 
   const classOptions = useMemo(() => {
     return classesLookup
       .filter((c) => pendingFilters.schoolId === 'Select' || String(c.schoolId) === String(pendingFilters.schoolId))
-      .slice()
       .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
   }, [classesLookup, pendingFilters.schoolId])
 
@@ -214,86 +138,46 @@ const StudyMaterial = () => {
         if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
         return true
       })
-      .slice()
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
   }, [subjectsLookup, pendingFilters.schoolId, pendingFilters.classId])
 
-  const validateFind = () => {
-    if (isStudentScope) return {}
-    const errs = {}
-    if (pendingFilters.schoolId === 'Select') errs.schoolId = 'School is required.'
-    if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
-    if (pendingFilters.subjectId === 'Select') errs.subjectId = 'Subject is required.'
-    return errs
-  }
-
   const handleApplyFilters = (e) => {
-    e.preventDefault()
-    if (isStudentScope) return
-    const errs = validateFind()
-    if (Object.keys(errs).length > 0) {
-      setFindErrors(errs)
-      return
-    }
-    setFindErrors({})
+    if (e) e.preventDefault()
     setFilters(pendingFilters)
     setHasSearched(true)
-    setIsFindSidebarOpen(false)
+    setIsFilterSidebarOpen(false)
     setCurrentPage(1)
-    setSelectedRows([])
   }
 
   const handleResetFilters = () => {
-    if (isStudentScope) return
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
-    setFindErrors({})
     setHasSearched(false)
-    setSearch('')
     setCurrentPage(1)
-    setSelectedRows([])
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => {
-      if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
-      if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
-      return { ...prev, [id]: value }
-    })
-    setFindErrors((prev) => ({ ...prev, [id]: '' }))
   }
 
   const filtered = useMemo(() => {
-    if (!hasSearched) return []
     const q = search.trim().toLowerCase()
-    if (isStudentScope) {
-      return rows.filter((r) => {
-        if (!q) return true
-        return [r.title, r.description, r.fileName].filter(Boolean).join(' ').toLowerCase().includes(q)
-      })
-    }
-    const list = rows.filter((r) => {
-      const matchesScope =
-        String(r.schoolId) === String(filters.schoolId) &&
-        String(r.classId) === String(filters.classId) &&
-        String(r.subjectId) === String(filters.subjectId)
-      if (!matchesScope) return false
+    return rows.filter((r) => {
+      if (!isStudentScope) {
+        const matchesScope =
+          (filters.schoolId === 'Select' || String(r.schoolId) === String(filters.schoolId)) &&
+          (filters.classId === 'Select' || String(r.classId) === String(filters.classId)) &&
+          (filters.subjectId === 'Select' || String(r.subjectId) === String(filters.subjectId))
+        if (!matchesScope) return false
+      }
       if (!q) return true
-      return [r.title, r.description, r.fileName].filter(Boolean).join(' ').toLowerCase().includes(q)
+      return [r.title, r.description, r.fileName, r.schoolName, r.className, r.subjectName].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
-    return list
-  }, [rows, hasSearched, search, filters, isStudentScope])
+  }, [rows, search, filters, isStudentScope])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
     return filtered.slice(start, start + rowsPerPage)
   }, [currentPage, filtered, rowsPerPage])
 
   const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
-
   const handleSelectAll = (e) => {
     if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
     else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
@@ -304,202 +188,31 @@ const StudyMaterial = () => {
   }
 
   const openAdd = () => {
-    if (!canManage) return
-    setAddForm({
-      ...emptyForm,
-      ...filters,
-      ...(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}),
-    })
-    setAddFile(null)
-    if (addFileRef.current) addFileRef.current.value = ''
-    setAddStep(0)
-    setIsAddOpen(true)
+    sessionStorage.removeItem('edit-study-material-row')
+    onNavigate('add-study-material')
   }
 
   const openEdit = (row) => {
-    if (!canManage) return
-    setEditingId(row?.id ?? null)
-    setEditForm({
-      schoolId: row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId || 'Select',
-      classId: row?.classId != null ? String(row.classId) : 'Select',
-      subjectId: row?.subjectId != null ? String(row.subjectId) : 'Select',
-      title: row?.title || '',
-      description: row?.description || '',
-    })
-    setEditFile(null)
-    if (editFileRef.current) editFileRef.current.value = ''
-    setEditStep(0)
-    setIsEditOpen(true)
+    sessionStorage.setItem('edit-study-material-row', JSON.stringify(row))
+    onNavigate('add-study-material')
   }
 
-  const validateForm = (form) => {
-    const errs = {}
-    if (!form.schoolId || form.schoolId === 'Select') errs.schoolId = 'School is required.'
-    if (!form.classId || form.classId === 'Select') errs.classId = 'Class is required.'
-    if (!form.subjectId || form.subjectId === 'Select') errs.subjectId = 'Subject is required.'
-    if (!String(form.title || '').trim()) errs.title = 'Title is required.'
-    return errs
-  }
-
-  const [formErrors, setFormErrors] = useState({})
-
-  const submitAdd = async () => {
-    if (!canManage) return
-    const errs = validateForm(addForm)
-    if (Object.keys(errs).length > 0) {
-      setFormErrors(errs)
-      return
-    }
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this study material?')) return
     try {
-      setSaving(true)
-      setError('')
-      await createStudyMaterial(
-        {
-          schoolId: Number(addForm.schoolId),
-          classId: Number(addForm.classId),
-          subjectId: Number(addForm.subjectId),
-          title: addForm.title,
-          description: addForm.description,
-        },
-        addFile,
-      )
-      setIsAddOpen(false)
-      await loadRows()
-    } catch (e) {
-      setError(e?.message || 'Failed to create study material')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const submitEdit = async () => {
-    if (!canManage) return
-    if (!editingId) return
-    const errs = validateForm(editForm)
-    if (Object.keys(errs).length > 0) {
-      setFormErrors(errs)
-      return
-    }
-    try {
-      setSaving(true)
-      setError('')
-      await updateStudyMaterial(
-        editingId,
-        {
-          schoolId: Number(editForm.schoolId),
-          classId: Number(editForm.classId),
-          subjectId: Number(editForm.subjectId),
-          title: editForm.title,
-          description: editForm.description,
-        },
-        editFile,
-      )
-      setIsEditOpen(false)
-      setEditingId(null)
-      await loadRows()
-    } catch (e) {
-      setError(e?.message || 'Failed to update study material')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDelete = async (row) => {
-    if (!canManage) return
-    const id = row?.id
-    if (!id) return
-    if (!window.confirm(`Delete study material "${row?.title || id}"?`)) return
-    try {
-      setSaving(true)
-      setError('')
       await deleteStudyMaterial(id)
-      await loadRows()
+      setRefreshKey(k => k + 1)
     } catch (e) {
-      setError(e?.message || 'Failed to delete study material')
-    } finally {
-      setSaving(false)
+      alert(e.message)
     }
   }
 
-  const renderEntryForm = (form, setForm, fileRef, setFile) => {
-    const localClassOptions = classesLookup
-      .filter((c) => !form.schoolId || form.schoolId === 'Select' || String(c.schoolId) === String(form.schoolId))
-      .slice()
-      .sort((a, b) => String(a.className || '').localeCompare(String(b.className || '')))
-
-    const localSubjectOptions = subjectsLookup
-      .filter((s) => {
-        if (!form.schoolId || form.schoolId === 'Select') return true
-        if (String(s.schoolId) !== String(form.schoolId)) return false
-        if (form.classId && form.classId !== 'Select' && String(s.classId) !== String(form.classId)) return false
-        return true
-      })
-      .slice()
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-
-    const onChange = (e) => {
-      const { id, value } = e.target
-      setForm((prev) => {
-        if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
-        if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
-        return { ...prev, [id]: value }
-      })
-      setFormErrors((prev) => ({ ...prev, [id]: '' }))
-    }
-
-    return (
-      <div className="avm-grid">
-        <FormField label="School Name" required>
-          <select id="schoolId" className={`form-control form-select ps-44${formErrors.schoolId ? ' is-invalid' : ''}`} value={form.schoolId} onChange={onChange} disabled={saving || isSchoolLocked}>
-            <option value="Select">--Select School--</option>
-            {effectiveSchoolsLookup.map((s) => (
-              <option key={s.id} value={String(s.id)}>
-                {s.schoolName}
-              </option>
-            ))}
-          </select>
-          {formErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{formErrors.schoolId}</div> : null}
-        </FormField>
-
-        <FormField label="Class" required>
-          <select id="classId" className={`form-control form-select ps-44${formErrors.classId ? ' is-invalid' : ''}`} value={form.classId} onChange={onChange} disabled={saving}>
-            <option value="Select">--Select Class--</option>
-            {localClassOptions.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.className}
-              </option>
-            ))}
-          </select>
-          {formErrors.classId ? <div className="text-danger-600 text-sm mt-4">{formErrors.classId}</div> : null}
-        </FormField>
-
-        <FormField label="Subject" required>
-          <select id="subjectId" className={`form-control form-select ps-44${formErrors.subjectId ? ' is-invalid' : ''}`} value={form.subjectId} onChange={onChange} disabled={saving}>
-            <option value="Select">--Select Subject--</option>
-            {localSubjectOptions.map((s) => (
-              <option key={s.id} value={String(s.id)}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          {formErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{formErrors.subjectId}</div> : null}
-        </FormField>
-
-        <FormField label="Title" required full>
-          <input id="title" className={`form-control ps-44${formErrors.title ? ' is-invalid' : ''}`} value={form.title} onChange={onChange} disabled={saving} />
-          {formErrors.title ? <div className="text-danger-600 text-sm mt-4">{formErrors.title}</div> : null}
-        </FormField>
-
-        <FormField label="Description" full>
-          <textarea id="description" className="form-control ps-44" rows={3} value={form.description} onChange={onChange} disabled={saving} />
-        </FormField>
-
-        <FormField label="Material" full>
-          <input ref={fileRef} type="file" accept={ACCEPTED_DOC_TYPES} className="form-control ps-44" onChange={(e) => setFile(e.target.files?.[0] || null)} disabled={saving} />
-          <div className="text-secondary-light text-sm mt-4">Accepted: {ACCEPTED_DOC_LABEL}</div>
-        </FormField>
-      </div>
-    )
+  const getVisiblePages = () => {
+    const pages = []
+    const start = Math.max(1, currentPage - 1)
+    const end = Math.min(totalPages, start + 2)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
   }
 
   return (
@@ -508,139 +221,165 @@ const StudyMaterial = () => {
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Study Material</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
-              Dashboard
-            </button>
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">Dashboard</button>
             <span className="text-secondary-light"> / Study Material</span>
           </div>
         </div>
+        {canManage && (
+          <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+            <i className="ri-add-large-line text-md"></i> Add Study Material
+          </button>
+        )}
       </div>
-
-      {error ? (
-        <div className="card mb-16">
-          <div className="card-body px-20 py-12 text-danger-600">{error}</div>
-        </div>
-      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20">
-            <div className="d-flex align-items-center gap-8">
-              <div className="position-relative">
-                <input
-                  className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                  placeholder="Search..."
-                  value={search}
-                  disabled={!hasSearched}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                  <i className="ri-search-line"></i>
-                </span>
-              </div>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-center gap-16">
               <div className="dropdown">
-                <button className="btn btn-light border dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  Columns ({visibleColumnCount})
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
+                  </span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
                 </button>
-                <ul className="dropdown-menu p-2" style={{ minWidth: 240 }}>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
+                  <li>
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                      <i className="ri-file-3-line"></i> PDF
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10">
+                      <i className="ri-file-excel-2-line"></i> Excel
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    Columns
+                  </span>
+                  <span><i className="ri-arrow-down-s-line"></i></span>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((col) => (
-                    <li key={col.key} className="dropdown-item">
-                      <label className="d-flex align-items-center gap-8 m-0">
-                        <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
-                        <span>{col.label}</span>
+                    <li key={col.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[col.key]}
+                          onChange={() => toggleColumn(col.key)}
+                        />
+                        {col.label}
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
+
+              {!isStudentScope && (
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  onClick={() => setIsFilterSidebarOpen(true)}
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    Filter
+                  </span>
+                  <span><i className="ri-arrow-right-line"></i></span>
+                </button>
+              )}
+
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(v) => {
+                  setRowsPerPage(v)
+                  setCurrentPage(1)
+                }}
+              />
             </div>
 
-            <div className="d-flex align-items-center gap-8 ms-auto">
-              {!isStudentScope ? (
-                <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                  Find
-                </button>
-              ) : null}
-              {canManage ? (
-                <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
-                  + Add
-                </button>
-              ) : null}
+            <div className="position-relative">
+              <input
+                type="text"
+                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
+                placeholder="Search study material..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
+              />
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
             </div>
           </div>
 
           <div className="table-responsive">
-            <table className="table mb-0">
+            <table className="table bordered-table mb-0 data-table">
               <thead>
                 <tr>
-                  {canManage ? (
-                    <th style={{ width: 48 }}>
-                      <input type="checkbox" checked={allSelected} onChange={handleSelectAll} disabled={!hasSearched || loading} />
-                    </th>
-                  ) : null}
+                  <th scope="col" style={{ width: 80 }}>
+                    <div className="form-check style-check d-flex align-items-center">
+                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} disabled={loading} />
+                      <label className="form-check-label">S.L</label>
+                    </div>
+                  </th>
                   {visibleColumns.school && <th>School</th>}
                   {visibleColumns.className && <th>Class</th>}
                   {visibleColumns.subjectName && <th>Subject</th>}
                   {visibleColumns.title && <th>Title</th>}
                   {visibleColumns.fileName && <th>File</th>}
-                  {canManage ? <th style={{ width: 160 }}>Action</th> : null}
+                  {canManage && <th style={{ width: 100 }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + (canManage ? 2 : 0)} className="text-center py-24 text-secondary-light">
-                      Loading...
-                    </td>
-                  </tr>
-                ) : !hasSearched ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + (canManage ? 2 : 0)} className="text-center py-24 text-secondary-light">
-                      {isStudentScope ? 'Loading your class materials...' : 'Use Find to select School, Class and Subject.'}
-                    </td>
-                  </tr>
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40">Loading...</td></tr>
                 ) : paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={visibleColumnCount + (canManage ? 2 : 0)} className="text-center py-24 text-secondary-light">
-                      No materials found.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
                 ) : (
-                  paginated.map((r) => (
+                  paginated.map((r, idx) => (
                     <tr key={r.id}>
-                      {canManage ? (
-                        <td>
-                          <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
-                        </td>
-                      ) : null}
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input className="form-check-input" type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
+                        </div>
+                      </td>
                       {visibleColumns.school && <td>{r.schoolName || r.schoolId}</td>}
                       {visibleColumns.className && <td>{r.className || r.classId}</td>}
                       {visibleColumns.subjectName && <td>{r.subjectName || r.subjectId}</td>}
                       {visibleColumns.title && <td className="fw-medium text-primary-light">{r.title}</td>}
                       {visibleColumns.fileName && (
                         <td>
-                          {r.fileName ? (
+                          {getStudyMaterialFileName(r) ? (
                             <span className="d-inline-flex align-items-center gap-8">
-                              <i className={getFileIcon(r.fileName)}></i>
-                              <span>{r.fileName}</span>
+                              <i className={getFileIcon(getStudyMaterialFileName(r))}></i>
+                              <span>{getStudyMaterialFileName(r)}</span>
                             </span>
-                          ) : (
-                            <span className="text-secondary-light">-</span>
-                          )}
+                          ) : <span className="text-secondary-light">-</span>}
                         </td>
                       )}
-                      {canManage ? (
+                      {canManage && (
                         <td>
-                          <div className="d-flex gap-8">
-                            <button type="button" className="btn btn-sm btn-primary-600" onClick={() => openEdit(r)} disabled={!canManage || saving}>
-                              Edit
+                          <div className="d-flex align-items-center gap-10">
+                            <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => openEdit(r)} title="Edit">
+                              <i className="ri-edit-line"></i>
                             </button>
-                            <button type="button" className="btn btn-sm btn-danger-600" onClick={() => handleDelete(r)} disabled={!canManage || saving}>
-                              Delete
+                            <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(r.id)} title="Delete">
+                              <i className="ri-delete-bin-line"></i>
                             </button>
                           </div>
                         </td>
-                      ) : null}
+                      )}
                     </tr>
                   ))
                 )}
@@ -648,135 +387,52 @@ const StudyMaterial = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between p-20 flex-wrap gap-16">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+            <span className="text-sm text-secondary-light">
+              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+            </span>
             <div className="d-flex align-items-center gap-8">
-              <span className="text-secondary-light">Rows per page:</span>
-              <select
-                className="form-select form-select-sm"
-                style={{ width: 90 }}
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={!hasSearched || currentPage === 1}>
-                Prev
-              </button>
-              <span className="text-secondary-light text-sm">
-                Page {hasSearched ? currentPage : 1} / {hasSearched ? totalPages : 1}
-              </span>
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={!hasSearched || currentPage === totalPages}>
-                Next
-              </button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
+              {getVisiblePages().map(p => (
+                <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
+              ))}
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
             </div>
           </div>
         </div>
       </div>
 
-      {canManage ? (
-        <>
-          <WizardPopup
-            modalWidth="780px"
-            open={isAddOpen}
-            title="Add Study Material"
-            steps={STEPS}
-            step={addStep}
-            onClose={() => setIsAddOpen(false)}
-            onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-            onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-            onSubmit={submitAdd}
-            submitLabel={saving ? 'Saving...' : 'Save'}
-          >
-            {renderEntryForm(addForm, setAddForm, addFileRef, setAddFile)}
-          </WizardPopup>
-
-          <WizardPopup
-            modalWidth="780px"
-            open={isEditOpen}
-            title="Edit Study Material"
-            steps={STEPS}
-            step={editStep}
-            onClose={() => setIsEditOpen(false)}
-            onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-            onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-            onSubmit={submitEdit}
-            submitLabel={saving ? 'Updating...' : 'Update'}
-          >
-            {renderEntryForm(editForm, setEditForm, editFileRef, setEditFile)}
-          </WizardPopup>
-        </>
-      ) : null}
-
-      {!isStudentScope ? (
-        <SlideSidebar isOpen={isFindSidebarOpen} title="Find Study Material" onClose={() => setIsFindSidebarOpen(false)} className="filter-sidebar">
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School <span className="text-danger-600">*</span>
-            </label>
-            <select id="schoolId" className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`} value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
-              <option value="Select">--Select School--</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName}
-                </option>
-              ))}
-            </select>
-            {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
-          </div>
-
-          <div>
-            <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Class <span className="text-danger-600">*</span>
-            </label>
-            <select id="classId" className={`form-control form-select${findErrors.classId ? ' is-invalid' : ''}`} value={pendingFilters.classId} onChange={handlePendingFilterChange}>
-              <option value="Select">--Select--</option>
-              {classOptions.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.className}
-                </option>
-              ))}
-            </select>
-            {findErrors.classId ? <div className="text-danger-600 text-sm mt-4">{findErrors.classId}</div> : null}
-          </div>
-
-          <div>
-            <label htmlFor="subjectId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Subject <span className="text-danger-600">*</span>
-            </label>
-            <select id="subjectId" className={`form-control form-select${findErrors.subjectId ? ' is-invalid' : ''}`} value={pendingFilters.subjectId} onChange={handlePendingFilterChange}>
-              <option value="Select">--Select--</option>
-              {subjectOptions.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            {findErrors.subjectId ? <div className="text-danger-600 text-sm mt-4">{findErrors.subjectId}</div> : null}
-          </div>
-
-          <div>
-            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
-              Reset
-            </button>
-          </div>
-          <div>
-            <button type="submit" className="btn btn-primary-600 w-100" disabled={loading}>
-              Apply
-            </button>
-          </div>
-        </form>
+      {!isStudentScope && (
+        <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Study Material" onClose={() => setIsFilterSidebarOpen(false)}>
+          <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+            <div>
+              <label className="text-sm fw-semibold text-primary-light mb-8">School <span className="text-danger-600">*</span></label>
+              <select className="form-control form-select" value={pendingFilters.schoolId} onChange={e => setPendingFilters(p => ({ ...p, schoolId: e.target.value, classId: 'Select', subjectId: 'Select' }))}>
+                <option value="Select">--Select School--</option>
+                {schoolsLookup.map(s => <option key={s.id} value={String(s.id)}>{s.schoolName}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm fw-semibold text-primary-light mb-8">Class <span className="text-danger-600">*</span></label>
+              <select className="form-control form-select" value={pendingFilters.classId} onChange={e => setPendingFilters(p => ({ ...p, classId: e.target.value, subjectId: 'Select' }))}>
+                <option value="Select">--Select Class--</option>
+                {classOptions.map(c => <option key={c.id} value={String(c.id)}>{c.className}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm fw-semibold text-primary-light mb-8">Subject <span className="text-danger-600">*</span></label>
+              <select className="form-control form-select" value={pendingFilters.subjectId} onChange={e => setPendingFilters(p => ({ ...p, subjectId: e.target.value }))}>
+                <option value="Select">--Select Subject--</option>
+                {subjectOptions.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+              </select>
+            </div>
+            <div className="d-flex gap-8 mt-12">
+              <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">Reset</button>
+              <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
+            </div>
+          </form>
         </SlideSidebar>
-      ) : null}
+      )}
     </div>
   )
 }

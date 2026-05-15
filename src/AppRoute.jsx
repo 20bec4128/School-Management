@@ -9,9 +9,13 @@ import UserRoleAcl from "./pages/UserRoleAcl";
 import TeacherDepartment from "./pages/TeacherDepartment";
 import StudentList from "./pages/StudentList";
 import AddStudent from "./pages/AddStudent";
+import AddStudentActivity from "./pages/AddStudentActivity";
+
 import AddLesson from "./pages/AddLesson";
 import EditLesson from "./pages/EditLesson";
 import ManageTeacher from "./pages/Manageteacher";
+import AddTeacher from "./pages/AddTeacher";
+
 import ClassLecture from "./pages/ClassLecture";
 import Rating from "./pages/Rating";
 import ManageDesignation from "./pages/Managedesignation";
@@ -23,13 +27,19 @@ import PostalDispatch from "./pages/PostalDispatch";
 import PostalReceive from "./pages/PostalReceive";
 import ComplainType from "./pages/ComplainType";
 import ManageComplain from "./pages/ManageComplain";
+import AddComplain from "./pages/AddComplain";
 import Notice from "./pages/Notice";
 import News from "./pages/News";
+import AddNews from "./pages/AddNews.jsx";
 import Holiday from "./pages/Holiday";
+import AddHoliday from "./pages/AddHoliday.jsx";
 import Event from "./pages/Event";
 import Gallery from "./pages/Gallery";
+import AddGallery from "./pages/AddGallery.jsx";
 import Images from "./pages/Images";
+import AddImages from "./pages/AddImages.jsx";
 import Videos from "./pages/Videos";
+import AddVideos from "./pages/AddVideos.jsx";
 import StudentType from "./pages/StudentType";
 import BulkAdmission from "./pages/BulkAdmission";
 import OnlineAdmission from "./pages/OnlineAdmission";
@@ -38,6 +48,7 @@ import StudentAttendance from "./pages/StudentAttendance";
 import TeacherAttendance from "./pages/TeacherAttendance";
 import EmployeeAttendance from "./pages/EmployeeAttendance";
 import AbsentEmail from "./pages/AbsentEmail";
+import AddAbsentEmail from "./pages/AddAbsentEmail";
 import AbsentSMS from "./pages/AbsentSMS";
 import Promotion from "./pages/Promotion";
 import IdCardSetting from "./pages/IdCardSetting";
@@ -51,9 +62,14 @@ import Guardian from "./pages/Guardian";
 import Class from "./pages/Class";
 import Section from "./pages/Section";
 import Subject from "./pages/Subject";
+import AddSubject from "./pages/AddSubject";
+
 import Syllabus from "./pages/Syllabus";
+import AddSyllabus from "./pages/AddSyllabus";
 import StudyMaterial from "./pages/StudyMaterial";
+import AddStudyMaterial from "./pages/AddStudyMaterial";
 import Liveclass from "./pages/Liveclass";
+import AddLiveClass from "./pages/AddLiveClass";
 import Assignment from "./pages/Assignment";
 import Submission from "./pages/Submission";
 import Lesson from "./pages/Lesson";
@@ -189,6 +205,12 @@ import SubscriptionPlan from "./pages/SubscriptionPlan.jsx";
 import SchoolSubscription from "./pages/SchoolSubscription.jsx";
 import GeneralSetting from "./pages/GeneralSetting.jsx";
 import AddSchool from "./pages/AddSchool.jsx";
+import AddVisitorInfo from "./pages/AddVisitorInfo.jsx";
+import AddCallLog from "./pages/AddCallLog.jsx";
+import AddPostalDispatch from "./pages/AddPostalDispatch.jsx";
+import AddNotice from "./pages/AddNotice.jsx";
+import AddEvent from "./pages/AddEvent.jsx";
+import AddPostalReceive from "./pages/AddPostalReceive.jsx";
 
 const routeEntries = [
   {
@@ -232,7 +254,9 @@ const routeEntries = [
   { pageKey: "add-student", component: AddStudent },
   { pageKey: "admit-card-setting", component: AdmitCardSetting },
   { pageKey: "bulk-admission", component: BulkAdmission },
-  { pageKey: "manage-teacher", component: ManageTeacher },
+    { pageKey: "manage-teacher", component: ManageTeacher },
+  { pageKey: "add-teacher", component: AddTeacher },
+
   { pageKey: "class-lecture", component: ClassLecture },
   { pageKey: "rating", component: Rating },
   { pageKey: "manage-designation", component: ManageDesignation },
@@ -244,13 +268,20 @@ const routeEntries = [
   { pageKey: "postal-receive", component: PostalReceive },
   { pageKey: "complain-type", component: ComplainType },
   { pageKey: "manage-complain", component: ManageComplain },
+  { pageKey: "add-complain", component: AddComplain },
   { pageKey: "notice", component: Notice },
   { pageKey: "news", component: News },
+  { pageKey: "add-news", component: AddNews },
   { pageKey: "holiday", component: Holiday },
+  { pageKey: "add-holiday", component: AddHoliday },
   { pageKey: "event", component: Event },
+  { pageKey: "add-event", component: AddEvent },
   { pageKey: "gallery", component: Gallery },
+  { pageKey: "add-gallery", component: AddGallery },
   { pageKey: "images", component: Images },
+  { pageKey: "images-add", component: AddImages },
   { pageKey: "videos", component: Videos },
+  { pageKey: "add-videos", component: AddVideos },
   { pageKey: "student-type", component: StudentType },
   { pageKey: "online-admission", component: OnlineAdmission },
   { pageKey: "student-activity", component: StudentActivity },
@@ -258,6 +289,7 @@ const routeEntries = [
   { pageKey: "teacher-attendance", component: TeacherAttendance },
   { pageKey: "employee-attendance", component: EmployeeAttendance },
   { pageKey: "absent-email", component: AbsentEmail },
+  { pageKey: "add-absent-email", component: AddAbsentEmail },
   { pageKey: "absent-sms", component: AbsentSMS },
   { pageKey: "promotion", component: Promotion },
   { pageKey: "id-card-setting", component: IdCardSetting },
@@ -270,9 +302,215 @@ const routeEntries = [
   { pageKey: "class", component: Class },
   { pageKey: "section", component: Section },
   { pageKey: "subject", component: Subject },
+  { pageKey: "add-subject", component: AddSubject },
+
   { pageKey: "syllabus", component: Syllabus },
+  { pageKey: "add-syllabus", component: AddSyllabus },
   { pageKey: "study-material", component: StudyMaterial },
+  { pageKey: "add-study-material", component: AddStudyMaterial },
   { pageKey: "live-class", component: Liveclass },
+  { pageKey: "add-live-class", component: AddLiveClass },
+  { pageKey: "assignment", component: Assignment },
+  { pageKey: "submission", component: Submission },
+  { pageKey: "lesson", component: Lesson },
+  { pageKey: "add-lesson", component: AddLesson },
+  { pageKey: "edit-lesson", component: EditLesson },
+  { pageKey: "topic", component: Topic },
+  { pageKey: "lesson-timeline", component: LessonTimeline },
+  { pageKey: "lesson-status", component: LessonStatus },
+  { pageKey: "lesson-plan", component: LessonPlan },
+  { pageKey: "class-routine", component: ClassRoutine },
+  { pageKey: "exam-instruction", component: ExamInstruction },
+  { pageKey: "question-bank", component: QuestionBank },
+  { pageKey: "onlineexam", component: OnlineExam },
+  { pageKey: "exam-result", component: ExamResult },
+  { pageKey: "exam-grade", component: ExamGrade },
+  { pageKey: "exam-term", component: ExamTerm },
+  { pageKey: "schedule", component: Schedule },
+  { pageKey: "suggestion", component: Suggestion },
+  { pageKey: "attendance", component: Attendance },
+  { pageKey: "manage-mark", component: Managemark },
+  { pageKey: "exam-term-result", component: Examtermresult },
+  { pageKey: "exam-final-result", component: Examfinalresult },
+  { pageKey: "merit-list", component: MeritList },
+  { pageKey: "mark-sheet", component: MarkSheet },
+  { pageKey: "result-card", component: ResultCard },
+  { pageKey: "mark-send-email", component: MarkSendByEmail },
+  { pageKey: "mark-send-sms", component: MarkSendBySMS },
+  { pageKey: "result-email", component: ResultEmail },
+  { pageKey: "result-sms", component: ResultSMS },
+  { pageKey: "leave-type", component: LeaveType },
+  { pageKey: "leave-application", component: LeaveApplication },
+  { pageKey: "waiting-application", component: WaitingApplication },
+  { pageKey: "approved-application", component: ApprovedApplication },
+  { pageKey: "declined-application", component: DeclineApplication },
+  { pageKey: "salary-grade", component: SalaryGrade },
+  { pageKey: "salary-payment", component: SalaryPayment },
+  { pageKey: "salary-history", component: SalaryHistory },
+  { pageKey: "discount", component: Discount },
+  { pageKey: "fee-type", component: FeeType },
+  { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "issue-return", component: IssueReturn },
+  { pageKey: "issue-book-create", component: IssueBookCreate },
+
+  {
+    pageKey: "manage-school",
+    component: ManageSchool,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "academic-year",
+    component: AcademicYear,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "payment-setting",
+    component: PaymentSetting,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "sms-setting",
+    component: SmsSetting,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  { pageKey: "leave-type", component: LeaveType },
+  { pageKey: "leave-application", component: LeaveApplication },
+  { pageKey: "waiting-application", component: WaitingApplication },
+  { pageKey: "approved-application", component: ApprovedApplication },
+  { pageKey: "declined-application", component: DeclineApplication },
+  { pageKey: "discount", component: Discount },
+  { pageKey: "fee-type", component: FeeType },
+  { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "manage-invoice", component: ManageInvoice },
+  { pageKey: "due-invoice", component: DueInvoice },
+  { pageKey: "due-receipt", component: DueReceipt },
+  { pageKey: "paid-receipt", component: PaidReceipt },
+  { pageKey: "due-fee-email", component: DueFeeEmail },
+  { pageKey: "due-fee-sms", component: DueFeeSMS },
+  { pageKey: "income-head", component: IncomeHead },
+  { pageKey: "income", component: Income },
+  { pageKey: "expenditure-head", component: ExpenditureHead },
+  { pageKey: "expenditure", component: Expenditure },
+  { pageKey: "income-report", component: IncomeReport },
+  { pageKey: "expenditure-report", component: ExpenditureReport },
+  { pageKey: "invoice-report", component: InvoiceReport },
+  { pageKey: "due-fee-report", component: DueFeeReport },
+  { pageKey: "fee-collection-report", component: FeeCollectionReport },
+  { pageKey: "accounting-balance-report", component: AccountingBalanceReport },
+  { pageKey: "library-report", component: LibraryReport },
+  { pageKey: "student-attendance-report", component: StudentAttendanceReport },
+  {
+    pageKey: "student-yearly-attendance-report",
+    component: StudentYearlyAttendanceReport,
+  },
+  { pageKey: "teacher-attendance-report", component: TeacherAttendanceReport },
+  {
+    pageKey: "teacher-yearly-attendance-report",
+    component: TeacherYearlyAttendanceReport,
+  },
+  {
+    pageKey: "employee-attendance-report",
+    component: EmployeeAttendanceReport,
+  },
+  {
+    pageKey: "employee-yearly-attendance-report",
+    component: EmployeeYearlyAttendanceReport,
+  },
+  { pageKey: "student-report", component: StudentReport },
+  { pageKey: "student-invoice-report", component: StudentInvoiceReport },
+  { pageKey: "student-activity-report", component: StudentActivityReport },
+  { pageKey: "payroll-report", component: PayrollReport },
+  { pageKey: "daily-transaction-report", component: DailyTransactionReport },
+  { pageKey: "daily-statement-report", component: DailyStatementReport },
+  { pageKey: "exam-result-report", component: ExamResultReport },
+  { pageKey: "supplier", component: Supplier },
+  { pageKey: "warehouse", component: Warehouse },
+  { pageKey: "category", component: Category },
+  { pageKey: "product", component: Product },
+  { pageKey: "purchase", component: Purchase },
+  { pageKey: "sale", component: Sale },
+  { pageKey: "issue", component: Issue },
+  { pageKey: "sale-create", component: SaleCreate },
+  { pageKey: "asset-vendor", component: Vendor },
+  { pageKey: "asset-store", component: AssetStore },
+  { pageKey: "asset-category", component: AssetCategory },
+  { pageKey: "asset-item", component: AssetItem },
+  { pageKey: "asset-purchase", component: AssetPurchase },
+  { pageKey: "asset-issue", component: AssetIssue },
+  { pageKey: "asset-return", component: AssetReturn },
+  { pageKey: "asset-report", component: AssetReport },
+  { pageKey: "add-asset-vendor", component: AssetVendorCreate },
+  { pageKey: "add-asset-store", component: AssetStoreCreate },
+  { pageKey: "add-asset-item", component: AssetItemCreate },
+  { pageKey: "add-asset-purchase", component: AssetPurchaseCreate },
+  { pageKey: "books-list", component: Book },
+  { pageKey: "book", component: Book },
+  { pageKey: "book-create", component: BookCreate },
+  { pageKey: "library-members", component: LibraryMember },
+  { pageKey: "non-library-members", component: NonLibraryMember },
+  { pageKey: "issue-book-create", component: IssueBookCreate },
+  { pageKey: "ebook", component: EBook },
+  { pageKey: "ebook-list", component: EBook },
+  { pageKey: "ebook-create", component: EBookCreate },
+  { pageKey: "vehicle", component: Vehicle },
+  { pageKey: "transport-member", component: TransportMember },
+  { pageKey: "transport-route", component: TransportRoute },
+  { pageKey: "transport-route-create", component: TransportRouteCreate },
+  { pageKey: "non-transport-member", component: NonTransportMember },
+  { pageKey: "vehicle-create", component: VehicleCreate },
+  { pageKey: "manage-hostel", component: ManageHostel },
+  { pageKey: "hostel-create", component: HostelCreate },
+  { pageKey: "manage-room", component: ManageRoom },
+  { pageKey: "add-room", component: RoomCreate },
+  { pageKey: "hostel-member", component: HostelMember },
+  { pageKey: "non-hostel-member", component: NonHostelMember },
+  { pageKey: "email", component: Email },
+  { pageKey: "email-create", component: EmailCreate },
+  { pageKey: "sms", component: SMS },
+  { pageKey: "sms-create", component: SMSCreate },
+  { pageKey: "frontend-page", component: FrontendPage },
+  { pageKey: "frontend-page-create", component: FrontendPageCreate },
+  { pageKey: "slider", component: Slider },
+  { pageKey: "slider-create", component: SliderCreate },
+  { pageKey: "about-school", component: AboutSchool },
+  { pageKey: "manage-award", component: ManageAward },
+  { pageKey: "manage-award-create", component: AwardCreate },
+  { pageKey: "manage-todo", component: ManageTodo },
+  { pageKey: "manage-todo-create", component: TodoCreate },
+  { pageKey: "faq", component: FAQ },
+  { pageKey: "subscription-faq", component: SubscriptionFAQ },
+  { pageKey: "subscription-slider", component: SubscriptionSlider },
+  { pageKey: "subscription-settings", component: SubscriptionSetting },
+  { pageKey: "images", component: Images },
+  { pageKey: "videos", component: Videos },
+  { pageKey: "student-type", component: StudentType },
+  { pageKey: "online-admission", component: OnlineAdmission },
+  { pageKey: "student-activity", component: StudentActivity },
+  { pageKey: "add-student-activity", component: AddStudentActivity },
+  { pageKey: "student-attendance", component: StudentAttendance },
+  { pageKey: "teacher-attendance", component: TeacherAttendance },
+  { pageKey: "employee-attendance", component: EmployeeAttendance },
+  { pageKey: "absent-email", component: AbsentEmail },
+  { pageKey: "add-absent-email", component: AddAbsentEmail },
+  { pageKey: "absent-sms", component: AbsentSMS },
+  { pageKey: "promotion", component: Promotion },
+  { pageKey: "id-card-setting", component: IdCardSetting },
+  { pageKey: "certificate-type", component: CertificateType },
+  { pageKey: "generate-certificate", component: GenerateCertificate },
+  { pageKey: "candidate", component: Candidate },
+  { pageKey: "donar", component: Donar },
+  { pageKey: "scholarship", component: Scholarship },
+  { pageKey: "guardian", component: Guardian },
+  { pageKey: "class", component: Class },
+  { pageKey: "section", component: Section },
+  { pageKey: "subject", component: Subject },
+  { pageKey: "add-subject", component: AddSubject },
+  { pageKey: "syllabus", component: Syllabus },
+  { pageKey: "add-syllabus", component: AddSyllabus },
+  { pageKey: "study-material", component: StudyMaterial },
+  { pageKey: "add-study-material", component: AddStudyMaterial },
+  { pageKey: "live-class", component: Liveclass },
+  { pageKey: "add-live-class", component: AddLiveClass },
   { pageKey: "assignment", component: Assignment },
   { pageKey: "submission", component: Submission },
   { pageKey: "lesson", component: Lesson },
@@ -448,6 +686,13 @@ const routeEntries = [
   { pageKey: "subscription-plans", component: SubscriptionPlan },
   { pageKey: "school-subscription", component: SchoolSubscription },
   { pageKey: "add-school", component: AddSchool },
+  { pageKey: "add-visitor-info", component: AddVisitorInfo },
+  { pageKey: "add-call-log", component: AddCallLog },
+  { pageKey: "add-postal-dispatch", component: AddPostalDispatch },
+  { pageKey: "add-notice", component: AddNotice },
+  { pageKey: "add-postal-receive", component: AddPostalReceive },
+  { pageKey: "add-teacher", component: AddTeacher },
+
 ];
 
 const AppRoute = ({
@@ -455,8 +700,6 @@ const AppRoute = ({
   user,
 
   role,
-  parentChildren,
-  selectedChildId,
   onNavigate,
 }) => {
   const normalizedRole = normalizeRole(

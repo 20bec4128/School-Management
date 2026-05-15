@@ -33,7 +33,13 @@ export const fetchStudyMaterials = async ({ schoolId, classId, subjectId } = {})
   const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   const data = await res.json()
-  return Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
+  return Array.isArray(data)
+    ? data
+    : Array.isArray(data?.content)
+      ? data.content
+      : Array.isArray(data?.value)
+        ? data.value
+        : []
 }
 
 export const createStudyMaterial = async (payload, file) => {

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -7,22 +6,13 @@ import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { fetchGalleries } from '../apis/galleryApi'
-import { findSchoolById } from '../utils/schoolScope'
 import {
-  createGalleryImage,
   deleteGalleryImage,
   fetchGalleryImages,
-  updateGalleryImage,
 } from '../apis/galleryImageApi'
 import '../assets/css/addModalShared.css'
 
-const emptyForm = {
-  schoolId: '',
-  galleryId: '',
-  title: '',
-  image: null,
-  caption: '',
-}
+
 
 const emptyFilters = {
   headOfficeId: '',
@@ -30,7 +20,7 @@ const emptyFilters = {
   galleryId: '',
 }
 
-const STEPS = ['Basic']
+
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
@@ -48,41 +38,7 @@ const columnOptions = [
   { key: 'caption', label: 'Caption' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const Images = () => {
+const Images = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -90,27 +46,13 @@ const Images = () => {
 
   const [rows, setRows] = useState([])
   const [galleries, setGalleries] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [editingId, setEditingId] = useState(null)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [addPreview, setAddPreview] = useState(null)
-  const [editPreview, setEditPreview] = useState(null)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-
-  const addImageRef = useRef(null)
-  const editImageRef = useRef(null)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -146,8 +88,6 @@ const Images = () => {
   const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
 
   const loadData = useCallback(async () => {
-    setLoading(true)
-    setError('')
     try {
       let schoolIdToFetch = null
       if (!isSuperAdmin) {
@@ -155,11 +95,8 @@ const Images = () => {
       }
       const list = await fetchGalleryImages(schoolIdToFetch ? { schoolId: schoolIdToFetch } : {})
       setRows(Array.isArray(list) ? list : [])
-    } catch (err) {
+    } catch {
       setRows([])
-      setError(err?.message || 'Failed to load gallery images')
-    } finally {
-      setLoading(false)
     }
   }, [activeSchoolId, authSchoolId, isSuperAdmin])
 
@@ -177,14 +114,11 @@ const Images = () => {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData()
   }, [loadData])
 
-  useEffect(() => {
-    const sid = isAddOpen ? addForm.schoolId : isEditOpen ? editForm.schoolId : null
-    if (sid) void loadGalleries(sid)
-    else setGalleries([])
-  }, [isAddOpen, addForm.schoolId, isEditOpen, editForm.schoolId, loadGalleries])
+
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -198,22 +132,7 @@ const Images = () => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
 
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleImageChange = (e, setPreview, setter) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setter((prev) => ({ ...prev, image: file }))
-    setPreview(URL.createObjectURL(file))
-  }
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
@@ -222,60 +141,25 @@ const Images = () => {
     setIsFilterSidebarOpen(false)
   }
 
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target
+    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const openAdd = () => {
+    sessionStorage.removeItem('edit-image-row')
+    onNavigate('images-add')
+  }
+
+  const openEdit = (row) => {
+    sessionStorage.setItem('edit-image-row', JSON.stringify(row))
+    onNavigate('images-add')
+  }
+
   const handleResetFilters = () => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setCurrentPage(1)
-  }
-
-  const handleSave = async (form, isEdit = false) => {
-    try {
-      const payload = {
-        schoolId: form.schoolId ? Number(form.schoolId) : null,
-        galleryId: form.galleryId ? Number(form.galleryId) : null,
-        title: form.title,
-        caption: form.caption,
-      }
-      if (isEdit) await updateGalleryImage(editingId, payload, form.image)
-      else await createGalleryImage(payload, form.image)
-      
-      await loadData()
-      setIsAddOpen(false)
-      setIsEditOpen(false)
-    } catch (err) {
-      alert(err.message || 'Operation failed')
-    }
-  }
-
-  const openAdd = () => {
-    setEditingId(null)
-    setAddForm({
-      ...emptyForm,
-      schoolId: isSuperAdmin ? '' : activeSchoolId ? String(activeSchoolId) : '',
-    })
-    setAddPreview(null)
-    setAddStep(0)
-    setIsAddOpen(true)
-  }
-
-  const openEdit = (row) => {
-    setEditingId(row.id)
-    if (isSuperAdmin) {
-      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      schoolId: row.schoolId ? String(row.schoolId) : '',
-      galleryId: row.galleryId ? String(row.galleryId) : '',
-      title: row.title,
-      image: null,
-      caption: row.caption || '',
-    })
-    setEditPreview(row.imagePath ? `/uploads/gallery_images/${row.imagePath}` : null)
-    setEditStep(0)
-    setIsEditOpen(true)
   }
 
   const handleDelete = async (id) => {
@@ -296,115 +180,7 @@ const Images = () => {
     return pages
   }
 
-  const renderForm = (form, setter, preview, imageRef, setPreview) => (
-    <>
-      <p className="avm-section-title">Basic Information</p>
-      <div className="avm-grid">
-        <div className="avm-field full" style={{ display: isSuperAdmin ? 'block' : 'none' }}>
-           <ManualScopeSelectors
-              enabled={isSuperAdmin}
-              headOffices={manualScope.headOffices}
-              schoolOptions={manualScope.schoolOptions}
-              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-              onHeadOfficeChange={(val) => {
-                manualScope.setSelectedHeadOfficeId(val)
-                manualScope.setSelectedSchoolId('')
-                setter((prev) => ({ ...prev, schoolId: '', galleryId: '' }))
-              }}
-              selectedSchoolId={form.schoolId}
-              onSchoolChange={(val) => setter(prev => ({ ...prev, schoolId: val, galleryId: '' }))}
-           />
-        </div>
 
-        {!isSuperAdmin && (
-          <FormField label="School Name" required full>
-            <select className="avm-select" id="schoolId" value={form.schoolId} onChange={(e) => {
-               const val = e.target.value
-               setter(prev => ({ ...prev, schoolId: val, galleryId: '' }))
-            }}>
-              <option value="">--Select School--</option>
-              {schoolOptions.map((school) => (
-                <option key={String(school.id)} value={String(school.id)}>
-                  {school.schoolName}
-                </option>
-              ))}
-            </select>
-          </FormField>
-        )}
-
-        <FormField label="Gallery" required full>
-          <select className="avm-select" id="galleryId" value={form.galleryId} onChange={handleChange(setter)}>
-            <option value="">--Select Gallery--</option>
-            {galleries.map((g) => (
-              <option key={String(g.id)} value={String(g.id)}>
-                {g.title}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Title" required full>
-          <input
-            type="text"
-            className="avm-input"
-            id="title"
-            placeholder="Image Title"
-            value={form.title}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <div className="avm-field full">
-          <label className="avm-label">
-            Image
-            <span className="req"> *</span>
-          </label>
-          <input
-            ref={imageRef}
-            type="file"
-            accept=".jpg,.jpeg,.png,.gif"
-            style={{ display: 'none' }}
-            onChange={(e) => handleImageChange(e, setPreview, setter)}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button type="button" className="avm-btn light" onClick={() => imageRef.current.click()}>
-              <i className="ri-upload-2-line"></i> Upload Image
-            </button>
-            {preview && (
-              <img
-                src={preview}
-                alt="preview"
-                style={{
-                  width: 80,
-                  height: 60,
-                  objectFit: 'cover',
-                  borderRadius: 8,
-                  border: '1px solid #d0d5dd',
-                }}
-              />
-            )}
-          </div>
-          <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>
-            Dimension:- Max-W: 1000px, Max-H: 600px
-          </span>
-          <span style={{ fontSize: '0.78rem', color: '#7a8a9a', marginTop: 4 }}>
-            Image file format: .jpg, .jpeg, .png or .gif
-          </span>
-        </div>
-
-        <FormField label="Caption" full>
-          <textarea
-            rows="4"
-            className="avm-input avm-textarea"
-            id="caption"
-            placeholder="Caption"
-            value={form.caption}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-      </div>
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -625,35 +401,7 @@ const Images = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="540px"
-        open={isAddOpen}
-        title="Add Images"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => handleSave(addForm, false)}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addPreview, addImageRef, setAddPreview)}
-      </WizardPopup>
 
-      <WizardPopup
-        modalWidth="540px"
-        open={isEditOpen}
-        title="Edit Images"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => handleSave(editForm, true)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editPreview, editImageRef, setEditPreview)}
-      </WizardPopup>
 
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Images" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>

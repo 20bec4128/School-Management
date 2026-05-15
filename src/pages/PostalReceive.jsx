@@ -1,46 +1,18 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
-import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
-import { 
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import {
   fetchPostalReceives, 
-  createPostalReceive, 
-  updatePostalReceive, 
   deletePostalReceive 
 } from '../apis/postalApi'
-import '../assets/css/addModalShared.css'
-
-const emptyForm = {
-  schoolId: '',
-  toTitle: '',
-  referenceNo: '',
-  address: '',
-  fromTitle: '',
-  date: new Date().toISOString().split('T')[0],
-  note: '',
-}
-
 const emptyFilters = {
   headOfficeId: '',
   schoolId: '',
-}
-
-const ADD_STEPS = ['Basic Info', 'Other Info']
-const EDIT_STEPS = ['Basic Info', 'Other Info']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'To Title': 'ri-user-received-line',
-  Reference: 'ri-file-list-3-line',
-  Address: 'ri-map-pin-2-line',
-  'From Title': 'ri-user-shared-line',
-  'Receive Date': 'ri-calendar-2-line',
-  Note: 'ri-sticky-note-line',
 }
 
 const columnOptions = [
@@ -51,41 +23,7 @@ const columnOptions = [
   { key: 'date', label: 'Receive Date' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const PostalReceive = () => {
+const PostalReceive = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -97,23 +35,15 @@ const PostalReceive = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
-  const attachmentRef = useRef()
-  const editAttachmentRef = useRef()
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const listSchoolId = isSuperAdmin
     ? (activeSchoolId ? String(activeSchoolId) : '')
     : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
-  const isSchoolLocked = !isSuperAdmin && !!listSchoolId
+
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -146,14 +76,11 @@ const PostalReceive = () => {
   }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData()
   }, [loadData])
 
-  useEffect(() => {
-    if (!isSuperAdmin && listSchoolId) {
-      setAddForm(prev => ({ ...prev, schoolId: listSchoolId }))
-    }
-  }, [isSuperAdmin, listSchoolId])
+
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -182,10 +109,7 @@ const PostalReceive = () => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
+
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
@@ -205,64 +129,13 @@ const PostalReceive = () => {
   }
 
   const openAdd = () => { 
-    setError('')
-    setAddForm({ ...emptyForm, schoolId: isSuperAdmin ? '' : listSchoolId || '' })
-    setAddStep(0)
-    setIsAddOpen(true) 
+    sessionStorage.removeItem('edit-postal-receive-row')
+    onNavigate('add-postal-receive')
   }
 
   const openEdit = (row) => {
-    setError('')
-    if (isSuperAdmin) {
-      const school = findSchoolById(manualScope.schoolOptions, row.schoolId)
-      if (school?.headOfficeId != null) {
-        manualScope.setSelectedScope(String(school.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
-      }
-    }
-    setEditForm({
-      ...row,
-      schoolId: row.schoolId != null ? String(row.schoolId) : listSchoolId,
-      date: row.date || new Date().toISOString().split('T')[0],
-      note: row.note || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    fromTitle: form.fromTitle || '',
-    referenceNo: form.referenceNo || '',
-    address: form.address || '',
-    toTitle: form.toTitle || '',
-    date: form.date || null,
-    note: form.note || '',
-  })
-
-  const handleSave = async () => {
-    try {
-      if (!addForm.schoolId || !addForm.toTitle || !addForm.fromTitle || !addForm.date) {
-        alert('Please fill all required fields')
-        return
-      }
-      await createPostalReceive(buildPayload(addForm))
-      setIsAddOpen(false)
-      void loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to save postal receive')
-      alert('Failed to save postal receive')
-    }
-  }
-
-  const handleUpdate = async () => {
-    try {
-      await updatePostalReceive(editForm.id, buildPayload(editForm))
-      setIsEditOpen(false)
-      void loadData()
-    } catch (err) {
-      setError(err?.message || 'Failed to update postal receive')
-      alert('Failed to update postal receive')
-    }
+    sessionStorage.setItem('edit-postal-receive-row', JSON.stringify(row))
+    onNavigate('add-postal-receive')
   }
 
   const handleDelete = async (id) => {
@@ -271,6 +144,7 @@ const PostalReceive = () => {
       await deletePostalReceive(id)
       void loadData()
     } catch (err) {
+      console.error(err);
       alert('Failed to delete postal receive')
     }
   }
@@ -283,117 +157,7 @@ const PostalReceive = () => {
     return pages
   }
 
-  const renderForm = (form, setter, aRef, step = 0) => (
-    <>
-      <p className="avm-section-title">{step === 0 ? 'Basic Information' : 'Other Information'}</p>
-      <div className="avm-grid">
-        {step === 0 ? (
-          <>
-        {isSuperAdmin ? (
-          <div className="avm-field full">
-            <ManualScopeSelectors
-              enabled={isSuperAdmin}
-              headOffices={manualScope.headOffices}
-              schoolOptions={schoolOptions}
-              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-              onHeadOfficeChange={(value) => {
-                manualScope.setSelectedHeadOfficeId(value)
-                manualScope.setSelectedSchoolId('')
-                setter((prev) => ({ ...prev, schoolId: '' }))
-              }}
-              selectedSchoolId={form.schoolId}
-              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value }))}
-            />
-          </div>
-        ) : (
-          <FormField label="School Name" required full>
-            <select 
-              className="avm-select" 
-              id="schoolId" 
-              value={form.schoolId} 
-              onChange={handleChange(setter)}
-              disabled={isSchoolLocked}
-            >
-              <option value="">--Select School--</option>
-              {schoolOptions.map(s => (
-                <option key={s.id} value={s.id}>{s.schoolName}</option>
-              ))}
-            </select>
-          </FormField>
-        )}
 
-        <FormField label="To Title" required>
-          <input
-            type="text"
-            className="avm-input"
-            id="toTitle"
-            placeholder="Enter to title"
-            value={form.toTitle}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Reference">
-          <input
-            type="text"
-            className="avm-input"
-            id="referenceNo"
-            placeholder="Enter reference"
-            value={form.referenceNo}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Address" required full>
-          <textarea
-            rows="3"
-            className="avm-input avm-textarea"
-            id="address"
-            placeholder="Enter address"
-            value={form.address}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="From Title" required>
-          <input
-            type="text"
-            className="avm-input"
-            id="fromTitle"
-            placeholder="Enter from title"
-            value={form.fromTitle}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-
-        <FormField label="Receive Date" required>
-          <input
-            type="date"
-            className="avm-input"
-            id="date"
-            value={form.date}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-          </>
-        ) : (
-          <>
-
-        <FormField label="Note" full>
-          <textarea
-            rows="3"
-            className="avm-input avm-textarea"
-            id="note"
-            placeholder="Enter note"
-            value={form.note}
-            onChange={handleChange(setter)}
-          />
-        </FormField>
-          </>
-        )}
-      </div>
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -568,37 +332,7 @@ const PostalReceive = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
-      <WizardPopup
-        modalWidth="540px"
-        open={isAddOpen}
-        title="Add Postal Receive"
-        steps={ADD_STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(ADD_STEPS.length - 1, s + 1))}
-        onSubmit={handleSave}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, attachmentRef, addStep)}
-      </WizardPopup>
 
-      {/* Edit Modal */}
-      <WizardPopup
-        modalWidth="540px"
-        open={isEditOpen}
-        title="Edit Postal Receive"
-        steps={EDIT_STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(EDIT_STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editAttachmentRef, editStep)}
-      </WizardPopup>
 
       {/* Filter Sidebar */}
       <SlideSidebar

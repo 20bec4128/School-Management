@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchEmployees } from '../apis/employeesApi'
 import { createVehicle } from '../apis/vehiclesApi'
 import { useAuth } from '../context/useAuth'
@@ -23,83 +21,30 @@ const emptyForm = {
 
 const VehicleCreate = ({ onNavigate }) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
-  const { activeSchoolId } = useSchool()
+  const { activeSchoolId, schoolOptions: schoolOptionsFromContext } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
-  const [headOffices, setHeadOffices] = useState([])
-  const [allSchools, setAllSchools] = useState([])
   const [driverEmployees, setDriverEmployees] = useState([])
   const [form, setForm] = useState(emptyForm)
-  const [loadingLookups, setLoadingLookups] = useState(false)
   const [loadingDrivers, setLoadingDrivers] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const currentSchoolId = isSuperAdmin
-    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : '')
-    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-
-  const currentHeadOfficeId = isSuperAdmin
-    ? (manualScope.selectedHeadOfficeId ? String(manualScope.selectedHeadOfficeId) : '')
-    : authHeadOfficeId != null
-      ? String(authHeadOfficeId)
-      : ''
-
   const schoolOptions = useMemo(() => {
-    const rows = Array.isArray(allSchools) ? allSchools : []
-    if (isSuperAdmin) {
-      if (!currentHeadOfficeId) return []
-      return rows.filter((school) => String(school.headOfficeId ?? '') === String(currentHeadOfficeId))
-    }
-    if (isHeadOfficeAdmin) {
-      return rows.filter((school) => String(school.headOfficeId ?? '') === String(authHeadOfficeId))
-    }
-    if (isSchoolAdmin) {
-      return rows.filter((school) => String(school.id ?? '') === String(authSchoolId))
-    }
-    return rows
-  }, [allSchools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, currentHeadOfficeId, authHeadOfficeId, authSchoolId])
+    if (isSuperAdmin) return manualScope.schoolOptions
+    return Array.isArray(schoolOptionsFromContext) ? schoolOptionsFromContext : []
+  }, [isSuperAdmin, manualScope.schoolOptions, schoolOptionsFromContext])
 
   const selectedSchoolName = useMemo(() => {
-    const match = Array.isArray(allSchools)
-      ? allSchools.find((school) => String(school.id ?? '') === String(form.schoolId))
+    const match = Array.isArray(schoolOptionsFromContext)
+      ? schoolOptionsFromContext.find((school) => String(school.id ?? '') === String(form.schoolId))
       : null
     return match?.schoolName || authSchoolName || ''
-  }, [allSchools, form.schoolId, authSchoolName])
-
-  useEffect(() => {
-    if (status !== 'ready' || !token) return
-    let cancelled = false
-
-    const loadLookups = async () => {
-      setLoadingLookups(true)
-      try {
-        const [headOfficePage, schoolsData] = await Promise.all([
-          isSuperAdmin || isHeadOfficeAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-          fetchSchoolsLookup(),
-        ])
-        if (cancelled) return
-        setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
-        setAllSchools(Array.isArray(schoolsData) ? schoolsData : [])
-      } catch (err) {
-        if (cancelled) return
-        console.error('Failed to load vehicle lookups:', err)
-        setHeadOffices([])
-        setAllSchools([])
-      } finally {
-        if (!cancelled) setLoadingLookups(false)
-      }
-    }
-
-    void loadLookups()
-    return () => {
-      cancelled = true
-    }
-  }, [status, token, isSuperAdmin, isHeadOfficeAdmin])
+  }, [authSchoolName, form.schoolId, schoolOptionsFromContext])
 
   useEffect(() => {
     if (!isSchoolAdmin) return
@@ -216,10 +161,10 @@ const VehicleCreate = ({ onNavigate }) => {
               isSuperAdmin={isSuperAdmin}
               isHeadOfficeAdmin={isHeadOfficeAdmin}
               isSchoolAdmin={isSchoolAdmin}
-              headOffices={headOffices}
+              headOffices={manualScope.headOffices}
               schoolOptions={schoolOptions}
               driverEmployees={driverEmployees}
-              selectedHeadOfficeId={form.headOfficeId}
+              selectedHeadOfficeId={isSuperAdmin ? manualScope.selectedHeadOfficeId : form.headOfficeId}
               selectedSchoolId={form.schoolId}
               onHeadOfficeChange={(value) => {
                 setForm((prev) => ({
@@ -256,10 +201,10 @@ const VehicleCreate = ({ onNavigate }) => {
                 Cancel
               </button>
               <button
-                type="submit"
-                className="btn btn-primary-600 px-32"
-                disabled={saving || loadingLookups}
-              >
+              type="submit"
+              className="btn btn-primary-600 px-32"
+              disabled={saving}
+            >
                 {saving ? 'Saving...' : 'Save Vehicle'}
               </button>
             </div>

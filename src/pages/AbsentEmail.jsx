@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
-import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { ABSENT_EMAIL_EDIT_STORAGE_KEY, ABSENT_EMAIL_ROWS_STORAGE_KEY } from '../constants/absentEmail'
 import '../assets/css/addModalShared.css'
 
 const absentEmails = [
@@ -43,58 +42,6 @@ const absentEmails = [
   },
 ]
 
-const receiverOptionsMap = {
-  Student: ['Alice Brown', 'Michael Brown', 'Sophia Wilson', 'David Johnson', 'Emma Davis'],
-  Parent: ['Mr. Brown', 'Mrs. Brown', 'Mrs. Wilson', 'Mr. Johnson', 'Mrs. Davis'],
-  Guardian: ['Guardian - Alice', 'Guardian - Michael', 'Guardian - Sophia'],
-}
-
-const templateOptions = {
-  'Absent Alert Template': {
-    subject: 'Absent Notification for {student_name}',
-    emailBody:
-      'Dear {receiver_name},\n\nThis is to inform you that {student_name} was absent on {absent_date} in {class_name} - {section_name}.\n\nRegards,\n{school_name}',
-  },
-  'Parent Notice Template': {
-    subject: 'Attendance Alert - {student_name}',
-    emailBody:
-      'Hello {receiver_name},\n\nPlease note that {student_name} was marked absent on {absent_date}.\n\nSchool: {school_name}\nClass: {class_name}\nSection: {section_name}\n\nThank you.',
-  },
-  'Guardian Follow-up Template': {
-    subject: 'Follow-up on Absence - {student_name}',
-    emailBody:
-      'Dear {receiver_name},\n\nWe would like to inform you that {student_name} was absent on {absent_date}. Kindly ensure regular attendance.\n\nRegards,\n{school_name}',
-  },
-}
-
-const emptyForm = {
-  school: '',
-  receiverType: '',
-  receiver: '',
-  template: '',
-  absentDate: '',
-  subject: '',
-  emailBody: '',
-}
-
-const emptyFilters = {
-  school: 'Select',
-  receiverType: 'Select',
-}
-
-const STEPS = ['Basic']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Receiver Type': 'ri-group-line',
-  Receiver: 'ri-user-3-line',
-  Template: 'ri-file-list-3-line',
-  'Absent Date': 'ri-calendar-2-line',
-  Subject: 'ri-mail-open-line',
-  'Email Body': 'ri-mail-send-line',
-  'Dynamic Tag': 'ri-price-tag-3-line',
-}
-
 const columnOptions = [
   { key: 'school', label: 'School' },
   { key: 'receiverType', label: 'Receiver Type' },
@@ -102,75 +49,45 @@ const columnOptions = [
   { key: 'sendDate', label: 'Send Date' },
 ]
 
-const dynamicTags = [
-  '{school_name}',
-  '{receiver_name}',
-  '{student_name}',
-  '{class_name}',
-  '{section_name}',
-  '{absent_date}',
-]
-
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
+const emptyFilters = {
+  school: 'Select',
+  receiverType: 'Select',
 }
 
-const AbsentEmail = () => {
+const readRows = () => {
+  try {
+    const raw = sessionStorage.getItem(ABSENT_EMAIL_ROWS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : absentEmails
+  } catch {
+    return absentEmails
+  }
+}
+
+const AbsentEmail = ({ onNavigate }) => {
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
+  const [rows, setRows] = useState(() => readRows())
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  useEffect(() => {
+    sessionStorage.setItem(ABSENT_EMAIL_ROWS_STORAGE_KEY, JSON.stringify(rows))
+  }, [rows])
+
   const schoolOptions = useMemo(
-    () => Array.from(new Set(absentEmails.map((item) => item.school))),
-    [],
+    () => Array.from(new Set(rows.map((item) => item.school))),
+    [rows],
   )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
 
-    return absentEmails.filter((row) => {
+    return rows.filter((row) => {
       const matchesSearch =
         !q ||
         [row.school, row.receiverType, row.subject, row.sendDate].join(' ').toLowerCase().includes(q)
@@ -181,7 +98,7 @@ const AbsentEmail = () => {
 
       return matchesSearch && matchesSchool && matchesReceiverType
     })
-  }, [search, filters])
+  }, [rows, search, filters])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
 
@@ -206,39 +123,6 @@ const AbsentEmail = () => {
     )
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-
-    setter((prev) => {
-      if (id === 'school') {
-        return {
-          ...prev,
-          school: value,
-        }
-      }
-
-      if (id === 'receiverType') {
-        return {
-          ...prev,
-          receiverType: value,
-          receiver: '',
-        }
-      }
-
-      if (id === 'template') {
-        const selectedTemplate = templateOptions[value]
-        return {
-          ...prev,
-          template: value,
-          subject: selectedTemplate ? selectedTemplate.subject : prev.subject,
-          emailBody: selectedTemplate ? selectedTemplate.emailBody : prev.emailBody,
-        }
-      }
-
-      return { ...prev, [id]: value }
-    })
-  }
-
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
@@ -258,23 +142,18 @@ const AbsentEmail = () => {
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setIsAddOpen(true)
+    sessionStorage.removeItem(ABSENT_EMAIL_EDIT_STORAGE_KEY)
+    onNavigate('add-absent-email')
   }
 
   const openEdit = (row) => {
-    setEditForm({
-      school: row.school,
-      receiverType: row.receiverType,
-      receiver: receiverOptionsMap[row.receiverType]?.[0] || '',
-      template: '',
-      absentDate: row.sendDate,
-      subject: row.subject,
-      emailBody: '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+    sessionStorage.setItem(ABSENT_EMAIL_EDIT_STORAGE_KEY, JSON.stringify(row))
+    onNavigate('add-absent-email')
+  }
+
+  const handleDelete = (row) => {
+    setRows((prev) => prev.filter((item) => item.sl !== row.sl))
+    setSelectedRows((prev) => prev.filter((id) => id !== row.sl))
   }
 
   const getVisiblePages = () => {
@@ -283,133 +162,6 @@ const AbsentEmail = () => {
     const end = Math.min(totalPages, start + 2)
     for (let p = start; p <= end; p++) pages.push(p)
     return pages
-  }
-
-  const renderForm = (form, setter) => {
-    const receiverOptions = form.receiverType ? receiverOptionsMap[form.receiverType] || [] : []
-
-    return (
-      <>
-        <p className="avm-section-title">Basic Information</p>
-        <div className="avm-grid">
-          <FormField label="School Name" required full>
-            <select className="avm-select" id="school" value={form.school} onChange={handleChange(setter)}>
-              <option value="">--Select School--</option>
-              <option>Windsor Park High School</option>
-            </select>
-          </FormField>
-
-          <FormField label="Receiver Type" required>
-            <select
-              className="avm-select"
-              id="receiverType"
-              value={form.receiverType}
-              onChange={handleChange(setter)}
-            >
-              <option value="">--Select --</option>
-              <option>Student</option>
-              <option>Parent</option>
-              <option>Guardian</option>
-            </select>
-          </FormField>
-
-          <FormField label="Receiver" required>
-            <select
-              className="avm-select"
-              id="receiver"
-              value={form.receiver}
-              onChange={handleChange(setter)}
-              disabled={!form.receiverType}
-            >
-              <option value="">--Select--</option>
-              {receiverOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Template">
-            <select
-              className="avm-select"
-              id="template"
-              value={form.template}
-              onChange={handleChange(setter)}
-            >
-              <option value="">--Select--</option>
-              {Object.keys(templateOptions).map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Absent Date" required>
-            <input
-              type="date"
-              className="avm-input"
-              id="absentDate"
-              value={form.absentDate}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-
-          <FormField label="Subject" required full>
-            <input
-              type="text"
-              className="avm-input"
-              id="subject"
-              placeholder="Enter subject"
-              value={form.subject}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-
-          <FormField label="Email Body" required full>
-            <textarea
-              rows="5"
-              className="avm-input avm-textarea"
-              id="emailBody"
-              placeholder="Enter email body"
-              value={form.emailBody}
-              onChange={handleChange(setter)}
-            />
-          </FormField>
-
-          <FormField label="Dynamic Tag" full noIcon>
-            <div
-              style={{
-                border: '1px solid #d0d5dd',
-                borderRadius: '0.9rem',
-                padding: '0.9rem',
-                background: '#f8fafc',
-              }}
-            >
-              <div className="avm-chip-wrap" style={{ marginTop: 0 }}>
-                {dynamicTags.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    className="avm-chip"
-                    style={{ border: 'none', cursor: 'pointer' }}
-                    onClick={() =>
-                      setter((prev) => ({
-                        ...prev,
-                        emailBody: prev.emailBody ? `${prev.emailBody} ${tag}` : tag,
-                      }))
-                    }
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </FormField>
-        </div>
-      </>
-    )
   }
 
   return (
@@ -575,10 +327,7 @@ const AbsentEmail = () => {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
                       No absent emails found.
                     </td>
                   </tr>
@@ -616,6 +365,7 @@ const AbsentEmail = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={() => handleDelete(row)}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -665,36 +415,6 @@ const AbsentEmail = () => {
           </div>
         </div>
       </div>
-
-      <WizardPopup
-        modalWidth="620px"
-        open={isAddOpen}
-        title="Send Email"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Send"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="620px"
-        open={isEditOpen}
-        title="Edit Absent Email"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
@@ -764,4 +484,3 @@ const AbsentEmail = () => {
 }
 
 export default AbsentEmail
-

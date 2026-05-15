@@ -1,13 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import {
-  createSyllabus,
-  deleteSyllabus,
-  fetchSyllabuses,
-  updateSyllabus,
-} from '../apis/syllabusApi'
+import { deleteSyllabus, fetchSyllabuses } from '../apis/syllabusApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
@@ -18,89 +12,11 @@ import '../assets/css/addModalShared.css'
 
 const sessionYearOptions = ['2024-2025', '2023-2024', '2022-2023']
 
-const ACCEPTED_DOC_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.txt'
-const ACCEPTED_DOC_LABEL = '.pdf, .doc/docx, .ppt/pptx or .txt'
-
-const emptyForm = {
-  schoolId: '',
-  classId: '',
-  subjectId: '',
-  title: '',
-  sessionYear: '',
-  syllabus: null,
-  note: '',
-  existingFileName: '',
-}
-
 const emptyFilters = {
   school: 'Select',
   className: 'Select',
   subject: 'Select',
   sessionYear: 'Select',
-}
-
-const STEPS = ['Basic Info', 'Syllabus & Notes']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Title: 'ri-file-list-2-line',
-  Class: 'ri-building-line',
-  Subject: 'ri-book-open-line',
-  'Session Year': 'ri-calendar-line',
-  Note: 'ri-sticky-note-line',
-}
-
-const columnOptions = [
-  { key: 'school', label: 'School' },
-  { key: 'title', label: 'Title' },
-  { key: 'className', label: 'Class' },
-  { key: 'subject', label: 'Subject' },
-  { key: 'sessionYear', label: 'Session Year' },
-  { key: 'file', label: 'File' },
-]
-
-const getFileIcon = (fileName) => {
-  if (!fileName) return 'ri-file-line'
-  const ext = fileName.split('.').pop().toLowerCase()
-  if (ext === 'pdf') return 'ri-file-pdf-line'
-  if (['doc', 'docx'].includes(ext)) return 'ri-file-word-line'
-  if (['ppt', 'pptx'].includes(ext)) return 'ri-slideshow-line'
-  if (ext === 'txt') return 'ri-file-text-line'
-  return 'ri-file-line'
-}
-
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
 }
 
 const normalizeSyllabus = (row) => ({
@@ -155,7 +71,26 @@ const getChildClassId = (child) =>
   child?.schoolClass?.id ??
   null
 
-const Syllabus = () => {
+const columnOptions = [
+  { key: 'school', label: 'School' },
+  { key: 'title', label: 'Title' },
+  { key: 'className', label: 'Class' },
+  { key: 'subject', label: 'Subject' },
+  { key: 'sessionYear', label: 'Session Year' },
+  { key: 'file', label: 'File' },
+]
+
+const getFileIcon = (fileName) => {
+  if (!fileName) return 'ri-file-line'
+  const ext = String(fileName).split('.').pop().toLowerCase()
+  if (ext === 'pdf') return 'ri-file-pdf-line'
+  if (ext === 'doc' || ext === 'docx') return 'ri-file-word-line'
+  if (ext === 'ppt' || ext === 'pptx') return 'ri-slideshow-line'
+  if (ext === 'txt') return 'ri-file-text-line'
+  return 'ri-file-line'
+}
+
+const Syllabus = ({ onNavigate }) => {
   const { user, role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren } = useAuth()
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const canManage = can(user, ['SYLLABUS_MANAGE', 'SYLLABUS_MANAGE_ASSIGNED', '*'])
@@ -167,27 +102,19 @@ const Syllabus = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [editingId, setEditingId] = useState(null)
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [addSyllabusFile, setAddSyllabusFile] = useState(null)
-  const [editSyllabusFile, setEditSyllabusFile] = useState(null)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const roleUpper = String(role || '').toUpperCase()
-  const isTeacherScope = roleUpper === 'TEACHER'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
+  const isTeacherScope = roleUpper === 'TEACHER'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const effectiveSchoolId =
     roleUpper === 'STUDENT'
@@ -204,7 +131,7 @@ const Syllabus = () => {
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : schoolId ? String(schoolId) : ''
   const resolvedSchoolName = schoolName || ''
   const resolvedSchoolLabel = resolvedSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
-  const isSchoolLocked = !isSchoolSelectionEnabled && !!resolvedSchoolId
+
   const effectiveSchoolsLookup = useMemo(() => {
     const byId = new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((row) => [String(row?.id), row]))
     if (resolvedSchoolId && !byId.has(String(resolvedSchoolId))) {
@@ -216,9 +143,6 @@ const Syllabus = () => {
     return Array.from(byId.values()).sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
   }, [resolvedSchoolId, resolvedSchoolName, schoolsLookup])
 
-  const addFileRef = useRef(null)
-  const editFileRef = useRef(null)
-
   const loadLookups = useCallback(async () => {
     if (!canManage) {
       setSchoolsLookup([])
@@ -226,6 +150,7 @@ const Syllabus = () => {
       setSubjectsLookup([])
       return
     }
+
     const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
       fetchSchoolsLookup(),
       fetchClasses(),
@@ -242,6 +167,7 @@ const Syllabus = () => {
   const loadSyllabuses = useCallback(async () => {
     setLoading(true)
     setError('')
+
     try {
       const scopedParams = isStudentScope
         ? (effectiveSchoolId && effectiveClassId
@@ -317,8 +243,7 @@ const Syllabus = () => {
       const matchesSchool = filters.school === 'Select' || row?.school === filters.school
       const matchesClass = filters.className === 'Select' || row?.className === filters.className
       const matchesSubject = filters.subject === 'Select' || row?.subject === filters.subject
-      const matchesSession =
-        filters.sessionYear === 'Select' || row?.sessionYear === filters.sessionYear
+      const matchesSession = filters.sessionYear === 'Select' || row?.sessionYear === filters.sessionYear
 
       return matchesSearch && matchesSchool && matchesClass && matchesSubject && matchesSession
     })
@@ -351,29 +276,6 @@ const Syllabus = () => {
     )
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleSchoolChange = (setter) => (e) => {
-    if (isTeacherScope) return
-    const schoolId = e.target.value
-    setter((prev) => ({ ...prev, schoolId, classId: '', subjectId: '' }))
-  }
-
-  const handleClassChange = (setter) => (e) => {
-    const classId = e.target.value
-    setter((prev) => ({ ...prev, classId, subjectId: '' }))
-  }
-
-  const handleFileChange = (setter, setFile) => (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setter((prev) => ({ ...prev, syllabus: file }))
-    setFile(file)
-  }
-
   const handlePendingFilterChange = (e) => {
     if (isStudentScope) return
     if (isTeacherScope && e.target.id === 'school') return
@@ -386,6 +288,7 @@ const Syllabus = () => {
     if (isStudentScope) return
     setFilters(isTeacherScope ? { ...pendingFilters, school: resolvedSchoolLabel } : pendingFilters)
     setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
   }
 
   const handleResetFilters = () => {
@@ -398,139 +301,24 @@ const Syllabus = () => {
     setCurrentPage(1)
   }
 
-  const closeAdd = () => {
-    setIsAddOpen(false)
-    setAddForm(emptyForm)
-    setAddSyllabusFile(null)
-    setAddStep(0)
-  }
-
-  const closeEdit = () => {
-    setIsEditOpen(false)
-    setEditForm(emptyForm)
-    setEditSyllabusFile(null)
-    setEditStep(0)
-    setEditingId(null)
-  }
-
-  const openAdd = () => {
+  const handleAdd = () => {
     if (!canManage) return
-    setError('')
-    setAddForm(resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
-    setAddSyllabusFile(null)
-    setAddStep(0)
-    if (addFileRef.current) addFileRef.current.value = ''
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem('edit-syllabus-row')
+    } catch {
+      // ignore session storage failures
+    }
+    onNavigate?.('add-syllabus')
   }
 
-  const openEdit = (row) => {
+  const handleEdit = (row) => {
     if (!canManage) return
-    setError('')
-    setEditingId(row?.id ?? null)
-    setEditForm({
-      schoolId: row?.schoolId || resolvedSchoolId,
-      classId: row?.classId || '',
-      subjectId: row?.subjectId || '',
-      title: row?.title || '',
-      sessionYear: row?.sessionYear || '',
-      syllabus: null,
-      note: row?.note || '',
-      existingFileName: row?.fileName || '',
-    })
-    setEditSyllabusFile(null)
-    if (editFileRef.current) editFileRef.current.value = ''
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
-  }
-
-  const getClassesForSchool = (schoolId) => {
-    const rows = classesLookup.filter((row) => !schoolId || String(row?.schoolId) === String(schoolId))
-    return rows.sort((a, b) => (a?.className || '').localeCompare(b?.className || ''))
-  }
-
-  const getSubjectsForForm = (schoolId, classId) => {
-    const rows = subjectsLookup.filter((row) => {
-      const matchesSchool = !schoolId || String(row?.schoolId) === String(schoolId)
-      const matchesClass = !classId || String(row?.classId) === String(classId)
-      return matchesSchool && matchesClass
-    })
-    return rows.sort((a, b) => (a?.subject || a?.name || '').localeCompare(b?.subject || b?.name || ''))
-  }
-
-  const getValidationError = (form) => {
-    if (!form.schoolId) return 'Please select a school.'
-    if (!form.classId) return 'Please select a class.'
-    if (!form.subjectId) return 'Please select a subject.'
-    if (!form.title.trim()) return 'Please enter a title.'
-    if (!form.sessionYear) return 'Please select an academic year.'
-    return ''
-  }
-
-  const buildPayload = (form) => ({
-    schoolId: Number(form.schoolId),
-    classId: Number(form.classId),
-    subjectId: Number(form.subjectId),
-    title: form.title.trim(),
-    sessionYear: form.sessionYear,
-    note: form.note || '',
-  })
-
-  const handleCreate = async () => {
-    if (saving) return
-    const validationError = getValidationError(addForm)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    setSaving(true)
-    setError('')
     try {
-      const created = normalizeSyllabus(await createSyllabus(buildPayload(addForm), addSyllabusFile))
-      setSyllabuses((prev) => [created, ...prev])
-      closeAdd()
-      setCurrentPage(1)
-    } catch (e) {
-      setError(e?.message || 'Failed to create syllabus')
-    } finally {
-      setSaving(false)
+      sessionStorage.setItem('edit-syllabus-row', JSON.stringify(row))
+    } catch {
+      // ignore session storage failures
     }
-  }
-
-  const handleUpdate = async () => {
-    if (saving) return
-    if (!editingId) {
-      setError('No syllabus selected for update')
-      return
-    }
-
-    const validationError = getValidationError(editForm)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    setSaving(true)
-    setError('')
-    try {
-      const updated = normalizeSyllabus(
-        await updateSyllabus(editingId, buildPayload(editForm), editSyllabusFile),
-      )
-      setSyllabuses((prev) => prev.map((row) => (row.id === updated.id ? updated : row)))
-      closeEdit()
-    } catch (e) {
-      setError(e?.message || 'Failed to update syllabus')
-    } finally {
-      setSaving(false)
-    }
+    onNavigate?.('add-syllabus')
   }
 
   const handleDelete = async (id) => {
@@ -552,261 +340,38 @@ const Syllabus = () => {
     }
   }
 
-  const renderForm = (form, setter, step, syllabusFile, setSyllabusFile, fileRef) => {
-    const availableClasses = getClassesForSchool(form.schoolId)
-    const availableSubjects = getSubjectsForForm(form.schoolId, form.classId)
-
-    return (
-      <>
-        <p className="avm-section-title">{STEPS[step]}</p>
-        <div className="avm-grid">
-          {step === 0 && (
-            <>
-              <div
-                className="full"
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.6rem',
-                  background: '#fff8e6',
-                  border: '1px solid #fde68a',
-                  borderRadius: '0.65rem',
-                  padding: '0.75rem 1rem',
-                }}
-              >
-                <i
-                  className="ri-information-line"
-                  style={{ color: '#d97706', fontSize: '1rem', flexShrink: 0, marginTop: 2 }}
-                ></i>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#92400e', lineHeight: 1.5 }}>
-                  <strong>Instruction:</strong> Please add academic year before creating a syllabus.
-                </p>
-              </div>
-
-              <FormField label="School Name" required full>
-                {isTeacherScope ? (
-                  <input
-                    className="avm-input"
-                    value={resolvedSchoolLabel}
-                    readOnly
-                    aria-readonly="true"
-                  />
-                ) : (
-                  <select
-                    className="avm-select"
-                    id="schoolId"
-                    value={form.schoolId}
-                    onChange={handleSchoolChange(setter)}
-                    disabled={saving || isSchoolLocked}
-                  >
-                    <option value="">--Select School--</option>
-                    {effectiveSchoolsLookup.map((school) => (
-                      <option key={school.id} value={String(school.id)}>
-                        {school.schoolName}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </FormField>
-
-              <FormField label="Title" required full>
-                <input
-                  type="text"
-                  className="avm-input"
-                  id="title"
-                  placeholder="Title"
-                  value={form.title}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Class" required>
-                <select
-                  className="avm-select"
-                  id="classId"
-                  value={form.classId}
-                  onChange={handleClassChange(setter)}
-                  disabled={!form.schoolId}
-                >
-                  <option value="">--Select--</option>
-                  {availableClasses.map((item) => (
-                    <option key={item.id} value={String(item.id)}>
-                      {item.className}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Subject" required>
-                <select
-                  className="avm-select"
-                  id="subjectId"
-                  value={form.subjectId}
-                  onChange={handleChange(setter)}
-                  disabled={!form.schoolId || !form.classId}
-                >
-                  <option value="">--Select--</option>
-                  {availableSubjects.map((item) => (
-                    <option key={item.id} value={String(item.id)}>
-                      {item.subject || item.name}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Session Year" required full>
-                <select
-                  className="avm-select"
-                  id="sessionYear"
-                  value={form.sessionYear}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select--</option>
-                  {sessionYearOptions.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-            </>
-          )}
-
-          {step === 1 && (
-            <>
-              <div className="avm-field full">
-                <label className="avm-label">Syllabus</label>
-                <div
-                  style={{
-                    border: '2px dashed #d0d5dd',
-                    borderRadius: '0.75rem',
-                    padding: '1.5rem 1.25rem',
-                    background: '#f8fafc',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    cursor: 'pointer',
-                    transition: 'border-color 0.2s, background 0.2s',
-                  }}
-                  onClick={() => fileRef.current?.click()}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#45597a'
-                    e.currentTarget.style.background = '#f0f4f8'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#d0d5dd'
-                    e.currentTarget.style.background = '#f8fafc'
-                  }}
-                >
-                  {syllabusFile ? (
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        background: '#e8edf4',
-                        borderRadius: '0.6rem',
-                        padding: '0.65rem 1rem',
-                        width: '100%',
-                      }}
-                    >
-                      <i
-                        className={getFileIcon(syllabusFile.name)}
-                        style={{ fontSize: '1.5rem', color: '#45597a', flexShrink: 0 }}
-                      ></i>
-                      <div style={{ minWidth: 0 }}>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: '0.875rem',
-                            fontWeight: 600,
-                            color: '#34393f',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {syllabusFile.name}
-                        </p>
-                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#7a8a9a' }}>
-                          {(syllabusFile.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        style={{
-                          width: 56,
-                          height: 56,
-                          borderRadius: '50%',
-                          background: '#e8edf4',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <i
-                          className="ri-upload-cloud-2-line"
-                          style={{ fontSize: '1.6rem', color: '#45597a' }}
-                        ></i>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#45597a' }}>
-                          Click to upload document
-                        </p>
-                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                          Document file format: {ACCEPTED_DOC_LABEL}
-                        </p>
-                        {form.existingFileName ? (
-                          <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: '#45597a' }}>
-                            Current file: {form.existingFileName}
-                          </p>
-                        ) : null}
-                      </div>
-                    </>
-                  )}
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept={ACCEPTED_DOC_TYPES}
-                    style={{ display: 'none' }}
-                    onChange={handleFileChange(setter, setSyllabusFile)}
-                  />
-                </div>
-                {syllabusFile && (
-                  <button
-                    type="button"
-                    className="avm-btn light sm"
-                    style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}
-                    onClick={() => {
-                      setter((prev) => ({ ...prev, syllabus: null }))
-                      setSyllabusFile(null)
-                      if (fileRef.current) fileRef.current.value = ''
-                    }}
-                  >
-                    <i className="ri-delete-bin-line"></i> Remove
-                  </button>
-                )}
-              </div>
-
-              <FormField label="Note" full>
-                <textarea
-                  rows={4}
-                  className="avm-input avm-textarea"
-                  id="note"
-                  placeholder="Note"
-                  value={form.note}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </>
-          )}
-        </div>
-      </>
-    )
+  const getVisiblePages = () => {
+    const pages = []
+    const start = Math.max(1, currentPage - 1)
+    const end = Math.min(totalPages, start + 2)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
   }
+
+  const getClassesForSchool = (schoolIdValue) => {
+    const rows = classesLookup.filter((row) => !schoolIdValue || String(row?.schoolId) === String(schoolIdValue))
+    return rows.sort((a, b) => (a?.className || '').localeCompare(b?.className || ''))
+  }
+
+  const getSubjectsForSchool = (schoolIdValue, classIdValue) => {
+    const rows = subjectsLookup.filter((row) => {
+      const matchesSchool = !schoolIdValue || String(row?.schoolId) === String(schoolIdValue)
+      const matchesClass = !classIdValue || String(row?.classId) === String(classIdValue)
+      return matchesSchool && matchesClass
+    })
+    return rows.sort((a, b) => (a?.subject || a?.name || '').localeCompare(b?.subject || b?.name || ''))
+  }
+
+  const schoolNameById = useMemo(() => {
+    const map = {}
+    effectiveSchoolsLookup.forEach((school) => {
+      map[String(school.id)] = school.schoolName
+    })
+    return map
+  }, [effectiveSchoolsLookup])
+
+  const teacherSchoolName = resolvedSchoolLabel || schoolNameById[resolvedSchoolId] || ''
+  const getSchoolName = (row) => row.school || schoolNameById[row.schoolId] || '-'
 
   return (
     <div className="dashboard-main-body">
@@ -827,7 +392,7 @@ const Syllabus = () => {
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
+            onClick={handleAdd}
           >
             <span className="d-flex text-md">
               <i className="ri-add-large-line"></i>
@@ -988,6 +553,7 @@ const Syllabus = () => {
                   {canManage ? <th scope="col">Action</th> : null}
                 </tr>
               </thead>
+
               <tbody>
                 {loading ? (
                   <tr>
@@ -998,7 +564,7 @@ const Syllabus = () => {
                       Loading syllabus records...
                     </td>
                   </tr>
-                ) : paginated.length === 0 ? (
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td
                       colSpan={visibleColumnCount + (canManage ? 2 : 0)}
@@ -1025,7 +591,7 @@ const Syllabus = () => {
                           </div>
                         </td>
                       ) : null}
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
+                      {visibleColumns.school ? <td>{getSchoolName(row)}</td> : null}
                       {visibleColumns.title ? (
                         <td>
                           <span className="fw-medium text-primary-light d-flex align-items-center gap-6">
@@ -1072,7 +638,7 @@ const Syllabus = () => {
                             <button
                               type="button"
                               className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                              onClick={() => openEdit(row)}
+                              onClick={() => handleEdit(row)}
                               title="Edit"
                             >
                               <i className="ri-edit-line"></i>
@@ -1082,6 +648,7 @@ const Syllabus = () => {
                               className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                               onClick={() => handleDelete(row.id)}
                               title="Delete"
+                              disabled={saving}
                             >
                               <i className="ri-delete-bin-line"></i>
                             </button>
@@ -1136,36 +703,6 @@ const Syllabus = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="560px"
-        open={isAddOpen}
-        title="Add Syllabus"
-        steps={STEPS}
-        step={addStep}
-        onClose={closeAdd}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleCreate}
-        submitLabel={saving ? 'Saving...' : 'Save'}
-      >
-        {renderForm(addForm, setAddForm, addStep, addSyllabusFile, setAddSyllabusFile, addFileRef)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="560px"
-        open={isEditOpen}
-        title="Edit Syllabus"
-        steps={STEPS}
-        step={editStep}
-        onClose={closeEdit}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel={saving ? 'Updating...' : 'Update'}
-      >
-        {renderForm(editForm, setEditForm, editStep, editSyllabusFile, setEditSyllabusFile, editFileRef)}
-      </WizardPopup>
-
       {!isStudentScope ? (
         <SlideSidebar
           isOpen={isFilterSidebarOpen}
@@ -1173,119 +710,119 @@ const Syllabus = () => {
           onClose={() => setIsFilterSidebarOpen(false)}
           className="filter-sidebar"
         >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="school"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
-            </label>
-            {isTeacherScope ? (
-              <input
-                id="school"
-                className="form-control"
-                value={resolvedSchoolLabel}
-                readOnly
-              />
-            ) : (
+          <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label
+                htmlFor="school"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                School
+              </label>
+              {isTeacherScope ? (
+                <input
+                  id="school"
+                  className="form-control"
+                  value={teacherSchoolName}
+                  readOnly
+                />
+              ) : (
+                <select
+                  id="school"
+                  className="form-control form-select"
+                  value={pendingFilters.school}
+                  onChange={handlePendingFilterChange}
+                >
+                  <option value="Select">Select School</option>
+                  {schoolFilterOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="className"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                Class
+              </label>
               <select
-                id="school"
+                id="className"
                 className="form-control form-select"
-                value={pendingFilters.school}
+                value={pendingFilters.className}
                 onChange={handlePendingFilterChange}
               >
-                <option value="Select">Select School</option>
-                {schoolFilterOptions.map((option) => (
+                <option value="Select">Select</option>
+                {classFilterOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
                 ))}
               </select>
-            )}
-          </div>
+            </div>
 
-          <div>
-            <label
-              htmlFor="className"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              Class
-            </label>
-            <select
-              id="className"
-              className="form-control form-select"
-              value={pendingFilters.className}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {classFilterOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div>
+              <label
+                htmlFor="subject"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                Subject
+              </label>
+              <select
+                id="subject"
+                className="form-control form-select"
+                value={pendingFilters.subject}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select</option>
+                {subjectFilterOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div>
-            <label
-              htmlFor="subject"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              Subject
-            </label>
-            <select
-              id="subject"
-              className="form-control form-select"
-              value={pendingFilters.subject}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {subjectFilterOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label
+                htmlFor="sessionYear"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                Session Year
+              </label>
+              <select
+                id="sessionYear"
+                className="form-control form-select"
+                value={pendingFilters.sessionYear}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select</option>
+                {sessionYearOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="sessionYear"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              Session Year
-            </label>
-            <select
-              id="sessionYear"
-              className="form-control form-select"
-              value={pendingFilters.sessionYear}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select</option>
-              {sessionYearOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
-              Reset
-            </button>
-          </div>
-          <div>
-            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>
-              Apply
-            </button>
-          </div>
-        </form>
+            <div>
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="btn btn-danger-200 text-danger-600 w-100"
+              >
+                Reset
+              </button>
+            </div>
+            <div>
+              <button type="submit" className="btn btn-primary-600 w-100">
+                Apply
+              </button>
+            </div>
+          </form>
         </SlideSidebar>
       ) : null}
     </div>
