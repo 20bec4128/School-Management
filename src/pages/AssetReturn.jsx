@@ -1,8 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import SlideSidebar from '../components/SlideSidebar';
+import ExportDropdown from '../components/ExportDropdown';
 import useColumnVisibility from '../hooks/useColumnVisibility';
 
 const columnOptions = [
@@ -29,23 +27,6 @@ const AssetReturn = () => {
     return data.filter((row) => !q || Object.values(row).some((value) => String(value).toLowerCase().includes(q)));
   }, [data, search]);
 
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Asset Returns');
-    XLSX.writeFile(workbook, 'asset-return-report.xlsx');
-  };
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.text('Asset Return Report', 14, 10);
-    doc.autoTable({
-      head: [['School', 'Vendor', 'Asset', 'Returned By', 'Return Date']],
-      body: filteredData.map((row) => [row.school, row.vendor, row.asset, row.returnedBy, row.returnDate]),
-    });
-    doc.save('asset-return-report.pdf');
-  };
-
   return (
     <div className="avm-page">
       <div className="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
@@ -62,8 +43,13 @@ const AssetReturn = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
           <button className="btn btn-outline-secondary" onClick={() => setIsFilterSidebarOpen(true)}>Filters</button>
-          <button className="btn btn-outline-secondary" onClick={handleExportExcel}>Excel</button>
-          <button className="btn btn-outline-secondary" onClick={handleExportPDF}>PDF</button>
+          <ExportDropdown
+            rows={filteredData}
+            columns={columnOptions}
+            fileName="asset-return-report"
+            sheetName="Asset Returns"
+            pdfTitle="Asset Return Report"
+          />
         </div>
       </div>
 

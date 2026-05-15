@@ -4,6 +4,8 @@ import com.School.School_management.Entity.AdminUser;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface AdminUserRepository extends JpaRepository<AdminUser, Long> {
     Optional<AdminUser> findByUsername(String username);
@@ -17,6 +19,11 @@ public interface AdminUserRepository extends JpaRepository<AdminUser, Long> {
     Optional<AdminUser> findFirstByHeadOfficeIdAndSchoolIdIsNullOrderByIdAsc(Long headOfficeId);
 
     Optional<AdminUser> findFirstBySchoolIdAndRoleOrderByIdAsc(Long schoolId, String role);
+
+    List<AdminUser> findBySchoolIdAndRoleIgnoreCaseOrderByIdDesc(Long schoolId, String role);
+
+    @Query("select distinct a.role from AdminUser a where a.schoolId = :schoolId and a.role is not null order by a.role")
+    List<String> findDistinctRolesBySchoolId(@Param("schoolId") Long schoolId);
 
     boolean existsByUsernameAndIdNot(String username, Long id);
 }

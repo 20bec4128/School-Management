@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
-
 const normalizeValue = (value) => {
   const n = Number(value)
   if (Number.isFinite(n) && n > 0) return n
   return 10
 }
+
+const DEFAULT_OPTIONS = [10, 25, 50]
 
 const readCustomSize = (current) => {
   const raw = window.prompt('Enter number of records per page', String(current > 0 ? current : 10))
@@ -14,14 +14,10 @@ const readCustomSize = (current) => {
   return Math.floor(n)
 }
 
-const RowsPerPageSelect = ({ value, onChange, className, options = [10, 20] }) => {
+const RowsPerPageSelect = ({ value, onChange, className }) => {
   const normalized = normalizeValue(value)
-  const optionValues = Array.from(new Set((Array.isArray(options) ? options : [10, 20]).map(normalizeValue)))
-
-  const selectValue = useMemo(() => {
-    if (optionValues.includes(normalized)) return String(normalized)
-    return `custom:${normalized}`
-  }, [normalized, optionValues])
+  const optionValues = DEFAULT_OPTIONS
+  const selectValue = optionValues.includes(normalized) ? String(normalized) : `custom:${normalized}`
 
   return (
     <select

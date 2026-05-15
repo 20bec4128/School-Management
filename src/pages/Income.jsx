@@ -12,6 +12,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchIncomeHeads } from '../apis/incomeHeadsApi'
 import { createIncome, deleteIncome, fetchIncomesPage, updateIncome } from '../apis/incomesApi'
 import { normalizeRole } from '../utils/roles'
+import ExportDropdown from '../components/ExportDropdown'
 
 const emptyForm = {
   headOfficeId: '',
@@ -374,39 +375,7 @@ const Income = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
@@ -448,7 +417,6 @@ const Income = () => {
                   setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-                options={[5, 10, 20, 50]}
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
               />
             </div>

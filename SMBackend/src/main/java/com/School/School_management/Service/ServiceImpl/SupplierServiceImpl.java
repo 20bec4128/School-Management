@@ -4,6 +4,9 @@ import com.School.School_management.Dto.SupplierDto;
 import com.School.School_management.Entity.HeadOffice;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Entity.Supplier;
+import com.School.School_management.Exception.BadRequestException;
+import com.School.School_management.Exception.ForbiddenException;
+import com.School.School_management.Exception.NotFoundException;
 import com.School.School_management.Repository.HeadOfficeRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.SupplierRepository;
@@ -45,7 +48,7 @@ public class SupplierServiceImpl implements SupplierService {
     @Override
     public SupplierDto getById(Long id, CurrentUser user) {
         Supplier supplier = supplierRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Supplier not found"));
+                .orElseThrow(NotFoundException::new);
         ensureVisibleToUser(supplier, user);
         return toDto(supplier);
     }
@@ -63,7 +66,7 @@ public class SupplierServiceImpl implements SupplierService {
     @Override
     public SupplierDto update(Long id, SupplierDto dto, CurrentUser user) {
         Supplier supplier = supplierRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Supplier not found"));
+                .orElseThrow(NotFoundException::new);
         ensureVisibleToUser(supplier, user);
         ResolvedScope scope = resolveWriteScope(user, dto);
         applyDto(dto, supplier);
@@ -75,43 +78,43 @@ public class SupplierServiceImpl implements SupplierService {
     @Override
     public void delete(Long id, CurrentUser user) {
         Supplier supplier = supplierRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Supplier not found"));
+                .orElseThrow(NotFoundException::new);
         ensureVisibleToUser(supplier, user);
         supplierRepository.delete(supplier);
     }
 
     private void ensureVisibleToUser(Supplier supplier, CurrentUser user) {
         if (user == null) {
-            throw new RuntimeException("Unauthorized");
+            throw new ForbiddenException();
         }
         if (user.isSuperAdmin()) {
             return;
         }
         if (user.isHeadOfficeScopedAdmin()) {
             if (!Objects.equals(user.headOfficeId(), supplier.getHeadOfficeId())) {
-                throw new RuntimeException("Supplier not found");
+                throw new NotFoundException();
             }
             return;
         }
         if (user.isSchoolScopedAdminUser()) {
             if (!Objects.equals(user.schoolId(), supplier.getSchoolId())) {
-                throw new RuntimeException("Supplier not found");
+                throw new NotFoundException();
             }
             return;
         }
-        throw new RuntimeException("Forbidden");
+        throw new ForbiddenException();
     }
 
     private ResolvedScope resolveListScope(CurrentUser user, Long requestedHeadOfficeId, Long requestedSchoolId) {
         if (user == null) {
-            throw new RuntimeException("Unauthorized");
+            throw new ForbiddenException();
         }
 
         if (user.isSuperAdmin()) {
             if (requestedSchoolId != null) {
                 ManageSchool school = requireSchool(requestedSchoolId);
                 if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, school.getHeadOfficeId())) {
-                    throw new RuntimeException("School does not belong to the selected head office");
+                    throw new BadRequestException("School does not belong to the selected head office");
                 }
                 return new ResolvedScope(school.getHeadOfficeId(), school.getId());
             }
@@ -121,12 +124,12 @@ public class SupplierServiceImpl implements SupplierService {
         if (user.isHeadOfficeScopedAdmin()) {
             Long authHeadOfficeId = user.headOfficeId();
             if (requestedHeadOfficeId != null && !Objects.equals(authHeadOfficeId, requestedHeadOfficeId)) {
-                throw new RuntimeException("Forbidden");
+                throw new ForbiddenException();
             }
             if (requestedSchoolId != null) {
                 ManageSchool school = requireSchool(requestedSchoolId);
                 if (!Objects.equals(authHeadOfficeId, school.getHeadOfficeId())) {
-                    throw new RuntimeException("School does not belong to the selected head office");
+                    throw new BadRequestException("School does not belong to the selected head office");
                 }
                 return new ResolvedScope(authHeadOfficeId, school.getId());
             }
@@ -136,20 +139,20 @@ public class SupplierServiceImpl implements SupplierService {
         if (user.isSchoolScopedAdminUser()) {
             ManageSchool school = requireSchool(user.schoolId());
             if (requestedSchoolId != null && !Objects.equals(user.schoolId(), requestedSchoolId)) {
-                throw new RuntimeException("Forbidden");
+                throw new ForbiddenException();
             }
             if (requestedHeadOfficeId != null && !Objects.equals(school.getHeadOfficeId(), requestedHeadOfficeId)) {
-                throw new RuntimeException("Forbidden");
+                throw new ForbiddenException();
             }
             return new ResolvedScope(school.getHeadOfficeId(), school.getId());
         }
 
-        throw new RuntimeException("Forbidden");
+        throw new ForbiddenException();
     }
 
     private ResolvedScope resolveWriteScope(CurrentUser user, SupplierDto dto) {
         if (user == null) {
-            throw new RuntimeException("Unauthorized");
+            throw new ForbiddenException();
         }
 
         Long requestedHeadOfficeId = normalizeId(dto.getHeadOfficeId());
@@ -158,7 +161,7 @@ public class SupplierServiceImpl implements SupplierService {
         if (user.isSuperAdmin()) {
             ManageSchool school = requireSchool(requiredId(requestedSchoolId, "School is required"));
             if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, school.getHeadOfficeId())) {
-                throw new RuntimeException("School does not belong to the selected head office");
+                throw new BadRequestException("School does not belong to the selected head office");
             }
             return new ResolvedScope(school.getHeadOfficeId(), school.getId());
         }
@@ -167,10 +170,10 @@ public class SupplierServiceImpl implements SupplierService {
             Long authHeadOfficeId = user.headOfficeId();
             ManageSchool school = requireSchool(requiredId(requestedSchoolId, "School is required"));
             if (!Objects.equals(authHeadOfficeId, school.getHeadOfficeId())) {
-                throw new RuntimeException("School does not belong to your head office");
+                throw new BadRequestException("School does not belong to your head office");
             }
             if (requestedHeadOfficeId != null && !Objects.equals(authHeadOfficeId, requestedHeadOfficeId)) {
-                throw new RuntimeException("Forbidden");
+                throw new ForbiddenException();
             }
             return new ResolvedScope(authHeadOfficeId, school.getId());
         }
@@ -178,30 +181,30 @@ public class SupplierServiceImpl implements SupplierService {
         if (user.isSchoolScopedAdminUser()) {
             ManageSchool school = requireSchool(user.schoolId());
             if (requestedSchoolId != null && !Objects.equals(requestedSchoolId, user.schoolId())) {
-                throw new RuntimeException("Forbidden");
+                throw new ForbiddenException();
             }
             if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, school.getHeadOfficeId())) {
-                throw new RuntimeException("Forbidden");
+                throw new ForbiddenException();
             }
             return new ResolvedScope(school.getHeadOfficeId(), school.getId());
         }
 
-        throw new RuntimeException("Forbidden");
+        throw new ForbiddenException();
     }
 
     private ManageSchool requireSchool(Long schoolId) {
         return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
-                .orElseThrow(() -> new RuntimeException("School not found"));
+                .orElseThrow(NotFoundException::new);
     }
 
     private HeadOffice requireHeadOffice(Long headOfficeId) {
         return headOfficeRepository.findById(headOfficeId)
-                .orElseThrow(() -> new RuntimeException("Head office not found"));
+                .orElseThrow(NotFoundException::new);
     }
 
     private Long requiredId(Long value, String message) {
         if (value == null) {
-            throw new RuntimeException(message);
+            throw new BadRequestException(message);
         }
         return value;
     }

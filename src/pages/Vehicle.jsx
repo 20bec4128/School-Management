@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -16,6 +13,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchEmployees } from '../apis/employeesApi'
 import { fetchVehiclesPage, updateVehicle, deleteVehicle } from '../apis/vehiclesApi'
 import '../assets/css/addModalShared.css'
+import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
   schoolId: 'Select',
@@ -301,40 +299,30 @@ const Vehicle = ({ onNavigate }) => {
     }
   }
 
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(
-      vehicles.map((row) => ({
-        School: row.schoolName || '',
-        'Vehicle Number': row.vehicleNumber || '',
-        'Vehicle Model': row.vehicleModel || '',
-        Driver: row.driverEmployeeName || '',
-        'Vehicle License': row.vehicleLicense || '',
-        Contact: formatContact(row),
-      })),
-    )
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Vehicles')
-    XLSX.writeFile(workbook, 'Vehicle_List.xlsx')
-  }
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape' })
-    doc.text('Vehicle Inventory Report', 14, 10)
-    doc.autoTable({
-      head: [['S.L', ...columnOptions.filter((column) => visibleColumns[column.key]).map((column) => column.label)]],
-      body: vehicles.map((row, index) => [
-        index + 1,
-        ...(columnOptions.filter((column) => visibleColumns[column.key]).map((column) => {
-          if (column.key === 'school') return row.schoolName || '--'
-          if (column.key === 'driver') return row.driverEmployeeName || '--'
-          if (column.key === 'vehicleContact') return formatContact(row) || '--'
-          return row[column.key] || '--'
-        })),
-      ]),
-      headStyles: { fillColor: [31, 41, 55] },
+  const loadExportRows = useCallback(async () => {
+    const selectedSchoolId = filters.schoolId && filters.schoolId !== 'Select'
+      ? String(filters.schoolId)
+      : ''
+    const effectiveSchoolId = selectedSchoolId || currentSchoolId || null
+    const size = Math.max(totalElements, rowsPerPage, 1)
+    const data = await fetchVehiclesPage({
+      schoolId: effectiveSchoolId,
+      search: debouncedSearch,
+      page: 0,
+      size,
     })
-    doc.save('Vehicle_List.pdf')
-  }
+    return Array.isArray(data?.content) ? data.content : []
+  }, [currentSchoolId, debouncedSearch, filters.schoolId, rowsPerPage, totalElements])
+
+  const mapExportRow = useCallback(
+    (row) => ({
+      ...row,
+      school: row.schoolName || '--',
+      driver: row.driverEmployeeName || '--',
+      vehicleContact: formatContact(row) || '--',
+    }),
+    [],
+  )
 
   const currentEditDriverOptions = useMemo(() => driverEmployees, [driverEmployees])
 
@@ -365,39 +353,16 @@ const Vehicle = ({ onNavigate }) => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                      onClick={handleExportExcel}
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                      onClick={handleExportPDF}
-                    >
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <ExportDropdown
+                rows={vehicles}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={loadExportRows}
+                mapRow={mapExportRow}
+                fileName="Vehicle_List"
+                sheetName="Vehicles"
+                pdfTitle="Vehicle Inventory Report"
+              />
 
               <button
                 type="button"
@@ -437,7 +402,6 @@ const Vehicle = ({ onNavigate }) => {
 
               <RowsPerPageSelect
                 value={rowsPerPage}
-                options={[5, 10, 20, 50]}
                 onChange={(value) => {
                   setRowsPerPage(value)
                   setCurrentPage(1)

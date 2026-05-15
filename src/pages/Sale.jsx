@@ -1,288 +1,465 @@
-import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import SlideSidebar from '../components/SlideSidebar';
-import useColumnVisibility from '../hooks/useColumnVisibility';
-import '../assets/css/addModalShared.css';
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import SlideSidebar from '../components/SlideSidebar'
+import ExportDropdown from '../components/ExportDropdown'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { normalizeRole } from '../utils/roles'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { deleteSale, fetchSalesPage } from '../apis/salesApi'
+import '../assets/css/addModalShared.css'
 
-/** * 1. Configuration & Constants
- */
+const EDIT_STORAGE_KEY = 'sale-edit-row'
+
 const emptyFilters = {
-    schoolId: 'Select',
-    status: 'Select',
-    startDate: '',
-    endDate: '',
-};
+  headOfficeId: '',
+  schoolId: '',
+  status: '',
+}
 
 const columnOptions = [
-    { key: 'school', label: 'School' },
-    { key: 'invoiceNumber', label: 'Invoice Number' },
-    { key: 'studentSaleTo', label: 'Student/Sale To' },
-    { key: 'grossAmount', label: 'Gross Amount' },
-    { key: 'discount', label: 'Discount' },
-    { key: 'netAmount', label: 'Net Amount' },
-    { key: 'status', label: 'Status' },
-];
+  { key: 'schoolName', label: 'School' },
+  { key: 'invoiceNumber', label: 'Invoice Number' },
+  { key: 'userType', label: 'User Type' },
+  { key: 'saleToName', label: 'Sale To' },
+  { key: 'incomeHeadName', label: 'Income Head' },
+  { key: 'grossAmount', label: 'Gross Amount' },
+  { key: 'discountAmount', label: 'Discount' },
+  { key: 'netAmount', label: 'Net Amount' },
+  { key: 'status', label: 'Status' },
+  { key: 'saleDate', label: 'Sale Date' },
+]
 
-const FIELD_ICONS = {
-    'School': 'ri-school-line',
-    'Status': 'ri-checkbox-circle-line',
-    'Start Date': 'ri-calendar-line',
-    'End Date': 'ri-calendar-check-line',
-};
-
-/**
- * Standardized FormField wrapper for SlideSidebar filtering
- */
-const FormField = ({ label, required, children }) => {
-    const icon = FIELD_ICONS[label] || 'ri-edit-line';
-    return (
-        <div className="avm-field full">
-            <label className="avm-label">
-                {label}
-                {required && <span className="req"> *</span>}
-            </label>
-            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-                <span style={{ 
-                    position: 'absolute', 
-                    left: '0.85rem', 
-                    top: '50%', 
-                    transform: 'translateY(-50%)', 
-                    color: '#667085', 
-                    fontSize: '0.95rem', 
-                    zIndex: 1 
-                }}>
-                    <i className={icon}></i>
-                </span>
-                {children}
-            </div>
-        </div>
-    );
-};
+const FormField = ({ label, children, full = false }) => (
+  <div className={`avm-field${full ? ' full' : ''}`}>
+    <label className="avm-label">{label}</label>
+    {children}
+  </div>
+)
 
 const Sale = ({ onNavigate }) => {
-    /** * 2. State Management
-     */
-    const [data, setData] = useState([]); 
-    const [search, setSearch] = useState('');
-    const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false);
-    const [filters, setFilters] = useState(emptyFilters);
-    const [pendingFilters, setPendingFilters] = useState(emptyFilters);
-    
-    const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
-    /** * 3. Logic: Filtering & Pagination
-     */
-    const filteredData = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        return data.filter((row) => {
-            const matchesSearch = !q || Object.values(row).some((v) => String(v).toLowerCase().includes(q));
-            const matchesSchool = filters.schoolId === 'Select' || row.schoolId === filters.schoolId;
-            const matchesStatus = filters.status === 'Select' || row.status === filters.status;
-            return matchesSearch && matchesSchool && matchesStatus;
-        });
-    }, [data, search, filters]);
+  const [rows, setRows] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
+  const [allSchools, setAllSchools] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
+  const [filters, setFilters] = useState(emptyFilters)
+  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
 
-    const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
-    const paginatedData = useMemo(() => {
-        const start = (currentPage - 1) * rowsPerPage;
-        return filteredData.slice(start, start + rowsPerPage);
-    }, [currentPage, filteredData, rowsPerPage]);
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-    /** * 4. Cell Rendering & Export Logic
-     */
-    const renderCell = (row, column) => {
-        const value = row[column.key];
-        switch (column.key) {
-            case 'invoiceNumber':
-                return <span className="fw-medium text-primary-light">{value}</span>;
-            case 'status':
-                const isPaid = value?.toLowerCase() === 'paid';
-                return (
-                    <span className={`px-12 py-4 radius-4 fw-medium text-sm ${isPaid ? 'bg-success-100 text-success-600' : 'bg-warning-100 text-warning-600'}`}>
-                        {value || 'Pending'}
-                    </span>
-                );
-            case 'netAmount':
-                return <span className="fw-bold text-primary-light">{value}</span>;
-            default:
-                return value || '--';
-        }
-    };
+  const loadLookups = useCallback(async () => {
+    setLookupLoading(true)
+    try {
+      const [headOfficePage, schools] = await Promise.all([
+        fetchHeadOfficesPage(0, 500),
+        fetchSchoolsLookup(),
+      ])
+      setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
+      setAllSchools(Array.isArray(schools) ? schools : [])
+    } catch (err) {
+      console.error('Failed to load sale lookups:', err)
+      setHeadOffices([])
+      setAllSchools([])
+    } finally {
+      setLookupLoading(false)
+    }
+  }, [])
 
-    const handleExportExcel = () => {
-        const worksheet = XLSX.utils.json_to_sheet(filteredData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
-        XLSX.writeFile(workbook, "Sale_Records.xlsx");
-    };
+  const loadSales = useCallback(async () => {
+    if (status !== 'ready' || !token) return
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchSalesPage({
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search: debouncedSearch,
+        headOfficeId: filters.headOfficeId || undefined,
+        schoolId: filters.schoolId || undefined,
+        status: filters.status || undefined,
+      })
+      setRows(Array.isArray(data?.content) ? data.content : [])
+      setTotalElements(Number(data?.totalElements ?? 0))
+      setTotalPages(Number(data?.totalPages ?? 0))
+    } catch (err) {
+      console.error('Failed to load sales:', err)
+      setError(err?.message || 'Failed to load sales')
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, debouncedSearch, filters.headOfficeId, filters.schoolId, rowsPerPage, status, token])
 
-    return (
-        <div className="dashboard-main-body">
-            <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-                <div>
-                    <h1 className="fw-semibold mb-4 h6 text-primary-light">Sale</h1>
-                    <span className="text-secondary-light">Inventory / Sale Management</span>
-                </div>
-                {/* Add button navigates to a separate page as per requirement */}
-                <button
-                    type="button"
-                    className="btn btn-primary-600 d-flex align-items-center gap-6" 
-                    onClick={() => onNavigate?.('sale-create')}
-                >
-                    <i className="ri-add-large-line"></i> Add Sale
-                </button>
-            </div>
+  useEffect(() => {
+    void loadLookups()
+  }, [loadLookups])
 
-            <div className="card h-100">
-                <div className="card-body p-0 dataTable-wrapper">
-                    {/* Persistent Toolbar */}
-                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-                        <div className="d-flex flex-wrap align-items-center gap-16">
-                            
-                            <div className="dropdown">
-                                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
-                                    <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                                        <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                                    </span>
-                                    <span><i className="ri-arrow-down-s-line"></i></span>
-                                </button>
-                                <ul className="dropdown-menu p-12 border bg-base shadow">
-                                    <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10" onClick={handleExportExcel}><i className="ri-file-excel-2-line"></i> Excel</button></li>
-                                </ul>
-                            </div>
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    void loadSales()
+  }, [loadSales, status, token])
 
-                            <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
-                                <span className="text-secondary-light text-sm">Find</span>
-                                <i className="ri-arrow-right-line"></i>
-                            </button>
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
-                            <div className="dropdown">
-                                <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
-                                    <span className="text-secondary-light text-sm">Columns</span>
-                                    <i className="ri-arrow-down-s-line"></i>
-                                </button>
-                                <ul className="dropdown-menu p-12 border shadow">
-                                    {columnOptions.map(col => (
-                                        <li key={col.key}>
-                                            <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                                                <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
-                                                {col.label}
-                                            </label>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
+  useEffect(() => {
+    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+      const value = String(authHeadOfficeId)
+      setPendingFilters((prev) => ({ ...prev, headOfficeId: value }))
+      setFilters((prev) => ({ ...prev, headOfficeId: value }))
+    }
+  }, [authHeadOfficeId, isHeadOfficeAdmin])
 
-                            <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
-                                {[10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
-                            </select>
-                        </div>
+  useEffect(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return
+    const school = (Array.isArray(allSchools) ? allSchools : []).find((row) => String(row?.id ?? '') === String(authSchoolId))
+    const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    const schoolId = String(authSchoolId)
+    setPendingFilters((prev) => ({ ...prev, headOfficeId, schoolId }))
+    setFilters((prev) => ({ ...prev, headOfficeId, schoolId }))
+  }, [allSchools, authSchoolId, isSchoolAdmin])
 
-                        <div className="position-relative">
-                            <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search sales..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
-                            <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                                <i className="ri-search-line"></i>
-                            </span>
-                        </div>
-                    </div>
+  useEffect(() => {
+    if (currentPage > 1 && totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
-                    {/* Table Body */}
-                    <div className="table-responsive">
-                        <table className="table bordered-table mb-0 data-table">
-                            <thead>
-                                <tr>
-                                    <th scope="col">
-                                        <div className="form-check style-check d-flex align-items-center">
-                                            <input type="checkbox" className="form-check-input" />
-                                            <label className="form-check-label">S.L</label>
-                                        </div>
-                                    </th>
-                                    {columnOptions.map(col => visibleColumns[col.key] && (
-                                        <th scope="col" key={col.key}>{col.label}</th>
-                                    ))}
-                                    <th scope="col">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {paginatedData.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
-                                            {data.length === 0 ? "No records found. Use 'Find' to generate results." : "No results for this search."}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    paginatedData.map((row, idx) => (
-                                        <tr key={idx}>
-                                            <td>
-                                                <div className="form-check style-check d-flex align-items-center">
-                                                    <input className="form-check-input" type="checkbox" />
-                                                    <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
-                                                </div>
-                                            </td>
-                                            {columnOptions.map(col => visibleColumns[col.key] && (
-                                                <td key={col.key}>{renderCell(row, col)}</td>
-                                            ))}
-                                            <td>
-                                                <div className="d-flex align-items-center gap-10">
-                                                    <button className="bg-info-focus bg-hover-info-200 text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"><i className="ri-printer-line"></i></button>
-                                                    <button className="bg-danger-focus bg-hover-danger-200 text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"><i className="ri-delete-bin-line"></i></button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+  const resolveSchoolName = useCallback(
+    (schoolId) => {
+      if (schoolId == null) return ''
+      const match = (Array.isArray(allSchools) ? allSchools : []).find((row) => String(row?.id ?? '') === String(schoolId))
+      return match?.schoolName || (String(schoolId) === String(authSchoolId ?? '') ? authSchoolName || '' : '')
+    },
+    [allSchools, authSchoolId, authSchoolName],
+  )
 
-                    {/* Pagination Footer */}
-                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-                        <span className="text-sm text-secondary-light">
-                            Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} – {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length} entries
-                        </span>
-                        <div className="d-flex align-items-center gap-8">
-                            <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .slice(Math.max(0, currentPage - 2), currentPage + 1)
-                                .map((p) => (
-                                    <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
-                                ))}
-                            <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  const schoolOptionsFor = useCallback(
+    (headOfficeId) => {
+      const list = Array.isArray(allSchools) ? allSchools : []
+      if (isSuperAdmin) {
+        if (!headOfficeId) return []
+        return list.filter((school) => String(school?.headOfficeId ?? '') === String(headOfficeId))
+      }
+      if (isHeadOfficeAdmin) {
+        return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+      }
+      if (isSchoolAdmin) {
+        return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      }
+      return list
+    },
+    [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+  )
 
-            {/* Find Sidebar */}
-            <SlideSidebar isOpen={isFilterSidebarOpen} onClose={() => setIsFilterSidebarOpen(false)} title="Find Sale">
-                <form className="p-20 d-grid gap-16" onSubmit={(e) => { e.preventDefault(); setFilters(pendingFilters); setIsFilterSidebarOpen(false); }}>
-                    <FormField label="School" required>
-                        <select className="avm-select" value={pendingFilters.schoolId} onChange={e => setPendingFilters({...pendingFilters, schoolId: e.target.value})}>
-                            <option value="Select">Select School</option>
-                        </select>
-                    </FormField>
-                    <FormField label="Status">
-                        <select className="avm-select" value={pendingFilters.status} onChange={e => setPendingFilters({...pendingFilters, status: e.target.value})}>
-                            <option value="Select">All Status</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Unpaid">Unpaid</option>
-                        </select>
-                    </FormField>
-                    <FormField label="Start Date">
-                        <input type="date" className="avm-input" value={pendingFilters.startDate} onChange={e => setPendingFilters({...pendingFilters, startDate: e.target.value})} />
-                    </FormField>
-                    <div className="d-flex gap-8 mt-12">
-                        <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={() => setPendingFilters(emptyFilters)}>Reset</button>
-                        <button type="submit" className="btn btn-primary-600 w-100">Apply Filter</button>
-                    </div>
-                </form>
-            </SlideSidebar>
+  const filterSchoolOptions = useMemo(() => schoolOptionsFor(pendingFilters.headOfficeId), [pendingFilters.headOfficeId, schoolOptionsFor])
+
+  const normalizedRows = useMemo(
+    () =>
+      rows.map((row) => ({
+        ...row,
+        schoolName: row.schoolName || resolveSchoolName(row.schoolId),
+      })),
+    [resolveSchoolName, rows],
+  )
+
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
+
+  const handleApplyFilters = (e) => {
+    e.preventDefault()
+    setFilters(pendingFilters)
+    setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
+  }
+
+  const handleResetFilters = () => {
+    const next = {
+      headOfficeId: isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : '',
+      schoolId: isSchoolAdmin ? String(authSchoolId ?? '') : '',
+      status: '',
+    }
+    setPendingFilters(next)
+    setFilters(next)
+    setCurrentPage(1)
+  }
+
+  const loadExportRows = useCallback(async () => {
+    const size = Math.max(totalElements, rowsPerPage, 1)
+    const data = await fetchSalesPage({
+      page: 0,
+      size,
+      search: debouncedSearch,
+      headOfficeId: filters.headOfficeId || undefined,
+      schoolId: filters.schoolId || undefined,
+      status: filters.status || undefined,
+    })
+    return Array.isArray(data?.content) ? data.content : []
+  }, [debouncedSearch, filters.headOfficeId, filters.schoolId, filters.status, rowsPerPage, totalElements])
+
+  const mapExportRow = useCallback(
+    (row) => ({
+      ...row,
+      schoolName: row.schoolName || resolveSchoolName(row.schoolId),
+    }),
+    [resolveSchoolName],
+  )
+
+  return (
+    <div className="dashboard-main-body">
+      <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
+        <div>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Sale</h1>
+          <span className="text-secondary-light">Inventory / Sale Management</span>
         </div>
-    );
-};
+        <button
+          type="button"
+          className="btn btn-primary-600 d-flex align-items-center gap-6"
+          onClick={() => {
+            sessionStorage.removeItem(EDIT_STORAGE_KEY)
+            onNavigate?.('sale-create')
+          }}
+        >
+          <i className="ri-add-large-line"></i> Add Sale
+        </button>
+      </div>
 
-export default Sale;
+      <div className="card h-100">
+        <div className="card-body p-0 dataTable-wrapper">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-center gap-16">
+              <ExportDropdown
+                rows={normalizedRows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={loadExportRows}
+                mapRow={mapExportRow}
+                fileName="Sale_Records"
+                sheetName="Sales"
+                pdfTitle="Sale Report"
+              />
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
+                <span className="text-secondary-light text-sm">Find</span>
+                <i className="ri-arrow-right-line"></i>
+              </button>
+              <div className="dropdown">
+                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                  <span className="text-secondary-light text-sm">Columns</span>
+                  <i className="ri-arrow-down-s-line"></i>
+                </button>
+                <ul className="dropdown-menu p-12 border shadow">
+                  {columnOptions.map((col) => (
+                    <li key={col.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                        {col.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(value) => {
+                  setRowsPerPage(value)
+                  setCurrentPage(1)
+                }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
+            </div>
+            <div className="position-relative">
+              <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search sales..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
+            </div>
+          </div>
+
+          {error ? <div className="px-20 py-12 text-danger">{error}</div> : null}
+          {lookupLoading ? <div className="px-20 py-12 text-secondary-light">Loading lookups...</div> : null}
+
+          <div className="table-responsive">
+            <table className="table bordered-table mb-0 data-table">
+              <thead>
+                <tr>
+                  <th scope="col">
+                    <div className="form-check style-check d-flex align-items-center">
+                      <input type="checkbox" className="form-check-input" />
+                      <label className="form-check-label">S.L</label>
+                    </div>
+                  </th>
+                  {columnOptions.map((col) => visibleColumns[col.key] && <th key={col.key}>{col.label}</th>)}
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading sales...
+                    </td>
+                  </tr>
+                ) : normalizedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      No records found.
+                    </td>
+                  </tr>
+                ) : (
+                  normalizedRows.map((row, idx) => (
+                    <tr key={row.id ?? idx}>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input className="form-check-input" type="checkbox" />
+                          <label className="form-check-label">{currentStart + idx}</label>
+                        </div>
+                      </td>
+                      {columnOptions.map((col) =>
+                        visibleColumns[col.key] ? (
+                          <td key={col.key}>
+                            {col.key === 'invoiceNumber' ? (
+                              <span className="fw-medium text-primary-light">{row.invoiceNumber}</span>
+                            ) : col.key === 'status' ? (
+                              <span className="px-12 py-4 radius-4 fw-medium text-sm bg-success-100 text-success-600">{row.status || 'PAID'}</span>
+                            ) : col.key === 'netAmount' ? (
+                              <span className="fw-bold text-primary-light">{row.netAmount}</span>
+                            ) : (
+                              row[col.key] || '--'
+                            )}
+                          </td>
+                        ) : null,
+                      )}
+                      <td>
+                        <div className="d-flex align-items-center gap-10">
+                          <button
+                            type="button"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => {
+                              sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify({ id: row.id }))
+                              onNavigate?.('sale-create')
+                            }}
+                          >
+                            <i className="ri-edit-line"></i>
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete sale "${row.invoiceNumber || 'this sale'}"?`)) return
+                              try {
+                                await deleteSale(row.id)
+                                await loadSales()
+                              } catch (err) {
+                                setError(err?.message || 'Failed to delete sale')
+                              }
+                            }}
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+            <span className="text-sm text-secondary-light">
+              Showing {totalElements === 0 ? 0 : currentStart} - {totalElements === 0 ? 0 : currentEnd} of {totalElements} entries
+            </span>
+            <div className="d-flex align-items-center gap-8">
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1 || totalPages < 1}>Prev</button>
+              <button type="button" className="btn btn-sm btn-primary-600">{currentPage}</button>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(Math.max(1, totalPages), p + 1))} disabled={currentPage === totalPages || totalPages < 1}>Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <SlideSidebar isOpen={isFilterSidebarOpen} onClose={() => setIsFilterSidebarOpen(false)} title="Find Sale">
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOffices.map((row) => ({ id: row.id, name: row.name || row.headOfficeName || '' }))}
+              schoolOptions={filterSchoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) => setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) => {
+                const selectedSchool = (Array.isArray(allSchools) ? allSchools : []).find((row) => String(row?.id ?? '') === String(value))
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  schoolId: value,
+                  headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+                }))
+              }}
+              schoolLabel="School"
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <FormField label="Head Office" full>
+                  <input className="avm-input" value={authHeadOfficeName || String(authHeadOfficeId || '')} disabled />
+                </FormField>
+              ) : null}
+              <FormField label="School" full>
+                <select className="avm-select" value={pendingFilters.schoolId} onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value }))} disabled={isSchoolAdmin}>
+                  <option value="">All Schools</option>
+                  {filterSchoolOptions.map((school) => (
+                    <option key={String(school.id)} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </>
+          )}
+
+          <FormField label="Status" full>
+            <select className="avm-select" value={pendingFilters.status} onChange={(e) => setPendingFilters((prev) => ({ ...prev, status: e.target.value }))}>
+              <option value="">All Status</option>
+              <option value="PAID">PAID</option>
+              <option value="UNPAID">UNPAID</option>
+              <option value="PARTIAL">PARTIAL</option>
+            </select>
+          </FormField>
+
+          <div className="d-flex gap-8 mt-12">
+            <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={handleResetFilters}>
+              Reset
+            </button>
+            <button type="submit" className="btn btn-primary-600 w-100">
+              Apply Filter
+            </button>
+          </div>
+        </form>
+      </SlideSidebar>
+    </div>
+  )
+}
+
+export default Sale

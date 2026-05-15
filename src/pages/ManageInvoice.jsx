@@ -863,7 +863,6 @@ const ManageInvoice = () => {
 
               <RowsPerPageSelect
                 value={rowsPerPage}
-                options={[5, 10, 20, 50]}
                 onChange={(value) => {
                   setRowsPerPage(value)
                   setCurrentPage(1)

@@ -5,6 +5,7 @@ import 'jspdf-autotable';
 import SlideSidebar from '../components/SlideSidebar';
 import useColumnVisibility from '../hooks/useColumnVisibility';
 import '../assets/css/addModalShared.css';
+import ExportDropdown from '../components/ExportDropdown'
 
 /** * 1. Configuration & Constants
  * Defined outside to prevent re-initialization on every render.
@@ -142,22 +143,7 @@ const DailyStatementReport = () => {
             <div className="d-flex flex-wrap align-items-center gap-16">
               
               {/* Export Dropdown */}
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded d-flex align-items-center gap-10" onClick={handleExportExcel}><i className="ri-file-excel-2-line"></i> Excel</button></li>
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded d-flex align-items-center gap-10" onClick={handleExportPDF}><i className="ri-file-3-line"></i> PDF</button></li>
-                </ul>
-              </div>
+              <ExportDropdown onExportExcel={handleExportExcel} onExportPDF={handleExportPDF} />
 
               {/* Find Button */}
               <button 
