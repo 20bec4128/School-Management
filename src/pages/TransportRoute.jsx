@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -17,6 +14,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchVehicles } from '../apis/vehiclesApi'
 import { fetchTransportRoutesPage, updateTransportRoute, deleteTransportRoute } from '../apis/transportRoutesApi'
 import '../assets/css/addModalShared.css'
+import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
   headOfficeId: '',
@@ -315,39 +313,27 @@ const TransportRoute = ({ onNavigate }) => {
     }
   }
 
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(
-      routes.map((row) => ({
-        School: row.schoolName || '',
-        'Route Name': row.routeName || '',
-        Start: row.routeStart || '',
-        End: row.routeEnd || '',
-        Vehicle: getVehicleDisplay(row),
-        Stops: Array.isArray(row.stops) ? row.stops.length : row.stopCount || 0,
-      })),
-    )
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'TransportRoutes')
-    XLSX.writeFile(workbook, 'Transport_Route_List.xlsx')
-  }
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape' })
-    doc.text('Transport Route Report', 14, 10)
-    doc.autoTable({
-      head: [['S.L', ...columnOptions.filter((column) => visibleColumns[column.key]).map((column) => column.label)]],
-      body: routes.map((row, index) => [
-        index + 1,
-        ...(columnOptions.filter((column) => visibleColumns[column.key]).map((column) => {
-          if (column.key === 'vehicleDisplay') return getVehicleDisplay(row) || '--'
-          if (column.key === 'stopCount') return Array.isArray(row.stops) ? row.stops.length : row.stopCount || 0
-          return row[column.key] || '--'
-        })),
-      ]),
-      headStyles: { fillColor: [31, 41, 55] },
+  const loadExportRows = useCallback(async () => {
+    const size = Math.max(totalElements, rowsPerPage, 1)
+    const data = await fetchTransportRoutesPage({
+      page: 0,
+      size,
+      search: debouncedSearch,
+      headOfficeId: filters.headOfficeId || undefined,
+      schoolId: filters.schoolId || undefined,
     })
-    doc.save('Transport_Route_List.pdf')
-  }
+    return Array.isArray(data?.content) ? data.content : []
+  }, [debouncedSearch, filters.headOfficeId, filters.schoolId, rowsPerPage, totalElements])
+
+  const mapExportRow = useCallback(
+    (row) => ({
+      ...row,
+      schoolName: row.schoolName || '',
+      vehicleDisplay: getVehicleDisplay(row) || '--',
+      stopCount: Array.isArray(row.stops) ? row.stops.length : row.stopCount || 0,
+    }),
+    [],
+  )
 
   const renderCell = (row, column) => {
     if (column.key === 'vehicleDisplay') return getVehicleDisplay(row)
@@ -375,39 +361,16 @@ const TransportRoute = ({ onNavigate }) => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                      onClick={handleExportExcel}
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                      onClick={handleExportPDF}
-                    >
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <ExportDropdown
+                rows={rows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={loadExportRows}
+                mapRow={mapExportRow}
+                fileName="TransportRoute_List"
+                sheetName="Transport Routes"
+                pdfTitle="Transport Route Report"
+              />
 
               <button
                 type="button"

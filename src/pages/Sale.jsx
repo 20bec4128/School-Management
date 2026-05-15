@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
 import SlideSidebar from '../components/SlideSidebar'
+import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -207,7 +205,7 @@ const Sale = ({ onNavigate }) => {
     setCurrentPage(1)
   }
 
-  const exportRows = async () => {
+  const loadExportRows = useCallback(async () => {
     const size = Math.max(totalElements, rowsPerPage, 1)
     const data = await fetchSalesPage({
       page: 0,
@@ -218,41 +216,15 @@ const Sale = ({ onNavigate }) => {
       status: filters.status || undefined,
     })
     return Array.isArray(data?.content) ? data.content : []
-  }
+  }, [debouncedSearch, filters.headOfficeId, filters.schoolId, filters.status, rowsPerPage, totalElements])
 
-  const handleExportExcel = async () => {
-    try {
-      const exportData = await exportRows()
-      const worksheet = XLSX.utils.json_to_sheet(exportData)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales')
-      XLSX.writeFile(workbook, 'Sale_Records.xlsx')
-    } catch (err) {
-      console.error('Failed to export sales:', err)
-      setError(err?.message || 'Failed to export sales')
-    }
-  }
-
-  const handleExportPDF = async () => {
-    try {
-      const exportData = await exportRows()
-      const doc = new jsPDF({ orientation: 'landscape' })
-      const visibleColumnsForExport = columnOptions.filter((column) => visibleColumns[column.key])
-      doc.text('Sale Report', 14, 10)
-      doc.autoTable({
-        head: [['S.L', ...visibleColumnsForExport.map((column) => column.label)]],
-        body: exportData.map((row, index) => [
-          index + 1,
-          ...visibleColumnsForExport.map((column) => row[column.key] ?? ''),
-        ]),
-        headStyles: { fillColor: [31, 41, 55] },
-      })
-      doc.save('Sale_Records.pdf')
-    } catch (err) {
-      console.error('Failed to export sales:', err)
-      setError(err?.message || 'Failed to export sales')
-    }
-  }
+  const mapExportRow = useCallback(
+    (row) => ({
+      ...row,
+      schoolName: row.schoolName || resolveSchoolName(row.schoolId),
+    }),
+    [resolveSchoolName],
+  )
 
   return (
     <div className="dashboard-main-body">
@@ -277,18 +249,16 @@ const Sale = ({ onNavigate }) => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10" onClick={handleExportExcel}><i className="ri-file-excel-2-line"></i> Excel</button></li>
-                  <li><button type="button" className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10" onClick={handleExportPDF}><i className="ri-file-3-line"></i> PDF</button></li>
-                </ul>
-              </div>
+              <ExportDropdown
+                rows={normalizedRows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={loadExportRows}
+                mapRow={mapExportRow}
+                fileName="Sale_Records"
+                sheetName="Sales"
+                pdfTitle="Sale Report"
+              />
               <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="text-secondary-light text-sm">Find</span>
                 <i className="ri-arrow-right-line"></i>

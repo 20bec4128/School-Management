@@ -11,6 +11,7 @@ import './assets/css/topbar.css'
 import './assets/css/dashboard.css'
 import './assets/css/table.css'
 import './css/mobile-bottom-nav.css'
+import './utils/pdfAutoTable.js'
 
 import './index.css'
 import App from './App.jsx'

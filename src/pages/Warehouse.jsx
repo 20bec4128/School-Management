@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import PhoneField from '../components/PhoneField'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -451,56 +449,13 @@ const Warehouse = () => {
     return Array.isArray(data?.content) ? data.content : []
   }
 
-  const handleExportExcel = async () => {
-    try {
-      const exportData = await exportRows()
-      const worksheet = XLSX.utils.json_to_sheet(
-        exportData.map((row) =>
-          columnOptions.reduce(
-            (acc, column) => {
-              if (visibleColumns[column.key]) {
-                acc[column.label] =
-                  column.key === 'schoolName'
-                    ? row.schoolName || resolveSchoolName(row.schoolId)
-                    : row[column.key] ?? ''
-              }
-              return acc
-            },
-            { S_L: row.id ?? '' },
-          ),
-        ),
-      )
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Warehouses')
-      XLSX.writeFile(workbook, 'Warehouse_List.xlsx')
-    } catch (err) {
-      console.error('Failed to export warehouses:', err)
-      setError(err?.message || 'Failed to export warehouses')
-    }
-  }
-
-  const handleExportPDF = async () => {
-    try {
-      const exportData = await exportRows()
-      const doc = new jsPDF({ orientation: 'landscape' })
-      const visibleColumnsForExport = columnOptions.filter((column) => visibleColumns[column.key])
-      doc.text('Warehouse Report', 14, 10)
-      doc.autoTable({
-        head: [['S.L', ...visibleColumnsForExport.map((column) => column.label)]],
-        body: exportData.map((row, index) => [
-          index + 1,
-          ...visibleColumnsForExport.map((column) =>
-            column.key === 'schoolName' ? row.schoolName || resolveSchoolName(row.schoolId) : row[column.key] ?? '',
-          ),
-        ]),
-        headStyles: { fillColor: [31, 41, 55] },
-      })
-      doc.save('Warehouse_Report.pdf')
-    } catch (err) {
-      console.error('Failed to export warehouses:', err)
-      setError(err?.message || 'Failed to export warehouses')
-    }
-  }
+  const mapExportRow = useCallback(
+    (row) => ({
+      ...row,
+      schoolName: row.schoolName || resolveSchoolName(row.schoolId),
+    }),
+    [resolveSchoolName],
+  )
 
   const handleSchoolChange = (setter, value) => {
     const selectedSchool = getById(allSchools, value)
@@ -551,36 +506,16 @@ const Warehouse = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown" aria-expanded="false">
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                      onClick={() => void handleExportExcel()}
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-10"
-                      onClick={() => void handleExportPDF()}
-                    >
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <ExportDropdown
+                rows={rows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={exportRows}
+                mapRow={mapExportRow}
+                fileName="Warehouse_List"
+                sheetName="Warehouses"
+                pdfTitle="Warehouse Report"
+              />
 
               <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="text-secondary-light text-sm">Find</span>

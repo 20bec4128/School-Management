@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import PhoneCodeField from '../components/PhoneCodeField';
 
+const DEFAULT_PHONE_CODE = '+91';
+
 const emptyForm = {
   schoolId: '',
   storeName: '',

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -490,38 +488,16 @@ const Issue = () => {
     return Array.isArray(data) ? data : []
   }, [debouncedSearch, filters.headOfficeId, filters.schoolId, filters.userType])
 
-  const handleExportExcel = useCallback(async () => {
-    try {
-      const exportRows = await handleExportRows()
-      const worksheet = XLSX.utils.json_to_sheet(exportRows)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Issues')
-      XLSX.writeFile(workbook, 'Issue_Report.xlsx')
-    } catch (err) {
-      console.error('Failed to export issues:', err)
-      setError(err?.message || 'Failed to export issues')
-    }
-  }, [handleExportRows])
-
-  const handleExportPDF = useCallback(async () => {
-    try {
-      const exportRows = await handleExportRows()
-      const doc = new jsPDF({ orientation: 'landscape' })
-      doc.text('Product Issue Report', 14, 10)
-      doc.autoTable({
-        head: [['S.L', ...columnOptions.filter((column) => visibleColumns[column.key]).map((column) => column.label)]],
-        body: exportRows.map((row, index) => [
-          index + 1,
-          ...columnOptions.filter((column) => visibleColumns[column.key]).map((column) => row[column.key]),
-        ]),
-        headStyles: { fillColor: [31, 41, 55] },
-      })
-      doc.save('Issue_Report.pdf')
-    } catch (err) {
-      console.error('Failed to export issues:', err)
-      setError(err?.message || 'Failed to export issues')
-    }
-  }, [handleExportRows, visibleColumns])
+  const mapExportRow = useCallback(
+    (row) => ({
+      ...row,
+      schoolName: row.schoolName || (Array.isArray(schools) ? schools.find((school) => String(school?.id ?? '') === String(row.schoolId))?.schoolName : '') || '',
+      issueToName: row.issueToName || '',
+      categoryName: row.categoryName || '',
+      productName: row.productName || '',
+    }),
+    [schools],
+  )
 
   const handleSchoolChange = useCallback(
     (value) => {
@@ -733,49 +709,16 @@ const Issue = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
-                      onClick={handleExportExcel}
-                    >
-                      <i className="ri-file-text-line"></i> CSV
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
-                      onClick={handleExportExcel}
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
-                      onClick={handleExportPDF}
-                    >
-                      <i className="ri-file-3-line"></i> PDF
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <ExportDropdown
+                rows={rows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={handleExportRows}
+                mapRow={mapExportRow}
+                fileName="Issue_List"
+                sheetName="Issues"
+                pdfTitle="Issue Report"
+              />
 
               <button
                 type="button"

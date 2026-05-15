@@ -5,6 +5,7 @@ import "jspdf-autotable";
 import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import "../assets/css/addModalShared.css";
+import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
   schoolId: "Select",
@@ -85,24 +86,7 @@ const IssueReturn = ({ onNavigate }) => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    <i className="ri-file-upload-line text-md line-height-1"></i> Export
-                  </span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  <li>
-                    <button
-                      className="dropdown-item px-16 py-8 rounded text-secondary-light bg-hover-neutral-200 d-flex align-items-center gap-10"
-                      onClick={handleExportExcel}
-                    >
-                      <i className="ri-file-excel-2-line"></i> Excel
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              <ExportDropdown onExportExcel={handleExportExcel} />
 
               <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterOpen(true)}>
                 <span className="text-secondary-light text-sm">Find</span>

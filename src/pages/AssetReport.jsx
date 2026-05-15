@@ -1,8 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import SlideSidebar from '../components/SlideSidebar';
+import ExportDropdown from '../components/ExportDropdown';
 import useColumnVisibility from '../hooks/useColumnVisibility';
 
 const columnOptions = [
@@ -29,23 +27,6 @@ const AssetReport = () => {
     return data.filter((row) => !q || Object.values(row).some((value) => String(value).toLowerCase().includes(q)));
   }, [data, search]);
 
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Asset Report');
-    XLSX.writeFile(workbook, 'asset-report.xlsx');
-  };
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.text('Asset Report', 14, 10);
-    doc.autoTable({
-      head: [['School', 'Asset', 'Purchase', 'Issue', 'Return']],
-      body: filteredData.map((row) => [row.school, row.asset, row.purchase, row.issue, row.returnCount]),
-    });
-    doc.save('asset-report.pdf');
-  };
-
   return (
     <div className="avm-page">
       <div className="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
@@ -62,8 +43,13 @@ const AssetReport = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
           <button className="btn btn-outline-secondary" onClick={() => setIsFilterSidebarOpen(true)}>Filters</button>
-          <button className="btn btn-outline-secondary" onClick={handleExportExcel}>Excel</button>
-          <button className="btn btn-outline-secondary" onClick={handleExportPDF}>PDF</button>
+          <ExportDropdown
+            rows={filteredData}
+            columns={columnOptions}
+            fileName="asset-report"
+            sheetName="Asset Report"
+            pdfTitle="Asset Report"
+          />
         </div>
       </div>
 
