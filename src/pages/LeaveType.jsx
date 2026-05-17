@@ -4,6 +4,7 @@ import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { normalizeRole } from '../utils/roles'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchDesignations } from '../apis/designationsApi'
 import { fetchSchoolRoles } from '../apis/schoolRbacApi'
@@ -17,6 +18,7 @@ import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
 const makeEmptyForm = (defaultSchoolId = '', defaultApplicantType = '') => ({
+  headOfficeId: '',
   schoolId: defaultSchoolId ? String(defaultSchoolId) : '',
   applicantType: defaultApplicantType,
   designationId: '',
@@ -91,7 +93,9 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const LeaveType = () => {
+const EDIT_STORAGE_KEY = 'edit-leave-type-row'
+
+const LeaveType = ({ onNavigate } = {}) => {
   const {
     status,
     token,
@@ -110,8 +114,10 @@ const LeaveType = () => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const isStudentRole = role === 'STUDENT'
   const isFixedSchoolRole = isSchoolAdmin || isStudentRole
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
   const [rows, setRows] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
   const [applicantRoles, setApplicantRoles] = useState([])
   const [designations, setDesignations] = useState([])
@@ -151,6 +157,15 @@ const LeaveType = () => {
     return map
   }, [schools])
 
+  const headOfficesById = useMemo(() => {
+    const map = new Map()
+    for (const item of Array.isArray(headOffices) ? headOffices : []) {
+      if (item?.id == null) continue
+      map.set(String(item.id), item)
+    }
+    return map
+  }, [headOffices])
+
   const designationsById = useMemo(() => {
     const map = new Map()
     for (const item of Array.isArray(designations) ? designations : []) {
@@ -164,6 +179,12 @@ const LeaveType = () => {
     if (schoolId == null) return fallback || ''
     const row = schoolsById.get(String(schoolId))
     return row?.schoolName || row?.name || fallback || (schoolId === authSchoolId ? authSchoolName : '') || ''
+  }
+
+  const resolveHeadOfficeName = (headOfficeId, fallback = '') => {
+    if (headOfficeId == null) return fallback || ''
+    const row = headOfficesById.get(String(headOfficeId))
+    return row?.name || row?.headOfficeName || fallback || `Head Office ${headOfficeId}`
   }
 
   const resolveDesignationName = (designationId, fallback = '') => {
@@ -277,13 +298,26 @@ const LeaveType = () => {
   const loadSchools = async () => {
     if (!isSuperAdmin && !isHeadOfficeAdmin) {
       setSchools([])
+      setHeadOffices([])
       return
     }
     try {
-      const list = await fetchSchoolsLookup()
-      setSchools(Array.isArray(list) ? list : [])
+      const [schoolList, headOfficePage] = await Promise.all([
+        fetchSchoolsLookup(),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+      ])
+      setSchools(Array.isArray(schoolList) ? schoolList : [])
+      setHeadOffices(
+        Array.isArray(headOfficePage?.content)
+          ? headOfficePage.content.map((item) => ({
+              ...item,
+              name: item?.name || item?.headOfficeName || '',
+            }))
+          : [],
+      )
     } catch {
       setSchools([])
+      setHeadOffices([])
     }
   }
 
@@ -298,11 +332,24 @@ const LeaveType = () => {
       setDesignations([])
       return
     }
-    const data = await fetchDesignations({
+    const matchesApplicantType = (item) =>
+      normalizeApplicantType(item?.role || item?.applicantType || item?.designationType || '') === normalizedApplicantType
+
+    const primary = await fetchDesignations({
       schoolId: Number(schoolId),
       role: normalizedApplicantType,
-    })
-    setDesignations(Array.isArray(data) ? data : [])
+    }).catch(() => [])
+    const primaryList = Array.isArray(primary) ? primary.filter(matchesApplicantType) : []
+
+    if (primaryList.length > 0) {
+      setDesignations(primaryList)
+      return
+    }
+
+    const fallback = await fetchDesignations({
+      schoolId: Number(schoolId),
+    }).catch(() => [])
+    setDesignations(Array.isArray(fallback) ? fallback.filter(matchesApplicantType) : [])
   }
 
   const loadRows = async (schoolId = null) => {
@@ -415,6 +462,11 @@ const LeaveType = () => {
     const { id, value } = e.target
     setter((prev) => {
       const next = { ...prev, [id]: value }
+      if (id === 'headOfficeId') {
+        next.schoolId = ''
+        next.applicantType = ''
+        next.designationId = ''
+      }
       if (id === 'schoolId') {
         next.applicantType = ''
         next.designationId = ''
@@ -424,6 +476,12 @@ const LeaveType = () => {
       }
       return next
     })
+
+    if (id === 'headOfficeId') {
+      setApplicantRoles([])
+      setDesignations([])
+      return
+    }
 
     if (id === 'schoolId') {
       void loadApplicantRolesForSchool(value)
@@ -437,6 +495,14 @@ const LeaveType = () => {
   }
 
   const openAdd = () => {
+    if (navigateTo) {
+      try {
+        sessionStorage.removeItem(EDIT_STORAGE_KEY)
+      } catch {}
+      navigateTo('add-leave-type')
+      return
+    }
+
     const defaultSchoolId = isFixedSchoolRole
       ? authSchoolId
       : isHeadOfficeAdmin
@@ -456,7 +522,17 @@ const LeaveType = () => {
   }
 
   const openEdit = (row) => {
+    if (navigateTo) {
+      try {
+        sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+      } catch {}
+      navigateTo('add-leave-type')
+      return
+    }
+
+    const rowSchool = row.schoolId != null ? schoolsById.get(String(row.schoolId)) : null
     const nextForm = {
+      headOfficeId: rowSchool?.headOfficeId != null ? String(rowSchool.headOfficeId) : '',
       schoolId: row.schoolId != null ? String(row.schoolId) : '',
       applicantType: row.applicantType || '',
       designationId:
@@ -647,27 +723,60 @@ const LeaveType = () => {
       )
     }
 
+    const selectedHeadOfficeId = isSuperAdmin
+      ? form.headOfficeId
+      : isHeadOfficeAdmin && authHeadOfficeId != null
+        ? String(authHeadOfficeId)
+        : ''
+
     const schoolSelectOptions =
-      isHeadOfficeAdmin && authHeadOfficeId != null
-        ? schools.filter((item) => String(item?.headOfficeId ?? '') === String(authHeadOfficeId))
+      isSuperAdmin && selectedHeadOfficeId
+        ? schools.filter((item) => String(item?.headOfficeId ?? '') === String(selectedHeadOfficeId))
+        : isHeadOfficeAdmin && authHeadOfficeId != null
+          ? schools.filter((item) => String(item?.headOfficeId ?? '') === String(authHeadOfficeId))
         : schools
 
     return (
-      <FormField label="School Name" required full>
-        <select
-          className="avm-select"
-          id="schoolId"
-          value={form.schoolId}
-          onChange={handleFormChange(form, setter)}
-        >
-          <option value="">--Select School--</option>
-          {schoolSelectOptions.map((option) => (
-            <option key={option.id} value={String(option.id)}>
-              {option.schoolName}
+      <div className="avm-grid">
+        {isSuperAdmin ? (
+          <FormField label="Head Office" required full>
+            <select
+              className="avm-select"
+              id="headOfficeId"
+              value={form.headOfficeId}
+              onChange={handleFormChange(form, setter)}
+            >
+              <option value="">--Select Head Office--</option>
+              {headOffices.map((option) => (
+                <option key={option.id} value={String(option.id)}>
+                  {option.name || option.headOfficeName}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        ) : null}
+
+        <FormField label="School Name" required full>
+          <select
+            className="avm-select"
+            id="schoolId"
+            value={form.schoolId}
+            onChange={handleFormChange(form, setter)}
+            disabled={isSuperAdmin && !form.headOfficeId}
+          >
+            <option value="">
+              {isSuperAdmin && !form.headOfficeId
+                ? '--Select Head Office First--'
+                : '--Select School--'}
             </option>
-          ))}
-        </select>
-      </FormField>
+            {schoolSelectOptions.map((option) => (
+              <option key={option.id} value={String(option.id)}>
+                {option.schoolName}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      </div>
     )
   }
 
@@ -679,26 +788,49 @@ const LeaveType = () => {
     const disabled = !schoolId || !applicantType
 
     return (
-      <FormField label="Designation" required full>
-        <select
-          className="avm-select"
-          id="designationId"
-          value={form.designationId}
-          onChange={handleFormChange(form, setter)}
-          disabled={disabled}
+      <FormField label="Designation" required full noIcon>
+        <div
+          className="avm-input-with-icon"
+          style={{ position: 'relative', minHeight: '44px' }}
         >
-          <option value="">--Select Designation--</option>
-          {designations.map((option) => (
-            <option key={option.id} value={String(option.id)}>
-              {option.name}
-            </option>
-          ))}
-        </select>
-        {!disabled && designations.length === 0 ? (
-          <small className="text-secondary-light d-block mt-8">
-            No designations found for the selected role and school.
-          </small>
-        ) : null}
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: '0.85rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#667085',
+              fontSize: '0.95rem',
+              lineHeight: 1,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <i className="ri-award-line"></i>
+          </span>
+          <select
+            className="avm-select"
+            id="designationId"
+            value={form.designationId}
+            onChange={handleFormChange(form, setter)}
+            disabled={disabled}
+          >
+            <option value="">--Select Designation--</option>
+            {designations.map((option) => (
+              <option key={option.id} value={String(option.id)}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ minHeight: '1.1rem', marginTop: '0.35rem' }}>
+          {!disabled && designations.length === 0 ? (
+            <small className="text-secondary-light d-block">
+              No designations found for the selected role and school.
+            </small>
+          ) : null}
+        </div>
       </FormField>
     )
   }

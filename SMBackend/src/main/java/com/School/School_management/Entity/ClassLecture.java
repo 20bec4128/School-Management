@@ -37,6 +37,10 @@ public class ClassLecture {
   private String note;
 
   @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "lesson_id")
+  private Lesson lesson;
+
+  @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "teacher_id", nullable = false)
   private ManageTeacher teacher;
 
@@ -118,6 +122,14 @@ public class ClassLecture {
 
   public void setNote(String note) {
     this.note = note;
+  }
+
+  public Lesson getLesson() {
+    return lesson;
+  }
+
+  public void setLesson(Lesson lesson) {
+    this.lesson = lesson;
   }
 
   public ManageTeacher getTeacher() {

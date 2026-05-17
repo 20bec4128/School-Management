@@ -129,8 +129,11 @@ const LeaveApplicationWorkspace = ({
   statusFilter = null,
   showCreateButton = true,
   showForm = true,
+  showTable = true,
   actionMode = 'crud', // crud | review | view
   showStatusColumn = true,
+  defaultOpenAdd = false,
+  onNavigate = null,
 }) => {
   const { status, token, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(() => normalizeRole(authRole), [authRole])
@@ -429,10 +432,23 @@ const LeaveApplicationWorkspace = ({
       setDesignations([])
       return []
     }
-    const data = await fetchDesignations({ schoolId: Number(schoolId), role: normalizedRoleName })
-    const list = Array.isArray(data) ? data : []
-    setDesignations(list)
-    return list
+    const primary = await fetchDesignations({
+      schoolId: Number(schoolId),
+      role: normalizedRoleName,
+    }).catch(() => [])
+    const primaryList = Array.isArray(primary) ? primary : []
+
+    if (primaryList.length > 0) {
+      setDesignations(primaryList)
+      return primaryList
+    }
+
+    const fallback = await fetchDesignations({
+      schoolId: Number(schoolId),
+    }).catch(() => [])
+    const fallbackList = Array.isArray(fallback) ? fallback : []
+    setDesignations(fallbackList)
+    return fallbackList
   }
 
   const loadApplicantsForForm = async (schoolId, applicantType, designationId) => {
@@ -531,6 +547,13 @@ const LeaveApplicationWorkspace = ({
       active = false
     }
   }, [status, token, role, authSchoolId, scopeSchoolId, statusFilter])
+
+  useEffect(() => {
+    if (defaultOpenAdd && showForm && showTable) {
+      void openAdd()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultOpenAdd, showForm, showTable])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -651,6 +674,10 @@ const LeaveApplicationWorkspace = ({
 
   const openAdd = async () => {
     if (!showForm) return
+    if (typeof onNavigate === 'function') {
+      onNavigate('add-leave-application')
+      return
+    }
     const defaults = {
       headOfficeId: isSchoolAdmin || role === 'TEACHER' || role === 'STUDENT' || role === 'PARENT'
         ? authHeadOfficeId
@@ -939,7 +966,7 @@ const LeaveApplicationWorkspace = ({
             <p className="avm-section-title">Basic Information</p>
             <div className="avm-grid">
           {isSuperAdmin ? (
-            <FormField label="Head Office" required full>
+            <FormField label="Head Office" required >
               <select
                 className="avm-select"
                 id="headOfficeId"
@@ -955,7 +982,7 @@ const LeaveApplicationWorkspace = ({
               </select>
             </FormField>
           ) : (
-            <FormField label="Head Office" required full>
+            <FormField label="Head Office" required >
               <input
                 className="avm-input"
                 value={resolveHeadOfficeName(formHeadOfficeId(form)) || 'Head office fixed'}
@@ -965,7 +992,7 @@ const LeaveApplicationWorkspace = ({
           )}
 
           {isSuperAdmin || isHeadOfficeAdmin ? (
-            <FormField label="School Name" required full>
+            <FormField label="School Name" required>
               <select
                 className="avm-select"
                 id="schoolId"
@@ -982,12 +1009,12 @@ const LeaveApplicationWorkspace = ({
               </select>
             </FormField>
           ) : (
-            <FormField label="School Name" required full>
+            <FormField label="School Name" required>
               <input className="avm-input" value={resolveSchoolName(formSchoolId(form)) || 'School fixed'} readOnly />
             </FormField>
           )}
 
-          <FormField label="Applicant Type" required full>
+          <FormField label="Applicant Type" required>
             <select
               className="avm-select"
               id="applicantType"
@@ -1001,30 +1028,53 @@ const LeaveApplicationWorkspace = ({
           </FormField>
 
           {designationRequired ? (
-            <FormField label="Designation" required full>
-              <select
-                className="avm-select"
-                id="designationId"
-                value={form.designationId}
-                onChange={handleFormChange(form, setter)}
-                disabled={!schoolId || !applicantType}
+            <FormField label="Designation" required noIcon>
+              <div
+                className="avm-input-with-icon"
+                style={{ position: 'relative', minHeight: '44px' }}
               >
-                <option value="">--Select Designation--</option>
-                {designations.map((item) => (
-                  <option key={item.id} value={String(item.id)}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-              {!(!schoolId || !applicantType) && designations.length === 0 ? (
-                <small className="text-secondary-light d-block mt-8">
-                  No designations found for the selected role and school.
-                </small>
-              ) : null}
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    left: '0.85rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#667085',
+                    fontSize: '0.95rem',
+                    lineHeight: 1,
+                    pointerEvents: 'none',
+                    zIndex: 1,
+                  }}
+                >
+                  <i className="ri-award-line" />
+                </span>
+                <select
+                  className="avm-select"
+                  id="designationId"
+                  value={form.designationId}
+                  onChange={handleFormChange(form, setter)}
+                  disabled={!schoolId || !applicantType}
+                >
+                  <option value="">--Select Designation--</option>
+                  {designations.map((item) => (
+                    <option key={item.id} value={String(item.id)}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ minHeight: '1.1rem', marginTop: '0.35rem' }}>
+                {!(!schoolId || !applicantType) && designations.length === 0 ? (
+                  <small className="text-secondary-light d-block">
+                    No designations found for the selected role and school.
+                  </small>
+                ) : null}
+              </div>
             </FormField>
           ) : null}
 
-          <FormField label="Applicant" required full>
+          <FormField label="Applicant" required >
             <select
               className="avm-select"
               id="applicantId"
@@ -1046,26 +1096,49 @@ const LeaveApplicationWorkspace = ({
             ) : null}
           </FormField>
 
-          <FormField label="Leave Type" required full>
-            <select
-              className="avm-select"
-              id="leaveTypeId"
-              value={form.leaveTypeId}
-              onChange={handleFormChange(form, setter)}
-              disabled={leaveTypeDisabled}
+          <FormField label="Leave Type" required noIcon>
+            <div
+              className="avm-input-with-icon"
+              style={{ position: 'relative', minHeight: '44px' }}
             >
-              <option value="">--Select Leave Type--</option>
-              {leaveTypes.map((item) => (
-                <option key={item.id} value={String(item.id)}>
-                  {item.leaveType || item.leaveTypeName || `Leave Type ${item.id}`}
-                </option>
-              ))}
-            </select>
-            {!leaveTypeDisabled && leaveTypes.length === 0 ? (
-              <small className="text-secondary-light d-block mt-8">
-                No leave types found for the selected role and designation.
-              </small>
-            ) : null}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: '0.85rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#667085',
+                  fontSize: '0.95rem',
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}
+              >
+                <i className="ri-file-list-3-line" />
+              </span>
+              <select
+                className="avm-select"
+                id="leaveTypeId"
+                value={form.leaveTypeId}
+                onChange={handleFormChange(form, setter)}
+                disabled={leaveTypeDisabled}
+              >
+                <option value="">--Select Leave Type--</option>
+                {leaveTypes.map((item) => (
+                  <option key={item.id} value={String(item.id)}>
+                    {item.leaveType || item.leaveTypeName || `Leave Type ${item.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ minHeight: '1.1rem', marginTop: '0.35rem' }}>
+              {!leaveTypeDisabled && leaveTypes.length === 0 ? (
+                <small className="text-secondary-light d-block">
+                  No leave types found for the selected role and designation.
+                </small>
+              ) : null}
+            </div>
           </FormField>
         </div>
           </>
@@ -1159,6 +1232,116 @@ const LeaveApplicationWorkspace = ({
 
   const canCreate = !isHeadOfficeAdmin || !!scopeSchoolId
 
+  const renderInlineAddPage = () => (
+    <div className="card h-100">
+      <div className="card-header border-bottom border-neutral-200 px-20 py-0 d-flex gap-0">
+        {LEAVE_APPLICATION_STEPS.map((step, index) => (
+          <button
+            key={step}
+            type="button"
+            className="border-0 bg-transparent"
+            onClick={() => {
+              if (index > addStep) {
+                const validation = validateApplicantStep(addForm)
+                if (validation) {
+                  setError(validation)
+                  return
+                }
+              }
+              setError('')
+              setAddStep(index)
+            }}
+            style={{
+              borderBottom:
+                addStep === index
+                  ? '2px solid var(--primary-600, #4f46e5)'
+                  : '2px solid transparent',
+              color:
+                addStep === index
+                  ? 'var(--primary-600, #4f46e5)'
+                  : 'var(--text-secondary-light, #667085)',
+              fontWeight: addStep === index ? 600 : 500,
+              padding: '14px 20px',
+              fontSize: '0.875rem',
+            }}
+          >
+            {step}
+          </button>
+        ))}
+      </div>
+
+      <div className="card-body p-24">
+        {error ? (
+          <div className="alert alert-danger d-flex align-items-center gap-10 mb-24 radius-8">
+            <i className="ri-error-warning-line text-lg"></i>
+            {error}
+          </div>
+        ) : null}
+
+        {renderForm(addForm, setAddForm, true, addStep)}
+
+        <div className="d-flex align-items-center justify-content-between gap-10 mt-24 pt-20 border-top border-neutral-200">
+          <button
+            type="button"
+            className="btn btn-light border px-24"
+            onClick={() => setAddStep((step) => Math.max(0, step - 1))}
+            disabled={addStep === 0}
+          >
+            Back
+          </button>
+
+          <div className="d-flex align-items-center gap-10">
+            <button
+              type="button"
+              className="btn btn-light border px-24"
+              onClick={() => onNavigate?.('leave-application')}
+            >
+              Cancel
+            </button>
+
+            {addStep < LEAVE_APPLICATION_STEPS.length - 1 ? (
+              <button
+                type="button"
+                className="btn btn-primary-600 px-24"
+                onClick={() => {
+                  const validation = validateApplicantStep(addForm)
+                  if (validation) {
+                    setError(validation)
+                    return
+                  }
+                  setError('')
+                  setAddStep((step) =>
+                    Math.min(LEAVE_APPLICATION_STEPS.length - 1, step + 1),
+                  )
+                }}
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary-600 px-24 d-flex align-items-center gap-8"
+                onClick={handleCreate}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>{' '}
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-save-line"></i> Save Leave Application
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -1205,47 +1388,49 @@ const LeaveApplicationWorkspace = ({
 
       {error ? <div className="alert alert-danger mb-16" role="alert">{error}</div> : null}
 
-      <div className="card h-100">
-        <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-            <div className="d-flex flex-wrap align-items-center gap-16">
-              <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
+      {showTable ? (
+        <div className="card h-100">
+          <div className="card-body p-0 dataTable-wrapper">
+            <>
+              <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+                <div className="d-flex flex-wrap align-items-center gap-16">
+                  <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
 
-              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
-                <span><i className="ri-arrow-right-line"></i></span>
-              </button>
+                  <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
+                    <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
+                    <span><i className="ri-arrow-right-line"></i></span>
+                  </button>
 
-              <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
-                </button>
-                <ul className="dropdown-menu p-12 border bg-base shadow">
-                  {columnOptions.map((column) => (
-                    <li key={column.key}>
-                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
-                        {column.label}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
+                  <div className="dropdown">
+                    <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" data-bs-toggle="dropdown" aria-expanded="false">
+                      <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
+                      <span><i className="ri-arrow-down-s-line"></i></span>
+                    </button>
+                    <ul className="dropdown-menu p-12 border bg-base shadow">
+                      {columnOptions.map((column) => (
+                        <li key={column.key}>
+                          <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                            <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[column.key]} onChange={() => toggleColumn(column.key)} />
+                            {column.label}
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
+                    {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+
+                <div className="position-relative">
+                  <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search leave applications..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }} />
+                  <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light"><i className="ri-search-line"></i></span>
+                </div>
               </div>
 
-              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-
-            <div className="position-relative">
-              <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search leave applications..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }} />
-              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light"><i className="ri-search-line"></i></span>
-            </div>
-          </div>
-
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1200 }}>
+              <div className="p-0 table-responsive">
+                <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1200 }}>
               <thead>
                 <tr>
                   <th scope="col">
@@ -1337,23 +1522,27 @@ const LeaveApplicationWorkspace = ({
                   ))
                 )}
               </tbody>
-            </table>
-          </div>
+                </table>
+              </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              {getVisiblePages().map((p) => (
-                <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
-              ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
-            </div>
+              <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+                <span className="text-sm text-secondary-light">
+                  Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
+                </span>
+                <div className="d-flex align-items-center gap-8">
+                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
+                  {getVisiblePages().map((p) => (
+                    <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
+                  ))}
+                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+                </div>
+              </div>
+            </>
           </div>
         </div>
-      </div>
+      ) : showForm ? (
+        renderInlineAddPage()
+      ) : null}
 
       {showForm ? (
         <>

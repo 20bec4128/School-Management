@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
@@ -52,6 +51,7 @@ const emptyFilters = {
 }
 
 const STEPS = ['Issue Details']
+const EDIT_STORAGE_KEY = 'edit-issue-row'
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
@@ -131,7 +131,7 @@ const normalizeSelectValue = (value) => {
   return trimmed
 }
 
-const Issue = () => {
+const Issue = ({ onNavigate } = {}) => {
   const {
     status,
     token,
@@ -147,6 +147,7 @@ const Issue = () => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
@@ -196,6 +197,14 @@ const Issue = () => {
   )
 
   const schoolOptions = useMemo(() => schoolOptionsFor(schools), [schoolOptionsFor, schools])
+  const schoolsById = useMemo(() => {
+    const map = new Map()
+    for (const school of Array.isArray(schools) ? schools : []) {
+      if (school?.id == null) continue
+      map.set(String(school.id), school)
+    }
+    return map
+  }, [schools])
   const addSchoolOptions = useMemo(() => schoolOptionsFor(schools, addForm.headOfficeId), [addForm.headOfficeId, schoolOptionsFor, schools])
   const filterSchoolOptions = useMemo(() => schoolOptionsFor(schools, pendingFilters.headOfficeId), [pendingFilters.headOfficeId, schoolOptionsFor, schools])
   const categoryOptions = useMemo(
@@ -359,26 +368,24 @@ const Issue = () => {
 
   const handleOpenAdd = useCallback(() => {
     setError('')
-    setEditingId(null)
-    setAddForm({
-      ...emptyForm,
-      headOfficeId: isHeadOfficeAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : '',
-      schoolId: isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : '',
-      issueDate: DEFAULT_ISSUE_DATE,
-      dueDate: DEFAULT_DUE_DATE,
-    })
-    setRoleOptions([])
-    setRecipientOptions([])
-    setIsAddOpen(true)
-  }, [authSchoolId, isSchoolAdmin])
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    navigateTo?.('add-issue')
+  }, [navigateTo])
 
   const handleEdit = useCallback(
     (row) => {
       if (!row) return
-      setError('')
-      setEditingId(row.id ?? null)
-      setAddForm({
-        headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : '',
+      const school = row.schoolId != null ? schoolsById.get(String(row.schoolId)) : null
+      const payload = {
+        ...row,
+        headOfficeId:
+          row.headOfficeId != null
+            ? String(row.headOfficeId)
+            : school?.headOfficeId != null
+              ? String(school.headOfficeId)
+              : '',
         schoolId: row.schoolId != null ? String(row.schoolId) : '',
         userType: row.userType || '',
         issueToId: row.issueToId != null ? String(row.issueToId) : '',
@@ -388,10 +395,15 @@ const Issue = () => {
         issueDate: row.issueDate ? String(row.issueDate).slice(0, 10) : DEFAULT_ISSUE_DATE,
         dueDate: row.dueDate ? String(row.dueDate).slice(0, 10) : DEFAULT_DUE_DATE,
         note: row.note || '',
-      })
-      setIsAddOpen(true)
+      }
+
+      try {
+        sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(payload))
+      } catch {}
+
+      navigateTo?.('add-issue')
     },
-    [],
+    [navigateTo, schoolsById],
   )
 
   const handleHeadOfficeChange = useCallback(
@@ -896,22 +908,6 @@ const Issue = () => {
           </div>
         </div>
       </div>
-
-      <WizardPopup
-        modalWidth="680px"
-        open={isAddOpen}
-        title={editingId != null ? 'Edit Issue' : 'Add Issue'}
-        steps={STEPS}
-        step={0}
-        onClose={() => {
-          setIsAddOpen(false)
-          setEditingId(null)
-        }}
-        onSubmit={handleSave}
-        submitLabel={busy ? 'Saving...' : editingId != null ? 'Update Issue' : 'Save'}
-      >
-        {renderForm()}
-      </WizardPopup>
 
       <SlideSidebar isOpen={isFilterSidebarOpen} onClose={() => setIsFilterSidebarOpen(false)} title="Find Issue">
         <form

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
@@ -13,6 +12,8 @@ import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { createSupplier, deleteSupplier, fetchSuppliersPage, updateSupplier } from '../apis/suppliersApi'
 import '../assets/css/addModalShared.css'
+
+const EDIT_STORAGE_KEY = 'edit-vendor-row'
 
 const emptyForm = {
   headOfficeId: '',
@@ -282,77 +283,45 @@ const Vendor = ({ onNavigate }) => {
   })
 
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) base.headOfficeId = String(authHeadOfficeId)
-    if (isSchoolAdmin && authSchoolId != null) {
-      const school = getSchoolById(allSchools, authSchoolId)
-      base.schoolId = String(authSchoolId)
-      base.headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    if (onNavigate) {
+      onNavigate('add-vendor')
+      return
     }
-    if (isSuperAdmin && manualScope.selectedHeadOfficeId) {
-      base.headOfficeId = String(manualScope.selectedHeadOfficeId)
-      base.schoolId = String(manualScope.selectedSchoolId || '')
-    }
-    setAddForm(base)
-    setIsAddOpen(true)
+    window.history.back()
   }
 
   const openEdit = (row) => {
-    setEditForm({
+    const school = row?.schoolId != null ? getSchoolById(allSchools, row.schoolId) : null
+    const payload = {
       id: row?.id != null ? String(row.id) : '',
-      headOfficeId: row?.headOfficeId != null ? String(row.headOfficeId) : '',
+      headOfficeId:
+        row?.headOfficeId != null
+          ? String(row.headOfficeId)
+          : school?.headOfficeId != null
+            ? String(school.headOfficeId)
+            : '',
       schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-      vendorName: row?.supplierName || '',
+      vendorName: row?.supplierName || row?.vendorName || '',
+      supplierName: row?.supplierName || row?.vendorName || '',
       contactName: row?.contactName || '',
       email: row?.email || '',
       phone: row?.phone || '',
       address: row?.address || '',
       note: row?.note || '',
-    })
-    setIsEditOpen(true)
-  }
+    }
 
-  const handleSaveAdd = async () => {
-    const payload = buildPayload(addForm)
-    if (!payload.supplierName || !payload.contactName || !payload.phone || !payload.schoolId) {
-      setError('Vendor name, contact name, phone, and school are required.')
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(payload))
+    } catch {}
+
+    if (onNavigate) {
+      onNavigate('add-vendor')
       return
     }
-
-    setSaving(true)
-    setError('')
-    try {
-      await createSupplier(payload)
-      setIsAddOpen(false)
-      setAddForm(emptyForm)
-      await loadRows()
-    } catch (err) {
-      console.error('Failed to create vendor:', err)
-      setError(err?.message || 'Failed to create vendor')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSaveEdit = async () => {
-    const payload = buildPayload(editForm)
-    if (!payload.supplierName || !payload.contactName || !payload.phone || !payload.schoolId) {
-      setError('Vendor name, contact name, phone, and school are required.')
-      return
-    }
-
-    setSaving(true)
-    setError('')
-    try {
-      await updateSupplier(editForm.id, payload)
-      setIsEditOpen(false)
-      await loadRows()
-    } catch (err) {
-      console.error('Failed to update vendor:', err)
-      setError(err?.message || 'Failed to update vendor')
-    } finally {
-      setSaving(false)
-    }
+    window.history.back()
   }
 
   const handleDelete = async (row) => {
@@ -582,117 +551,6 @@ const Vendor = ({ onNavigate }) => {
         </form>
       </SlideSidebar>
 
-      <WizardPopup
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        title="Add Vendor"
-        onSave={() => void handleSaveAdd()}
-        saving={saving}
-        steps={['Basic Information']}
-        activeStep={0}
-        onStepChange={() => {}}
-      >
-        <div className="row g-20">
-          <ManualScopeSelectors
-            enabled={isSuperAdmin}
-            headOffices={headOffices}
-            schoolOptions={addSchoolOptions}
-            selectedHeadOfficeId={addForm.headOfficeId}
-            selectedSchoolId={addForm.schoolId}
-            onHeadOfficeChange={(value) => setAddForm((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))}
-            onSchoolChange={(value) => setAddForm((prev) => ({ ...prev, schoolId: value }))}
-            showSchoolSelector
-            schoolLabel="School Name"
-            loading={lookupLoading}
-          />
-          <div className="col-md-6">
-            <FormField label="Vendor" required>
-              <input className="avm-input" id="vendorName" value={addForm.vendorName} onChange={(e) => setAddForm((prev) => ({ ...prev, vendorName: e.target.value }))} placeholder="Vendor Name" />
-            </FormField>
-          </div>
-          <div className="col-md-6">
-            <FormField label="Contact Name" required>
-              <input className="avm-input" id="contactName" value={addForm.contactName} onChange={(e) => setAddForm((prev) => ({ ...prev, contactName: e.target.value }))} placeholder="Contact Name" />
-            </FormField>
-          </div>
-          <div className="col-md-6">
-            <FormField label="Email">
-              <input className="avm-input" id="email" value={addForm.email} onChange={(e) => setAddForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" />
-            </FormField>
-          </div>
-          <div className="col-md-6">
-            <FormField label="Phone" required>
-              <input className="avm-input" id="phone" value={addForm.phone} onChange={(e) => setAddForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" />
-            </FormField>
-          </div>
-          <div className="col-12">
-            <FormField label="Address" full>
-              <textarea className="avm-input avm-textarea" id="address" rows="3" value={addForm.address} onChange={(e) => setAddForm((prev) => ({ ...prev, address: e.target.value }))} placeholder="Address" />
-            </FormField>
-          </div>
-          <div className="col-12">
-            <FormField label="Note" full>
-              <textarea className="avm-input avm-textarea" id="note" rows="3" value={addForm.note} onChange={(e) => setAddForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Note" />
-            </FormField>
-          </div>
-        </div>
-      </WizardPopup>
-
-      <WizardPopup
-        isOpen={isEditOpen}
-        onClose={() => setIsEditOpen(false)}
-        title="Edit Vendor"
-        onSave={() => void handleSaveEdit()}
-        saving={saving}
-        steps={['Basic Information']}
-        activeStep={0}
-        onStepChange={() => {}}
-      >
-        <div className="row g-20">
-          <ManualScopeSelectors
-            enabled={isSuperAdmin}
-            headOffices={headOffices}
-            schoolOptions={editSchoolOptions}
-            selectedHeadOfficeId={editForm.headOfficeId}
-            selectedSchoolId={editForm.schoolId}
-            onHeadOfficeChange={(value) => setEditForm((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))}
-            onSchoolChange={(value) => setEditForm((prev) => ({ ...prev, schoolId: value }))}
-            showSchoolSelector
-            schoolLabel="School Name"
-            loading={lookupLoading}
-          />
-          <div className="col-md-6">
-            <FormField label="Vendor" required>
-              <input className="avm-input" id="vendorName" value={editForm.vendorName} onChange={(e) => setEditForm((prev) => ({ ...prev, vendorName: e.target.value }))} placeholder="Vendor Name" />
-            </FormField>
-          </div>
-          <div className="col-md-6">
-            <FormField label="Contact Name" required>
-              <input className="avm-input" id="contactName" value={editForm.contactName} onChange={(e) => setEditForm((prev) => ({ ...prev, contactName: e.target.value }))} placeholder="Contact Name" />
-            </FormField>
-          </div>
-          <div className="col-md-6">
-            <FormField label="Email">
-              <input className="avm-input" id="email" value={editForm.email} onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" />
-            </FormField>
-          </div>
-          <div className="col-md-6">
-            <FormField label="Phone" required>
-              <input className="avm-input" id="phone" value={editForm.phone} onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" />
-            </FormField>
-          </div>
-          <div className="col-12">
-            <FormField label="Address" full>
-              <textarea className="avm-input avm-textarea" id="address" rows="3" value={editForm.address} onChange={(e) => setEditForm((prev) => ({ ...prev, address: e.target.value }))} placeholder="Address" />
-            </FormField>
-          </div>
-          <div className="col-12">
-            <FormField label="Note" full>
-              <textarea className="avm-input avm-textarea" id="note" rows="3" value={editForm.note} onChange={(e) => setEditForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Note" />
-            </FormField>
-          </div>
-        </div>
-      </WizardPopup>
     </div>
   )
 }

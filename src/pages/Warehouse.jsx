@@ -54,7 +54,7 @@ const columnOptions = [
   { key: 'address', label: 'Address' },
 ]
 
-const FormField = ({ label, required, children, full = false }) => {
+const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
   return (
     <div className={`avm-field${full ? ' full' : ''}`}>
@@ -62,24 +62,28 @@ const FormField = ({ label, required, children, full = false }) => {
         {label}
         {required && <span className="req"> *</span>}
       </label>
-      <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: '0.85rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#667085',
-            fontSize: '0.95rem',
-            zIndex: 1,
-            pointerEvents: 'none',
-          }}
-        >
-          <i className={icon}></i>
-        </span>
-        {children}
-      </div>
+      {noIcon ? (
+        children
+      ) : (
+        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: '0.85rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#667085',
+              fontSize: '0.95rem',
+              zIndex: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <i className={icon}></i>
+          </span>
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -771,7 +775,7 @@ const Warehouse = () => {
             />
           </FormField>
 
-          <FormField label="Phone">
+          <FormField label="Phone" noIcon>
             <PhoneField
               id="phone"
               label=""
@@ -891,7 +895,7 @@ const Warehouse = () => {
             />
           </FormField>
 
-          <FormField label="Phone">
+          <FormField label="Phone" noIcon>
             <PhoneField
               id="phone"
               label=""

@@ -14,6 +14,8 @@ public class ClassLectureDto {
   private String academicYear;
   private String lectureUrl;
   private String note;
+  private Long lessonId;
+  private String lesson;
   private Long teacherId;
   private String teacher;
 
@@ -97,6 +99,22 @@ public class ClassLectureDto {
 
   public void setNote(String note) {
     this.note = note;
+  }
+
+  public Long getLessonId() {
+    return lessonId;
+  }
+
+  public void setLessonId(Long lessonId) {
+    this.lessonId = lessonId;
+  }
+
+  public String getLesson() {
+    return lesson;
+  }
+
+  public void setLesson(String lesson) {
+    this.lesson = lesson;
   }
 
   public Long getTeacherId() {

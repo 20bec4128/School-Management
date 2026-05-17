@@ -1,7 +1,8 @@
 import LeaveApplicationWorkspace from './LeaveApplicationWorkspace'
 
-const LeaveApplication = () => (
+const LeaveApplication = ({ onNavigate }) => (
   <LeaveApplicationWorkspace
+    onNavigate={onNavigate}
     pageTitle="Leave Application"
     breadcrumbLabel="Leave Application"
     statusFilter={null}

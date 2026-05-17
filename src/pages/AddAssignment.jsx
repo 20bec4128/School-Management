@@ -841,6 +841,7 @@ const AddAssignment = ({ onNavigate }) => {
     if (activeStep === 1) {
       return (
         <div className="row g-20">
+          <div className="col-12 avm-grid">
           <FormField label="Assignment Date" required>
             <input
               className="form-control avm-input ps-44"
@@ -901,6 +902,7 @@ const AddAssignment = ({ onNavigate }) => {
               placeholder="Optional note"
             />
           </FormField>
+          </div>
         </div>
       );
     }

@@ -26,6 +26,7 @@ import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
 // Removed dummy data
+const EDIT_STORAGE_KEY = 'edit-fee-collection-row'
 
 const emptyForm = {
   headOfficeId: '',
@@ -143,13 +144,14 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const FeeCollection = () => {
+const FeeCollection = ({ onNavigate } = {}) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [search, setSearch] = useState('')
@@ -489,60 +491,40 @@ const FeeCollection = () => {
   }
 
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isSchoolAdmin) {
-      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-      base.schoolId = authSchoolId != null ? String(authSchoolId) : ''
-    } else if (isHeadOfficeAdmin) {
-      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-    } else if (isSuperAdmin) {
-      base.headOfficeId = manualScope.selectedHeadOfficeId || ''
-      base.schoolId = manualScope.selectedSchoolId || ''
-    }
-    Object.assign(base, recalcTotals(base, base.discountId))
-    setAddForm(base)
-    setAddStep(0)
-    setIsAddOpen(true)
+    navigateTo?.('add-fee-collection')
   }
 
   const openBulk = () => {
-    const base = { ...emptyBulkForm }
-    if (isSchoolAdmin) {
-      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-      base.schoolId = authSchoolId != null ? String(authSchoolId) : ''
-    } else if (isHeadOfficeAdmin) {
-      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-    } else if (isSuperAdmin) {
-      base.headOfficeId = manualScope.selectedHeadOfficeId || ''
-      base.schoolId = manualScope.selectedSchoolId || ''
-    }
-    Object.assign(base, recalcTotals(base, base.discountId))
-    setBulkForm(base)
-    setBulkStep(0)
-    setIsBulkOpen(true)
+    navigateTo?.('add-bulk-invoice')
   }
 
   const openEdit = (row) => {
-    const s = row?.schoolId != null ? schoolOptions.find((item) => String(item.id) === String(row.schoolId)) : null
+    const s = row?.schoolId != null ? schools.find((item) => String(item.id) === String(row.schoolId)) : null
     if (isSuperAdmin && s?.headOfficeId != null) {
       manualScope.setSelectedScope(String(s.headOfficeId), row.schoolId != null ? String(row.schoolId) : '')
     }
-    setEditForm({
+    const normalizedRow = {
       id: row.id,
       headOfficeId: s?.headOfficeId != null ? String(s.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : ''),
-      schoolId: row.schoolId,
-      classId: row.classId,
-      studentId: row.studentId,
-      feeTypeId: row.feeTypeId,
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      classId: row.classId != null ? String(row.classId) : '',
+      studentId: row.studentId != null ? String(row.studentId) : '',
+      feeTypeId: row.feeTypeId != null ? String(row.feeTypeId) : '',
       discountId: row.discountId != null ? String(row.discountId) : '',
-      feeAmount: row.feeAmount,
-      month: row.month,
+      feeAmount: row.feeAmount != null ? String(row.feeAmount) : '0.00',
+      month: row.month || '',
       isApplicableDiscount: row.isApplicableDiscount ? 'Yes' : 'No',
-      paidStatus: row.paidStatus,
-      note: row.note,
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+      paidStatus: row.paidStatus || 'Unpaid',
+      note: row.note || '',
+      grossAmount: row.grossAmount != null ? String(row.grossAmount) : '0.00',
+      discount: row.discount != null ? String(row.discount) : '0.00',
+      netAmount: row.netAmount != null ? String(row.netAmount) : '0.00',
+      dueAmount: row.dueAmount != null ? String(row.dueAmount) : '0.00',
+    }
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(normalizedRow))
+    } catch {}
+    navigateTo?.('add-fee-collection')
   }
 
   const getVisiblePages = () => {
@@ -562,15 +544,18 @@ const FeeCollection = () => {
             <p className="avm-section-title">{INVOICE_STEPS[0]}</p>
             <div className="avm-grid">
               {isSuperAdmin ? (
-                <ManualScopeSelectors
-                  enabled
-                  headOffices={headOffices}
-                  schoolOptions={formSchoolOptions}
-                  selectedHeadOfficeId={form.headOfficeId}
-                  onHeadOfficeChange={(val) => handleChange(setter)({ target: { id: 'headOfficeId', value: val } })}
-                  selectedSchoolId={form.schoolId}
-                  onSchoolChange={(val) => handleChange(setter)({ target: { id: 'schoolId', value: val } })}
-                />
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <ManualScopeSelectors
+                    enabled
+                    compact
+                    headOffices={headOffices}
+                    schoolOptions={formSchoolOptions}
+                    selectedHeadOfficeId={form.headOfficeId}
+                    onHeadOfficeChange={(val) => handleChange(setter)({ target: { id: 'headOfficeId', value: val } })}
+                    selectedSchoolId={form.schoolId}
+                    onSchoolChange={(val) => handleChange(setter)({ target: { id: 'schoolId', value: val } })}
+                  />
+                </div>
               ) : isHeadOfficeAdmin ? (
                 <>
                   <FormField label="Head Office" required full>
