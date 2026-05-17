@@ -8,10 +8,11 @@ import { useSchool } from '../context/useSchool'
 import { fetchGalleries } from '../apis/galleryApi'
 import {
   deleteGalleryImage,
-  fetchGalleryImages,
+  fetchGalleryImagesPage,
 } from '../apis/galleryImageApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 
 
@@ -47,6 +48,10 @@ const Images = ({ onNavigate }) => {
 
   const [rows, setRows] = useState([])
   const [galleries, setGalleries] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -61,45 +66,40 @@ const Images = ({ onNavigate }) => {
     if (isSuperAdmin) return manualScope.schoolOptions
     return contextSchoolOptions || []
   }, [isSuperAdmin, manualScope.schoolOptions, contextSchoolOptions])
-
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.schoolName, row.galleryTitle, row.title, row.caption]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      
-      const matchesHeadOffice = !filters.headOfficeId || String(row.headOfficeId) === String(filters.headOfficeId)
-      const matchesSchool = !filters.schoolId || String(row.schoolId) === String(filters.schoolId)
-      const matchesGallery = !filters.galleryId || String(row.galleryId) === String(filters.galleryId)
-      
-      return matchesSearch && matchesHeadOffice && matchesSchool && matchesGallery
-    })
-  }, [rows, search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage))
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filteredRows.slice(start, start + rowsPerPage)
-  }, [currentPage, filteredRows, rowsPerPage])
-
-  const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
+  const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(String(row.id)))
 
   const loadData = useCallback(async () => {
+    const schoolIdToFetch = isSuperAdmin ? (manualScope.selectedSchoolId || activeSchoolId || authSchoolId) : (activeSchoolId || authSchoolId)
+    if (!schoolIdToFetch) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError('Select a school before viewing images.')
+      return
+    }
+    setLoading(true)
+    setError('')
     try {
-      let schoolIdToFetch = null
-      if (!isSuperAdmin) {
-        schoolIdToFetch = activeSchoolId || authSchoolId
-      }
-      const list = await fetchGalleryImages(schoolIdToFetch ? { schoolId: schoolIdToFetch } : {})
-      setRows(Array.isArray(list) ? list : [])
+      const data = await fetchGalleryImagesPage({
+        schoolId: schoolIdToFetch,
+        galleryId: filters.galleryId || '',
+        search,
+        page: currentPage - 1,
+        size: rowsPerPage,
+      })
+      const content = Array.isArray(data?.content) ? data.content : []
+      setRows(content)
+      setTotalElements(Number(data?.totalElements ?? content.length))
+      setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
     } catch {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError('Failed to load images')
+    } finally {
+      setLoading(false)
     }
-  }, [activeSchoolId, authSchoolId, isSuperAdmin])
+  }, [activeSchoolId, authSchoolId, currentPage, filters.galleryId, isSuperAdmin, manualScope.selectedSchoolId, rowsPerPage, search])
 
   const loadGalleries = useCallback(async (schoolId) => {
     if (!schoolId) {
@@ -123,9 +123,9 @@ const Images = ({ onNavigate }) => {
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
+      setSelectedRows((prev) => [...new Set([...prev, ...rows.map((row) => String(row.id))])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
+      setSelectedRows((prev) => prev.filter((id) => !rows.some((row) => String(row.id) === id)))
     }
   }
 
@@ -140,6 +140,9 @@ const Images = ({ onNavigate }) => {
     setFilters(pendingFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
+    if (isSuperAdmin && pendingFilters.schoolId) {
+      manualScope.setSelectedSchoolId(pendingFilters.schoolId)
+    }
   }
 
   const handlePendingFilterChange = (e) => {
@@ -173,15 +176,8 @@ const Images = ({ onNavigate }) => {
     }
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let page = start; page <= end; page += 1) pages.push(page)
-    return pages
-  }
-
-
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   return (
     <div className="dashboard-main-body">
@@ -234,20 +230,14 @@ const Images = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -287,14 +277,20 @@ const Images = ({ onNavigate }) => {
               </thead>
 
               <tbody>
-                {paginatedRows.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading images...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No images found.
                     </td>
                   </tr>
                 ) : (
-                  paginatedRows.map((row) => (
+                  rows.map((row) => (
                     <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -358,24 +354,22 @@ const Images = ({ onNavigate }) => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
+              Showing {currentStart} - {currentEnd} of {totalElements} entries
             </span>
-
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1 || totalPages < 1}>
                 Prev
               </button>
-              {getVisiblePages().map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(page)}
-                >
-                  {page}
-                </button>
-              ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                const base = Math.max(1, currentPage - 1)
+                const pageNumber = Math.min(totalPages, base + index)
+                return pageNumber > 0 ? (
+                  <button key={pageNumber} type="button" className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(pageNumber)}>
+                    {pageNumber}
+                  </button>
+                ) : null
+              })}
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage === totalPages || totalPages < 1}>
                 Next
               </button>
             </div>

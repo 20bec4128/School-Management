@@ -6,6 +6,18 @@ export const fetchPostalDispatches = async (schoolId) => {
   return response.data
 }
 
+export const fetchPostalDispatchesPage = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+  const response = await apiClient.get('/api/postal-dispatches', {
+    params: {
+      schoolId,
+      page: Math.max(0, page),
+      size: Math.max(1, size),
+      search: search ? String(search).trim() : undefined,
+    },
+  })
+  return response.data
+}
+
 export const createPostalDispatch = async (data) => {
   const response = await apiClient.post('/api/postal-dispatches', data)
   return response.data
@@ -24,6 +36,18 @@ export const deletePostalDispatch = async (id) => {
 // Postal Receive
 export const fetchPostalReceives = async (schoolId) => {
   const response = await apiClient.get(`/api/postal-receives/school/${schoolId}`)
+  return response.data
+}
+
+export const fetchPostalReceivesPage = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+  const response = await apiClient.get('/api/postal-receives', {
+    params: {
+      schoolId,
+      page: Math.max(0, page),
+      size: Math.max(1, size),
+      search: search ? String(search).trim() : undefined,
+    },
+  })
   return response.data
 }
 

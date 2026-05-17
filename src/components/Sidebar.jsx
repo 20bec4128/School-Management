@@ -484,17 +484,6 @@ const menuSections = [
         ],
       },
       {
-        title: "Asset Management",
-        icon: "ri:building-2-line",
-        submenu: [
-          { label: "Vendor", href: "#", page: "asset-vendor" },
-          { label: "Store", href: "#", page: "asset-store" },
-          { label: "Category", href: "#", page: "asset-category" },
-          { label: "Item", href: "#", page: "asset-item" },
-          { label: "Purchase", href: "#", page: "asset-purchase" },
-        ],
-      },
-      {
         title: "Library",
         icon: "ri:book-2-line",
         submenu: [

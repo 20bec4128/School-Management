@@ -3,6 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.VisitorInfoDto;
 import com.School.School_management.Service.VisitorInfoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +19,16 @@ public class VisitorInfoController {
     @GetMapping("/school/{schoolId}")
     public List<VisitorInfoDto> getAllBySchool(@PathVariable Long schoolId) {
         return service.getAllBySchool(schoolId);
+    }
+
+    @GetMapping
+    public Page<VisitorInfoDto> page(
+            @RequestParam Long schoolId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return service.pageBySchool(schoolId, search, page, size);
     }
 
     @PostMapping

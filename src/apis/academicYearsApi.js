@@ -27,6 +27,20 @@ export const fetchAcademicYears = async ({ schoolId } = {}) => {
   return res.json()
 }
 
+export const fetchAcademicYearsPage = async ({ schoolId, page = 0, size = 10, search = '', running } = {}) => {
+  const qs = new URLSearchParams()
+  if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
+  qs.set('page', String(Math.max(0, page)))
+  qs.set('size', String(Math.max(1, size)))
+  if (search != null && String(search).trim() !== '') qs.set('search', String(search).trim())
+  if (running === true) qs.set('running', 'true')
+  if (running === false) qs.set('running', 'false')
+
+  const res = await apiFetch(`${BASE}/page?${qs.toString()}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const createAcademicYear = async (payload) => {
   const res = await apiFetch(BASE, {
     method: 'POST',

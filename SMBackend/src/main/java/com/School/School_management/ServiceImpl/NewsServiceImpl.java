@@ -11,9 +11,15 @@ import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Service.NewsService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +49,24 @@ public class NewsServiceImpl implements NewsService {
             rows = newsRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId);
         }
         return rows.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NewsDto.Response> page(Long schoolId, String search, Boolean isViewOnWeb, int page, int size) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        final String q = normalizeOptional(search);
+        List<NewsDto.Response> filtered = newsRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId).stream()
+                .map(this::toResponse)
+                .filter(dto -> matches(dto, q, isViewOnWeb))
+                .sorted(Comparator.comparing(NewsDto.Response::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override
@@ -150,6 +174,23 @@ public class NewsServiceImpl implements NewsService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean matches(NewsDto.Response dto, String search, Boolean isViewOnWeb) {
+        if (isViewOnWeb != null && !Objects.equals(dto.getIsViewOnWeb(), isViewOnWeb)) {
+            return false;
+        }
+        if (search == null) {
+            return true;
+        }
+        String q = search.toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(dto.getTitle(), q)
+                || containsIgnoreCase(dto.getNews(), q)
+                || containsIgnoreCase(dto.getImage(), q);
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
     }
 
     private java.time.LocalDate requireDate(java.time.LocalDate value) {

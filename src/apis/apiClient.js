@@ -57,6 +57,21 @@ const parseJsonSafe = async (response) => {
 const request = async (method, url, data, config = {}) => {
   const headers = new Headers(config.headers || {})
 
+  let finalUrl = url
+  if (config.params && typeof config.params === 'object') {
+    const qs = new URLSearchParams()
+    Object.entries(config.params).forEach(([key, value]) => {
+      if (value == null) return
+      const text = String(value).trim()
+      if (!text) return
+      qs.set(key, text)
+    })
+    const queryString = qs.toString()
+    if (queryString) {
+      finalUrl = `${url}${String(url).includes('?') ? '&' : '?'}${queryString}`
+    }
+  }
+
   const options = {
     ...config,
     method,
@@ -68,7 +83,8 @@ const request = async (method, url, data, config = {}) => {
     options.body = typeof data === 'string' ? data : JSON.stringify(data)
   }
 
-  const response = await apiFetch(url, options)
+  delete options.params
+  const response = await apiFetch(finalUrl, options)
   const body = await parseJsonSafe(response)
 
   if (!response.ok) {

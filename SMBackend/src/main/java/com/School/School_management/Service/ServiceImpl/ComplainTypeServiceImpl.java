@@ -6,6 +6,9 @@ import com.School.School_management.Repository.ComplainTypeRepository;
 import com.School.School_management.Service.ComplainTypeService;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,6 +25,16 @@ public class ComplainTypeServiceImpl implements ComplainTypeService {
         return repository.findBySchoolIdAndIsDeletedFalse(schoolId).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Page<ComplainTypeDto> pageBySchool(Long schoolId, String search, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        String q = search == null ? null : search.trim();
+        if (q == null || q.isEmpty()) {
+            return repository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(schoolId, pageable).map(this::toDto);
+        }
+        return repository.findBySchoolIdAndIsDeletedFalseAndComplainTypeContainingIgnoreCaseOrderByIdDesc(schoolId, q, pageable).map(this::toDto);
     }
 
     @Override

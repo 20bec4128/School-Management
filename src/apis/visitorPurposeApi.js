@@ -5,6 +5,18 @@ export const fetchVisitorPurposes = async (schoolId) => {
   return response.data
 }
 
+export const fetchVisitorPurposesPage = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+  const response = await apiClient.get('/api/visitor-purposes', {
+    params: {
+      schoolId,
+      page: Math.max(0, page),
+      size: Math.max(1, size),
+      search: search ? String(search).trim() : undefined,
+    },
+  })
+  return response.data
+}
+
 export const createVisitorPurpose = async (data) => {
   const response = await apiClient.post('/api/visitor-purposes', data)
   return response.data

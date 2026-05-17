@@ -11,7 +11,7 @@ import org.springframework.data.domain.Page;
 public interface HeadOfficeService {
     CreateHeadOfficeWithAdminResponse createWithAdmin(CreateHeadOfficeWithAdminRequest request, CurrentUser user);
 
-    Page<HeadOfficeDto> getAll(int page, int size, CurrentUser user);
+    Page<HeadOfficeDto> getAll(int page, int size, String search, String status, CurrentUser user);
 
     HeadOfficeDto getById(Long id, CurrentUser user);
 

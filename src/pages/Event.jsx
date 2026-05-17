@@ -8,6 +8,7 @@ import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { deleteEvent, fetchEvents } from '../apis/eventApi'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const EDIT_STORAGE_KEY = 'event-edit-row'
 
@@ -229,13 +230,8 @@ const Event = ({ onNavigate }) => {
     }
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let page = start; page <= end; page += 1) pages.push(page)
-    return pages
-  }
+  const currentStart = filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = filteredRows.length === 0 ? 0 : Math.min(currentPage * rowsPerPage, filteredRows.length)
 
   return (
     <div className="dashboard-main-body">
@@ -300,20 +296,14 @@ const Event = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(event) => {
-                  setRowsPerPage(Number(event.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -429,18 +419,22 @@ const Event = ({ onNavigate }) => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
+              Showing {currentStart} - {currentEnd} of {filteredRows.length} entries
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1 || totalPages < 1}>
                 Prev
               </button>
-              {getVisiblePages().map((page) => (
-                <button key={page} type="button" className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(page)}>
-                  {page}
-                </button>
-              ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage === totalPages}>
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                const base = Math.max(1, currentPage - 1)
+                const pageNumber = Math.min(totalPages, base + index)
+                return pageNumber > 0 ? (
+                  <button key={pageNumber} type="button" className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(pageNumber)}>
+                    {pageNumber}
+                  </button>
+                ) : null
+              })}
+              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage === totalPages || totalPages < 1}>
                 Next
               </button>
             </div>

@@ -140,7 +140,7 @@ const LibraryMember = () => {
             <div className="d-flex flex-wrap align-items-center gap-16">
               
               <ExportDropdown
-                rows={rows}
+                rows={filteredData}
                 columns={columnOptions}
                 visibleColumns={visibleColumns}
                 fileName="LibraryMember_List"

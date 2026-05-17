@@ -5,6 +5,21 @@ export const fetchComplains = async (schoolId) => {
   return response.data
 }
 
+export const fetchComplainsPage = async ({ schoolId, page = 0, size = 10, search = '', academicYear, complainTypeId, userType } = {}) => {
+  const response = await apiClient.get('/api/complains', {
+    params: {
+      schoolId,
+      page: Math.max(0, page),
+      size: Math.max(1, size),
+      search: search ? String(search).trim() : undefined,
+      academicYear: academicYear ? String(academicYear).trim() : undefined,
+      complainTypeId: complainTypeId != null && String(complainTypeId).trim() !== '' ? Number(complainTypeId) : undefined,
+      userType: userType ? String(userType).trim() : undefined,
+    },
+  })
+  return response.data
+}
+
 export const createComplain = async (data) => {
   const response = await apiClient.post('/api/complains', data)
   return response.data

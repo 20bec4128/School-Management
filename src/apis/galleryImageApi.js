@@ -27,6 +27,20 @@ export const fetchGalleryImages = async ({ schoolId, galleryId } = {}) => {
   return res.json()
 }
 
+export const fetchGalleryImagesPage = async ({ schoolId, galleryId, search = '', page = 0, size = 10 } = {}) => {
+  const qs = new URLSearchParams({
+    schoolId: String(schoolId),
+    page: String(Math.max(0, page)),
+    size: String(Math.max(1, size)),
+  })
+  if (galleryId != null && String(galleryId).trim() !== '') qs.set('galleryId', String(galleryId))
+  const q = String(search || '').trim()
+  if (q) qs.set('search', q)
+  const res = await apiFetch(`${BASE}/page?${qs.toString()}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const createGalleryImage = async (payload, file) => {
   const formData = new FormData()
   formData.append('data', new Blob([JSON.stringify(payload)], { type: 'application/json' }))

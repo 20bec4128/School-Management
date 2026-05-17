@@ -17,6 +17,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +80,52 @@ public class AcademicYearServiceImpl implements AcademicYearService {
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AcademicYearDto> page(Long schoolId, String search, Boolean running, int page, int size) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        String q = normalizeOptional(search);
+        Pageable pageable = PageRequest.of(
+                Math.max(0, page),
+                Math.max(1, size),
+                Sort.by(Sort.Direction.DESC, "sessionStart").and(Sort.by(Sort.Direction.DESC, "id"))
+        );
+
+        Page<AcademicYear> entityPage;
+
+        if (user.isSchoolScoped()) {
+            if (user.schoolId() == null) throw new ForbiddenException();
+            entityPage = academicYearRepository.searchBySchoolId(user.schoolId(), running, q, pageable);
+        } else if (user.isHeadOfficeScopedAdmin()) {
+            if (schoolId != null) {
+                ensureSchoolInHeadOffice(schoolId, user.headOfficeId());
+                entityPage = academicYearRepository.searchBySchoolId(schoolId, running, q, pageable);
+            } else {
+                List<Long> schoolIds = schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(user.headOfficeId())
+                        .stream()
+                        .map(ManageSchool::getId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                if (schoolIds.isEmpty()) {
+                    return Page.empty(pageable);
+                }
+                entityPage = academicYearRepository.searchBySchoolIds(schoolIds, running, q, pageable);
+            }
+        } else {
+            if (schoolId == null) {
+                // Super admin/all scopes: allow running/search filters, but keep it simple by paging over all and filtering by query is done via repository only for scoped calls.
+                // If you want filters for the global list, select a school or use head office scope.
+                entityPage = academicYearRepository.findAllByOrderBySessionStartDesc(pageable);
+            } else {
+                entityPage = academicYearRepository.searchBySchoolId(schoolId, running, q, pageable);
+            }
+        }
+
+        return entityPage.map(this::toDto);
     }
 
     @Override

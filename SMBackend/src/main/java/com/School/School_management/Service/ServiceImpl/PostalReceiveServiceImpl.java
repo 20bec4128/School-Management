@@ -5,9 +5,15 @@ import com.School.School_management.Entity.PostalReceive;
 import com.School.School_management.Repository.PostalReceiveRepository;
 import com.School.School_management.Service.PostalReceiveService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,6 +27,21 @@ public class PostalReceiveServiceImpl implements PostalReceiveService {
         return repository.findBySchoolIdAndIsDeletedFalse(schoolId).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Page<PostalReceiveDto> pageBySchool(Long schoolId, String search, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        final String q = normalize(search);
+        List<PostalReceiveDto> filtered = repository.findBySchoolIdAndIsDeletedFalse(schoolId).stream()
+                .map(this::toDto)
+                .filter(dto -> matches(dto, q))
+                .sorted(Comparator.comparing(PostalReceiveDto::getDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(PostalReceiveDto::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override
@@ -69,5 +90,27 @@ public class PostalReceiveServiceImpl implements PostalReceiveService {
         dto.setNote(entity.getNote());
         dto.setFilePath(entity.getFilePath());
         return dto;
+    }
+
+    private String normalize(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean matches(PostalReceiveDto dto, String search) {
+        if (search == null) {
+            return true;
+        }
+        String q = search.toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(dto.getFromTitle(), q)
+                || containsIgnoreCase(dto.getToTitle(), q)
+                || containsIgnoreCase(dto.getReferenceNo(), q)
+                || containsIgnoreCase(dto.getAddress(), q)
+                || containsIgnoreCase(dto.getNote(), q);
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
     }
 }

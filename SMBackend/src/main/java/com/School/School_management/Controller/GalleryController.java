@@ -3,6 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.GalleryDto;
 import com.School.School_management.Service.GalleryService;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,17 @@ public class GalleryController {
     @GetMapping
     public ResponseEntity<List<GalleryDto.Response>> list(@RequestParam(value = "schoolId", required = false) Long schoolId) {
         return ResponseEntity.ok(galleryService.list(schoolId));
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<Page<GalleryDto.Response>> page(
+            @RequestParam Long schoolId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean isViewOnWeb,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(galleryService.page(schoolId, search, isViewOnWeb, page, size));
     }
 
     @PostMapping
