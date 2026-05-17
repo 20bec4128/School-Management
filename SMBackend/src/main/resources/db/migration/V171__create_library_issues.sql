@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS library_issues (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_library_issues_head_office FOREIGN KEY (head_office_id) REFERENCES head_offices(id),
     CONSTRAINT fk_library_issues_school FOREIGN KEY (school_id) REFERENCES schools(id),
-    CONSTRAINT fk_library_issues_book FOREIGN KEY (book_id) REFERENCES books(id),
     CONSTRAINT fk_library_issues_student FOREIGN KEY (student_id) REFERENCES students(id)
 );
 
