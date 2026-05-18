@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS sms_settings (
+    id BIGSERIAL PRIMARY KEY,
+    head_office_id BIGINT,
+    school_id BIGINT NOT NULL,
+    school_name VARCHAR(255),
+    gateway VARCHAR(100) NOT NULL,
+    account_sid VARCHAR(500),
+    auth_token VARCHAR(500),
+    from_number VARCHAR(255),
+    username VARCHAR(255),
+    password VARCHAR(500),
+    api_key VARCHAR(500),
+    mo_number VARCHAR(255),
+    auth_id VARCHAR(500),
+    hash_key VARCHAR(500),
+    sender_id VARCHAR(255),
+    auth_key VARCHAR(500),
+    router VARCHAR(255),
+    sms_type VARCHAR(100),
+    is_active VARCHAR(10) NOT NULL DEFAULT 'No',
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

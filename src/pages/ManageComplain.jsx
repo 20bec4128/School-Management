@@ -8,7 +8,7 @@ import { useSchool } from '../context/useSchool'
 import { fetchAcademicYears } from '../apis/academicYearsApi'
 import { fetchComplainTypes } from '../apis/complainTypeApi'
 import { deleteComplain, fetchComplainsPage } from '../apis/complainApi'
-import { uniqueBy, uniqueStrings } from '../utils/schoolScope'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy, uniqueStrings } from '../utils/schoolScope'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -54,10 +54,29 @@ const ManageComplain = ({ onNavigate }) => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions) : contextSchoolOptions
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
+
+    const singleSchoolId = authSchoolId || activeSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [
+    activeSchoolId,
+    authSchoolId,
+    contextSchoolOptions,
+    filters.schoolId,
+    isSuperAdmin,
+    manualScope.schoolOptions,
+    manualScope.selectedHeadOfficeId,
+    manualScope.selectedSchoolId,
+    schoolOptions,
+  ])
+  const listSchoolId = scopedSchoolIds[0] || ''
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
@@ -77,35 +96,72 @@ const ManageComplain = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      if (!listSchoolId) {
+      if (scopedSchoolIds.length === 0) {
         setData([])
         setTotalElements(0)
         setTotalPages(1)
         setComplainTypes([])
         setAcademicYears([])
-        setError('Select a school before viewing complains.')
         return
       }
 
-      const [pageData, typeList, yearList] = await Promise.all([
-        fetchComplainsPage({
-          schoolId: listSchoolId,
-          page: currentPage - 1,
-          size: rowsPerPage,
-          search,
-          academicYear: filters.academicYear !== 'Select' ? filters.academicYear : undefined,
-          complainTypeId: filters.complainTypeId !== 'Select' ? filters.complainTypeId : undefined,
-          userType: filters.userType !== 'Select' ? filters.userType : undefined,
-        }),
-        fetchComplainTypes(listSchoolId),
-        fetchAcademicYears({ schoolId: listSchoolId }),
+      if (scopedSchoolIds.length === 1) {
+        const [pageData, typeList, yearList] = await Promise.all([
+          fetchComplainsPage({
+            schoolId: scopedSchoolIds[0],
+            page: currentPage - 1,
+            size: rowsPerPage,
+            search,
+            academicYear: filters.academicYear !== 'Select' ? filters.academicYear : undefined,
+            complainTypeId: filters.complainTypeId !== 'Select' ? filters.complainTypeId : undefined,
+            userType: filters.userType !== 'Select' ? filters.userType : undefined,
+          }),
+          fetchComplainTypes(scopedSchoolIds[0]),
+          fetchAcademicYears({ schoolId: scopedSchoolIds[0] }),
+        ])
+
+        setData(Array.isArray(pageData?.content) ? pageData.content : [])
+        setTotalElements(Number(pageData?.totalElements ?? 0))
+        setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
+        setComplainTypes(Array.isArray(typeList) ? typeList : [])
+        setAcademicYears(Array.isArray(yearList) ? yearList : [])
+        return
+      }
+
+      const [complainRows, typeRows, yearRows] = await Promise.all([
+        fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) =>
+          fetchComplainsPage({
+            schoolId,
+            page: 0,
+            size: 500,
+            search,
+            academicYear: filters.academicYear !== 'Select' ? filters.academicYear : undefined,
+            complainTypeId: filters.complainTypeId !== 'Select' ? filters.complainTypeId : undefined,
+            userType: filters.userType !== 'Select' ? filters.userType : undefined,
+          }).then((res) => Array.isArray(res?.content) ? res.content : []),
+        ),
+        fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) => fetchComplainTypes(schoolId)),
+        fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) => fetchAcademicYears({ schoolId })),
       ])
 
-      setData(Array.isArray(pageData?.content) ? pageData.content : [])
-      setTotalElements(Number(pageData?.totalElements ?? 0))
-      setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
-      setComplainTypes(Array.isArray(typeList) ? typeList : [])
-      setAcademicYears(Array.isArray(yearList) ? yearList : [])
+      const query = search.trim().toLowerCase()
+      const filteredRows = uniqueBy(Array.isArray(complainRows) ? complainRows : [], (row) => row?.id)
+        .filter((row) => {
+          if (filters.academicYear !== 'Select' && String(row?.academicYear ?? '') !== String(filters.academicYear)) return false
+          if (filters.complainTypeId !== 'Select' && String(row?.complainTypeId ?? '') !== String(filters.complainTypeId)) return false
+          if (filters.userType !== 'Select' && String(row?.userType ?? '') !== String(filters.userType)) return false
+          if (!query) return true
+          const haystack = [row?.schoolName, row?.complainType, row?.academicYear, row?.userType, row?.title, row?.description]
+            .map((value) => String(value ?? '').toLowerCase())
+            .join(' ')
+          return haystack.includes(query)
+        })
+      const start = (currentPage - 1) * rowsPerPage
+      setData(filteredRows.slice(start, start + rowsPerPage))
+      setTotalElements(filteredRows.length)
+      setTotalPages(Math.max(1, Math.ceil(filteredRows.length / rowsPerPage)))
+      setComplainTypes(uniqueBy(Array.isArray(typeRows) ? typeRows.flat() : [], (row) => row?.id))
+      setAcademicYears(uniqueBy(Array.isArray(yearRows) ? yearRows.flat() : [], (row) => `${row?.academicYear ?? ''}-${row?.id ?? ''}`))
     } catch (err) {
       console.error('Failed to fetch complain data:', err)
       setError(err?.message || 'Failed to fetch complains')
@@ -117,7 +173,7 @@ const ManageComplain = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, filters.academicYear, filters.complainTypeId, filters.userType, listSchoolId, rowsPerPage, search])
+  }, [currentPage, filters.academicYear, filters.complainTypeId, filters.userType, rowsPerPage, scopedSchoolIds, search])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -151,6 +207,9 @@ const ManageComplain = ({ onNavigate }) => {
     event.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope(pendingFilters.headOfficeId || '', pendingFilters.schoolId || '')
+    }
   }
 
   const handleResetFilters = () => {

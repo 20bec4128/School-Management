@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS general_settings (
+    id BIGSERIAL PRIMARY KEY,
+    head_office_id BIGINT,
+    school_id BIGINT NOT NULL,
+    school_name VARCHAR(255),
+    brand_name VARCHAR(255) NOT NULL,
+    brand_title VARCHAR(255) NOT NULL,
+    language VARCHAR(100) NOT NULL,
+    currency VARCHAR(100),
+    currency_symbol VARCHAR(50),
+    enable_rtl VARCHAR(10) NOT NULL DEFAULT 'No',
+    enable_frontend VARCHAR(10) NOT NULL DEFAULT 'Yes',
+    theme VARCHAR(100) NOT NULL DEFAULT 'Navy Blue',
+    time_zone VARCHAR(255) NOT NULL,
+    date_format VARCHAR(100) NOT NULL,
+    brand_logo TEXT,
+    favicon_icon TEXT,
+    brand_footer VARCHAR(255),
+    google_analytics VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

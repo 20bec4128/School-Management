@@ -5,6 +5,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { can } from "../utils/permissions";
 import { canManageUsers } from "../utils/editableRoles";
 import { normalizeRole } from "../utils/roles";
+import { useAuth } from "../context/useAuth";
 
 const menuSections = [
   {
@@ -37,16 +38,16 @@ const menuSections = [
             perm: "HEAD_OFFICE_MANAGE",
           },
           {
+            label: "General Settings",
+            href: "#",
+            page: "general-settings",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
             label: "Manage School",
             href: "#",
             page: "manage-school",
             perm: "SCHOOL_MANAGE",
-          },
-          {
-            label: "Manage User Roles",
-            href: "#",
-            page: "user-role-acl",
-            perm: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE"],
           },
           {
             label: "Payment Setting",
@@ -70,6 +71,36 @@ const menuSections = [
             label: "Academic Year",
             href: "#",
             page: "academic-year",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "Manage User Roles",
+            href: "#",
+            page: "user-role-acl",
+            perm: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE"],
+          },
+          {
+            label: "Manage Super Admin",
+            href: "#",
+            page: "manage-super-admin",
+            perm: "*",
+          },
+          {
+            label: "Manage Feedback",
+            href: "#",
+            page: "manage-feedback",
+            perm: "SCHOOL_MANAGE",
+          },
+          {
+            label: "Backup Database",
+            href: "#",
+            page: "backup-database",
+            perm: "*",
+          },
+          {
+            label: "Opening Hour",
+            href: "#",
+            page: "opening-hour",
             perm: "SCHOOL_MANAGE",
           },
         ],
@@ -598,6 +629,7 @@ const menuSections = [
 
 const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const { isOpen, isCollapsed, closeSidebar, toggleSidebar } = useSidebar();
+  const { generalSettings } = useAuth();
 
   const username =
     user?.username ||
@@ -813,19 +845,22 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           <div className="sidebar-logo d-flex align-items-center justify-content-between">
             <a href="#" className="sidebar-logo__brand">
               <img
-                src="/assets/images/logo.png"
+                src={generalSettings?.brandLogo || "/assets/images/logo.png"}
                 alt="site logo"
                 className="light-logo"
+                style={{ maxHeight: "36px", objectFit: "contain" }}
               />
               <img
-                src="/assets/images/logo-light.png"
+                src={generalSettings?.brandLogo || "/assets/images/logo-light.png"}
                 alt="site logo"
                 className="dark-logo"
+                style={{ maxHeight: "36px", objectFit: "contain" }}
               />
               <img
-                src="/assets/images/logo-icon.png"
+                src={generalSettings?.faviconIcon || generalSettings?.brandLogo || "/assets/images/logo-icon.png"}
                 alt="site logo"
                 className="logo-icon"
+                style={{ maxHeight: "36px", objectFit: "contain" }}
               />
             </a>
             <button

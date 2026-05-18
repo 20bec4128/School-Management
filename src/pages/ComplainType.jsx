@@ -6,7 +6,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
-import { findSchoolById } from '../utils/schoolScope'
+import { findSchoolById, normalizeSchoolIds } from '../utils/schoolScope'
 import {
   createComplainType,
   deleteComplainType,
@@ -97,10 +97,19 @@ const ComplainType = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions) : contextSchoolOptions
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
+    const singleSchoolId = activeSchoolId || authSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [activeSchoolId, authSchoolId, contextSchoolOptions, filters.schoolId, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, manualScope.selectedSchoolId, schoolOptions])
+  const listSchoolId = scopedSchoolIds[0] || ''
+  const showSchoolSelector = schoolOptions.length > 1
   const isSchoolLocked = !isSuperAdmin && !!listSchoolId
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
@@ -113,7 +122,6 @@ const ComplainType = () => {
         setData([])
         setTotalElements(0)
         setTotalPages(1)
-        setError('Select a school before viewing complain types.')
         return
       }
       const pageData = await fetchComplainTypesPage({
@@ -178,6 +186,9 @@ const ComplainType = () => {
     event.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope(pendingFilters.headOfficeId || '', pendingFilters.schoolId || '')
+    }
   }
 
   const handleResetFilters = () => {

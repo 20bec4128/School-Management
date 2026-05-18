@@ -2,6 +2,7 @@ import '../css/topbar.css'
 import { useSidebar } from '../context/SidebarContext'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSchool } from '../context/useSchool'
+import { useAuth } from '../context/useAuth'
 import { normalizeRole } from '../utils/roles'
 import ParentChildSelector from './ParentChildSelector'
 
@@ -37,6 +38,7 @@ const readTheme = () => {
 
 const Topbar = ({ user }) => {
   const { toggleSidebar } = useSidebar()
+  const { logout } = useAuth()
   const {
     activeSchoolId,
     setActiveSchoolId,
@@ -54,6 +56,7 @@ const Topbar = ({ user }) => {
   const pickerInputRef = useRef(null)
   const pickerShellRef = useRef(null)
   const webToolbarRef = useRef(null)
+  const [logoutBusy, setLogoutBusy] = useState(false)
 
   const role = normalizeRole(user?.role || user?.userRole || user?.authority)
   const isParent = role === 'PARENT'
@@ -63,6 +66,17 @@ const Topbar = ({ user }) => {
     typeof window !== 'undefined' &&
     (Boolean(window.ReactNativeWebView) || /WebView|wv/i.test(window.navigator?.userAgent || ''))
   const isDesktopWebView = desktopReady
+
+  const handleLogout = async () => {
+    if (logoutBusy) return
+    setLogoutBusy(true)
+    try {
+      await logout()
+    } finally {
+      setOpenMenu('none')
+      setLogoutBusy(false)
+    }
+  }
 
   useEffect(() => {
     const handler = (event) => {
@@ -321,6 +335,43 @@ const Topbar = ({ user }) => {
         >
           <i className={theme === 'dark' ? 'ri-sun-line' : 'ri-moon-line'} />
         </button>
+
+        <div className="dropdown">
+          <button
+            type="button"
+            className="sm-topbar__action-btn"
+            aria-label="Profile"
+            aria-expanded={openMenu === 'profile'}
+            onClick={() => setOpenMenu((prev) => (prev === 'profile' ? 'none' : 'profile'))}
+          >
+            <i className="ri-user-3-line" />
+          </button>
+
+          {openMenu === 'profile' ? (
+            <div className="sm-topbar__menu sm-topbar__menu--compact" style={{ minWidth: '14rem' }}>
+              <div className="sm-topbar__menu-header">
+                <strong>Profile</strong>
+                <span>Account actions</span>
+              </div>
+              <div className="sm-topbar__menu-list">
+                <button
+                  type="button"
+                  className="sm-topbar__menu-card w-100 text-start border-0 bg-transparent"
+                  onClick={handleLogout}
+                  disabled={logoutBusy}
+                >
+                  <span className="sm-topbar__menu-card-icon">
+                    <i className="ri-logout-box-r-line" />
+                  </span>
+                  <div className="sm-topbar__menu-card-copy">
+                    <strong>{logoutBusy ? 'Logging out...' : 'Logout'}</strong>
+                    <p>Sign out of this session</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   ) : null

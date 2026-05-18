@@ -8,6 +8,7 @@ import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
 import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import { 
+  fetchVisitorPurposes,
   fetchVisitorPurposesPage,
   createVisitorPurpose, 
   updateVisitorPurpose, 
@@ -97,10 +98,33 @@ const VisitorPurpose = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const schoolOptions = isSuperAdmin
+    ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
+    : contextSchoolOptions
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
+
+    const singleSchoolId =
+      activeSchoolId || authSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [
+    activeSchoolId,
+    authSchoolId,
+    contextSchoolOptions,
+    filters.schoolId,
+    isSuperAdmin,
+    manualScope.schoolOptions,
+    manualScope.selectedHeadOfficeId,
+    manualScope.selectedSchoolId,
+    schoolOptions,
+  ])
+  const listSchoolId = scopedSchoolIds[0] || ''
+  const showSchoolSelector = schoolOptions.length > 1
   const isSchoolLocked = !isSuperAdmin && !!listSchoolId
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
@@ -109,23 +133,38 @@ const VisitorPurpose = () => {
     setLoading(true)
     setError('')
     try {
-      if (!listSchoolId) {
+      if (scopedSchoolIds.length === 0) {
         setData([])
         setTotalElements(0)
         setTotalPages(1)
-        setError('Select a school before viewing visitor purposes.')
         return
       }
 
-      const pageData = await fetchVisitorPurposesPage({
-        schoolId: listSchoolId,
-        page: currentPage - 1,
-        size: rowsPerPage,
-        search,
-      })
-      setData(Array.isArray(pageData?.content) ? pageData.content : [])
-      setTotalElements(Number(pageData?.totalElements ?? 0))
-      setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
+      if (scopedSchoolIds.length === 1) {
+        const pageData = await fetchVisitorPurposesPage({
+          schoolId: scopedSchoolIds[0],
+          page: currentPage - 1,
+          size: rowsPerPage,
+          search,
+        })
+        setData(Array.isArray(pageData?.content) ? pageData.content : [])
+        setTotalElements(Number(pageData?.totalElements ?? 0))
+        setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
+        return
+      }
+
+      const rows = await fetchRowsForSchoolIds(scopedSchoolIds, fetchVisitorPurposes)
+      const normalizedRows = uniqueBy(Array.isArray(rows) ? rows : [], (row) => row?.id)
+        .filter((row) => {
+          if (!search.trim()) return true
+          return String(row?.purpose ?? '').toLowerCase().includes(search.trim().toLowerCase())
+        })
+        .sort((a, b) => Number(b?.id ?? 0) - Number(a?.id ?? 0))
+      const start = Math.max(0, (currentPage - 1) * rowsPerPage)
+      const end = Math.min(start + rowsPerPage, normalizedRows.length)
+      setData(normalizedRows.slice(start, end))
+      setTotalElements(normalizedRows.length)
+      setTotalPages(Math.max(1, Math.ceil(normalizedRows.length / rowsPerPage)))
     } catch (err) {
       console.error('Failed to fetch visitor purposes:', err)
       setError(err?.message || 'Failed to fetch visitor purposes')
@@ -135,17 +174,17 @@ const VisitorPurpose = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, listSchoolId, rowsPerPage, search])
+  }, [currentPage, rowsPerPage, scopedSchoolIds, search])
 
   useEffect(() => {
     void loadData()
   }, [loadData])
 
   useEffect(() => {
-    if (!isSuperAdmin && listSchoolId) {
+    if (listSchoolId) {
       setAddForm((prev) => ({ ...prev, schoolId: listSchoolId }))
     }
-  }, [isSuperAdmin, listSchoolId])
+  }, [listSchoolId])
 
   const allSelected = data.length > 0 && data.every((r) => selectedRows.includes(r.id))
 
@@ -251,6 +290,7 @@ const VisitorPurpose = () => {
               enabled={isSuperAdmin}
               headOffices={manualScope.headOffices}
               schoolOptions={schoolOptions}
+              showSchoolSelector={showSchoolSelector}
               selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
               onHeadOfficeChange={(value) => {
                 manualScope.setSelectedHeadOfficeId(value)
@@ -515,17 +555,18 @@ const VisitorPurpose = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          {isSuperAdmin ? (
-            <div className="full">
-              <ManualScopeSelectors
-                enabled={isSuperAdmin}
-                headOffices={manualScope.headOffices}
-                schoolOptions={schoolOptions}
-                selectedHeadOfficeId={pendingFilters.headOfficeId}
-                onHeadOfficeChange={(val) => setPendingFilters((p) => ({ ...p, headOfficeId: val, schoolId: '' }))}
-                selectedSchoolId={pendingFilters.schoolId}
-                onSchoolChange={(val) => setPendingFilters((p) => ({ ...p, schoolId: val }))}
-              />
+        {isSuperAdmin ? (
+          <div className="full">
+            <ManualScopeSelectors
+              enabled={isSuperAdmin}
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolOptions}
+              showSchoolSelector={showSchoolSelector}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(val) => setPendingFilters((p) => ({ ...p, headOfficeId: val, schoolId: '' }))}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(val) => setPendingFilters((p) => ({ ...p, schoolId: val }))}
+            />
             </div>
           ) : (
             <div className="full">

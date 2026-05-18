@@ -5,6 +5,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import { deleteGallery, fetchGalleriesPage } from '../apis/galleryApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
@@ -39,13 +40,6 @@ const Gallery = ({ onNavigate }) => {
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
-  const listSchoolId = isSuperAdmin
-    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId
-      ? String(activeSchoolId)
-      : authSchoolId
-        ? String(authSchoolId)
-        : ''
 
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -63,42 +57,104 @@ const Gallery = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const schoolOptions = useMemo(() => {
-    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions
     return contextSchoolOptions || []
   }, [isSuperAdmin, manualScope.schoolOptions, contextSchoolOptions, manualScope.selectedHeadOfficeId])
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
+
+    const singleSchoolId = activeSchoolId || authSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [
+    activeSchoolId,
+    authSchoolId,
+    contextSchoolOptions,
+    filters.schoolId,
+    isSuperAdmin,
+    manualScope.schoolOptions,
+    manualScope.selectedHeadOfficeId,
+    manualScope.selectedSchoolId,
+    schoolOptions,
+  ])
+  const listSchoolId = scopedSchoolIds[0] || ''
+  const showSchoolSelector = schoolOptions.length > 1
 
   const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(String(row.id)))
 
   const loadData = useCallback(async () => {
-    if (!listSchoolId) {
+    if (scopedSchoolIds.length === 0) {
       setRows([])
       setTotalElements(0)
       setTotalPages(1)
-      setError('Select a school before viewing gallery records.')
       return
     }
     setLoading(true)
     setError('')
     try {
-      const data = await fetchGalleriesPage({
-        schoolId: listSchoolId,
-        search,
-        isViewOnWeb: filters.isViewOnWeb,
-        page: currentPage - 1,
-        size: rowsPerPage,
-      })
-      const content = Array.isArray(data?.content) ? data.content : []
-      setRows(content.map((item) => ({
-        id: item?.id,
-        schoolId: item?.schoolId ?? null,
-        schoolName: item?.schoolName || '',
-        headOfficeId: item?.headOfficeId ?? null,
-        title: item?.title || '',
-        note: item?.note || '',
-        isViewOnWeb: Boolean(item?.isViewOnWeb),
-      })))
-      setTotalElements(Number(data?.totalElements ?? content.length))
-      setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+      if (scopedSchoolIds.length === 1) {
+        const data = await fetchGalleriesPage({
+          schoolId: scopedSchoolIds[0],
+          search,
+          isViewOnWeb: filters.isViewOnWeb === 'Select' ? '' : filters.isViewOnWeb,
+          page: currentPage - 1,
+          size: rowsPerPage,
+        })
+        const content = Array.isArray(data?.content) ? data.content : []
+        setRows(content.map((item) => ({
+          id: item?.id,
+          schoolId: item?.schoolId ?? null,
+          schoolName: item?.schoolName || '',
+          headOfficeId: item?.headOfficeId ?? null,
+          title: item?.title || '',
+          note: item?.note || '',
+          isViewOnWeb: Boolean(item?.isViewOnWeb),
+        })))
+        setTotalElements(Number(data?.totalElements ?? content.length))
+        setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+        return
+      }
+
+      const rows = await fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) =>
+        fetchGalleriesPage({
+          schoolId,
+          search,
+          isViewOnWeb: filters.isViewOnWeb === 'Select' ? '' : filters.isViewOnWeb,
+          page: 0,
+          size: 500,
+        }).then((data) => Array.isArray(data?.content) ? data.content : []),
+      )
+      const normalizedRows = uniqueBy(Array.isArray(rows) ? rows : [], (row) => row?.id)
+        .filter((row) => {
+          const query = search.trim().toLowerCase()
+          if (query) {
+            const haystack = [row?.title, row?.note, row?.schoolName, row?.schoolId]
+              .map((value) => String(value ?? '').toLowerCase())
+              .join(' ')
+            if (!haystack.includes(query)) return false
+          }
+          if (filters.isViewOnWeb !== 'Select' && String(Boolean(row?.isViewOnWeb)) !== String(filters.isViewOnWeb === 'Yes')) {
+            return false
+          }
+          return true
+        })
+        .map((item) => ({
+          id: item?.id,
+          schoolId: item?.schoolId ?? null,
+          schoolName: item?.schoolName || '',
+          headOfficeId: item?.headOfficeId ?? null,
+          title: item?.title || '',
+          note: item?.note || '',
+          isViewOnWeb: Boolean(item?.isViewOnWeb),
+        }))
+      const start = (currentPage - 1) * rowsPerPage
+      setRows(normalizedRows.slice(start, start + rowsPerPage))
+      setTotalElements(normalizedRows.length)
+      setTotalPages(Math.max(1, Math.ceil(normalizedRows.length / rowsPerPage)))
     } catch (err) {
       setRows([])
       setTotalElements(0)
@@ -107,7 +163,7 @@ const Gallery = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, filters.isViewOnWeb, listSchoolId, rowsPerPage, search])
+  }, [currentPage, filters.isViewOnWeb, rowsPerPage, scopedSchoolIds, search])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -366,10 +422,11 @@ const Gallery = ({ onNavigate }) => {
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Gallery" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
          <div style={{ display: isSuperAdmin ? 'block' : 'none' }}>
-             <ManualScopeSelectors
+            <ManualScopeSelectors
                 enabled={isSuperAdmin}
                 headOffices={manualScope.headOffices}
                 schoolOptions={schoolOptions}
+                showSchoolSelector={showSchoolSelector}
                 selectedHeadOfficeId={pendingFilters.headOfficeId}
                 onHeadOfficeChange={(val) => setPendingFilters(p => ({ ...p, headOfficeId: val, schoolId: '' }))}
                 selectedSchoolId={pendingFilters.schoolId}

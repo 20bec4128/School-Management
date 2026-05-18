@@ -1,4 +1,4 @@
-CREATE TABLE guardians (
+CREATE TABLE IF NOT EXISTS guardians (
     id BIGSERIAL PRIMARY KEY,
     school_id BIGINT NOT NULL REFERENCES schools(id),
     name VARCHAR(200) NOT NULL,
@@ -15,5 +15,5 @@ CREATE TABLE guardians (
     photo_url TEXT
 );
 
-CREATE INDEX idx_guardians_school_id ON guardians (school_id);
-CREATE INDEX idx_guardians_profession ON guardians (profession);
+CREATE INDEX IF NOT EXISTS idx_guardians_school_id ON guardians (school_id);
+CREATE INDEX IF NOT EXISTS idx_guardians_profession ON guardians (profession);

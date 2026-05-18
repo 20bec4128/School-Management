@@ -3,6 +3,7 @@ import { login as loginApi, logout as logoutApi, me as meApi } from '../apis/aut
 import { getToken, setToken } from '../apis/apiClient'
 import { normalizeRole } from '../utils/roles'
 import { AuthContext } from './authContext'
+import { fetchGeneralSettingBySchoolId } from '../apis/generalSettingApi'
 
 const USER_KEY = 'sm_user'
 const CHILD_KEY = 'sm_selected_child_id'
@@ -111,6 +112,53 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  const [generalSettings, setGeneralSettings] = useState(null)
+
+  const refreshGeneralSettings = useCallback(async () => {
+    if (!schoolId) {
+      setGeneralSettings(null)
+      return
+    }
+    try {
+      const data = await fetchGeneralSettingBySchoolId(schoolId)
+      if (data) setGeneralSettings(data)
+    } catch {
+      // ignore
+    }
+  }, [schoolId])
+
+  useEffect(() => {
+    void refreshGeneralSettings()
+  }, [refreshGeneralSettings])
+
+  useEffect(() => {
+    const handler = () => {
+      void refreshGeneralSettings()
+    }
+    window.addEventListener('sm:general-settings-refresh', handler)
+    return () => window.removeEventListener('sm:general-settings-refresh', handler)
+  }, [refreshGeneralSettings])
+
+  useEffect(() => {
+    const faviconUrl = generalSettings?.faviconIcon
+    if (faviconUrl) {
+      let link = document.querySelector("link[rel~='icon']")
+      if (!link) {
+        link = document.createElement('link')
+        link.rel = 'icon'
+        document.getElementsByTagName('head')[0].appendChild(link)
+      }
+      link.href = faviconUrl
+    }
+  }, [generalSettings])
+
+  useEffect(() => {
+    const title = generalSettings?.brandTitle || generalSettings?.brandName
+    if (title) {
+      document.title = title
+    }
+  }, [generalSettings])
+
   const refreshMe = useCallback(async () => {
     const t = getToken()
     if (!t) {
@@ -217,6 +265,8 @@ export const AuthProvider = ({ children }) => {
       refreshMe,
       login,
       logout,
+      generalSettings,
+      refreshGeneralSettings,
     }),
     [
       status,
@@ -239,6 +289,8 @@ export const AuthProvider = ({ children }) => {
       refreshMe,
       login,
       logout,
+      generalSettings,
+      refreshGeneralSettings,
     ],
   )
 

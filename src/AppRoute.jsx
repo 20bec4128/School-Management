@@ -125,7 +125,9 @@ import AddBulkInvoice from "./pages/AddBulkInvoice";
 import ManageSchool from "./pages/ManageSchool";
 import AcademicYear from "./pages/AcademicYear";
 import PaymentSetting from "./pages/PaymentSetting";
+import PaymentSettingCreate from "./pages/PaymentSettingCreate";
 import SmsSetting from "./pages/SmsSetting";
+import SmsSettingCreate from "./pages/SmsSettingCreate";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { normalizeRole } from "./utils/roles";
 import DueInvoice from "./pages/DueInvoice";
@@ -234,6 +236,12 @@ import AddClassLecture from "./pages/AddClassLecture.jsx";
 import AddTopic from "./pages/AddTopic.jsx";
 import AddManageDesignation from "./pages/AddManageDesignation.jsx";
 import AddManageEmployee from "./pages/AddManageEmployee.jsx";
+import SuperAdmin from "./pages/SuperAdmin.jsx";
+import SuperAdminCreate from "./pages/SuperAdminCreate.jsx";
+import ManageFeedback from "./pages/ManageFeedback.jsx";
+import BackupDatabase from "./pages/BackupDatabase.jsx";
+import OpeningHour from "./pages/OpeningHour.jsx";
+import OpeningHourCreate from "./pages/OpeningHourCreate.jsx";
 
 const routeEntries = [
   {
@@ -406,8 +414,18 @@ const routeEntries = [
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {
+    pageKey: "payment-setting-create",
+    component: PaymentSettingCreate,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
     pageKey: "sms-setting",
     component: SmsSetting,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "sms-setting-create",
+    component: SmsSettingCreate,
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   { pageKey: "leave-type", component: LeaveType },
@@ -629,6 +647,11 @@ const routeEntries = [
     component: SmsSetting,
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
+  {
+    pageKey: "sms-setting-create",
+    component: SmsSettingCreate,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
   { pageKey: "leave-type", component: LeaveType },
   { pageKey: "add-leave-type", component: AddLeaveType },
   { pageKey: "leave-application", component: LeaveApplication },
@@ -760,6 +783,12 @@ const routeEntries = [
   { pageKey: "add-topic", component: AddTopic },
   { pageKey: "add-manage-designation", component: AddManageDesignation },
   { pageKey: "add-manage-employee", component: AddManageEmployee },
+  { pageKey: "manage-super-admin", component: SuperAdmin },
+  { pageKey: "add-super-admin", component: SuperAdminCreate },
+  { pageKey: "manage-feedback", component: ManageFeedback },
+  { pageKey: "backup-database", component: BackupDatabase },
+  { pageKey: "opening-hour", component: OpeningHour },
+  { pageKey: "add-opening-hour", component: OpeningHourCreate },
 ];
 
 const AppRoute = ({

@@ -8,6 +8,7 @@ import { useSchool } from '../context/useSchool'
 import { deleteNotice, fetchNoticesPage } from '../apis/noticeApi'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 
 const EDIT_STORAGE_KEY = 'notice-edit-row'
 
@@ -29,7 +30,7 @@ const columnOptions = [
 ]
 
 const Notice = ({ onNavigate }) => {
-  const { role } = useAuth()
+  const { role, schoolId: authSchoolId } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
@@ -47,49 +48,106 @@ const Notice = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const listSchoolId = isSuperAdmin
-    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId
-      ? String(activeSchoolId)
-      : ''
+  const schoolOptions = isSuperAdmin
+    ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
+    : contextSchoolOptions
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
 
-  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+    const singleSchoolId = activeSchoolId || authSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [
+    activeSchoolId,
+    authSchoolId,
+    contextSchoolOptions,
+    filters.schoolId,
+    isSuperAdmin,
+    manualScope.schoolOptions,
+    manualScope.selectedHeadOfficeId,
+    manualScope.selectedSchoolId,
+    schoolOptions,
+  ])
+  const listSchoolId = scopedSchoolIds[0] || ''
+  const showSchoolSelector = schoolOptions.length > 1
   const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(String(row.id)))
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   const loadData = useCallback(async () => {
-    if (!listSchoolId) {
+    if (scopedSchoolIds.length === 0) {
       setRows([])
       setTotalElements(0)
       setTotalPages(1)
-      setError('Select a school before viewing notices.')
       return
     }
     setLoading(true)
     setError('')
     try {
-      const data = await fetchNoticesPage({
-        schoolId: listSchoolId,
-        search,
-        noticeFor: filters.noticeFor === 'Select' ? '' : filters.noticeFor,
-        isViewOnWeb: filters.isViewOnWeb,
-        page: currentPage - 1,
-        size: rowsPerPage,
-      })
-      const content = Array.isArray(data?.content) ? data.content : []
-      setRows(content.map((item) => ({
-        id: item?.id,
-        schoolId: item?.schoolId ?? null,
-        schoolName: item?.schoolName || '',
-        title: item?.title || '',
-        date: item?.date || '',
-        noticeFor: item?.noticeFor || '',
-        notice: item?.notice || '',
-        isViewOnWeb: Boolean(item?.isViewOnWeb),
-      })))
-      setTotalElements(Number(data?.totalElements ?? content.length))
-      setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+      if (scopedSchoolIds.length === 1) {
+        const data = await fetchNoticesPage({
+          schoolId: scopedSchoolIds[0],
+          search,
+          noticeFor: filters.noticeFor === 'Select' ? '' : filters.noticeFor,
+          isViewOnWeb: filters.isViewOnWeb === 'Select' ? '' : filters.isViewOnWeb,
+          page: currentPage - 1,
+          size: rowsPerPage,
+        })
+        const content = Array.isArray(data?.content) ? data.content : []
+        setRows(content.map((item) => ({
+          id: item?.id,
+          schoolId: item?.schoolId ?? null,
+          schoolName: item?.schoolName || '',
+          title: item?.title || '',
+          date: item?.date || '',
+          noticeFor: item?.noticeFor || '',
+          notice: item?.notice || '',
+          isViewOnWeb: Boolean(item?.isViewOnWeb),
+        })))
+        setTotalElements(Number(data?.totalElements ?? content.length))
+        setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+        return
+      }
+
+      const rows = await fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) =>
+        fetchNoticesPage({
+          schoolId,
+          search,
+          noticeFor: filters.noticeFor === 'Select' ? '' : filters.noticeFor,
+          isViewOnWeb: filters.isViewOnWeb === 'Select' ? '' : filters.isViewOnWeb,
+          page: 0,
+          size: 500,
+        }).then((data) => Array.isArray(data?.content) ? data.content : []),
+      )
+      const query = search.trim().toLowerCase()
+      const filteredRows = uniqueBy(Array.isArray(rows) ? rows : [], (row) => row?.id)
+        .filter((row) => {
+          if (filters.noticeFor !== 'Select' && String(row?.noticeFor || '') !== String(filters.noticeFor)) return false
+          if (filters.isViewOnWeb !== 'Select' && String(Boolean(row?.isViewOnWeb)) !== String(filters.isViewOnWeb === 'Yes')) return false
+          if (!query) return true
+          const haystack = [row?.title, row?.notice, row?.noticeFor, row?.schoolName, row?.date]
+            .map((value) => String(value ?? '').toLowerCase())
+            .join(' ')
+          return haystack.includes(query)
+        })
+        .map((item) => ({
+          id: item?.id,
+          schoolId: item?.schoolId ?? null,
+          schoolName: item?.schoolName || '',
+          title: item?.title || '',
+          date: item?.date || '',
+          noticeFor: item?.noticeFor || '',
+          notice: item?.notice || '',
+          isViewOnWeb: Boolean(item?.isViewOnWeb),
+        }))
+      const start = (currentPage - 1) * rowsPerPage
+      setRows(filteredRows.slice(start, start + rowsPerPage))
+      setTotalElements(filteredRows.length)
+      setTotalPages(Math.max(1, Math.ceil(filteredRows.length / rowsPerPage)))
     } catch (err) {
       console.error('Failed to fetch notices:', err)
       setRows([])
@@ -99,7 +157,7 @@ const Notice = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, filters.isViewOnWeb, filters.noticeFor, listSchoolId, rowsPerPage, search])
+  }, [currentPage, filters.isViewOnWeb, filters.noticeFor, rowsPerPage, scopedSchoolIds, search])
 
   useEffect(() => {
     void loadData()
@@ -392,6 +450,7 @@ const Notice = ({ onNavigate }) => {
                 enabled={isSuperAdmin}
                 headOffices={manualScope.headOffices}
                 schoolOptions={schoolOptions}
+                showSchoolSelector={showSchoolSelector}
                 selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
                 onHeadOfficeChange={(value) => {
                   manualScope.setSelectedHeadOfficeId(value)

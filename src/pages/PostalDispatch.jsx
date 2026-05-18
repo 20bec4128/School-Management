@@ -5,7 +5,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
-import { uniqueBy } from '../utils/schoolScope'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import { fetchPostalDispatchesPage, deletePostalDispatch } from '../apis/postalApi'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -42,9 +42,19 @@ const PostalDispatch = ({ onNavigate }) => {
   
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   
-  const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions) : contextSchoolOptions
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
+    const singleSchoolId = activeSchoolId || authSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [activeSchoolId, authSchoolId, contextSchoolOptions, filters.schoolId, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, manualScope.selectedSchoolId, schoolOptions])
+  const listSchoolId = scopedSchoolIds[0] || ''
+  const showSchoolSelector = schoolOptions.length > 1
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
@@ -52,22 +62,34 @@ const PostalDispatch = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      if (!listSchoolId) {
+      if (scopedSchoolIds.length === 0) {
         setData([])
         setTotalElements(0)
         setTotalPages(1)
-        setError('Select a school before viewing postal dispatches.')
         return
       }
-      const pageData = await fetchPostalDispatchesPage({
-        schoolId: listSchoolId,
-        page: currentPage - 1,
-        size: rowsPerPage,
-        search,
+      if (scopedSchoolIds.length === 1) {
+        const pageData = await fetchPostalDispatchesPage({
+          schoolId: scopedSchoolIds[0],
+          page: currentPage - 1,
+          size: rowsPerPage,
+          search,
+        })
+        setData(Array.isArray(pageData?.content) ? pageData.content : [])
+        setTotalElements(Number(pageData?.totalElements ?? 0))
+        setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
+        return
+      }
+      const rows = await fetchRowsForSchoolIds(scopedSchoolIds, async (schoolId) => {
+        const pageData = await fetchPostalDispatchesPage({ schoolId, page: 0, size: 1000, search })
+        return Array.isArray(pageData?.content) ? pageData.content : []
       })
-      setData(Array.isArray(pageData?.content) ? pageData.content : [])
-      setTotalElements(Number(pageData?.totalElements ?? 0))
-      setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
+      const mergedRows = uniqueBy(Array.isArray(rows) ? rows : [], (row) => row?.id).sort((a, b) => Number(b?.id ?? 0) - Number(a?.id ?? 0))
+      const start = Math.max(0, (currentPage - 1) * rowsPerPage)
+      const end = Math.min(start + rowsPerPage, mergedRows.length)
+      setData(mergedRows.slice(start, end))
+      setTotalElements(mergedRows.length)
+      setTotalPages(Math.max(1, Math.ceil(mergedRows.length / rowsPerPage)))
     } catch (err) {
       setError(err?.message || 'Failed to fetch postal dispatches')
       setData([])
@@ -76,7 +98,7 @@ const PostalDispatch = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, listSchoolId, rowsPerPage, search])
+  }, [currentPage, rowsPerPage, scopedSchoolIds, search])
 
   // Load table data on mount and whenever the active school scope changes.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -301,6 +323,7 @@ const PostalDispatch = ({ onNavigate }) => {
               enabled={isSuperAdmin}
               headOffices={manualScope.headOffices}
               schoolOptions={manualScope.schoolOptions}
+              showSchoolSelector={showSchoolSelector}
               selectedHeadOfficeId={pendingFilters.headOfficeId}
               onHeadOfficeChange={(val) => setPendingFilters((p) => ({ ...p, headOfficeId: val, schoolId: '' }))}
               selectedSchoolId={pendingFilters.schoolId}

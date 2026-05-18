@@ -39,6 +39,8 @@ export function FilterPanel({ filterProps }) {
 
   // Filterable columns
   const filterableColumns = columns.filter(col => col.filterType);
+  const getOptionValue = (option) => (option && typeof option === 'object' ? option.value ?? '' : option);
+  const getOptionLabel = (option) => (option && typeof option === 'object' ? option.label ?? option.value ?? '' : option);
 
   return (
     <>
@@ -89,8 +91,8 @@ export function FilterPanel({ filterProps }) {
                   >
                     <option value="">All</option>
                     {column.filterOptions?.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
+                      <option key={String(getOptionValue(option))} value={getOptionValue(option)}>
+                        {getOptionLabel(option)}
                       </option>
                     ))}
                   </select>

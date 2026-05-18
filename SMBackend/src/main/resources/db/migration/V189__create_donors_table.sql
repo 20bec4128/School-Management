@@ -1,4 +1,4 @@
-CREATE TABLE donors (
+CREATE TABLE IF NOT EXISTS donors (
     id BIGSERIAL PRIMARY KEY,
     school_id BIGINT NOT NULL REFERENCES schools(id),
     academic_year VARCHAR(20),
@@ -12,6 +12,6 @@ CREATE TABLE donors (
     note TEXT
 );
 
-CREATE INDEX idx_donors_school_id ON donors (school_id);
-CREATE INDEX idx_donors_academic_year ON donors (academic_year);
-CREATE INDEX idx_donors_donor_type ON donors (donor_type);
+CREATE INDEX IF NOT EXISTS idx_donors_school_id ON donors (school_id);
+CREATE INDEX IF NOT EXISTS idx_donors_academic_year ON donors (academic_year);
+CREATE INDEX IF NOT EXISTS idx_donors_donor_type ON donors (donor_type);

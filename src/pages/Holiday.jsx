@@ -10,6 +10,7 @@ import { deleteHoliday, fetchHolidaysPage } from '../apis/holidayApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 
 
 
@@ -40,7 +41,7 @@ const columnOptions = [
 
 const Holiday = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth()
-  const { activeSchoolId } = useSchool()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
@@ -60,18 +61,10 @@ const Holiday = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const listSchoolId = isSuperAdmin
-    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId
-      ? String(activeSchoolId)
-      : authSchoolId
-        ? String(authSchoolId)
-        : ''
-
-
-
   const schoolOptions = useMemo(() => {
-    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    if (isSuperAdmin) {
+      return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions
+    }
     const filtered = Array.isArray(schools)
       ? schools.filter((school) => {
           if (isHeadOfficeAdmin && authHeadOfficeId != null) {
@@ -80,11 +73,37 @@ const Holiday = ({ onNavigate }) => {
           return true
         })
       : []
-    const fallback = listSchoolId && !filtered.some((school) => String(school.id) === listSchoolId) && authSchoolName
-      ? [{ id: authSchoolId, schoolName: authSchoolName }]
-      : []
+    const fallbackSchoolId = authSchoolId || activeSchoolId || (filtered.length === 1 ? filtered[0]?.id : '')
+    const fallback =
+      fallbackSchoolId && !filtered.some((school) => String(school.id) === String(fallbackSchoolId)) && authSchoolName
+        ? [{ id: fallbackSchoolId, schoolName: authSchoolName }]
+        : []
     return [...filtered, ...fallback]
-  }, [isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, schools, isHeadOfficeAdmin, authHeadOfficeId, listSchoolId, authSchoolName, authSchoolId])
+  }, [activeSchoolId, authHeadOfficeId, authSchoolId, authSchoolName, contextSchoolOptions, isHeadOfficeAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, schools])
+
+  const scopedSchoolIds = useMemo(() => {
+    if (isSuperAdmin) {
+      if (filters.schoolId) return [String(filters.schoolId)]
+      if (manualScope.selectedSchoolId) return [String(manualScope.selectedSchoolId)]
+      if (manualScope.selectedHeadOfficeId) return normalizeSchoolIds(manualScope.schoolOptions)
+      return normalizeSchoolIds(contextSchoolOptions)
+    }
+
+    const singleSchoolId = authSchoolId || activeSchoolId || (schoolOptions.length === 1 ? schoolOptions[0]?.id : '')
+    return String(singleSchoolId ?? '').trim() ? [String(singleSchoolId)] : []
+  }, [
+    activeSchoolId,
+    authSchoolId,
+    contextSchoolOptions,
+    filters.schoolId,
+    isSuperAdmin,
+    manualScope.schoolOptions,
+    manualScope.selectedHeadOfficeId,
+    manualScope.selectedSchoolId,
+    schoolOptions,
+  ])
+  const listSchoolId = scopedSchoolIds[0] || ''
+  const showSchoolSelector = schoolOptions.length > 1
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
@@ -100,36 +119,72 @@ const Holiday = ({ onNavigate }) => {
   }, [])
 
   const loadData = useCallback(async () => {
-    if (!listSchoolId) {
+    if (scopedSchoolIds.length === 0) {
       setRows([])
       setTotalElements(0)
       setTotalPages(1)
-      setError('Select a school before viewing holidays.')
       return
     }
     setLoading(true)
     setError('')
     try {
-      const data = await fetchHolidaysPage({
-        schoolId: listSchoolId,
-        search,
-        isViewOnWeb: filters.isViewOnWeb,
-        page: currentPage - 1,
-        size: rowsPerPage,
-      })
-      const content = Array.isArray(data?.content) ? data.content : []
-      setRows(content.map((item) => ({
-        id: item?.id,
-        schoolId: item?.schoolId ?? null,
-        schoolName: item?.schoolName || '',
-        title: item?.title || '',
-        fromDate: item?.fromDate || '',
-        toDate: item?.toDate || '',
-        note: item?.note || '',
-        isViewOnWeb: Boolean(item?.isViewOnWeb),
-      })))
-      setTotalElements(Number(data?.totalElements ?? content.length))
-      setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+      if (scopedSchoolIds.length === 1) {
+        const data = await fetchHolidaysPage({
+          schoolId: scopedSchoolIds[0],
+          search,
+          isViewOnWeb: filters.isViewOnWeb === 'Select' ? '' : filters.isViewOnWeb,
+          page: currentPage - 1,
+          size: rowsPerPage,
+        })
+        const content = Array.isArray(data?.content) ? data.content : []
+        setRows(content.map((item) => ({
+          id: item?.id,
+          schoolId: item?.schoolId ?? null,
+          schoolName: item?.schoolName || '',
+          title: item?.title || '',
+          fromDate: item?.fromDate || '',
+          toDate: item?.toDate || '',
+          note: item?.note || '',
+          isViewOnWeb: Boolean(item?.isViewOnWeb),
+        })))
+        setTotalElements(Number(data?.totalElements ?? content.length))
+        setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+        return
+      }
+
+      const rows = await fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) =>
+        fetchHolidaysPage({
+          schoolId,
+          search,
+          isViewOnWeb: filters.isViewOnWeb === 'Select' ? '' : filters.isViewOnWeb,
+          page: 0,
+          size: 500,
+        }).then((data) => Array.isArray(data?.content) ? data.content : []),
+      )
+      const query = search.trim().toLowerCase()
+      const filteredRows = uniqueBy(Array.isArray(rows) ? rows : [], (row) => row?.id)
+        .filter((row) => {
+          if (filters.isViewOnWeb !== 'Select' && String(Boolean(row?.isViewOnWeb)) !== String(filters.isViewOnWeb === 'Yes')) return false
+          if (!query) return true
+          const haystack = [row?.title, row?.fromDate, row?.toDate, row?.note, row?.schoolName]
+            .map((value) => String(value ?? '').toLowerCase())
+            .join(' ')
+          return haystack.includes(query)
+        })
+        .map((item) => ({
+          id: item?.id,
+          schoolId: item?.schoolId ?? null,
+          schoolName: item?.schoolName || '',
+          title: item?.title || '',
+          fromDate: item?.fromDate || '',
+          toDate: item?.toDate || '',
+          note: item?.note || '',
+          isViewOnWeb: Boolean(item?.isViewOnWeb),
+        }))
+      const start = (currentPage - 1) * rowsPerPage
+      setRows(filteredRows.slice(start, start + rowsPerPage))
+      setTotalElements(filteredRows.length)
+      setTotalPages(Math.max(1, Math.ceil(filteredRows.length / rowsPerPage)))
     } catch (err) {
       setRows([])
       setTotalElements(0)
@@ -138,7 +193,7 @@ const Holiday = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, filters.isViewOnWeb, listSchoolId, rowsPerPage, search])
+  }, [currentPage, filters.isViewOnWeb, rowsPerPage, scopedSchoolIds, search])
 
   useEffect(() => { 
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -365,6 +420,7 @@ const Holiday = ({ onNavigate }) => {
               enabled={isSuperAdmin}
               headOffices={manualScope.headOffices}
               schoolOptions={schoolOptions}
+              showSchoolSelector={showSchoolSelector}
               selectedHeadOfficeId={pendingFilters.headOfficeId}
               onHeadOfficeChange={(value) =>
                 setPendingFilters((prev) => ({
