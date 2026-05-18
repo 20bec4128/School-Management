@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -8,51 +7,15 @@ import '../assets/css/addModalShared.css'
 import { useAuth } from '../context/useAuth'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { createSalaryGrade, deleteSalaryGrade, fetchSalaryGradesPage, updateSalaryGrade } from '../apis/salaryGradeApi'
+import { deleteSalaryGrade, fetchSalaryGradesPage } from '../apis/salaryGradeApi'
 import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
 
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  gradeName: '',
-  basicSalary: '',
-  houseRent: '',
-  transportAllowance: '',
-  medicalAllowance: '',
-  overTimeHourlyRate: '',
-  providentFund: '',
-  hourlyRate: '',
-  totalAllowance: 0,
-  totalDeduction: 0,
-  grossSalary: 0,
-  netSalary: 0,
-  note: '',
-}
-
+const EDIT_STORAGE_KEY = 'edit-salary-grade-row'
 const emptyFilters = {
   headOfficeId: '',
   schoolId: '',
   gradeName: '',
-}
-
-const STEPS = ['Basic Information', 'Allowances', 'Salary Summary']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Grade Name': 'ri-medal-line',
-  'Basic Salary': 'ri-coin-line',
-  'House Rent': 'ri-home-line',
-  'Transport Allowance': 'ri-bus-line',
-  'Medical Allowance': 'ri-heart-pulse-line',
-  'Over Time Hourly Rate': 'ri-time-line',
-  'Provident Fund': 'ri-funds-line',
-  'Hourly Rate': 'ri-calculator-line',
-  'Total Allowance': 'ri-add-circle-line',
-  'Total Deduction': 'ri-subtract-line',
-  'Gross Salary': 'ri-bank-card-line',
-  'Net Salary': 'ri-wallet-line',
-  Note: 'ri-file-text-line',
 }
 
 const columnOptions = [
@@ -64,41 +27,7 @@ const columnOptions = [
   { key: 'netSalary', label: 'Net Salary' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const SalaryGrade = () => {
+const SalaryGrade = ({ onNavigate }) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -121,13 +50,6 @@ const SalaryGrade = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-  
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
@@ -229,68 +151,22 @@ const SalaryGrade = () => {
       .finally(() => setBusy(false))
   }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters])
 
-  const calculateTotals = (formData) => {
-    const basicSalary = parseFloat(formData.basicSalary) || 0
-    const houseRent = parseFloat(formData.houseRent) || 0
-    const transportAllowance = parseFloat(formData.transportAllowance) || 0
-    const medicalAllowance = parseFloat(formData.medicalAllowance) || 0
-    const overTimeHourlyRate = parseFloat(formData.overTimeHourlyRate) || 0
-    const providentFund = parseFloat(formData.providentFund) || 0
-    
-    const totalAllowance = houseRent + transportAllowance + medicalAllowance + overTimeHourlyRate
-    const totalDeduction = providentFund
-    const grossSalary = basicSalary + totalAllowance
-    const netSalary = grossSalary - totalDeduction
-
-    return {
-      totalAllowance,
-      totalDeduction,
-      grossSalary,
-      netSalary,
-    }
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => {
-      const updated = { 
-        ...prev, 
-        [id]: value,
-        ...(id === 'headOfficeId' ? { schoolId: '' } : {})
-      }
-      const totals = calculateTotals(updated)
-      return {
-        ...updated,
-        totalAllowance: totals.totalAllowance,
-        totalDeduction: totals.totalDeduction,
-        grossSalary: totals.grossSalary,
-        netSalary: totals.netSalary,
-      }
-    })
-  }
-
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isSchoolAdmin) {
-      base.schoolId = authSchoolId != null ? String(authSchoolId) : ''
-      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-    } else if (isHeadOfficeAdmin) {
-      base.headOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : ''
-    }
-    setAddForm(base)
-    setAddStep(0)
-    setIsAddOpen(true)
+    onNavigate?.('add-salary-grade')
   }
 
   const openEdit = (row) => {
-    const s = row?.schoolId != null ? schoolsById.get(String(row.schoolId)) : null
-    setEditForm({
+    const school = row?.schoolId != null ? schoolsById.get(String(row.schoolId)) : null
+    const headOfficeId = row?.headOfficeId ?? school?.headOfficeId ?? authHeadOfficeId ?? ''
+    const normalizedRow = {
       ...row,
-      headOfficeId: s?.headOfficeId != null ? String(s.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : ''),
+      headOfficeId: headOfficeId != null ? String(headOfficeId) : '',
       schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+    }
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(normalizedRow))
+    } catch {}
+    onNavigate?.('add-salary-grade')
   }
 
   const handleSelectAll = (e) => {
@@ -322,196 +198,12 @@ const SalaryGrade = () => {
     return []
   }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
 
-  const schoolOptionsForForm = (form) => {
+  const schoolOptionsForForm = (f) => {
     if (isSchoolAdmin) return []
-    const selectedHeadOfficeId = isSuperAdmin ? form.headOfficeId : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+    const selectedHeadOfficeId = isSuperAdmin ? f.headOfficeId : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
     const list = Array.isArray(schools) ? schools : []
     if (!selectedHeadOfficeId) return []
     return list.filter((s) => String(s?.headOfficeId ?? '') === String(selectedHeadOfficeId))
-  }
-
-  const renderForm = (form, setter, step) => {
-    return (
-      <>
-        {step === 0 && (
-          <>
-            <p className="avm-section-title">{STEPS[0]}</p>
-            <div className="avm-grid">
-              {isSuperAdmin ? (
-                <FormField label="Head Office" required full>
-                  <select className="avm-select" id="headOfficeId" value={form.headOfficeId} onChange={handleChange(setter)}>
-                    <option value="">--Select Head Office--</option>
-                    {headOffices.map((ho) => (
-                      <option key={ho.id} value={String(ho.id)}>{ho.name}</option>
-                    ))}
-                  </select>
-                </FormField>
-              ) : (isHeadOfficeAdmin ? (
-                <FormField label="Head Office" required full>
-                  <input className="avm-input" value={headOfficeName || resolveHeadOfficeName(authHeadOfficeId) || ''} readOnly />
-                </FormField>
-              ) : null)}
-
-              {(isSuperAdmin || isHeadOfficeAdmin) ? (
-                <FormField label="School Name" required full>
-                  <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleChange(setter)}>
-                    <option value="">--Select School--</option>
-                    {schoolOptionsForForm(form).map((s) => (
-                      <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
-                    ))}
-                  </select>
-                </FormField>
-              ) : (isSchoolAdmin ? (
-                <FormField label="School Name" required full>
-                  <input className="avm-input" value={authSchoolName || resolveSchoolName(authSchoolId, authSchoolName) || ''} readOnly />
-                </FormField>
-              ) : null)}
-
-              <FormField label="Grade Name" required full>
-                <input
-                  type="text"
-                  className="avm-input"
-                  id="gradeName"
-                  placeholder="Enter grade name"
-                  value={form.gradeName}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Basic Salary" required>
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="basicSalary"
-                  placeholder="Enter basic salary"
-                  value={form.basicSalary}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <p className="avm-section-title">{STEPS[1]}</p>
-            <div className="avm-grid">
-              <FormField label="House Rent">
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="houseRent"
-                  placeholder="Enter house rent"
-                  value={form.houseRent}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Transport Allowance">
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="transportAllowance"
-                  placeholder="Enter transport allowance"
-                  value={form.transportAllowance}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Medical Allowance">
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="medicalAllowance"
-                  placeholder="Enter medical allowance"
-                  value={form.medicalAllowance}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Over Time Hourly Rate">
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="overTimeHourlyRate"
-                  placeholder="Enter over time hourly rate"
-                  value={form.overTimeHourlyRate}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Provident Fund">
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="providentFund"
-                  placeholder="Enter provident fund"
-                  value={form.providentFund}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <FormField label="Hourly Rate" required>
-                <input
-                  type="number"
-                  className="avm-input"
-                  id="hourlyRate"
-                  placeholder="Enter hourly rate"
-                  value={form.hourlyRate}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <p className="avm-section-title">{STEPS[2]}</p>
-            <div className="avm-grid">
-              <div className="avm-field">
-                <label className="avm-label">Total Allowance</label>
-                <div className="avm-input" style={{ background: '#f8fafc', fontWeight: 600 }}>
-                  {form.totalAllowance}
-                </div>
-              </div>
-
-              <div className="avm-field">
-                <label className="avm-label">Total Deduction</label>
-                <div className="avm-input" style={{ background: '#f8fafc', fontWeight: 600 }}>
-                  {form.totalDeduction}
-                </div>
-              </div>
-
-              <div className="avm-field">
-                <label className="avm-label">Gross Salary</label>
-                <div className="avm-input" style={{ background: '#e8f0fe', fontWeight: 600, color: '#45597a' }}>
-                  {form.grossSalary}
-                </div>
-              </div>
-
-              <div className="avm-field">
-                <label className="avm-label">Net Salary</label>
-                <div className="avm-input" style={{ background: '#e8f0fe', fontWeight: 600, color: '#45597a' }}>
-                  {form.netSalary}
-                </div>
-              </div>
-
-              <FormField label="Note" full noIcon>
-                <textarea
-                  rows="3"
-                  className="avm-input avm-textarea"
-                  id="note"
-                  placeholder="Enter note (optional)"
-                  value={form.note}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-            </div>
-          </>
-        )}
-      </>
-    )
   }
 
   const handleApplyFilters = (e) => {
@@ -804,60 +496,6 @@ const SalaryGrade = () => {
           </div>
         </div>
       </div>
-
-      <WizardPopup
-        modalWidth="620px"
-        open={isAddOpen}
-        title="Add Salary Grade"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={async () => {
-          setLoadError('')
-          const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (addForm.schoolId ? Number(addForm.schoolId) : null)
-          if (!effectiveSchoolId) { setLoadError('School is required'); return }
-          if (!addForm.gradeName) { setLoadError('Grade name is required'); return }
-          setBusy(true)
-          try {
-            await createSalaryGrade({ ...addForm, schoolId: effectiveSchoolId })
-            setIsAddOpen(false)
-            await loadSalaryGrades({ schoolId: effectiveSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
-          } catch (e) { setLoadError(e.message) }
-          finally { setBusy(false) }
-        }}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="620px"
-        open={isEditOpen}
-        title="Edit Salary Grade"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={async () => {
-          setLoadError('')
-          const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (editForm.schoolId ? Number(editForm.schoolId) : null)
-          if (!effectiveSchoolId) { setLoadError('School is required'); return }
-          if (!editForm.gradeName) { setLoadError('Grade name is required'); return }
-          setBusy(true)
-          try {
-            await updateSalaryGrade(editForm.id, { ...editForm, schoolId: effectiveSchoolId })
-            setIsEditOpen(false)
-            await loadSalaryGrades({ schoolId: effectiveSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
-          } catch (e) { setLoadError(e.message) }
-          finally { setBusy(false) }
-        }}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}

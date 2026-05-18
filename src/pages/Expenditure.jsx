@@ -14,16 +14,7 @@ import { createExpenditure, deleteExpenditure, fetchExpendituresPage, updateExpe
 import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
 
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  expenditureHeadId: '',
-  expenditureMethod: '',
-  reference: '',
-  amount: '',
-  expenditureDate: '',
-  note: '',
-}
+const EDIT_STORAGE_KEY = 'edit-expenditure-row'
 
 const emptyFilters = {
   headOfficeId: '',
@@ -90,12 +81,13 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const Expenditure = () => {
+const Expenditure = ({ onNavigate } = {}) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -115,13 +107,6 @@ const Expenditure = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
 
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
@@ -285,32 +270,23 @@ const Expenditure = () => {
   }
 
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isSchoolAdmin) {
-      base.schoolId = String(authSchoolId ?? '')
-    } else if (isHeadOfficeAdmin) {
-      base.headOfficeId = String(authHeadOfficeId ?? '')
-    }
-    setAddForm(base)
-    setAddStep(0)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    navigateTo?.('add-expenditure')
   }
 
   const openEdit = (row) => {
     const school = row?.schoolId != null ? schoolsById.get(String(row.schoolId)) : null
-    setEditForm({
-      id: row.id,
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : String(authHeadOfficeId ?? ''),
-      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-      expenditureHeadId: row?.expenditureHeadId != null ? String(row.expenditureHeadId) : '',
-      expenditureMethod: row?.expenditureMethod || '',
-      reference: row?.reference || '',
-      amount: row?.amount != null ? String(row.amount) : '',
-      expenditureDate: row?.expenditureDate || '',
-      note: row?.note || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
+    const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : String(authHeadOfficeId ?? '')
+    
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify({
+        ...row,
+        headOfficeId
+      }))
+    } catch {}
+    navigateTo?.('add-expenditure')
   }
 
   const getVisiblePages = () => {
@@ -559,342 +535,6 @@ const Expenditure = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="680px"
-        open={isAddOpen}
-        title="Add Expenditure"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={async () => {
-          setLoadError('')
-          const schoolId = isSchoolAdmin ? authSchoolId : (addForm.schoolId ? Number(addForm.schoolId) : null)
-          const expenditureHeadId = addForm.expenditureHeadId ? Number(addForm.expenditureHeadId) : null
-          if (!schoolId) {
-            setLoadError('School is required')
-            return
-          }
-          if (!expenditureHeadId) {
-            setLoadError('Expenditure head is required')
-            return
-          }
-          if (!addForm.expenditureMethod) {
-            setLoadError('Expenditure method is required')
-            return
-          }
-          if (!addForm.amount) {
-            setLoadError('Amount is required')
-            return
-          }
-          if (!addForm.expenditureDate) {
-            setLoadError('Date is required')
-            return
-          }
-          setBusy(true)
-          try {
-            await createExpenditure({ ...addForm, schoolId, expenditureHeadId, amount: Number(addForm.amount) })
-            setIsAddOpen(false)
-            await loadExpenditureHeads(schoolId)
-            await loadRows({
-              schoolId: currentSchoolId || schoolId,
-              expenditureHeadId: currentExpenditureHeadId || expenditureHeadId,
-              expenditureMethod: filters.expenditureMethod || null,
-              page: currentPage - 1,
-              size: rowsPerPage,
-              search: debouncedSearch,
-            })
-          } catch (error) {
-            setLoadError(error?.message || 'Failed to create expenditure')
-          } finally {
-            setBusy(false)
-          }
-        }}
-        submitLabel="Save"
-      >
-        <div className="avm-grid">
-          {isSuperAdmin ? (
-            <ManualScopeSelectors
-              enabled
-              headOffices={headOffices}
-              schoolOptions={schoolsForHeadOffice(addForm.headOfficeId)}
-              selectedHeadOfficeId={addForm.headOfficeId}
-              onHeadOfficeChange={(value) => setAddForm((prev) => ({ ...prev, headOfficeId: value, schoolId: '', expenditureHeadId: '' }))}
-              selectedSchoolId={addForm.schoolId}
-              onSchoolChange={async (value) => {
-                setAddForm((prev) => ({ ...prev, schoolId: value, expenditureHeadId: '' }))
-                await loadExpenditureHeads(value || '')
-              }}
-              schoolLabel="School"
-            />
-          ) : isHeadOfficeAdmin ? (
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="schoolId"
-                value={addForm.schoolId}
-                onChange={async (e) => {
-                  const value = e.target.value
-                  setAddForm((prev) => ({ ...prev, schoolId: value, expenditureHeadId: '' }))
-                  await loadExpenditureHeads(value || '')
-                }}
-              >
-                <option value="">--Select School--</option>
-                {schoolOptionsForScope.map((school) => (
-                  <option key={school.id} value={String(school.id)}>
-                    {school.schoolName}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-          ) : (
-            <FormField label="School Name" required full>
-              <input className="avm-input" value={authSchoolName || ''} readOnly />
-            </FormField>
-          )}
-
-          <FormField label="Expenditure Head" required full>
-            <select
-              className="avm-select"
-              id="expenditureHeadId"
-              value={addForm.expenditureHeadId}
-              onChange={handleInputChange(setAddForm)}
-              disabled={!addForm.schoolId && !isSchoolAdmin}
-            >
-              <option value="">{addForm.schoolId || isSchoolAdmin ? '--Select Expenditure Head--' : 'Select School First'}</option>
-              {expenditureHeads.map((head) => (
-                <option key={head.id} value={String(head.id)}>
-                  {head.expenditureHead}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Expenditure Method" required full>
-            <select className="avm-select" id="expenditureMethod" value={addForm.expenditureMethod} onChange={handleInputChange(setAddForm)}>
-              <option value="">--Select--</option>
-              {EXPENDITURE_METHOD_OPTIONS.map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Reference">
-            <input
-              type="text"
-              className="avm-input"
-              id="reference"
-              placeholder="Enter Reference"
-              value={addForm.reference}
-              onChange={handleInputChange(setAddForm)}
-            />
-          </FormField>
-
-          <FormField label="Amount" required>
-            <input
-              type="number"
-              className="avm-input"
-              id="amount"
-              placeholder="Enter Amount"
-              value={addForm.amount}
-              onChange={handleInputChange(setAddForm)}
-            />
-          </FormField>
-
-          <FormField label="Date" required>
-            <input
-              type="date"
-              className="avm-input"
-              id="expenditureDate"
-              value={addForm.expenditureDate}
-              onChange={handleInputChange(setAddForm)}
-            />
-          </FormField>
-
-          <FormField label="Note" full noIcon>
-            <textarea
-              className="avm-input avm-textarea"
-              id="note"
-              rows="3"
-              placeholder="Enter Note"
-              value={addForm.note}
-              onChange={handleInputChange(setAddForm)}
-            />
-          </FormField>
-        </div>
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="680px"
-        open={isEditOpen}
-        title="Edit Expenditure"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={async () => {
-          setLoadError('')
-          const schoolId = isSchoolAdmin ? authSchoolId : (editForm.schoolId ? Number(editForm.schoolId) : null)
-          const expenditureHeadId = editForm.expenditureHeadId ? Number(editForm.expenditureHeadId) : null
-          if (!schoolId) {
-            setLoadError('School is required')
-            return
-          }
-          if (!expenditureHeadId) {
-            setLoadError('Expenditure head is required')
-            return
-          }
-          if (!editForm.expenditureMethod) {
-            setLoadError('Expenditure method is required')
-            return
-          }
-          if (!editForm.amount) {
-            setLoadError('Amount is required')
-            return
-          }
-          if (!editForm.expenditureDate) {
-            setLoadError('Date is required')
-            return
-          }
-          setBusy(true)
-          try {
-            await updateExpenditure(editForm.id, { ...editForm, schoolId, expenditureHeadId, amount: Number(editForm.amount) })
-            setIsEditOpen(false)
-            await loadExpenditureHeads(schoolId)
-            await loadRows({
-              schoolId: currentSchoolId || schoolId,
-              expenditureHeadId: currentExpenditureHeadId || expenditureHeadId,
-              expenditureMethod: filters.expenditureMethod || null,
-              page: currentPage - 1,
-              size: rowsPerPage,
-              search: debouncedSearch,
-            })
-          } catch (error) {
-            setLoadError(error?.message || 'Failed to update expenditure')
-          } finally {
-            setBusy(false)
-          }
-        }}
-        submitLabel="Update"
-      >
-        <div className="avm-grid">
-          {isSuperAdmin ? (
-            <ManualScopeSelectors
-              enabled
-              headOffices={headOffices}
-              schoolOptions={schoolsForHeadOffice(editForm.headOfficeId)}
-              selectedHeadOfficeId={editForm.headOfficeId}
-              onHeadOfficeChange={(value) => setEditForm((prev) => ({ ...prev, headOfficeId: value, schoolId: '', expenditureHeadId: '' }))}
-              selectedSchoolId={editForm.schoolId}
-              onSchoolChange={async (value) => {
-                setEditForm((prev) => ({ ...prev, schoolId: value, expenditureHeadId: '' }))
-                await loadExpenditureHeads(value || '')
-              }}
-              schoolLabel="School"
-            />
-          ) : isHeadOfficeAdmin ? (
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="schoolId"
-                value={editForm.schoolId}
-                onChange={async (e) => {
-                  const value = e.target.value
-                  setEditForm((prev) => ({ ...prev, schoolId: value, expenditureHeadId: '' }))
-                  await loadExpenditureHeads(value || '')
-                }}
-              >
-                <option value="">--Select School--</option>
-                {schoolOptionsForScope.map((school) => (
-                  <option key={school.id} value={String(school.id)}>
-                    {school.schoolName}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-          ) : (
-            <FormField label="School Name" required full>
-              <input className="avm-input" value={authSchoolName || ''} readOnly />
-            </FormField>
-          )}
-
-          <FormField label="Expenditure Head" required full>
-            <select
-              className="avm-select"
-              id="expenditureHeadId"
-              value={editForm.expenditureHeadId}
-              onChange={handleInputChange(setEditForm)}
-              disabled={!editForm.schoolId && !isSchoolAdmin}
-            >
-              <option value="">{editForm.schoolId || isSchoolAdmin ? '--Select Expenditure Head--' : 'Select School First'}</option>
-              {expenditureHeads.map((head) => (
-                <option key={head.id} value={String(head.id)}>
-                  {head.expenditureHead}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Expenditure Method" required full>
-            <select className="avm-select" id="expenditureMethod" value={editForm.expenditureMethod} onChange={handleInputChange(setEditForm)}>
-              <option value="">--Select--</option>
-              {EXPENDITURE_METHOD_OPTIONS.map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Reference">
-            <input
-              type="text"
-              className="avm-input"
-              id="reference"
-              placeholder="Enter Reference"
-              value={editForm.reference}
-              onChange={handleInputChange(setEditForm)}
-            />
-          </FormField>
-
-          <FormField label="Amount" required>
-            <input
-              type="number"
-              className="avm-input"
-              id="amount"
-              placeholder="Enter Amount"
-              value={editForm.amount}
-              onChange={handleInputChange(setEditForm)}
-            />
-          </FormField>
-
-          <FormField label="Date" required>
-            <input
-              type="date"
-              className="avm-input"
-              id="expenditureDate"
-              value={editForm.expenditureDate}
-              onChange={handleInputChange(setEditForm)}
-            />
-          </FormField>
-
-          <FormField label="Note" full noIcon>
-            <textarea
-              className="avm-input avm-textarea"
-              id="note"
-              rows="3"
-              placeholder="Enter Note"
-              value={editForm.note}
-              onChange={handleInputChange(setEditForm)}
-            />
-          </FormField>
-        </div>
-      </WizardPopup>
-
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Expenditure"
@@ -977,3 +617,4 @@ const Expenditure = () => {
 }
 
 export default Expenditure
+

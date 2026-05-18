@@ -1,28 +1,15 @@
-import { useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import '../assets/css/addModalShared.css'
+import { useAuth } from '../context/useAuth'
+import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
+import { fetchOnlineExamsPage, deleteOnlineExam } from '../apis/onlineExamsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSubjects } from '../apis/subjectsApi'
 
-const STEPS = ['Basic Info', 'Schedule & Duration', 'Assessment & Settings']
-
-const emptyForm = {
-  school: '',
-  examTitle: '',
-  className: '',
-  section: '',
-  subject: '',
-  instruction: '',
-  duration: '',
-  startDate: '',
-  endDate: '',
-  markType: '',
-  passMark: '',
-  isPublish: '',
-  examLimit: '',
-  note: '',
-}
+const EDIT_STORAGE_KEY = 'edit-online-exam-row'
 
 const emptyFilters = {
   school: 'Select',
@@ -30,54 +17,6 @@ const emptyFilters = {
   subject: 'Select',
   isPublish: 'Select',
 }
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Exam Title': 'ri-file-list-line',
-  Class: 'ri-graduation-cap-line',
-  Section: 'ri-grid-line',
-  Subject: 'ri-book-open-line',
-  Instruction: 'ri-survey-line',
-  'Duration (Minute)': 'ri-timer-line',
-  'Start Date': 'ri-calendar-line',
-  'End Date': 'ri-calendar-line',
-  'Mark Type': 'ri-bar-chart-2-line',
-  'Pass Mark': 'ri-check-line',
-  'Is Publish?': 'ri-global-line',
-  'Exam limit per Student': 'ri-restriction-line',
-  Note: 'ri-sticky-note-line',
-}
-
-// Dummy data
-const dummyData = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    examTitle: 'Midterm Exam',
-    className: 'Class 10',
-    subject: 'Mathematics',
-    totalQuestion: 50,
-    isPublish: 'Published',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    examTitle: 'Final Exam',
-    className: 'Class 9',
-    subject: 'Science',
-    totalQuestion: 40,
-    isPublish: 'Draft',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    examTitle: 'Weekly Test',
-    className: 'Class 8',
-    subject: 'English',
-    totalQuestion: 30,
-    isPublish: 'Published',
-  },
-]
 
 const columnOptions = [
   { key: 'school', label: 'School' },
@@ -88,119 +27,164 @@ const columnOptions = [
   { key: 'isPublish', label: 'Is Publish?' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
+const getClassLabel = (row) => row?.className || row?.numericName || row?.name || row?.label || ''
+const getSubjectLabel = (row) => row?.subjectName || row?.name || row?.label || ''
 
-const OnlineExam = () => {
-  // Form states
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState({ ...emptyForm, id: null })
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
+const OnlineExam = ({ onNavigate } = {}) => {
+  const { status, token, role: authRole, user } = useAuth()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
-  // Table states
+  const [schools, setSchools] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [subjectsLookup, setSubjectsLookup] = useState([])
+  const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
+  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
+  const [filters, setFilters] = useState(emptyFilters)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
 
-  // Filter states
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
-
-  // Column visibility
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  // Filtered & paginated data
-  const filteredData = useMemo(() => {
-    let data = [...dummyData]
-    if (filters.school !== 'Select')
-      data = data.filter((r) => r.school === filters.school)
-    if (filters.className !== 'Select')
-      data = data.filter((r) => r.className === filters.className)
-    if (filters.subject !== 'Select')
-      data = data.filter((r) => r.subject === filters.subject)
-    if (filters.isPublish !== 'Select')
-      data = data.filter((r) => r.isPublish === filters.isPublish)
-    if (search) {
-      const term = search.toLowerCase()
-      data = data.filter(
-        (r) =>
-          r.examTitle.toLowerCase().includes(term) ||
-          r.school.toLowerCase().includes(term) ||
-          r.subject.toLowerCase().includes(term)
-      )
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    fetchSchoolsLookup()
+      .then((rowsData) => setSchools(Array.isArray(rowsData) ? rowsData : []))
+      .catch((err) => {
+        console.error('Failed to load schools', err)
+        setSchools([])
+      })
+  }, [status, token])
+
+  const selectedSchoolId = useMemo(() => {
+    if (pendingFilters.school === 'Select') return ''
+    const school = schools.find((item) => (item.schoolName || item.name) === pendingFilters.school)
+    return school?.id ? String(school.id) : ''
+  }, [pendingFilters.school, schools])
+
+  useEffect(() => {
+    if (!selectedSchoolId) {
+      setClassesLookup([])
+      setSubjectsLookup([])
+      return
     }
-    return data
-  }, [filters, search])
 
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage)
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filteredData.slice(start, start + rowsPerPage)
-  }, [filteredData, currentPage, rowsPerPage])
+    let cancelled = false
+    Promise.all([
+      fetchClasses({ schoolId: selectedSchoolId }),
+      fetchSubjects({ schoolId: selectedSchoolId }),
+    ])
+      .then(([classRows, subjectRows]) => {
+        if (cancelled) return
+        setClassesLookup(Array.isArray(classRows) ? classRows : [])
+        setSubjectsLookup(Array.isArray(subjectRows) ? subjectRows : [])
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('Failed to load class/subject filters', err)
+        setClassesLookup([])
+        setSubjectsLookup([])
+      })
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
+    return () => {
+      cancelled = true
+    }
+  }, [selectedSchoolId])
+
+  const loadData = async () => {
+    if (status !== 'ready' || !token) return
+    setBusy(true)
+    setLoadError('')
+    try {
+      const pageData = await fetchOnlineExamsPage({
+        schoolId: filters.school !== 'Select' ? schools.find((item) => (item.schoolName || item.name) === filters.school)?.id : undefined,
+        classId: filters.className !== 'Select' ? classesLookup.find((item) => getClassLabel(item) === filters.className)?.id : undefined,
+        subjectId: filters.subject !== 'Select' ? subjectsLookup.find((item) => getSubjectLabel(item) === filters.subject)?.id : undefined,
+        isPublish: filters.isPublish !== 'Select' ? filters.isPublish : undefined,
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search: debouncedSearch,
+      })
+      setRows(Array.isArray(pageData?.content) ? pageData.content : [])
+      setTotalElements(pageData?.totalElements || 0)
+      setTotalPages(pageData?.totalPages || 0)
+    } catch (err) {
+      console.error('Failed to load online exams:', err)
+      setLoadError('Failed to load data. Please try again.')
+      setRows([])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, token, currentPage, rowsPerPage, debouncedSearch, filters])
+
+  const openAdd = () => {
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+    navigateTo?.('add-online-exam')
+  }
+
+  const openEdit = (row) => {
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    } catch {
+      // ignore
+    }
+    navigateTo?.('add-online-exam')
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this online exam?')) return
+    try {
+      await deleteOnlineExam(id)
+      loadData()
+    } catch (err) {
+      console.error('Failed to delete:', err)
+      alert('Failed to delete.')
+    }
   }
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows(paginatedData.map((row) => row.sl))
+    if (e.target.checked) setSelectedRows(rows.map((row) => row.id))
     else setSelectedRows([])
   }
 
-  const handleSelectRow = (sl) => {
-    if (selectedRows.includes(sl))
-      setSelectedRows(selectedRows.filter((id) => id !== sl))
-    else setSelectedRows([...selectedRows, sl])
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
+  const handleSelectRow = (id) => {
+    if (selectedRows.includes(id)) setSelectedRows(selectedRows.filter((rid) => rid !== id))
+    else setSelectedRows([...selectedRows, id])
   }
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+    setPendingFilters((prev) => {
+      if (id === 'school') {
+        return { ...prev, school: value, className: 'Select', subject: 'Select' }
+      }
+      if (id === 'className') {
+        return { ...prev, className: value, subject: 'Select' }
+      }
+      return { ...prev, [id]: value }
+    })
   }
 
   const handleApplyFilters = (e) => {
@@ -217,210 +201,13 @@ const OnlineExam = () => {
     setCurrentPage(1)
   }
 
-  const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setIsAddOpen(true)
+  const getVisiblePages = () => {
+    const pages = []
+    const start = Math.max(1, currentPage - 1)
+    const end = Math.min(totalPages, start + 2)
+    for (let p = start; p <= end; p += 1) pages.push(p)
+    return pages
   }
-
-  const openEdit = (row) => {
-    setEditForm({ ...row })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const renderForm = (form, setter, step) => (
-    <>
-      {step === 0 && (
-        <>
-          <p className="avm-section-title">{STEPS[0]}</p>
-          <div className="avm-grid">
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="school"
-                value={form.school}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select School--</option>
-                <option>Windsor Park High School</option>
-              </select>
-            </FormField>
-
-            <FormField label="Exam Title" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="examTitle"
-                placeholder="Exam Title"
-                value={form.examTitle}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Class" required>
-              <select
-                className="avm-select"
-                id="className"
-                value={form.className}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                <option>Class 8</option>
-                <option>Class 9</option>
-                <option>Class 10</option>
-              </select>
-            </FormField>
-
-            <FormField label="Section">
-              <select
-                className="avm-select"
-                id="section"
-                value={form.section}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                <option>A</option>
-                <option>B</option>
-                <option>C</option>
-              </select>
-            </FormField>
-
-            <FormField label="Subject" required>
-              <select
-                className="avm-select"
-                id="subject"
-                value={form.subject}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                <option>Mathematics</option>
-                <option>Science</option>
-                <option>English</option>
-              </select>
-            </FormField>
-
-            <FormField label="Instruction" full>
-              <select
-                className="avm-select"
-                id="instruction"
-                value={form.instruction}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                <option>Read carefully</option>
-                <option>No negative marking</option>
-              </select>
-            </FormField>
-          </div>
-        </>
-      )}
-
-      {step === 1 && (
-        <>
-          <p className="avm-section-title">{STEPS[1]}</p>
-          <div className="avm-grid">
-            <FormField label="Duration (Minute)" required>
-              <input
-                type="number"
-                className="avm-input"
-                id="duration"
-                placeholder="Duration"
-                value={form.duration}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Start Date" required>
-              <input
-                type="date"
-                className="avm-input"
-                id="startDate"
-                value={form.startDate}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="End Date" required>
-              <input
-                type="date"
-                className="avm-input"
-                id="endDate"
-                value={form.endDate}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-          </div>
-        </>
-      )}
-
-      {step === 2 && (
-        <>
-          <p className="avm-section-title">{STEPS[2]}</p>
-          <div className="avm-grid">
-            <FormField label="Mark Type" required>
-              <select
-                className="avm-select"
-                id="markType"
-                value={form.markType}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                <option>Percentage</option>
-                <option>Grade</option>
-              </select>
-            </FormField>
-
-            <FormField label="Pass Mark" required>
-              <input
-                type="text"
-                className="avm-input"
-                id="passMark"
-                placeholder="Pass Mark"
-                value={form.passMark}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Is Publish?" required>
-              <select
-                className="avm-select"
-                id="isPublish"
-                value={form.isPublish}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select--</option>
-                <option>Yes</option>
-                <option>No</option>
-              </select>
-            </FormField>
-
-            <FormField label="Exam limit per Student" required>
-              <input
-                type="number"
-                className="avm-input"
-                id="examLimit"
-                placeholder="Exam limit per Student"
-                value={form.examLimit}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Note" full noIcon>
-              <textarea
-                rows={4}
-                className="avm-input avm-textarea"
-                id="note"
-                placeholder="Note"
-                value={form.note}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-          </div>
-        </>
-      )}
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -428,20 +215,13 @@ const OnlineExam = () => {
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Online Exam</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Online Exam</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
+        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
           <span className="d-flex text-md">
             <i className="ri-add-large-line"></i>
           </span>
@@ -537,9 +317,7 @@ const OnlineExam = () => {
                       <input
                         className="form-check-input"
                         type="checkbox"
-                        checked={
-                          selectedRows.length === paginatedData.length && paginatedData.length > 0
-                        }
+                        checked={selectedRows.length === rows.length && rows.length > 0}
                         onChange={handleSelectAll}
                       />
                       <label className="form-check-label">S.L</label>
@@ -555,41 +333,47 @@ const OnlineExam = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.length === 0 ? (
+                {busy ? (
                   <tr>
-                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
-                      No records found.
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40">
+                      <div className="spinner-border text-primary" role="status" />
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      {loadError || 'No records found.'}
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row) => (
-                    <tr key={row.sl}>
+                  rows.map((row, index) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + index + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
+                      {visibleColumns.school ? <td>{row.schoolName}</td> : null}
                       {visibleColumns.examTitle ? <td>{row.examTitle}</td> : null}
                       {visibleColumns.className ? <td>{row.className}</td> : null}
-                      {visibleColumns.subject ? <td>{row.subject}</td> : null}
-                      {visibleColumns.totalQuestion ? <td>{row.totalQuestion}</td> : null}
+                      {visibleColumns.subject ? <td>{row.subjectName}</td> : null}
+                      {visibleColumns.totalQuestion ? <td>{row.totalQuestion || 0}</td> : null}
                       {visibleColumns.isPublish ? (
                         <td>
                           <span
                             className={
-                              row.isPublish === 'Published'
+                              row.isPublish === 'Yes'
                                 ? 'bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm'
                                 : 'bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm'
                             }
                           >
-                            {row.isPublish}
+                            {row.isPublish === 'Yes' ? 'Published' : 'Draft'}
                           </span>
                         </td>
                       ) : null}
@@ -606,6 +390,7 @@ const OnlineExam = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
                             title="Delete"
                           >
                             <i className="ri-delete-bin-line"></i>
@@ -621,8 +406,7 @@ const OnlineExam = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
@@ -633,21 +417,21 @@ const OnlineExam = () => {
               >
                 Prev
               </button>
-              {getVisiblePages().map((p) => (
+              {getVisiblePages().map((page) => (
                 <button
-                  key={p}
+                  key={page}
                   type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
+                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                  onClick={() => setCurrentPage(page)}
                 >
-                  {p}
+                  {page}
                 </button>
               ))}
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
+                disabled={currentPage === totalPages || totalPages === 0}
               >
                 Next
               </button>
@@ -656,39 +440,6 @@ const OnlineExam = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
-      <WizardPopup
-        modalWidth="620px"
-        open={isAddOpen}
-        title="Add Online Exam"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
-      </WizardPopup>
-
-      {/* Edit Modal */}
-      <WizardPopup
-        modalWidth="620px"
-        open={isEditOpen}
-        title="Edit Online Exam"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
-      </WizardPopup>
-
-      {/* Filter Sidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         onClose={() => setIsFilterSidebarOpen(false)}
@@ -706,7 +457,11 @@ const OnlineExam = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select School</option>
-              <option>Windsor Park High School</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.schoolName || school.name}>
+                  {school.schoolName || school.name}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -720,9 +475,11 @@ const OnlineExam = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select Class</option>
-              <option>Class 8</option>
-              <option>Class 9</option>
-              <option>Class 10</option>
+              {classesLookup.map((item) => (
+                <option key={item.id} value={getClassLabel(item)}>
+                  {getClassLabel(item)}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -736,9 +493,11 @@ const OnlineExam = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select Subject</option>
-              <option>Mathematics</option>
-              <option>Science</option>
-              <option>English</option>
+              {subjectsLookup.map((item) => (
+                <option key={item.id} value={getSubjectLabel(item)}>
+                  {getSubjectLabel(item)}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -752,8 +511,8 @@ const OnlineExam = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select</option>
-              <option>Published</option>
-              <option>Draft</option>
+              <option value="Yes">Published</option>
+              <option value="No">Draft</option>
             </select>
           </div>
           <div>

@@ -1,47 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { normalizeRole } from '../utils/roles'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
-
-const examInstructions = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    title: 'Mid-Term Exam Guidelines',
-    instruction: 'Students must carry their admit cards. Mobile phones are strictly prohibited inside the examination hall. Late entry will not be permitted after 15 minutes.',
-    status: 'Active',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    title: 'Annual Exam Rules',
-    instruction: 'All students must be seated 10 minutes before the exam begins. Writing instruments must be brought by students. No borrowing allowed.',
-    status: 'Active',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    title: 'Final Term Instructions',
-    instruction: 'Students must wear the school uniform. Identity cards are mandatory. Any form of cheating will result in immediate disqualification.',
-    status: 'Inactive',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    title: 'Unit Test Guidelines',
-    instruction: 'Answer books will be provided by the invigilator. Students should write their roll number on the answer sheet before starting.',
-    status: 'Active',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    title: 'Practical Exam Instructions',
-    instruction: 'Lab coats are mandatory for science practicals. Students must bring their own equipment as per the provided list. Results will be announced within 3 days.',
-    status: 'Inactive',
-  },
-]
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import {
+  createExamInstruction,
+  deleteExamInstruction,
+  fetchExamInstructionsPage,
+  updateExamInstruction,
+} from '../apis/examInstructionsApi'
 
 const emptyForm = {
   school: '',
@@ -110,7 +84,23 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ExamInstruction = () => {
+  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId } = useAuth()
+  const isSuperAdmin = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === 'SUPER_ADMIN',
+    [authRole, user],
+  )
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const [headOffices, setHeadOffices] = useState([])
+  const [schools, setSchools] = useState([])
+  
+  const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
@@ -119,46 +109,96 @@ const ExamInstruction = () => {
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
+  const [editForm, setEditForm] = useState({ ...emptyForm, id: null })
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(examInstructions.map((r) => r.school))),
-    [],
-  )
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return examInstructions.filter((r) => {
-      const matchesSearch =
-        !q ||
-        [r.school, r.title, r.instruction, r.status]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesStatus = filters.status === 'Select' || r.status === filters.status
-      return matchesSearch && matchesSchool && matchesStatus
-    })
-  }, [search, filters])
+    let cancelled = false
+    const loadLookups = async () => {
+      try {
+        const [headOfficePage, schoolList] = await Promise.all([
+          fetchHeadOfficesPage(0, 500),
+          fetchSchoolsLookup(),
+        ])
+        if (cancelled) return
+        setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
+        setSchools(Array.isArray(schoolList) ? schoolList : [])
+      } catch (err) {
+        if (cancelled) return
+        console.error('Failed to load exam instruction lookups:', err)
+        setHeadOffices([])
+        setSchools([])
+      }
+    }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+    void loadLookups()
+    return () => {
+      cancelled = true
+    }
+  }, [status, token])
 
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+  const scopeSchoolOptions = useMemo(() => {
+    const rows = Array.isArray(schools) ? schools : []
+    if (isSuperAdmin) {
+      if (!manualScope.selectedHeadOfficeId) return []
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(manualScope.selectedHeadOfficeId))
+    }
+    if (authHeadOfficeId != null) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+    return rows
+  }, [authHeadOfficeId, isSuperAdmin, manualScope.selectedHeadOfficeId, schools])
+
+  const schoolOptions = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    return Array.from(new Set(list.map((s) => s.schoolName || s.name))).filter(Boolean)
+  }, [schools])
+
+  const loadData = async () => {
+    if (status !== 'ready' || !token) return
+    setBusy(true)
+    setLoadError('')
+    try {
+      const pageData = await fetchExamInstructionsPage({
+        schoolId: filters.school !== 'Select' ? schools.find(s => (s.schoolName || s.name) === filters.school)?.id : undefined,
+        status: filters.status !== 'Select' ? filters.status : undefined,
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search: debouncedSearch,
+      })
+      setRows(Array.isArray(pageData?.content) ? pageData.content : [])
+      setTotalElements(pageData?.totalElements || 0)
+      setTotalPages(pageData?.totalPages || 0)
+    } catch (err) {
+      console.error('Failed to load exam instructions:', err)
+      setLoadError('Failed to load data. Please try again.')
+      setRows([])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    loadData()
+  }, [status, token, currentPage, rowsPerPage, debouncedSearch, filters])
 
   const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+    rows.length > 0 && rows.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
     if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+      setSelectedRows((prev) => [...new Set([...prev, ...rows.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !rows.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -192,17 +232,51 @@ const ExamInstruction = () => {
   const openAdd = () => {
     setAddForm(emptyForm)
     setAddStep(0)
+    manualScope.setSelectedScope('', '')
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
     setEditForm({
-      school: row.school,
+      id: row.id,
+      school: String(row.schoolId || ''),
       title: row.title,
       instruction: row.instruction,
     })
     setEditStep(0)
+    const s = schools.find(item => String(item.id) === String(row.schoolId))
+    manualScope.setSelectedScope(String(s?.headOfficeId || ''), String(row.schoolId || ''))
     setIsEditOpen(true)
+  }
+
+  const handleSave = async (form, setter, close) => {
+    try {
+      const payload = {
+        ...form,
+        schoolId: Number(form.school),
+      }
+      if (form.id) {
+        await updateExamInstruction(form.id, payload)
+      } else {
+        await createExamInstruction(payload)
+      }
+      loadData()
+      close()
+    } catch (err) {
+      console.error('Failed to save exam instruction:', err)
+      alert('Failed to save. Please check your inputs.')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this instruction?')) return
+    try {
+      await deleteExamInstruction(id)
+      loadData()
+    } catch (err) {
+      console.error('Failed to delete:', err)
+      alert('Failed to delete.')
+    }
   }
 
   const getVisiblePages = () => {
@@ -217,17 +291,50 @@ const ExamInstruction = () => {
     <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select
-            className="avm-select"
-            id="school"
-            value={form.school}
-            onChange={handleChange(setter)}
-          >
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+        {isSuperAdmin ? (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <ManualScopeSelectors
+              enabled
+              headOffices={(Array.isArray(manualScope.headOffices) && manualScope.headOffices.length > 0
+                ? manualScope.headOffices
+                : headOffices.map((ho) => ({ id: ho.id, name: ho.name || ho.headOfficeName || '' }))).filter((ho) => ho.id != null && ho.name)}
+              schoolOptions={scopeSchoolOptions.map((school) => ({ id: school.id, schoolName: school.schoolName || school.name || '' }))}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedScope(value, '')
+                setter((prev) => ({ ...prev, headOfficeId: value, school: '' }))
+              }}
+              selectedSchoolId={form.school}
+              onSchoolChange={(value) => {
+                manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value)
+                setter((prev) => ({ ...prev, headOfficeId: manualScope.selectedHeadOfficeId, school: value }))
+              }}
+              schoolLabel="School Name"
+            />
+          </div>
+        ) : (
+          <>
+            <FormField label="Head Office" required full>
+              <input className="avm-input" value={authHeadOfficeName || ''} readOnly />
+            </FormField>
+
+            <FormField label="School Name" required full>
+              <select
+                className="avm-select"
+                id="school"
+                value={form.school}
+                onChange={handleChange(setter)}
+              >
+                <option value="">--Select School--</option>
+                {scopeSchoolOptions.map((school) => (
+                  <option key={school.id} value={String(school.id)}>
+                    {school.schoolName || school.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </>
+        )}
 
         <FormField label="Title" required full>
           <input
@@ -256,7 +363,6 @@ const ExamInstruction = () => {
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Exam Instruction</h1>
@@ -282,16 +388,11 @@ const ExamInstruction = () => {
         </button>
       </div>
 
-      {/* Table Card */}
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
-
-              {/* Filter */}
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
@@ -301,7 +402,6 @@ const ExamInstruction = () => {
                 <span><i className="ri-arrow-right-line"></i></span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -329,7 +429,6 @@ const ExamInstruction = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
               <select
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
@@ -339,7 +438,6 @@ const ExamInstruction = () => {
               </select>
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
@@ -354,7 +452,6 @@ const ExamInstruction = () => {
             </div>
           </div>
 
-          {/* Table */}
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 800 }}>
               <thead>
@@ -378,27 +475,35 @@ const ExamInstruction = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {busy && rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
                       No exam instructions found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  rows.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
+                      {visibleColumns.school ? <td>{row.schoolName || row.name}</td> : null}
                       {visibleColumns.title ? (
                         <td className="fw-medium text-primary-light">{row.title}</td>
                       ) : null}
@@ -437,6 +542,7 @@ const ExamInstruction = () => {
                           <button
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            onClick={() => handleDelete(row.id)}
                             title="Delete"
                           >
                             <i className="ri-delete-bin-line"></i>
@@ -450,11 +556,10 @@ const ExamInstruction = () => {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
@@ -488,7 +593,6 @@ const ExamInstruction = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
       <WizardPopup
         modalWidth="540px"
         open={isAddOpen}
@@ -496,15 +600,12 @@ const ExamInstruction = () => {
         steps={STEPS}
         step={addStep}
         onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={() => handleSave(addForm, setAddForm, () => setIsAddOpen(false))}
         submitLabel="Save"
       >
         {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* Edit Modal */}
       <WizardPopup
         modalWidth="540px"
         open={isEditOpen}
@@ -512,15 +613,12 @@ const ExamInstruction = () => {
         steps={STEPS}
         step={editStep}
         onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={() => handleSave(editForm, setEditForm, () => setIsEditOpen(false))}
         submitLabel="Update"
       >
         {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Exam Instructions"
@@ -565,7 +663,7 @@ const ExamInstruction = () => {
             </button>
           </div>
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100" onClick={() => setIsFilterSidebarOpen(false)}>
+            <button type="submit" className="btn btn-primary-600 w-100">
               Apply
             </button>
           </div>

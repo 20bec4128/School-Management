@@ -73,6 +73,7 @@ import AddLiveClass from "./pages/AddLiveClass";
 import Assignment from "./pages/Assignment";
 import AddAssignment from "./pages/AddAssignment";
 import Submission from "./pages/Submission";
+import AddQuestionBank from "./pages/AddQuestionBank";
 import Lesson from "./pages/Lesson";
 import Topic from "./pages/Topic";
 import LessonTimeline from "./pages/LessonTimeline";
@@ -82,6 +83,7 @@ import ClassRoutine from "./pages/ClassRoutine";
 import ExamInstruction from "./pages/ExamInstruction";
 import QuestionBank from "./pages/QuestionBank";
 import OnlineExam from "./pages/OnlineExam";
+import AddOnlineExam from "./pages/AddOnlineExam";
 import ExamResult from "./pages/ExamResult";
 import ExamGrade from "./pages/ExamGrade";
 import ExamTerm from "./pages/ExamTerm";
@@ -99,16 +101,21 @@ import MarkSendBySMS from "./pages/MarkSendBySMS";
 import ResultEmail from "./pages/ResultEmail";
 import ResultSMS from "./pages/ResultSMS";
 import LeaveType from "./pages/LeaveType";
+import AddLeaveType from "./pages/AddLeaveType";
 import LeaveApplication from "./pages/LeaveApplication";
+import AddLeaveApplication from "./pages/AddLeaveApplication";
 import WaitingApplication from "./pages/WaitingApplication";
 import ApprovedApplication from "./pages/ApprovedApplication";
 import DeclineApplication from "./pages/DeclineApplication";
 import SalaryPayment from "./pages/SalaryPayment";
 import SalaryGrade from "./pages/SalaryGrade";
+import AddSalaryGrade from "./pages/AddSalaryGrade";
 import SalaryHistory from "./pages/SalaryHistory";
 import Discount from "./pages/Discount";
 import FeeType from "./pages/FeeType";
 import FeeCollection from "./pages/FeeCollection";
+import AddFeeCollection from "./pages/AddFeeCollection";
+import AddBulkInvoice from "./pages/AddBulkInvoice";
 import ManageSchool from "./pages/ManageSchool";
 import AcademicYear from "./pages/AcademicYear";
 import PaymentSetting from "./pages/PaymentSetting";
@@ -125,6 +132,7 @@ import IncomeHead from "./pages/IncomeHead";
 import Income from "./pages/Income";
 import ExpenditureHead from "./pages/ExpenditureHead";
 import Expenditure from "./pages/Expenditure";
+import AddExpenditure from "./pages/AddExpenditure";
 import IncomeReport from "./pages/IncomeReport";
 import ExpenditureReport from "./pages/ExpenditureReport";
 import InvoiceReport from "./pages/InvoiceReport";
@@ -150,8 +158,11 @@ import Warehouse from "./pages/Warehouse";
 import Category from "./pages/Category";
 import Product from "./pages/Product";
 import Purchase from "./pages/Purchase.jsx";
+import AddPurchase from "./pages/AddPurchase.jsx";
 import Sale from "./pages/Sale";
 import Issue from "./pages/Issue";
+import AddIssue from "./pages/AddIssue.jsx";
+import AddVendor from "./pages/AddVendor.jsx";
 import SaleCreate from "./pages/SaleCreate";
 import Vendor from "./pages/Vendor";
 import AssetStore from "./pages/AssetStore";
@@ -213,6 +224,10 @@ import AddNotice from "./pages/AddNotice.jsx";
 import AddEvent from "./pages/AddEvent.jsx";
 import AddPostalReceive from "./pages/AddPostalReceive.jsx";
 import AddSubmission from "./pages/AddSubmission.jsx";
+import AddClassLecture from "./pages/AddClassLecture.jsx";
+import AddTopic from "./pages/AddTopic.jsx";
+import AddManageDesignation from "./pages/AddManageDesignation.jsx";
+import AddManageEmployee from "./pages/AddManageEmployee.jsx";
 
 const routeEntries = [
   {
@@ -256,7 +271,7 @@ const routeEntries = [
   { pageKey: "add-student", component: AddStudent },
   { pageKey: "admit-card-setting", component: AdmitCardSetting },
   { pageKey: "bulk-admission", component: BulkAdmission },
-    { pageKey: "manage-teacher", component: ManageTeacher },
+  { pageKey: "manage-teacher", component: ManageTeacher },
   { pageKey: "add-teacher", component: AddTeacher },
 
   { pageKey: "class-lecture", component: ClassLecture },
@@ -314,11 +329,13 @@ const routeEntries = [
   { pageKey: "add-live-class", component: AddLiveClass },
   { pageKey: "assignment", component: Assignment },
   { pageKey: "add-assignment", component: AddAssignment },
+  { pageKey: "add-question-bank", component: AddQuestionBank },
   { pageKey: "submission", component: Submission },
   { pageKey: "lesson", component: Lesson },
   { pageKey: "add-lesson", component: AddLesson },
   { pageKey: "edit-lesson", component: EditLesson },
   { pageKey: "topic", component: Topic },
+  { pageKey: "add-topic", component: AddTopic },
   { pageKey: "lesson-timeline", component: LessonTimeline },
   { pageKey: "lesson-status", component: LessonStatus },
   { pageKey: "lesson-plan", component: LessonPlan },
@@ -326,6 +343,7 @@ const routeEntries = [
   { pageKey: "exam-instruction", component: ExamInstruction },
   { pageKey: "question-bank", component: QuestionBank },
   { pageKey: "onlineexam", component: OnlineExam },
+  { pageKey: "add-online-exam", component: AddOnlineExam },
   { pageKey: "exam-result", component: ExamResult },
   { pageKey: "exam-grade", component: ExamGrade },
   { pageKey: "exam-term", component: ExamTerm },
@@ -343,16 +361,20 @@ const routeEntries = [
   { pageKey: "result-email", component: ResultEmail },
   { pageKey: "result-sms", component: ResultSMS },
   { pageKey: "leave-type", component: LeaveType },
+  { pageKey: "add-leave-type", component: AddLeaveType },
   { pageKey: "leave-application", component: LeaveApplication },
+  { pageKey: "add-leave-application", component: AddLeaveApplication },
   { pageKey: "waiting-application", component: WaitingApplication },
   { pageKey: "approved-application", component: ApprovedApplication },
   { pageKey: "declined-application", component: DeclineApplication },
   { pageKey: "salary-grade", component: SalaryGrade },
+  { pageKey: "add-salary-grade", component: AddSalaryGrade },
   { pageKey: "salary-payment", component: SalaryPayment },
   { pageKey: "salary-history", component: SalaryHistory },
   { pageKey: "discount", component: Discount },
   { pageKey: "fee-type", component: FeeType },
   { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "add-fee-collection", component: AddFeeCollection },
   { pageKey: "issue-return", component: IssueReturn },
   { pageKey: "issue-book-create", component: IssueBookCreate },
 
@@ -377,14 +399,18 @@ const routeEntries = [
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   { pageKey: "leave-type", component: LeaveType },
+  { pageKey: "add-leave-type", component: AddLeaveType },
   { pageKey: "leave-application", component: LeaveApplication },
+  { pageKey: "add-leave-application", component: AddLeaveApplication },
   { pageKey: "waiting-application", component: WaitingApplication },
   { pageKey: "approved-application", component: ApprovedApplication },
   { pageKey: "declined-application", component: DeclineApplication },
   { pageKey: "discount", component: Discount },
   { pageKey: "fee-type", component: FeeType },
   { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "add-fee-collection", component: AddFeeCollection },
   { pageKey: "manage-invoice", component: ManageInvoice },
+  { pageKey: "add-bulk-invoice", component: AddBulkInvoice },
   { pageKey: "due-invoice", component: DueInvoice },
   { pageKey: "due-receipt", component: DueReceipt },
   { pageKey: "paid-receipt", component: PaidReceipt },
@@ -431,8 +457,11 @@ const routeEntries = [
   { pageKey: "category", component: Category },
   { pageKey: "product", component: Product },
   { pageKey: "purchase", component: Purchase },
+  { pageKey: "add-purchase", component: AddPurchase },
   { pageKey: "sale", component: Sale },
   { pageKey: "issue", component: Issue },
+  { pageKey: "add-issue", component: AddIssue },
+  { pageKey: "add-vendor", component: AddVendor },
   { pageKey: "sale-create", component: SaleCreate },
   { pageKey: "asset-vendor", component: Vendor },
   { pageKey: "asset-store", component: AssetStore },
@@ -515,6 +544,7 @@ const routeEntries = [
   { pageKey: "live-class", component: Liveclass },
   { pageKey: "add-live-class", component: AddLiveClass },
   { pageKey: "assignment", component: Assignment },
+  { pageKey: "add-question-bank", component: AddQuestionBank },
   { pageKey: "submission", component: Submission },
   { pageKey: "lesson", component: Lesson },
   { pageKey: "add-lesson", component: AddLesson },
@@ -527,6 +557,7 @@ const routeEntries = [
   { pageKey: "exam-instruction", component: ExamInstruction },
   { pageKey: "question-bank", component: QuestionBank },
   { pageKey: "onlineexam", component: OnlineExam },
+  { pageKey: "add-online-exam", component: AddOnlineExam },
   { pageKey: "exam-result", component: ExamResult },
   { pageKey: "exam-grade", component: ExamGrade },
   { pageKey: "exam-term", component: ExamTerm },
@@ -544,16 +575,20 @@ const routeEntries = [
   { pageKey: "result-email", component: ResultEmail },
   { pageKey: "result-sms", component: ResultSMS },
   { pageKey: "leave-type", component: LeaveType },
+  { pageKey: "add-leave-type", component: AddLeaveType },
   { pageKey: "leave-application", component: LeaveApplication },
+  { pageKey: "add-leave-application", component: AddLeaveApplication },
   { pageKey: "waiting-application", component: WaitingApplication },
   { pageKey: "approved-application", component: ApprovedApplication },
   { pageKey: "declined-application", component: DeclineApplication },
   { pageKey: "salary-grade", component: SalaryGrade },
+  { pageKey: "add-salary-grade", component: AddSalaryGrade },
   { pageKey: "salary-payment", component: SalaryPayment },
   { pageKey: "salary-history", component: SalaryHistory },
   { pageKey: "discount", component: Discount },
   { pageKey: "fee-type", component: FeeType },
   { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "add-fee-collection", component: AddFeeCollection },
   { pageKey: "issue-return", component: IssueReturn },
   { pageKey: "issue-book-create", component: IssueBookCreate },
 
@@ -578,14 +613,18 @@ const routeEntries = [
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   { pageKey: "leave-type", component: LeaveType },
+  { pageKey: "add-leave-type", component: AddLeaveType },
   { pageKey: "leave-application", component: LeaveApplication },
+  { pageKey: "add-leave-application", component: AddLeaveApplication },
   { pageKey: "waiting-application", component: WaitingApplication },
   { pageKey: "approved-application", component: ApprovedApplication },
   { pageKey: "declined-application", component: DeclineApplication },
   { pageKey: "discount", component: Discount },
   { pageKey: "fee-type", component: FeeType },
   { pageKey: "fee-collection", component: FeeCollection },
+  { pageKey: "add-fee-collection", component: AddFeeCollection },
   { pageKey: "manage-invoice", component: ManageInvoice },
+  { pageKey: "add-bulk-invoice", component: AddBulkInvoice },
   { pageKey: "due-invoice", component: DueInvoice },
   { pageKey: "due-receipt", component: DueReceipt },
   { pageKey: "paid-receipt", component: PaidReceipt },
@@ -595,6 +634,7 @@ const routeEntries = [
   { pageKey: "income", component: Income },
   { pageKey: "expenditure-head", component: ExpenditureHead },
   { pageKey: "expenditure", component: Expenditure },
+  { pageKey: "add-expenditure", component: AddExpenditure },
   { pageKey: "income-report", component: IncomeReport },
   { pageKey: "expenditure-report", component: ExpenditureReport },
   { pageKey: "invoice-report", component: InvoiceReport },
@@ -632,8 +672,11 @@ const routeEntries = [
   { pageKey: "category", component: Category },
   { pageKey: "product", component: Product },
   { pageKey: "purchase", component: Purchase },
+  { pageKey: "add-purchase", component: AddPurchase },
   { pageKey: "sale", component: Sale },
   { pageKey: "issue", component: Issue },
+  { pageKey: "add-issue", component: AddIssue },
+  { pageKey: "add-vendor", component: AddVendor },
   { pageKey: "sale-create", component: SaleCreate },
   { pageKey: "asset-vendor", component: Vendor },
   { pageKey: "asset-store", component: AssetStore },
@@ -696,6 +739,10 @@ const routeEntries = [
   { pageKey: "add-postal-receive", component: AddPostalReceive },
   { pageKey: "add-teacher", component: AddTeacher },
   { pageKey: "add-submission", component: AddSubmission },
+  { pageKey: "add-class-lecture", component: AddClassLecture },
+  { pageKey: "add-topic", component: AddTopic },
+  { pageKey: "add-manage-designation", component: AddManageDesignation },
+  { pageKey: "add-manage-employee", component: AddManageEmployee },
 ];
 
 const AppRoute = ({

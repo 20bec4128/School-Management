@@ -123,12 +123,15 @@ const fetchAllPages = async (fetchPage, pageSize = 500) => {
   }, [...firstContent])
 }
 
-const Purchase = () => {
+const EDIT_STORAGE_KEY = 'edit-purchase-row'
+
+const Purchase = ({ onNavigate } = {}) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
@@ -412,22 +415,25 @@ const Purchase = () => {
   })
 
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) base.headOfficeId = String(authHeadOfficeId)
-    if (isSchoolAdmin && authSchoolId != null) {
-      const school = getById(allSchools, authSchoolId)
-      base.schoolId = String(authSchoolId)
-      base.headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
-    }
-    setAddForm(base)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    navigateTo?.('add-purchase')
   }
 
   const openEdit = (row) => {
     const school = getById(allSchools, row?.schoolId)
-    setEditForm({
+    const normalizedRow = {
+      ...row,
       id: row?.id != null ? String(row.id) : '',
-      headOfficeId: row?.headOfficeId != null ? String(row.headOfficeId) : school?.headOfficeId != null ? String(school.headOfficeId) : '',
+      headOfficeId:
+        row?.headOfficeId != null
+          ? String(row.headOfficeId)
+          : school?.headOfficeId != null
+            ? String(school.headOfficeId)
+            : authHeadOfficeId != null
+              ? String(authHeadOfficeId)
+              : '',
       schoolId: row?.schoolId != null ? String(row.schoolId) : '',
       supplierId: row?.supplierId != null ? String(row.supplierId) : '',
       categoryId: row?.categoryId != null ? String(row.categoryId) : '',
@@ -440,8 +446,12 @@ const Purchase = () => {
       purchaseDate: row?.purchaseDate || '',
       expireDate: row?.expireDate || '',
       note: row?.note || '',
-    })
-    setIsEditOpen(true)
+    }
+
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(normalizedRow))
+    } catch {}
+    navigateTo?.('add-purchase')
   }
 
   const handleHeadOfficeChange = (setter, value) => {

@@ -1,6 +1,15 @@
 import usePhoneCodeField from '../hooks/usePhoneCodeField'
 
-const PhoneCodeField = ({ id, label, value, code, onValueChange, onCodeChange, required = false }) => {
+const PhoneCodeField = ({
+  id,
+  label,
+  value,
+  code,
+  onValueChange,
+  onCodeChange,
+  onChange,
+  required = false,
+}) => {
   const {
     wrapperRef,
     searchRef,
@@ -14,12 +23,27 @@ const PhoneCodeField = ({ id, label, value, code, onValueChange, onCodeChange, r
     phoneLengthRule,
   } = usePhoneCodeField({ code })
 
+  const codeValue = code || selectedCountry.code
+  const normalizedValue = String(value ?? '')
+  const trimmedDigits = normalizedValue.startsWith(codeValue)
+    ? normalizedValue.slice(codeValue.length).trim()
+    : normalizedValue
+  const displayValue = String(trimmedDigits ?? '').replace(/\D/g, '')
+  const emitValue = (digits, nextCode = codeValue) => {
+    const fullValue = digits ? `${nextCode} ${digits}` : nextCode
+
+    if (typeof onValueChange === 'function') onValueChange(digits)
+    if (typeof onChange === 'function') onChange(fullValue)
+  }
+
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
-      <label htmlFor={id} className="form-label fw-semibold text-primary-light">
-        {label}
-        {required ? <span className="text-danger"> *</span> : null}
-      </label>
+      {label && (
+        <label htmlFor={id} className="form-label fw-semibold text-primary-light">
+          {label}
+          {required ? <span className="text-danger"> *</span> : null}
+        </label>
+      )}
       <div className="input-group">
         <button
           type="button"
@@ -36,8 +60,8 @@ const PhoneCodeField = ({ id, label, value, code, onValueChange, onCodeChange, r
           className="form-control"
           id={id}
           placeholder={label}
-          value={value}
-          onChange={(event) => onValueChange(event.target.value.replace(/\D/g, '').slice(0, phoneLengthRule.max))}
+          value={displayValue}
+          onChange={(event) => emitValue(event.target.value.replace(/\D/g, '').slice(0, phoneLengthRule.max))}
           maxLength={phoneLengthRule.max}
           pattern={`\\d{${phoneLengthRule.min},${phoneLengthRule.max}}`}
           title={`Enter ${phoneLengthRule.min === phoneLengthRule.max ? phoneLengthRule.max : `${phoneLengthRule.min}-${phoneLengthRule.max}`} digits`}
@@ -69,8 +93,12 @@ const PhoneCodeField = ({ id, label, value, code, onValueChange, onCodeChange, r
                   country.code === selectedCountry.code ? 'bg-light' : ''
                 }`}
                 onClick={() => {
-                  onCodeChange(country.code)
+                  if (typeof onCodeChange === 'function') onCodeChange(country.code)
                   selectCountry(country)
+                  if (typeof onChange === 'function') {
+                    const digits = displayValue
+                    onChange(digits ? `${country.code} ${digits}` : country.code)
+                  }
                 }}
               >
                 <span className="me-2">{country.flag}</span>
