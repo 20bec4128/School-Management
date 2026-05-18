@@ -27,18 +27,22 @@ public class ExamTermController {
     }
 
     @GetMapping
-    public List<ExamTermDto> list(@RequestParam(required = false) Long schoolId) {
-        return examTermService.list(schoolId);
+    public List<ExamTermDto> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId
+    ) {
+        return examTermService.list(headOfficeId, schoolId);
     }
 
     @GetMapping("/page")
     public Page<ExamTermDto> listPaginated(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return examTermService.listPaginated(schoolId, page, size, search);
+        return examTermService.listPaginated(headOfficeId, schoolId, page, size, search);
     }
 
     @PostMapping

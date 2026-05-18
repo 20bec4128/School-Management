@@ -32,13 +32,26 @@ const isActiveSchoolRow = (row) => {
   return !isDeleted && (status === '' || status === 'ACTIVE')
 }
 
-export const fetchSchoolsPage = async (page, size, search = '', statusFilter = '') => {
+export const fetchSchoolsPage = async (...args) => {
+  const options = typeof args[0] === 'object' && args[0] !== null
+    ? args[0]
+    : {
+        page: args[0],
+        size: args[1],
+        search: args[2] ?? '',
+        statusFilter: args[3] ?? '',
+        headOfficeId: args[4],
+        schoolId: args[5],
+      }
+
   const query = new URLSearchParams({
-    page: String(Math.max(page, 0)),
-    size: String(size),
+    page: String(Math.max(options.page ?? 0, 0)),
+    size: String(options.size ?? 10),
   })
-  if (search) query.append('search', search)
-  if (statusFilter && statusFilter !== 'Select') query.append('status', statusFilter)
+  if (options.search) query.append('search', options.search)
+  if (options.statusFilter && options.statusFilter !== 'Select') query.append('status', options.statusFilter)
+  if (options.headOfficeId != null && String(options.headOfficeId).trim() !== '') query.append('headOfficeId', String(options.headOfficeId))
+  if (options.schoolId != null && String(options.schoolId).trim() !== '') query.append('schoolId', String(options.schoolId))
 
   const res = await apiFetch(`${SCHOOLS_API_BASE}?${query.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))

@@ -3,6 +3,7 @@ import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { deleteSyllabus, fetchSyllabuses } from '../apis/syllabusApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -10,12 +11,12 @@ import { TablePagination } from '../components/table'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
-const sessionYearOptions = ['2024-2025', '2023-2024', '2022-2023']
-
 const emptyFilters = {
+  headOfficeId: 'Select',
   school: 'Select',
   className: 'Select',
   subject: 'Select',
@@ -100,6 +101,7 @@ const Syllabus = ({ onNavigate }) => {
 
   const [syllabuses, setSyllabuses] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
   const [loading, setLoading] = useState(true)
@@ -118,6 +120,7 @@ const Syllabus = ({ onNavigate }) => {
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const isTeacherScope = roleUpper === 'TEACHER'
+  const sessionYearOptions = useAcademicYearOptions()
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const effectiveSchoolId =
     roleUpper === 'STUDENT'
@@ -149,19 +152,23 @@ const Syllabus = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     if (!canManage) {
       setSchoolsLookup([])
+      setHeadOfficesLookup([])
       setClassesLookup([])
       setSubjectsLookup([])
       return
     }
 
-    const [schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
+    const [headOfficesResult, schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
+      fetchHeadOfficesPage(0, 500),
       fetchSchoolsLookup(),
       fetchClasses(),
       fetchSubjects(),
     ])
+    const headOffices = headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : null
     const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
     const classes = classesResult.status === 'fulfilled' ? classesResult.value : []
     const subjects = subjectsResult.status === 'fulfilled' ? subjectsResult.value : []
+    setHeadOfficesLookup(Array.isArray(headOffices?.content) ? headOffices.content : [])
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
@@ -218,9 +225,12 @@ const Syllabus = ({ onNavigate }) => {
   }, [isTeacherScope, resolvedSchoolId, resolvedSchoolLabel])
 
   const schoolFilterOptions = useMemo(() => {
-    const source = schoolsLookup.length > 0 ? schoolsLookup.map((s) => s?.schoolName) : syllabuses.map((row) => row?.school)
+    const scopedSchools = pendingFilters.headOfficeId && pendingFilters.headOfficeId !== 'Select'
+      ? schoolsLookup.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+      : schoolsLookup
+    const source = scopedSchools.length > 0 ? scopedSchools.map((s) => s?.schoolName) : syllabuses.map((row) => row?.school)
     return Array.from(new Set(source.filter(Boolean))).sort()
-  }, [schoolsLookup, syllabuses])
+  }, [schoolsLookup, syllabuses, pendingFilters.headOfficeId])
 
   const classFilterOptions = useMemo(() => {
     const source = classesLookup.length > 0 ? classesLookup.map((c) => c?.className) : syllabuses.map((row) => row?.className)
@@ -646,6 +656,28 @@ const Syllabus = ({ onNavigate }) => {
           className="filter-sidebar"
         >
           <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label
+                htmlFor="headOfficeId"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                Head Office
+              </label>
+              <select
+                id="headOfficeId"
+                className="form-control form-select"
+                value={pendingFilters.headOfficeId}
+                onChange={(e) => setPendingFilters((prev) => ({ ...prev, headOfficeId: e.target.value, school: 'Select' }))}
+              >
+                <option value="Select">Select Head Office</option>
+                {headOfficesLookup.map((ho) => (
+                  <option key={String(ho.id)} value={String(ho.id)}>
+                    {ho.name || ho.headOfficeName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label
                 htmlFor="school"

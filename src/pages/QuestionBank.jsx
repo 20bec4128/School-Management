@@ -6,16 +6,20 @@ import { useAuth } from '../context/useAuth'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
 import { fetchQuestionBanksPage, deleteQuestionBank } from '../apis/questionBankApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const EDIT_STORAGE_KEY = 'edit-question-bank-row'
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: '',
   className: 'Select',
   subject: 'Select',
   questionType: 'Select',
@@ -55,9 +59,10 @@ const statusBadge = (status) => {
 }
 
 const QuestionBank = ({ onNavigate } = {}) => {
-  const { status: authStatus, token, role: authRole, user, schoolId: authSchoolId } = useAuth()
+  const { status: authStatus, token, role: authRole, user, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
@@ -74,6 +79,7 @@ const QuestionBank = ({ onNavigate } = {}) => {
   const [loadError, setLoadError] = useState('')
 
   const [schools, setSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
@@ -81,19 +87,46 @@ const QuestionBank = ({ onNavigate } = {}) => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const getSchoolById = (schoolId) =>
+    (Array.isArray(schools) ? schools : []).find((school) => String(school?.id ?? '') === String(schoolId ?? '')) || null
+
   useEffect(() => {
     if (authStatus === 'ready' && token) {
-      fetchSchoolsLookup().then(data => setSchools(Array.isArray(data) ? data : []))
+      Promise.all([
+        fetchHeadOfficesPage(0, 500),
+        fetchSchoolsLookup(),
+      ])
+        .then(([headOfficePage, schoolRows]) => {
+          setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
+          setSchools(Array.isArray(schoolRows) ? schoolRows : [])
+        })
+        .catch((err) => {
+          console.error('Failed to load question bank lookups', err)
+          setHeadOffices([])
+          setSchools([])
+        })
     }
   }, [authStatus, token])
 
   const filterSchoolId = useMemo(() => {
-    if (pendingFilters.school !== 'Select') {
-      return schools.find((s) => (s.schoolName || s.name) === pendingFilters.school)?.id
-    }
+    if (pendingFilters.schoolId) return pendingFilters.schoolId
     if (isSchoolAdmin) return authSchoolId
     return undefined
-  }, [authSchoolId, isSchoolAdmin, pendingFilters.school, schools])
+  }, [authSchoolId, isSchoolAdmin, pendingFilters.schoolId])
+
+  const filterSchoolOptions = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    if (pendingFilters.headOfficeId) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+    }
+    if (isHeadOfficeAdmin) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    }
+    return list
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schools])
 
   useEffect(() => {
     if (authStatus !== 'ready' || !token) return
@@ -145,7 +178,9 @@ const QuestionBank = ({ onNavigate } = {}) => {
     setLoadError('')
     try {
       const pageData = await fetchQuestionBanksPage({
-        schoolId: filters.school !== 'Select' ? schools.find(s => (s.schoolName || s.name) === filters.school)?.id : (isSchoolAdmin ? authSchoolId : undefined),
+        headOfficeId: filters.headOfficeId || undefined,
+        ...(filters.headOfficeId ? {} : isHeadOfficeAdmin ? { headOfficeId: authHeadOfficeId } : {}),
+        schoolId: filters.schoolId || (isSchoolAdmin ? authSchoolId : undefined),
         classId: filters.className !== 'Select' ? classesLookup.find((c) => c.className === filters.className)?.id : undefined,
         subjectId: filters.subject !== 'Select' ? subjectsLookup.find((s) => s.subjectName === filters.subject || s.name === filters.subject)?.id : undefined,
         questionType: filters.questionType !== 'Select' ? filters.questionType : undefined,
@@ -195,6 +230,32 @@ const QuestionBank = ({ onNavigate } = {}) => {
   const handleSelectRow = (id) => {
     if (selectedRows.includes(id)) setSelectedRows(selectedRows.filter(rid => rid !== id))
     else setSelectedRows([...selectedRows, id])
+  }
+
+  const handleFilterHeadOfficeChange = (value) => {
+    setPendingFilters((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: '',
+      className: 'Select',
+      subject: 'Select',
+    }))
+  }
+
+  const handleFilterSchoolChange = (value) => {
+    const selectedSchool = getSchoolById(value)
+    setPendingFilters((prev) => ({
+      ...prev,
+      schoolId: value,
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+      className: 'Select',
+      subject: 'Select',
+    }))
+  }
+
+  const handleRowsPerPageChange = (value) => {
+    setRowsPerPage(value)
+    setCurrentPage(1)
   }
 
   const openAdd = () => {
@@ -272,9 +333,11 @@ const QuestionBank = ({ onNavigate } = {}) => {
                   ))}
                 </ul>
               </div>
-              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={handleRowsPerPageChange}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
             <div className="position-relative">
               <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search questions..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }} />
@@ -349,30 +412,62 @@ const QuestionBank = ({ onNavigate } = {}) => {
 
       <SlideSidebar isOpen={isFilterSidebarOpen} onClose={() => setIsFilterSidebarOpen(false)} title="Filter Question Bank">
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select className="form-control form-select" value={pendingFilters.school} onChange={e => setPendingFilters(p => ({ ...p, school: e.target.value }))}>
-              <option value="Select">Select School</option>
-              {schools.map(s => <option key={s.id} value={s.schoolName || s.name}>{s.schoolName || s.name}</option>)}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={(Array.isArray(manualScope.headOffices) && manualScope.headOffices.length > 0
+                ? manualScope.headOffices
+                : headOffices.map((ho) => ({ id: ho.id, name: ho.name || ho.headOfficeName || '' }))).filter((ho) => ho.id != null && ho.name)}
+              schoolOptions={filterSchoolOptions.map((school) => ({ id: school.id, schoolName: school.schoolName || school.name || '' }))}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={handleFilterHeadOfficeChange}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={handleFilterSchoolChange}
+              schoolLabel="School"
+            />
+          ) : (
+            <div className="avm-field full">
+              <label className="avm-label" htmlFor="schoolId">School</label>
+              <select
+                id="schoolId"
+                className="avm-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) => handleFilterSchoolChange(e.target.value)}
+              >
+                <option value="">All Schools</option>
+                {filterSchoolOptions.map((school) => (
+                  <option key={String(school.id)} value={String(school.id)}>
+                    {school.schoolName || school.name || String(school.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Class</label>
-            <select className="form-control form-select" value={pendingFilters.className} onChange={e => setPendingFilters(p => ({ ...p, className: e.target.value }))}>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.className}
+              onChange={(e) => setPendingFilters((p) => ({ ...p, className: e.target.value }))}
+            >
               <option value="Select">Select Class</option>
-              {classesLookup.map(c => <option key={c.id} value={c.className}>{c.className || c.name || c.label}</option>)}
+              {classesLookup.map((c) => <option key={c.id} value={c.className}>{c.className || c.name || c.label}</option>)}
             </select>
           </div>
           <div>
             <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Subject</label>
-            <select className="form-control form-select" value={pendingFilters.subject} onChange={e => setPendingFilters(p => ({ ...p, subject: e.target.value }))}>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.subject}
+              onChange={(e) => setPendingFilters((p) => ({ ...p, subject: e.target.value }))}
+            >
               <option value="Select">Select Subject</option>
-              {subjectsLookup.map(s => <option key={s.id} value={s.subjectName || s.name}>{s.subjectName || s.name}</option>)}
+              {subjectsLookup.map((s) => <option key={s.id} value={s.subjectName || s.name}>{s.subjectName || s.name}</option>)}
             </select>
           </div>
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
             <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100 mt-8">Reset</button>
+            <button type="submit" className="btn btn-primary-600 w-100">Apply</button>
           </div>
         </form>
       </SlideSidebar>

@@ -19,12 +19,16 @@ public class OnlineExamController {
     }
 
     @GetMapping
-    public List<OnlineExamDto> list(@RequestParam(required = false) Long schoolId) {
-        return service.list(schoolId);
+    public List<OnlineExamDto> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId
+    ) {
+        return service.list(headOfficeId, schoolId);
     }
 
     @GetMapping("/page")
     public Page<OnlineExamDto> listPaginated(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Long subjectId,
@@ -33,7 +37,7 @@ public class OnlineExamController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return service.listPaginated(schoolId, classId, subjectId, isPublish, page, size, search);
+        return service.listPaginated(headOfficeId, schoolId, classId, subjectId, isPublish, page, size, search);
     }
 
     @PostMapping

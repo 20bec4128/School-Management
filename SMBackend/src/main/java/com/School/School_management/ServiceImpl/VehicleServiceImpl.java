@@ -40,28 +40,31 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<VehicleDto> list(Long schoolId) {
+    public List<VehicleDto> list(Long headOfficeId, Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
-        if (user.isSuperAdmin() && schoolId == null) {
+        if (user.isSuperAdmin() && headOfficeId == null && schoolId == null) {
             return repository.findAllActiveWithDetailsOrderByIdDesc().stream().map(this::toDto).collect(Collectors.toList());
         }
-        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return repository.findBySchoolIdActiveWithDetailsOrderByIdDesc(effectiveSchoolId).stream().map(this::toDto).collect(Collectors.toList());
+        Scope scope = resolveScope(user, headOfficeId, schoolId);
+        if (scope.schoolId() != null) {
+            return repository.findBySchoolIdActiveWithDetailsOrderByIdDesc(scope.schoolId()).stream().map(this::toDto).collect(Collectors.toList());
+        }
+        if (scope.headOfficeId() != null) {
+            return repository.findByHeadOfficeIdActiveWithDetailsOrderByIdDesc(scope.headOfficeId()).stream().map(this::toDto).collect(Collectors.toList());
+        }
+        return repository.findAllActiveWithDetailsOrderByIdDesc().stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<VehicleDto> listPaginated(Long schoolId, String search, int page, int size) {
+    public Page<VehicleDto> listPaginated(Long headOfficeId, Long schoolId, String search, int page, int size) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         String normalizedSearch = normalizeOptional(search);
-        if (user.isSuperAdmin() && schoolId == null) {
-            return repository.findPageWithDetails(null, normalizedSearch, pageable).map(this::toDto);
-        }
-        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return repository.findPageWithDetails(effectiveSchoolId, normalizedSearch, pageable).map(this::toDto);
+        Scope scope = resolveScope(user, headOfficeId, schoolId);
+        return repository.findPageWithDetails(scope.headOfficeId(), scope.schoolId(), normalizedSearch, pageable).map(this::toDto);
     }
 
     @Override
@@ -134,6 +137,52 @@ public class VehicleServiceImpl implements VehicleService {
         return schoolRepository.findById(schoolId).orElseThrow(NotFoundException::new);
     }
 
+    private Scope resolveScope(CurrentUser user, Long requestedHeadOfficeId, Long requestedSchoolId) {
+        if (user.isSchoolScoped()) {
+            if (user.schoolId() == null) throw new ForbiddenException();
+            return new Scope(null, user.schoolId());
+        }
+        if (user.isHeadOfficeScopedAdmin()) {
+            Long headOfficeId = user.headOfficeId();
+            if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, headOfficeId)) {
+                throw new ForbiddenException();
+            }
+            if (requestedSchoolId != null) {
+                ensureSchoolInHeadOffice(requestedSchoolId, headOfficeId);
+                return new Scope(headOfficeId, requestedSchoolId);
+            }
+            return new Scope(headOfficeId, null);
+        }
+        if (user.isSuperAdmin()) {
+            if (requestedSchoolId != null && requestedHeadOfficeId != null) {
+                ensureSchoolInHeadOffice(requestedSchoolId, requestedHeadOfficeId);
+                return new Scope(requestedHeadOfficeId, requestedSchoolId);
+            }
+            if (requestedSchoolId != null) {
+                return new Scope(null, requestedSchoolId);
+            }
+            if (requestedHeadOfficeId != null) {
+                return new Scope(requestedHeadOfficeId, null);
+            }
+            return new Scope(null, null);
+        }
+        if (requestedSchoolId == null) throw new BadRequestException("schoolId is required");
+        return new Scope(null, requestedSchoolId);
+    }
+
+    private Long effectiveSchoolIdForWrite(CurrentUser user, Long requestedSchoolId) {
+        if (requestedSchoolId == null) throw new BadRequestException("schoolId is required");
+        if (user.isSchoolScoped()) {
+            if (!Objects.equals(user.schoolId(), requestedSchoolId)) throw new ForbiddenException();
+            return requestedSchoolId;
+        }
+        if (user.isHeadOfficeScopedAdmin()) {
+            ensureSchoolInHeadOffice(requestedSchoolId, user.headOfficeId());
+            return requestedSchoolId;
+        }
+        return requestedSchoolId;
+    }
+
     private Long effectiveSchoolIdForRead(CurrentUser user, Long requestedSchoolId) {
         if (user.isSchoolScoped()) {
             if (user.schoolId() == null) throw new ForbiddenException();
@@ -146,10 +195,6 @@ public class VehicleServiceImpl implements VehicleService {
         }
         if (requestedSchoolId == null) throw new BadRequestException("schoolId is required");
         return requestedSchoolId;
-    }
-
-    private Long effectiveSchoolIdForWrite(CurrentUser user, Long requestedSchoolId) {
-        return effectiveSchoolIdForRead(user, requestedSchoolId);
     }
 
     private void ensureSchoolInHeadOffice(Long schoolId, Long headOfficeId) {
@@ -186,4 +231,6 @@ public class VehicleServiceImpl implements VehicleService {
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
+
+    private record Scope(Long headOfficeId, Long schoolId) {}
 }

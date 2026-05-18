@@ -12,10 +12,12 @@ import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchEmployees } from '../apis/employeesApi'
 import { fetchVehiclesPage, updateVehicle, deleteVehicle } from '../apis/vehiclesApi'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   schoolId: 'Select',
 }
 
@@ -89,6 +91,9 @@ const Vehicle = ({ onNavigate }) => {
       ? String(authHeadOfficeId)
       : ''
 
+  const selectedFilterHeadOfficeId =
+    isSuperAdmin ? pendingFilters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : ''
+
   const schoolOptions = useMemo(() => {
     const rows = Array.isArray(allSchools) ? allSchools : []
     if (isSuperAdmin) {
@@ -103,6 +108,43 @@ const Vehicle = ({ onNavigate }) => {
     }
     return rows
   }, [allSchools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, currentHeadOfficeId, authHeadOfficeId, authSchoolId])
+
+  const filterSchoolOptions = useMemo(() => {
+    const rows = Array.isArray(allSchools) ? allSchools : []
+    return rows
+      .filter((school) => {
+        if (isHeadOfficeAdmin) {
+          return String(school.headOfficeId ?? '') === String(authHeadOfficeId ?? '')
+        }
+        if (isSuperAdmin && selectedFilterHeadOfficeId && selectedFilterHeadOfficeId !== 'Select') {
+          return String(school.headOfficeId ?? '') === String(selectedFilterHeadOfficeId)
+        }
+        return true
+      })
+      .map((school) => ({
+        id: String(school.id),
+        schoolName: school.schoolName || school.name || `School ${school.id}`,
+        headOfficeId: school.headOfficeId ?? null,
+      }))
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)))
+  }, [allSchools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId, selectedFilterHeadOfficeId])
+
+  const headOfficeOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (Array.isArray(headOffices) ? headOffices : [])
+            .filter((item) => item?.id != null)
+            .map((item) => [String(item.id), item]),
+        ).values(),
+      )
+        .map((item) => ({
+          id: String(item.id),
+          name: item.name || item.headOfficeName || `Head Office ${item.id}`,
+        }))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [headOffices],
+  )
 
   const currentEditSchool = useMemo(() => {
     const match = Array.isArray(allSchools)
@@ -185,11 +227,21 @@ const Vehicle = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      const selectedSchoolId = filters.schoolId && filters.schoolId !== 'Select'
-        ? String(filters.schoolId)
-        : ''
-      const effectiveSchoolId = selectedSchoolId || currentSchoolId || null
+      const effectiveHeadOfficeId = (() => {
+        if (isSuperAdmin) {
+          return filters.headOfficeId && filters.headOfficeId !== 'Select' ? Number(filters.headOfficeId) : null
+        }
+        if (isHeadOfficeAdmin) return authHeadOfficeId != null ? Number(authHeadOfficeId) : null
+        return null
+      })()
+      const effectiveSchoolId = (() => {
+        if (filters.schoolId && filters.schoolId !== 'Select') return Number(filters.schoolId)
+        if (isSchoolAdmin && authSchoolId != null) return Number(authSchoolId)
+        if (!isSuperAdmin && !isHeadOfficeAdmin && currentSchoolId) return Number(currentSchoolId)
+        return null
+      })()
       const pageData = await fetchVehiclesPage({
+        headOfficeId: effectiveHeadOfficeId,
         schoolId: effectiveSchoolId,
         search: debouncedSearch,
         page: currentPage - 1,
@@ -207,7 +259,7 @@ const Vehicle = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, currentSchoolId, debouncedSearch, filters.schoolId, rowsPerPage, status, token])
+  }, [currentPage, currentSchoolId, debouncedSearch, filters.headOfficeId, filters.schoolId, rowsPerPage, status, token, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, authHeadOfficeId, authSchoolId])
 
   useEffect(() => {
     void loadVehicles()
@@ -215,6 +267,10 @@ const Vehicle = ({ onNavigate }) => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
+    if (id === 'headOfficeId') {
+      setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'Select' }))
+      return
+    }
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
@@ -226,7 +282,7 @@ const Vehicle = ({ onNavigate }) => {
   }
 
   const handleResetFilters = () => {
-    const next = { schoolId: 'Select' }
+    const next = { headOfficeId: 'Select', schoolId: 'Select' }
     setPendingFilters(next)
     setFilters(next)
     setCurrentPage(1)
@@ -300,19 +356,29 @@ const Vehicle = ({ onNavigate }) => {
   }
 
   const loadExportRows = useCallback(async () => {
-    const selectedSchoolId = filters.schoolId && filters.schoolId !== 'Select'
-      ? String(filters.schoolId)
-      : ''
-    const effectiveSchoolId = selectedSchoolId || currentSchoolId || null
+    const effectiveHeadOfficeId = (() => {
+      if (isSuperAdmin) {
+        return filters.headOfficeId && filters.headOfficeId !== 'Select' ? Number(filters.headOfficeId) : null
+      }
+      if (isHeadOfficeAdmin) return authHeadOfficeId != null ? Number(authHeadOfficeId) : null
+      return null
+    })()
+    const effectiveSchoolId = (() => {
+      if (filters.schoolId && filters.schoolId !== 'Select') return Number(filters.schoolId)
+      if (isSchoolAdmin && authSchoolId != null) return Number(authSchoolId)
+      if (!isSuperAdmin && !isHeadOfficeAdmin && currentSchoolId) return Number(currentSchoolId)
+      return null
+    })()
     const size = Math.max(totalElements, rowsPerPage, 1)
     const data = await fetchVehiclesPage({
+      headOfficeId: effectiveHeadOfficeId,
       schoolId: effectiveSchoolId,
       search: debouncedSearch,
       page: 0,
       size,
     })
     return Array.isArray(data?.content) ? data.content : []
-  }, [currentSchoolId, debouncedSearch, filters.schoolId, rowsPerPage, totalElements])
+  }, [authHeadOfficeId, authSchoolId, currentSchoolId, debouncedSearch, filters.headOfficeId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, rowsPerPage, totalElements])
 
   const mapExportRow = useCallback(
     (row) => ({
@@ -599,23 +665,23 @@ const Vehicle = ({ onNavigate }) => {
         title="Find Vehicle"
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="schoolId"
-              className="form-control form-select"
-              value={pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">All Schools</option>
-              {schoolOptions.map((school) => (
-                <option key={String(school.id)} value={String(school.id)}>
-                  {school.schoolName}
-                </option>
-              ))}
-            </select>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <ManualScopeSelectors
+              enabled={isSuperAdmin || isHeadOfficeAdmin}
+              headOffices={isSuperAdmin ? headOfficeOptions : []}
+              schoolOptions={filterSchoolOptions}
+              selectedHeadOfficeId={selectedFilterHeadOfficeId}
+              onHeadOfficeChange={(value) =>
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value || 'Select', schoolId: 'Select' }))
+              }
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({ ...prev, schoolId: value || 'Select' }))
+              }
+              showSchoolSelector
+              showHeadOfficeSelector={isSuperAdmin}
+              compact={false}
+            />
           </div>
 
           <div className="d-flex gap-8 mt-12">

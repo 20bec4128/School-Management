@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
@@ -37,7 +38,8 @@ const emptyForm = {
 }
 
 const emptyFilters = {
-  schoolId: 'Select',
+  headOfficeId: '',
+  schoolId: '',
   examTerm: 'Select',
   className: 'Select',
   subjectName: 'Select',
@@ -154,6 +156,9 @@ const Suggestion = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
+  const getSchoolById = (schoolId) =>
+    (Array.isArray(schoolsLookup) ? schoolsLookup : []).find((school) => String(school?.id ?? '') === String(schoolId ?? '')) || null
+
   const schoolFormOptions = useMemo(() => {
     const list = Array.isArray(schoolsLookup) ? schoolsLookup : []
     if (isSuperAdmin) return manualScope.schoolOptions || []
@@ -172,14 +177,18 @@ const Suggestion = ({ onNavigate }) => {
   }, [schoolsLookup, isSuperAdmin, manualScope.schoolOptions, isHeadOfficeAdmin, isSchoolAdmin, authHeadOfficeId, authSchoolId, authSchoolName])
 
   const schoolFilterOptions = useMemo(() => {
-    return Array.from(
-      new Map(
-        rows
-          .filter((row) => row?.schoolId != null)
-          .map((row) => [String(row.schoolId), { id: row.schoolId, name: row.schoolName || 'Unknown School' }]),
-      ).values(),
-    ).sort((a, b) => String(a.name).localeCompare(String(b.name)))
-  }, [rows])
+    const list = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    if (pendingFilters.headOfficeId) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+    }
+    if (isHeadOfficeAdmin) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    }
+    return list
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schoolsLookup])
 
   const examTermFilterOptions = useMemo(
     () => uniqueStrings(rows.map((row) => row.examTerm)),
@@ -199,7 +208,10 @@ const Suggestion = ({ onNavigate }) => {
   const filteredData = useMemo(() => {
     let data = [...rows]
 
-    if (filters.schoolId !== 'Select') {
+    if (filters.headOfficeId) {
+      data = data.filter((row) => String(getSchoolById(row.schoolId)?.headOfficeId ?? '') === String(filters.headOfficeId))
+    }
+    if (filters.schoolId) {
       data = data.filter((row) => String(row.schoolId ?? '') === String(filters.schoolId))
     }
     if (filters.examTerm !== 'Select') {
@@ -229,7 +241,7 @@ const Suggestion = ({ onNavigate }) => {
       })
     }
     return data
-  }, [rows, filters, search])
+  }, [rows, filters, search, getSchoolById])
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage))
   const startIndex = (currentPage - 1) * rowsPerPage
@@ -397,6 +409,28 @@ const Suggestion = ({ onNavigate }) => {
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handleFilterHeadOfficeChange = (value) => {
+    setPendingFilters((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: '',
+    }))
+  }
+
+  const handleFilterSchoolChange = (value) => {
+    const selectedSchool = getSchoolById(value)
+    setPendingFilters((prev) => ({
+      ...prev,
+      schoolId: value,
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+    }))
+  }
+
+  const handleRowsPerPageChange = (value) => {
+    setRowsPerPage(value)
+    setCurrentPage(1)
   }
 
   const handleApplyFilters = (e) => {
@@ -887,20 +921,11 @@ const Suggestion = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                onChange={handleRowsPerPageChange}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -1101,25 +1126,41 @@ const Suggestion = ({ onNavigate }) => {
         onClose={() => setIsFilterSidebarOpen(false)}
         title="Filter Suggestion"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="schoolId"
-              className="form-control form-select"
-              value={pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolFilterOptions.map((school) => (
-                <option key={String(school.id)} value={String(school.id)}>
-                  {school.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={schoolFilterOptions.map((school) => ({
+                id: school.id,
+                schoolName: school.schoolName || school.name || '',
+              }))}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={handleFilterHeadOfficeChange}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={handleFilterSchoolChange}
+              schoolLabel="School"
+            />
+          ) : (
+            <div className="avm-field full">
+              <label htmlFor="schoolId" className="avm-label">
+                School
+              </label>
+              <select
+                id="schoolId"
+                className="avm-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) => handleFilterSchoolChange(e.target.value)}
+              >
+                <option value="">All Schools</option>
+                {schoolFilterOptions.map((school) => (
+                  <option key={String(school.id)} value={String(school.id)}>
+                    {school.schoolName || school.name || String(school.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor="examTerm" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Exam Term

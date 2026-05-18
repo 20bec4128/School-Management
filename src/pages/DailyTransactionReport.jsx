@@ -6,6 +6,7 @@ import WizardPopup from '../components/WizardPopup';
 import SlideSidebar from '../components/SlideSidebar';
 import FindEmptyState from '../components/FindEmptyState';
 import useColumnVisibility from '../hooks/useColumnVisibility';
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions';
 import '../assets/css/addModalShared.css';
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -65,6 +66,7 @@ const DailyTransactionReport = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters);
   
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
+  const academicYearOptions = useAcademicYearOptions();
 
   /** * 3. Filtering & Reporting Logic
    */
@@ -249,8 +251,7 @@ const DailyTransactionReport = () => {
           <FormField label="Academic Year">
             <select className="avm-select" value={pendingFilters.academicYear} onChange={e => setPendingFilters({...pendingFilters, academicYear: e.target.value})}>
               <option value="Select">Select Year</option>
-              <option>2023-2024</option>
-              <option>2024-2025</option>
+              {academicYearOptions.map((year) => <option key={year}>{year}</option>)}
             </select>
           </FormField>
 

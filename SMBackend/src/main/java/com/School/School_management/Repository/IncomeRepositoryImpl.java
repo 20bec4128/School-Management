@@ -1,6 +1,7 @@
 package com.School.School_management.Repository;
 
 import com.School.School_management.Entity.Income;
+import java.time.LocalDate;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
@@ -35,8 +36,16 @@ public class IncomeRepositoryImpl implements IncomeRepositoryCustom {
     }
 
     @Override
-    public Page<Income> findPageWithDetails(Long schoolId, Long incomeHeadId, String incomeMethod, String search, Pageable pageable) {
-        CriteriaQuery<Income> dataQuery = buildDataQuery(schoolId, incomeHeadId, incomeMethod, search);
+    public Page<Income> findPageWithDetails(
+            Long schoolId,
+            Long incomeHeadId,
+            String incomeMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            String search,
+            Pageable pageable
+    ) {
+        CriteriaQuery<Income> dataQuery = buildDataQuery(schoolId, incomeHeadId, incomeMethod, startDate, endDate, search);
         TypedQuery<Income> typedQuery = entityManager.createQuery(dataQuery);
         typedQuery.setFirstResult((int) pageable.getOffset());
         typedQuery.setMaxResults(pageable.getPageSize());
@@ -46,7 +55,7 @@ public class IncomeRepositoryImpl implements IncomeRepositoryCustom {
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<Income> countRoot = countQuery.from(Income.class);
         countQuery.select(cb.countDistinct(countRoot));
-        countQuery.where(buildPredicates(cb, countRoot, schoolId, incomeHeadId, incomeMethod, search));
+        countQuery.where(buildPredicates(cb, countRoot, schoolId, incomeHeadId, incomeMethod, startDate, endDate, search));
         Long total = entityManager.createQuery(countQuery).getSingleResult();
         return new PageImpl<>(content, pageable, total == null ? 0L : total);
     }
@@ -64,22 +73,38 @@ public class IncomeRepositoryImpl implements IncomeRepositoryCustom {
     }
 
     private List<Income> runListQuery(Long schoolId, Long incomeHeadId, String incomeMethod, String search) {
-        return entityManager.createQuery(buildDataQuery(schoolId, incomeHeadId, incomeMethod, search)).getResultList();
+        return entityManager.createQuery(buildDataQuery(schoolId, incomeHeadId, incomeMethod, null, null, search)).getResultList();
     }
 
-    private CriteriaQuery<Income> buildDataQuery(Long schoolId, Long incomeHeadId, String incomeMethod, String search) {
+    private CriteriaQuery<Income> buildDataQuery(
+            Long schoolId,
+            Long incomeHeadId,
+            String incomeMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            String search
+    ) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Income> query = cb.createQuery(Income.class);
         Root<Income> root = query.from(Income.class);
         root.fetch("school", JoinType.LEFT);
         root.fetch("incomeHead", JoinType.LEFT);
         query.select(root).distinct(true);
-        query.where(buildPredicates(cb, root, schoolId, incomeHeadId, incomeMethod, search));
+        query.where(buildPredicates(cb, root, schoolId, incomeHeadId, incomeMethod, startDate, endDate, search));
         query.orderBy(cb.desc(root.get("id")));
         return query;
     }
 
-    private Predicate[] buildPredicates(CriteriaBuilder cb, Root<Income> root, Long schoolId, Long incomeHeadId, String incomeMethod, String search) {
+    private Predicate[] buildPredicates(
+            CriteriaBuilder cb,
+            Root<Income> root,
+            Long schoolId,
+            Long incomeHeadId,
+            String incomeMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            String search
+    ) {
         List<Predicate> predicates = new ArrayList<>();
         predicates.add(cb.isFalse(root.get("deleted")));
         Join<Income, ?> schoolJoin = root.join("school", JoinType.LEFT);
@@ -87,6 +112,12 @@ public class IncomeRepositoryImpl implements IncomeRepositoryCustom {
         if (schoolId != null) predicates.add(cb.equal(schoolJoin.get("id"), schoolId));
         if (incomeHeadId != null) predicates.add(cb.equal(headJoin.get("id"), incomeHeadId));
         if (incomeMethod != null) predicates.add(cb.equal(cb.lower(root.get("incomeMethod")), incomeMethod.toLowerCase()));
+        if (startDate != null) {
+            predicates.add(cb.greaterThanOrEqualTo(root.get("incomeDate"), startDate));
+        }
+        if (endDate != null) {
+            predicates.add(cb.lessThanOrEqualTo(root.get("incomeDate"), endDate));
+        }
         if (search != null) {
             Expression<String> expr = cb.concat(
                     cb.concat(

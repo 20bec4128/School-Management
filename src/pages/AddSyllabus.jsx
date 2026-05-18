@@ -5,6 +5,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { findSchoolById } from '../utils/schoolScope'
@@ -12,8 +13,6 @@ import '../assets/css/addModalShared.css'
 
 const EDIT_STORAGE_KEY = 'edit-syllabus-row'
 const TABS = ['Basic Info', 'Syllabus & Notes']
-
-const sessionYearOptions = ['2024-2025', '2023-2024', '2022-2023']
 
 const emptyForm = {
   schoolId: '',
@@ -115,6 +114,10 @@ const AddSyllabus = ({ onNavigate }) => {
       : authSchoolId
         ? String(authSchoolId)
         : ''
+  const academicYearOptions = useAcademicYearOptions({
+    schoolId: form.schoolId && form.schoolId !== 'Select' ? form.schoolId : listSchoolId,
+    enabled: Boolean((form.schoolId && form.schoolId !== 'Select') || listSchoolId),
+  })
 
   const [form, setForm] = useState(() => {
     if (initialEditRow) {
@@ -219,12 +222,12 @@ const AddSyllabus = ({ onNavigate }) => {
   const handleHeadOfficeChange = (value) => {
     manualScope.setSelectedHeadOfficeId(value)
     manualScope.setSelectedSchoolId('')
-    setForm((prev) => ({ ...prev, schoolId: '', classId: '', subjectId: '' }))
+    setForm((prev) => ({ ...prev, schoolId: '', sessionYear: '', classId: '', subjectId: '' }))
   }
 
   const handleSchoolChange = (value) => {
     if (isSuperAdmin) manualScope.setSelectedSchoolId(value)
-    setForm((prev) => ({ ...prev, schoolId: value, classId: '', subjectId: '' }))
+    setForm((prev) => ({ ...prev, schoolId: value, sessionYear: '', classId: '', subjectId: '' }))
   }
 
   const handleClassChange = (value) => {
@@ -483,18 +486,18 @@ const AddSyllabus = ({ onNavigate }) => {
                   </FormField>
 
                   <FormField label="Session Year" required full>
-                    <select
-                      className="avm-select"
-                      id="sessionYear"
-                      value={form.sessionYear}
-                      onChange={(e) => handleFieldChange('sessionYear', e.target.value)}
-                      disabled={saving}
-                    >
-                      <option value="">--Select--</option>
-                      {sessionYearOptions.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
+                  <select
+                    className="avm-select"
+                    id="sessionYear"
+                    value={form.sessionYear}
+                    onChange={(e) => handleFieldChange('sessionYear', e.target.value)}
+                    disabled={saving || academicYearOptions.length === 0}
+                  >
+                    <option value="">--Select--</option>
+                    {academicYearOptions.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
                       ))}
                     </select>
                   </FormField>

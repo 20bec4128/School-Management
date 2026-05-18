@@ -32,15 +32,16 @@ public class StudentActivityService {
     }
 
     @Transactional(readOnly = true)
-    public PaginationResponse<StudentActivityDto.Response> getAll(int page, int size, 
-                                                                    Long schoolId, 
+    public PaginationResponse<StudentActivityDto.Response> getAll(int page, int size,
+                                                                    Long headOfficeId,
+                                                                    Long schoolId,
                                                                     String className, 
                                                                     String section) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("activityDate").descending());
         Page<StudentActivity> activityPage;
         
-        if (schoolId != null || className != null || section != null) {
-            activityPage = studentActivityRepository.searchActivities(schoolId, className, section, pageable);
+        if (headOfficeId != null || schoolId != null || className != null || section != null) {
+            activityPage = studentActivityRepository.searchActivities(headOfficeId, schoolId, className, section, pageable);
         } else {
             activityPage = studentActivityRepository.findByDeletedFalse(pageable);
         }

@@ -52,14 +52,18 @@ public class ManageSchoolController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String status
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId
     ) {
         CurrentUser user = CurrentUserHolder.get();
-        Long schoolId = null;
-        Long headOfficeId = null;
         if (user != null) {
-            if (user.isSchoolScoped() && user.schoolId() != null) schoolId = user.schoolId();
-            if (user.isHeadOfficeScopedAdmin() && user.headOfficeId() != null) headOfficeId = user.headOfficeId();
+            if (user.isSchoolScoped() && user.schoolId() != null) {
+                schoolId = user.schoolId();
+                headOfficeId = null;
+            } else if (user.isHeadOfficeScopedAdmin() && user.headOfficeId() != null) {
+                headOfficeId = user.headOfficeId();
+            }
         }
         return manageSchoolService.getAllSchools(page, size, headOfficeId, schoolId, search, status);
     }

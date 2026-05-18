@@ -3,6 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.IncomeDto;
 import com.School.School_management.Service.IncomeService;
 import com.School.School_management.auth.RequirePermission;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
@@ -28,11 +29,13 @@ public class IncomeController {
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) Long incomeHeadId,
             @RequestParam(required = false) String incomeMethod,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return service.listPaginated(schoolId, incomeHeadId, incomeMethod, page, size, search);
+        return service.listPaginated(schoolId, incomeHeadId, incomeMethod, startDate, endDate, page, size, search);
     }
 
     @PostMapping

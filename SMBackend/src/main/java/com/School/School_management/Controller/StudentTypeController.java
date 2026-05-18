@@ -6,6 +6,7 @@ import com.School.School_management.Service.StudentTypeService;
 import com.School.School_management.auth.RequirePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -13,18 +14,17 @@ import org.springframework.web.bind.annotation.*;
 @RequirePermission({"STUDENT_TYPE_MANAGE", "*"})
 public class StudentTypeController {
 
-    private final StudentTypeService studentTypeService;
-
-    public StudentTypeController(StudentTypeService studentTypeService) {
-        this.studentTypeService = studentTypeService;
-    }
+    @Autowired
+    private StudentTypeService studentTypeService;
 
     @GetMapping
     public ResponseEntity<PaginationResponse<StudentTypeDto.Response>> getAll(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(studentTypeService.getAll(page, size));
+        return ResponseEntity.ok(studentTypeService.getAll(headOfficeId, schoolId, page, size));
     }
 
     @PostMapping

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
+import useAcademicYearOptions from "../hooks/useAcademicYearOptions";
 import "../assets/css/addModalShared.css";
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -27,6 +28,7 @@ const PayrollReport = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } =
     useColumnVisibility(columnOptions);
+  const academicYearOptions = useAcademicYearOptions();
 
   // Filtering Logic: Handles search and dropdown filters via useMemo
   const filtered = useMemo(() => {
@@ -310,8 +312,9 @@ const PayrollReport = () => {
               }
             >
               <option value="Select">Select Year</option>
-              <option>2023-2024</option>
-              <option>2024-2025</option>
+              {academicYearOptions.map((year) => (
+                <option key={year}>{year}</option>
+              ))}
             </select>
           </div>
           <div>

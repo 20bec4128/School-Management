@@ -8,8 +8,9 @@ export const fetchExamInstructions = async ({ schoolId } = {}) => {
   return response.data
 }
 
-export const fetchExamInstructionsPage = async ({ schoolId, status, page = 0, size = 10, search = '' } = {}) => {
+export const fetchExamInstructionsPage = async ({ headOfficeId, schoolId, status, page = 0, size = 10, search = '' } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   if (status != null && String(status).trim() !== '' && String(status) !== 'Select') qs.set('status', String(status))
   if (search) qs.set('search', search)

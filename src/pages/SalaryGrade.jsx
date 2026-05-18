@@ -10,11 +10,12 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { deleteSalaryGrade, fetchSalaryGradesPage } from '../apis/salaryGradeApi'
 import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 
 const EDIT_STORAGE_KEY = 'edit-salary-grade-row'
 const emptyFilters = {
-  headOfficeId: '',
-  schoolId: '',
+  headOfficeId: 'Select',
+  schoolId: 'Select',
   gradeName: '',
 }
 
@@ -107,13 +108,21 @@ const SalaryGrade = ({ onNavigate }) => {
     return () => clearTimeout(timer)
   }, [search])
 
-  const loadSalaryGrades = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+  const loadSalaryGrades = async ({ headOfficeId, schoolId, page = 0, size = 10, search = '' } = {}) => {
     const effectiveSchoolId = (() => {
       if (isSchoolAdmin) return authSchoolId
       return schoolId || null
     })()
+    const effectiveHeadOfficeId = (() => {
+      if (isSchoolAdmin) {
+        const school = schoolsById.get(String(authSchoolId ?? ''))
+        return school?.headOfficeId ?? authHeadOfficeId ?? null
+      }
+      if (isHeadOfficeAdmin) return authHeadOfficeId ?? null
+      return headOfficeId || null
+    })()
 
-    if (!effectiveSchoolId && !isSuperAdmin) {
+    if (!effectiveSchoolId && !effectiveHeadOfficeId && !isSuperAdmin) {
       setRows([])
       setTotalElements(0)
       setTotalPages(0)
@@ -121,6 +130,7 @@ const SalaryGrade = ({ onNavigate }) => {
     }
 
     const data = await fetchSalaryGradesPage({ 
+      headOfficeId: effectiveHeadOfficeId,
       schoolId: effectiveSchoolId, 
       page: page, 
       size: size,
@@ -139,8 +149,15 @@ const SalaryGrade = ({ onNavigate }) => {
     Promise.resolve()
       .then(loadLookups)
       .then(() => {
-        const initialSchoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId ? Number(filters.schoolId) : null))
+        const initialSchoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId !== 'Select' ? Number(filters.schoolId) : null))
+        const initialHeadOfficeId =
+          isSuperAdmin && filters.headOfficeId !== 'Select'
+            ? Number(filters.headOfficeId)
+            : isHeadOfficeAdmin
+              ? authHeadOfficeId
+              : null
         return loadSalaryGrades({ 
+          headOfficeId: initialHeadOfficeId,
           schoolId: initialSchoolId,
           page: currentPage - 1,
           size: rowsPerPage,
@@ -149,7 +166,7 @@ const SalaryGrade = ({ onNavigate }) => {
       })
       .catch((e) => setLoadError(e?.message || 'Failed to load salary grades'))
       .finally(() => setBusy(false))
-  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters])
+  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, schoolsById, scopeSchoolId])
 
   const openAdd = () => {
     onNavigate?.('add-salary-grade')
@@ -197,6 +214,46 @@ const SalaryGrade = ({ onNavigate }) => {
     if (isHeadOfficeAdmin) return list.filter(s => String(s.headOfficeId) === String(authHeadOfficeId))
     return []
   }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
+
+  const selectedFilterHeadOfficeId =
+    isSuperAdmin ? filters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : ''
+
+  const filterSchoolOptions = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    return list
+      .filter((s) => {
+        if (isHeadOfficeAdmin) return String(s?.headOfficeId ?? '') === String(authHeadOfficeId ?? '')
+        if (isSuperAdmin && selectedFilterHeadOfficeId !== 'Select' && selectedFilterHeadOfficeId !== '') {
+          return String(s?.headOfficeId ?? '') === String(selectedFilterHeadOfficeId)
+        }
+        return true
+      })
+      .map((s) => ({ id: s.id, schoolName: s.schoolName || s.name || `School ${s.id}`, headOfficeId: s.headOfficeId ?? null }))
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)))
+  }, [schools, isHeadOfficeAdmin, authHeadOfficeId, isSuperAdmin, selectedFilterHeadOfficeId])
+
+  const headOfficeOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (Array.isArray(headOffices) ? headOffices : [])
+            .filter((item) => item?.id != null)
+            .map((item) => [String(item.id), item]),
+        ).values(),
+      )
+        .map((item) => ({ id: item.id, name: item.name || item.headOfficeName || `Head Office ${item.id}` }))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [headOffices],
+  )
+
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target
+    if (id === 'headOfficeId') {
+      setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'Select' }))
+      return
+    }
+    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+  }
 
   const schoolOptionsForForm = (f) => {
     if (isSchoolAdmin) return []
@@ -435,7 +492,19 @@ const SalaryGrade = ({ onNavigate }) => {
                               try {
                                 await deleteSalaryGrade(row.id)
                                 await loadSalaryGrades({
-                                  schoolId: isSchoolAdmin ? authSchoolId : (scopeSchoolId || filters.schoolId || null),
+                                  headOfficeId:
+                                    isSuperAdmin && filters.headOfficeId !== 'Select'
+                                      ? Number(filters.headOfficeId)
+                                      : isHeadOfficeAdmin
+                                        ? authHeadOfficeId
+                                        : null,
+                                  schoolId: isSchoolAdmin
+                                    ? authSchoolId
+                                    : scopeSchoolId
+                                      ? Number(scopeSchoolId)
+                                      : filters.schoolId !== 'Select'
+                                        ? Number(filters.schoolId)
+                                        : null,
                                   page: currentPage - 1,
                                   size: rowsPerPage,
                                   search: debouncedSearch
@@ -504,33 +573,24 @@ const SalaryGrade = ({ onNavigate }) => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-           {isSuperAdmin && (
-             <div>
-              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Head Office</label>
-              <select 
-                className="form-control form-select" 
-                value={pendingFilters.headOfficeId} 
-                onChange={(e) => setPendingFilters(p => ({ ...p, headOfficeId: e.target.value, schoolId: '' }))}
-              >
-                <option value="">All</option>
-                {headOffices.map(ho => <option key={ho.id} value={String(ho.id)}>{ho.name}</option>)}
-              </select>
-            </div>
-           )}
-
-           {(isSuperAdmin || isHeadOfficeAdmin) && (
-             <div>
-              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-              <select 
-                className="form-control form-select" 
-                value={pendingFilters.schoolId} 
-                onChange={(e) => setPendingFilters(p => ({ ...p, schoolId: e.target.value }))}
-              >
-                <option value="">All</option>
-                {schoolOptionsForForm(pendingFilters).map(s => <option key={s.id} value={String(s.id)}>{s.schoolName}</option>)}
-              </select>
-            </div>
-           )}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <ManualScopeSelectors
+              enabled={isSuperAdmin || isHeadOfficeAdmin}
+              headOffices={isSuperAdmin ? headOfficeOptions : []}
+              schoolOptions={filterSchoolOptions}
+              selectedHeadOfficeId={selectedFilterHeadOfficeId}
+              onHeadOfficeChange={(value) =>
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value || 'Select', schoolId: 'Select' }))
+              }
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({ ...prev, schoolId: value || 'Select' }))
+              }
+              showSchoolSelector
+              showHeadOfficeSelector={isSuperAdmin}
+              compact={false}
+            />
+          </div>
 
           <div className="d-flex gap-8 mt-16">
             <button

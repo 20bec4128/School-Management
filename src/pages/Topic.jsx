@@ -3,11 +3,14 @@ import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import { deleteTopic, fetchTopics } from "../apis/topicsApi";
 import { fetchLessons } from "../apis/lessonsApi";
+import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
 import { fetchClasses } from "../apis/classesApi";
 import { fetchSubjects } from "../apis/subjectsApi";
+import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import { useAuth } from "../context/useAuth";
 import { useSchool } from "../context/useSchool";
+import useAcademicYearOptions from "../hooks/useAcademicYearOptions";
 import ExportDropdown from "../components/ExportDropdown";
 import RowsPerPageSelect from "../components/RowsPerPageSelect";
 import { TablePagination } from "../components/table";
@@ -15,14 +18,8 @@ import "../assets/css/addModalShared.css";
 import FindEmptyState from "../components/FindEmptyState";
 
 const EDIT_STORAGE_KEY = "edit-topic-row";
-const ACADEMIC_YEAR_OPTIONS = [
-  "2025-2026",
-  "2024-2025",
-  "2023-2024",
-  "2022-2023",
-];
-
 const emptyFilters = {
+  headOfficeId: "Select",
   schoolId: "Select",
   academicYear: "Select",
   classId: "Select",
@@ -92,6 +89,8 @@ const FormField = ({
 
 const Topic = ({ onNavigate }) => {
   const {
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
     role,
@@ -99,6 +98,7 @@ const Topic = ({ onNavigate }) => {
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool();
   const [topics, setTopics] = useState([]);
   const [schoolsLookup, setSchoolsLookup] = useState([]);
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([]);
   const [classesLookup, setClassesLookup] = useState([]);
   const [subjectsLookup, setSubjectsLookup] = useState([]);
   const [lessonsLookup, setLessonsLookup] = useState([]);
@@ -120,6 +120,11 @@ const Topic = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } =
     useColumnVisibility(columnOptions);
+
+  const academicYearOptions = useAcademicYearOptions({
+    schoolId: pendingFilters.schoolId !== "Select" ? pendingFilters.schoolId : "",
+    enabled: pendingFilters.schoolId !== "Select",
+  });
 
   const exportColumns = useMemo(
     () => [
@@ -154,6 +159,46 @@ const Topic = ({ onNavigate }) => {
       : "";
   const resolvedSchoolName = authSchoolName || "";
   const canAddTopics = role !== "STUDENT" && role !== "PARENT";
+  const roleUpper = String(role || "").toUpperCase();
+  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isHeadOfficeAdmin = roleUpper === "HEAD_OFFICE_ADMIN";
+
+  const headOfficeOptions = useMemo(() => {
+    const list = (Array.isArray(headOfficesLookup) ? headOfficesLookup : [])
+      .map((row) => ({
+        id: row?.id,
+        name: row?.name || row?.headOfficeName || "",
+      }))
+      .filter((row) => row.id != null && row.name);
+    if (isHeadOfficeAdmin && authHeadOfficeId != null && authHeadOfficeName) {
+      const exists = list.some((row) => String(row.id) === String(authHeadOfficeId));
+      if (!exists) list.unshift({ id: authHeadOfficeId, name: authHeadOfficeName });
+    }
+    return list.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [authHeadOfficeId, authHeadOfficeName, headOfficesLookup, isHeadOfficeAdmin]);
+
+  const schoolOptions = useMemo(() => {
+    const list = Array.isArray(schoolsLookup) ? schoolsLookup.slice() : [];
+    const selectedHeadOfficeId = pendingFilters.headOfficeId !== "Select"
+      ? String(pendingFilters.headOfficeId)
+      : isHeadOfficeAdmin && authHeadOfficeId != null
+        ? String(authHeadOfficeId)
+        : "";
+    const filtered = selectedHeadOfficeId
+      ? list.filter((school) => String(school?.headOfficeId ?? "") === selectedHeadOfficeId)
+      : isHeadOfficeAdmin && authHeadOfficeId != null
+        ? list.filter((school) => String(school?.headOfficeId ?? "") === String(authHeadOfficeId))
+        : resolvedSchoolId
+          ? list.filter((school) => String(school?.id ?? "") === String(resolvedSchoolId))
+          : list;
+    return filtered
+      .map((row) => ({
+        id: row?.id,
+        schoolName: row?.schoolName || row?.name || "",
+      }))
+      .filter((row) => row.id != null && row.schoolName)
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
+  }, [authHeadOfficeId, isHeadOfficeAdmin, pendingFilters.headOfficeId, resolvedSchoolId, schoolsLookup]);
 
   useEffect(() => {
     let ignore = false;
@@ -161,19 +206,23 @@ const Topic = ({ onNavigate }) => {
       try {
         setLoading(true);
         setError("");
-        const [schoolsResult, classesResult, subjectsResult] =
+        const [headOfficesResult, schoolsResult, classesResult, subjectsResult] =
           await Promise.allSettled([
+            fetchHeadOfficesPage(0, 500),
             fetchSchoolsLookup(),
             fetchClasses(),
             fetchSubjects(),
           ]);
         if (ignore) return;
+        const headOffices =
+          headOfficesResult.status === "fulfilled" ? headOfficesResult.value : null;
         const schools =
           schoolsResult.status === "fulfilled" ? schoolsResult.value : [];
         const classes =
           classesResult.status === "fulfilled" ? classesResult.value : [];
         const subjects =
           subjectsResult.status === "fulfilled" ? subjectsResult.value : [];
+        setHeadOfficesLookup(Array.isArray(headOffices?.content) ? headOffices.content : []);
         setSchoolsLookup(Array.isArray(schools) ? schools : []);
         setClassesLookup(Array.isArray(classes) ? classes : []);
         setSubjectsLookup(Array.isArray(subjects) ? subjects : []);
@@ -334,6 +383,15 @@ const Topic = ({ onNavigate }) => {
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target;
     setPendingFilters((prev) => {
+      if (id === "headOfficeId")
+        return {
+          ...prev,
+          headOfficeId: value,
+          schoolId: "Select",
+          classId: "Select",
+          subjectId: "Select",
+          lessonId: "Select",
+        };
       if (id === "schoolId")
         return {
           ...prev,
@@ -348,6 +406,34 @@ const Topic = ({ onNavigate }) => {
       return { ...prev, [id]: value };
     });
     setFindErrors((prev) => ({ ...prev, [id]: "" }));
+  };
+
+  const handleScopeChange = (field, value) => {
+    setPendingFilters((prev) => {
+      if (field === "headOfficeId") {
+        return {
+          ...prev,
+          headOfficeId: value || "Select",
+          schoolId: "Select",
+          academicYear: "Select",
+          classId: "Select",
+          subjectId: "Select",
+          lessonId: "Select",
+        };
+      }
+      if (field === "schoolId") {
+        return {
+          ...prev,
+          schoolId: value || "Select",
+          academicYear: "Select",
+          classId: "Select",
+          subjectId: "Select",
+          lessonId: "Select",
+        };
+      }
+      return prev;
+    });
+    setFindErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const filtered = useMemo(() => {
@@ -670,29 +756,48 @@ const Topic = ({ onNavigate }) => {
         isOpen={isFindSidebarOpen}
         title="Find Topic"
         onClose={() => setIsFindSidebarOpen(false)}
-        className="filter-sidebar"
+      className="filter-sidebar"
       >
         <form className="p-20 avm-grid" onSubmit={handleApplyFilters}>
-          <FormField label="School Name" required full>
-            <select
-              id="schoolId"
-              className={`form-control form-select ps-44${findErrors.schoolId ? " is-invalid" : ""}`}
-              value={pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select School--</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName}
-                </option>
-              ))}
-            </select>
-            {findErrors.schoolId && (
-              <div className="text-danger-600 text-sm mt-4">
-                {findErrors.schoolId}
-              </div>
-            )}
-          </FormField>
+          {(isSuperAdmin || isHeadOfficeAdmin) ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOfficeOptions}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={
+                isHeadOfficeAdmin && authHeadOfficeId != null
+                  ? String(authHeadOfficeId)
+                  : pendingFilters.headOfficeId === "Select"
+                    ? ""
+                    : pendingFilters.headOfficeId
+              }
+              onHeadOfficeChange={(value) => handleScopeChange("headOfficeId", value)}
+              selectedSchoolId={pendingFilters.schoolId === "Select" ? "" : pendingFilters.schoolId}
+              onSchoolChange={(value) => handleScopeChange("schoolId", value)}
+              showHeadOfficeSelector={isSuperAdmin}
+            />
+          ) : (
+            <FormField label="School Name" required full>
+              <select
+                id="schoolId"
+                className={`form-control form-select ps-44${findErrors.schoolId ? " is-invalid" : ""}`}
+                value={pendingFilters.schoolId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select School--</option>
+                {schoolOptions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.schoolName}
+                  </option>
+                ))}
+              </select>
+              {findErrors.schoolId && (
+                <div className="text-danger-600 text-sm mt-4">
+                  {findErrors.schoolId}
+                </div>
+              )}
+            </FormField>
+          )}
 
           <FormField label="Academic Year" required full>
             <select
@@ -700,9 +805,10 @@ const Topic = ({ onNavigate }) => {
               className={`form-control form-select ps-44${findErrors.academicYear ? " is-invalid" : ""}`}
               value={pendingFilters.academicYear}
               onChange={handlePendingFilterChange}
+              disabled={pendingFilters.schoolId === "Select"}
             >
               <option value="Select">--Select--</option>
-              {ACADEMIC_YEAR_OPTIONS.map((y) => (
+              {academicYearOptions.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>

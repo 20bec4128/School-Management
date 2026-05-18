@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -129,7 +130,6 @@ const resultBadge = (result) => {
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
 }
 
-const sessionOptions = ['2023-2024', '2024-2025', '2025-2026']
 const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
 const schoolOptions = ['Windsor Park High School']
 
@@ -142,6 +142,7 @@ const Promotion = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const sessionOptions = useAcademicYearOptions()
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

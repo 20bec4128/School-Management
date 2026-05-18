@@ -37,45 +37,28 @@ public class ExamGradeServiceImpl implements ExamGradeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ExamGradeDto> list(Long schoolId) {
+    public List<ExamGradeDto> list(Long headOfficeId, Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
-        if (user.isSuperAdmin() && schoolId == null) {
-            return examGradeRepository.findAllByOrderByIdDesc()
-                    .stream()
-                    .map(this::toDto)
-                    .collect(Collectors.toList());
-        }
-
-        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return examGradeRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
-                .stream()
+        return resolveVisibleRows(user, headOfficeId, schoolId).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExamGradeDto> listPaginated(Long schoolId, int page, int size, String search) {
+    public Page<ExamGradeDto> listPaginated(Long headOfficeId, Long schoolId, int page, int size, String search) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         String normalizedSearch = normalizeOptional(search);
 
-        if (user.isSuperAdmin() && schoolId == null) {
-            List<ExamGradeDto> rows = examGradeRepository.findAllByOrderByIdDesc()
-                    .stream()
-                    .map(this::toDto)
-                    .filter(dto -> normalizedSearch == null || matchesSearch(dto, normalizedSearch))
-                    .toList();
-            return slice(rows, pageable);
-        }
-
-        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return examGradeRepository.searchExamGrades(effectiveSchoolId, normalizedSearch, pageable)
-                .map(this::toDto);
+        List<ExamGradeDto> rows = list(headOfficeId, schoolId).stream()
+                .filter(dto -> normalizedSearch == null || matchesSearch(dto, normalizedSearch))
+                .collect(Collectors.toList());
+        return slice(rows, pageable);
     }
 
     @Override
@@ -196,6 +179,50 @@ public class ExamGradeServiceImpl implements ExamGradeService {
     private void ensureSchoolInHeadOffice(Long schoolId, Long headOfficeId) {
         boolean ok = schoolRepository.findByIdAndIsDeletedFalseAndHeadOfficeId(schoolId, headOfficeId).isPresent();
         if (!ok) throw new NotFoundException();
+    }
+
+    private List<ExamGrade> resolveVisibleRows(CurrentUser user, Long headOfficeId, Long schoolId) {
+        if (user.isSchoolScoped()) {
+            Long effectiveSchoolId = user.schoolId();
+            if (effectiveSchoolId == null) throw new ForbiddenException();
+            if (schoolId != null && !Objects.equals(schoolId, effectiveSchoolId)) throw new ForbiddenException();
+            if (headOfficeId != null) ensureSchoolInHeadOffice(effectiveSchoolId, headOfficeId);
+            return examGradeRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId);
+        }
+
+        if (schoolId != null) {
+            if (user.isHeadOfficeScopedAdmin()) ensureSchoolInHeadOffice(schoolId, user.headOfficeId());
+            return examGradeRepository.findBySchoolIdOrderByIdDesc(schoolId);
+        }
+
+        if (headOfficeId != null) {
+            if (user.isHeadOfficeScopedAdmin() && !Objects.equals(headOfficeId, user.headOfficeId())) {
+                throw new ForbiddenException();
+            }
+            return examGradeRepository.findAllByOrderByIdDesc().stream()
+                    .filter(row -> Objects.equals(resolveSchoolHeadOfficeId(row.getSchoolId()), headOfficeId))
+                    .collect(Collectors.toList());
+        }
+
+        if (user.isHeadOfficeScopedAdmin()) {
+            Long effectiveHeadOfficeId = user.headOfficeId();
+            return examGradeRepository.findAllByOrderByIdDesc().stream()
+                    .filter(row -> Objects.equals(resolveSchoolHeadOfficeId(row.getSchoolId()), effectiveHeadOfficeId))
+                    .collect(Collectors.toList());
+        }
+
+        if (user.isSuperAdmin()) {
+            return examGradeRepository.findAllByOrderByIdDesc();
+        }
+
+        throw new BadRequestException("schoolId is required");
+    }
+
+    private Long resolveSchoolHeadOfficeId(Long schoolId) {
+        if (schoolId == null) return null;
+        return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                .map(ManageSchool::getHeadOfficeId)
+                .orElse(null);
     }
 
     private ExamGradeDto toDto(ExamGrade entity) {

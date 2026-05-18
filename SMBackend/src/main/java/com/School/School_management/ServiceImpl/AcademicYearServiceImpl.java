@@ -13,7 +13,6 @@ import com.School.School_management.Service.AcademicYearService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -38,53 +37,42 @@ public class AcademicYearServiceImpl implements AcademicYearService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AcademicYearDto> list(Long schoolId) {
+    public List<AcademicYearDto> list(Long headOfficeId, Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
-        if (user.isSchoolScoped()) {
-            if (user.schoolId() == null) throw new ForbiddenException();
-            return academicYearRepository.findBySchoolIdOrderBySessionStartDesc(user.schoolId())
-                    .stream()
-                    .map(this::toDto)
-                    .collect(Collectors.toList());
-        }
-
-        if (user.isHeadOfficeScopedAdmin()) {
-            if (schoolId == null) {
-                return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(user.headOfficeId())
-                        .stream()
-                        .flatMap(school -> academicYearRepository.findBySchoolIdOrderBySessionStartDesc(school.getId()).stream())
-                        .sorted(
-                                Comparator.comparing(AcademicYear::getSessionStart, Comparator.nullsLast(Comparator.reverseOrder()))
-                                        .thenComparing(AcademicYear::getId, Comparator.nullsLast(Comparator.reverseOrder()))
-                        )
-                        .map(this::toDto)
-                        .collect(Collectors.toList());
-            }
-            ensureSchoolInHeadOffice(schoolId, user.headOfficeId());
-            return academicYearRepository.findBySchoolIdOrderBySessionStartDesc(schoolId)
-                    .stream()
-                    .map(this::toDto)
-                    .collect(Collectors.toList());
-        }
-
-        if (schoolId == null) {
+        List<Long> schoolIds = resolveSchoolIds(user, headOfficeId, schoolId);
+        if (schoolIds == null) {
             return academicYearRepository.findAllByOrderBySessionStartDesc()
                     .stream()
                     .map(this::toDto)
                     .collect(Collectors.toList());
         }
 
-        return academicYearRepository.findBySchoolIdOrderBySessionStartDesc(schoolId)
-                .stream()
+        if (schoolIds.isEmpty()) {
+            return List.of();
+        }
+
+        if (schoolIds.size() == 1) {
+            return academicYearRepository.findBySchoolIdOrderBySessionStartDesc(schoolIds.get(0))
+                    .stream()
+                    .map(this::toDto)
+                    .collect(Collectors.toList());
+        }
+
+        return schoolIds.stream()
+                .flatMap(scopedSchoolId -> academicYearRepository.findBySchoolIdOrderBySessionStartDesc(scopedSchoolId).stream())
+                .sorted(
+                        java.util.Comparator.comparing(AcademicYear::getSessionStart, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
+                                .thenComparing(AcademicYear::getId, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
+                )
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AcademicYearDto> page(Long schoolId, String search, Boolean running, int page, int size) {
+    public Page<AcademicYearDto> page(Long headOfficeId, Long schoolId, String search, Boolean running, int page, int size) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
@@ -97,32 +85,15 @@ public class AcademicYearServiceImpl implements AcademicYearService {
 
         Page<AcademicYear> entityPage;
 
-        if (user.isSchoolScoped()) {
-            if (user.schoolId() == null) throw new ForbiddenException();
-            entityPage = academicYearRepository.searchBySchoolId(user.schoolId(), running, q, pageable);
-        } else if (user.isHeadOfficeScopedAdmin()) {
-            if (schoolId != null) {
-                ensureSchoolInHeadOffice(schoolId, user.headOfficeId());
-                entityPage = academicYearRepository.searchBySchoolId(schoolId, running, q, pageable);
-            } else {
-                List<Long> schoolIds = schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(user.headOfficeId())
-                        .stream()
-                        .map(ManageSchool::getId)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList());
-                if (schoolIds.isEmpty()) {
-                    return Page.empty(pageable);
-                }
-                entityPage = academicYearRepository.searchBySchoolIds(schoolIds, running, q, pageable);
-            }
+        List<Long> scopedSchoolIds = resolveSchoolIds(user, headOfficeId, schoolId);
+        if (scopedSchoolIds == null) {
+            entityPage = academicYearRepository.findAllByOrderBySessionStartDesc(pageable);
+        } else if (scopedSchoolIds.isEmpty()) {
+            return Page.empty(pageable);
+        } else if (scopedSchoolIds.size() == 1) {
+            entityPage = academicYearRepository.searchBySchoolId(scopedSchoolIds.get(0), running, q, pageable);
         } else {
-            if (schoolId == null) {
-                // Super admin/all scopes: allow running/search filters, but keep it simple by paging over all and filtering by query is done via repository only for scoped calls.
-                // If you want filters for the global list, select a school or use head office scope.
-                entityPage = academicYearRepository.findAllByOrderBySessionStartDesc(pageable);
-            } else {
-                entityPage = academicYearRepository.searchBySchoolId(schoolId, running, q, pageable);
-            }
+            entityPage = academicYearRepository.searchBySchoolIds(scopedSchoolIds, running, q, pageable);
         }
 
         return entityPage.map(this::toDto);
@@ -237,6 +208,46 @@ public class AcademicYearServiceImpl implements AcademicYearService {
     private void ensureSchoolInHeadOffice(Long schoolId, Long headOfficeId) {
         boolean ok = schoolRepository.findByIdAndIsDeletedFalseAndHeadOfficeId(schoolId, headOfficeId).isPresent();
         if (!ok) throw new NotFoundException();
+    }
+
+    private List<Long> resolveSchoolIds(CurrentUser user, Long requestedHeadOfficeId, Long requestedSchoolId) {
+        if (user.isSchoolScoped()) {
+            if (user.schoolId() == null) throw new ForbiddenException();
+            return List.of(user.schoolId());
+        }
+
+        if (user.isHeadOfficeScopedAdmin()) {
+            Long headOfficeId = user.headOfficeId();
+            if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, headOfficeId)) {
+                throw new ForbiddenException();
+            }
+            if (requestedSchoolId != null) {
+                ensureSchoolInHeadOffice(requestedSchoolId, headOfficeId);
+                return List.of(requestedSchoolId);
+            }
+            return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(headOfficeId)
+                    .stream()
+                    .map(ManageSchool::getId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
+
+        if (requestedSchoolId != null) {
+            if (requestedHeadOfficeId != null) {
+                ensureSchoolInHeadOffice(requestedSchoolId, requestedHeadOfficeId);
+            }
+            return List.of(requestedSchoolId);
+        }
+
+        if (requestedHeadOfficeId != null) {
+            return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(requestedHeadOfficeId)
+                    .stream()
+                    .map(ManageSchool::getId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
+
+        return null;
     }
 
     private AcademicYearDto toDto(AcademicYear entity) {

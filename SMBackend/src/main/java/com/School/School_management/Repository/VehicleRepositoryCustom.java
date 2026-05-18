@@ -8,7 +8,8 @@ import org.springframework.data.domain.Pageable;
 
 public interface VehicleRepositoryCustom {
     List<Vehicle> findAllActiveWithDetailsOrderByIdDesc();
+    List<Vehicle> findByHeadOfficeIdActiveWithDetailsOrderByIdDesc(Long headOfficeId);
     List<Vehicle> findBySchoolIdActiveWithDetailsOrderByIdDesc(Long schoolId);
-    Page<Vehicle> findPageWithDetails(Long schoolId, String search, Pageable pageable);
+    Page<Vehicle> findPageWithDetails(Long headOfficeId, Long schoolId, String search, Pageable pageable);
     Optional<Vehicle> findByIdWithDetails(Long id);
 }

@@ -51,8 +51,9 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    public PaginationResponse<StudentDto.Response> getAll(int page, int size, 
-                                                           Long schoolId, 
+    public PaginationResponse<StudentDto.Response> getAll(int page, int size,
+                                                           Long headOfficeId,
+                                                           Long schoolId,
                                                            Long classId,
                                                            Long sectionId,
                                                            String className, 
@@ -61,8 +62,8 @@ public class StudentService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         Page<Student> studentPage;
         
-        if (schoolId != null || classId != null || sectionId != null || className != null || section != null || groupName != null) {
-            studentPage = studentRepository.searchStudents(schoolId, classId, sectionId, className, section, groupName, pageable);
+        if (headOfficeId != null || schoolId != null || classId != null || sectionId != null || className != null || section != null || groupName != null) {
+            studentPage = studentRepository.searchStudents(headOfficeId, schoolId, classId, sectionId, className, section, groupName, pageable);
         } else {
             studentPage = studentRepository.findByDeletedFalse(pageable);
         }

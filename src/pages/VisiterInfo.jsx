@@ -112,9 +112,18 @@ const VisitorInfo = ({ onNavigate }) => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const listSchoolId = isSuperAdmin
-    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const listSchoolId = useMemo(() => {
+    if (isSuperAdmin) {
+      if (manualScope.selectedSchoolId) return String(manualScope.selectedSchoolId)
+      if (activeSchoolId) return String(activeSchoolId)
+      if (manualScope.schoolOptions.length === 1) return String(manualScope.schoolOptions[0]?.id ?? '')
+      return ''
+    }
+    if (activeSchoolId) return String(activeSchoolId)
+    if (authSchoolId) return String(authSchoolId)
+    if (contextSchoolOptions.length === 1) return String(contextSchoolOptions[0]?.id ?? '')
+    return ''
+  }, [activeSchoolId, authSchoolId, contextSchoolOptions, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedSchoolId])
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
   const isSchoolLocked = !isSuperAdmin && !!listSchoolId
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
@@ -126,7 +135,7 @@ const VisitorInfo = ({ onNavigate }) => {
       setTotalElements(0)
       setTotalPages(1)
       setPurposes([])
-      setError('Select a school before viewing visitor info.')
+      setError('Unable to determine the school for this session. Please select a school.')
       return
     }
     setLoading(true)
@@ -155,6 +164,12 @@ const VisitorInfo = ({ onNavigate }) => {
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  useEffect(() => {
+    if (!isSuperAdmin && listSchoolId && !pendingFilters.schoolId) {
+      setPendingFilters((prev) => ({ ...prev, schoolId: String(listSchoolId) }))
+    }
+  }, [isSuperAdmin, listSchoolId, pendingFilters.schoolId])
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages)

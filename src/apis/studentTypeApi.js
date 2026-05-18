@@ -17,11 +17,13 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchStudentTypesPage = async (page, size) => {
+export const fetchStudentTypesPage = async ({ headOfficeId, schoolId, page = 0, size = 10 } = {}) => {
   const query = new URLSearchParams({
     page: String(Math.max(page, 0)),
     size: String(size),
   })
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') query.set('headOfficeId', String(headOfficeId))
+  if (schoolId != null && String(schoolId).trim() !== '') query.set('schoolId', String(schoolId))
   const res = await apiFetch(`${STUDENT_TYPE_API_BASE}?${query.toString()}`, {
     headers: { Accept: 'application/json' },
   })
@@ -30,7 +32,7 @@ export const fetchStudentTypesPage = async (page, size) => {
 }
 
 export const fetchStudentTypesLookup = async () => {
-  const firstPage = await fetchStudentTypesPage(0, 500)
+  const firstPage = await fetchStudentTypesPage({ page: 0, size: 500 })
   const firstContent = Array.isArray(firstPage?.content) ? firstPage.content : []
   const totalPages = Number.isFinite(firstPage?.totalPages) ? firstPage.totalPages : 1
 
@@ -40,7 +42,7 @@ export const fetchStudentTypesLookup = async () => {
 
   const pageRequests = []
   for (let page = 1; page < totalPages; page += 1) {
-    pageRequests.push(fetchStudentTypesPage(page, 500))
+    pageRequests.push(fetchStudentTypesPage({ page, size: 500 }))
   }
 
   const restPages = await Promise.all(pageRequests)

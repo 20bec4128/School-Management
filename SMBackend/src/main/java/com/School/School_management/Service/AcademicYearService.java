@@ -5,9 +5,9 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 
 public interface AcademicYearService {
-    List<AcademicYearDto> list(Long schoolId);
+    List<AcademicYearDto> list(Long headOfficeId, Long schoolId);
 
-    Page<AcademicYearDto> page(Long schoolId, String search, Boolean running, int page, int size);
+    Page<AcademicYearDto> page(Long headOfficeId, Long schoolId, String search, Boolean running, int page, int size);
 
     AcademicYearDto create(AcademicYearDto dto);
 

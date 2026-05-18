@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 
-const academicYearOptions = ['2025-2026', '2026-2027']
 const classOptions = ['8', '9', '10', '11', '12']
 const sectionOptions = ['A', 'B', 'C', 'D']
 
@@ -13,6 +13,7 @@ const BulkAdmission = ({ onNavigate }) => {
     section: '',
     csvFile: null,
   })
+  const academicYearOptions = useAcademicYearOptions()
 
   const fileName = useMemo(() => form.csvFile?.name || 'No file selected', [form.csvFile])
 

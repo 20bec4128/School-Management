@@ -2,15 +2,21 @@ import { useMemo, useState, useEffect, useCallback } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { TablePagination } from '../components/table'
 import { fetchStudentsPage, deleteStudent } from '../apis/studentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSections } from '../apis/sectionsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
-  schoolId: '',
+  headOfficeId: '',
+  schoolId: 'All',
   className: 'Select',
   section: 'Select',
   group: 'Select',
@@ -28,7 +34,13 @@ const columnOptions = [
 ]
 
 const StudentList = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+  } = useAuth()
   const { activeSchoolId } = useSchool()
   
   const [students, setStudents] = useState([])
@@ -46,17 +58,51 @@ const StudentList = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
   const [refreshKey, setRefreshKey] = useState(0)
   const [schoolList, setSchoolList] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
+  const [classOptions, setClassOptions] = useState([])
+  const [sectionOptions, setSectionOptions] = useState([])
 
   const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
-  const isSchoolLocked = Boolean(scopedSchoolId) && role !== 'SUPER_ADMIN'
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeScoped = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
+  const isSchoolScoped = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+
+  const selectedSchoolIdForLookups = useMemo(() => {
+    if (isSchoolScoped && scopedSchoolId) return scopedSchoolId
+    if (pendingFilters.schoolId && pendingFilters.schoolId !== 'All') return pendingFilters.schoolId
+    return ''
+  }, [isSchoolScoped, scopedSchoolId, pendingFilters.schoolId])
+
+  const selectedClassLookup = useMemo(() => {
+    const target = String(pendingFilters.className || '')
+    if (!target || target === 'Select') return null
+    return Array.isArray(classOptions)
+      ? classOptions.find((item) =>
+          String(item?.className || item?.numericName || item?.name || '') === target,
+        ) || null
+      : null
+  }, [classOptions, pendingFilters.className])
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      const effectiveHeadOfficeId = isSchoolScoped
+        ? undefined
+        : isHeadOfficeScoped && authHeadOfficeId != null
+          ? String(authHeadOfficeId)
+          : filters.headOfficeId !== 'All' && filters.headOfficeId !== ''
+            ? filters.headOfficeId
+            : undefined
+      const effectiveSchoolId = isSchoolScoped && scopedSchoolId
+        ? scopedSchoolId
+        : filters.schoolId && filters.schoolId !== 'Select' && filters.schoolId !== 'All'
+          ? filters.schoolId
+          : undefined
       const res = await fetchStudentsPage(currentPage - 1, rowsPerPage, {
-        schoolId: scopedSchoolId || (filters.schoolId && filters.schoolId !== 'Select' ? filters.schoolId : undefined),
+        headOfficeId: effectiveHeadOfficeId,
+        schoolId: effectiveSchoolId,
         className: filters.className !== 'Select' ? filters.className : undefined,
         section: filters.section !== 'Select' ? filters.section : undefined,
         group: filters.group !== 'Select' ? filters.group : undefined,
@@ -70,7 +116,7 @@ const StudentList = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, rowsPerPage, filters, search, scopedSchoolId])
+  }, [currentPage, rowsPerPage, filters, search, scopedSchoolId, authHeadOfficeId, isHeadOfficeScoped, isSchoolScoped])
 
   useEffect(() => {
     void loadData()
@@ -85,12 +131,93 @@ const StudentList = ({ onNavigate }) => {
     setSelectedRows([])
   }, [scopedSchoolId])
 
-  const effectiveSchoolList = useMemo(() => {
+  useEffect(() => {
+    void fetchHeadOfficesPage(0, 500)
+      .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
+      .catch(() => setHeadOffices([]))
+  }, [])
+
+  useEffect(() => {
+    if (!selectedSchoolIdForLookups) {
+      setClassOptions([])
+      setSectionOptions([])
+      return
+    }
+
+    let cancelled = false
+    void fetchClasses({ schoolId: selectedSchoolIdForLookups })
+      .then((rows) => {
+        if (cancelled) return
+        setClassOptions(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setClassOptions([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedSchoolIdForLookups])
+
+  useEffect(() => {
+    if (!selectedSchoolIdForLookups || !selectedClassLookup?.id) {
+      setSectionOptions([])
+      return
+    }
+
+    let cancelled = false
+    void fetchSections({
+      schoolId: selectedSchoolIdForLookups,
+      classId: selectedClassLookup.id,
+    })
+      .then((rows) => {
+        if (cancelled) return
+        setSectionOptions(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSectionOptions([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedClassLookup, selectedSchoolIdForLookups])
+
+  useEffect(() => {
+    if (pendingFilters.section === 'Select') return
+    const exists = sectionOptions.some((item) =>
+      String(item?.sectionName || item?.name || '').trim() === String(pendingFilters.section).trim(),
+    )
+    if (!exists && sectionOptions.length > 0) {
+      setPendingFilters((prev) => ({ ...prev, section: 'Select' }))
+      setFilters((prev) => ({ ...prev, section: 'Select' }))
+    }
+  }, [pendingFilters.section, sectionOptions])
+
+  const schoolOptions = useMemo(() => {
     const list = Array.isArray(schoolList) ? schoolList.slice() : []
-    if (!scopedSchoolId) return list
-    const selected = list.find((s) => String(s?.id) === String(scopedSchoolId))
-    return selected ? [selected] : list
-  }, [schoolList, scopedSchoolId])
+    const filtered = pendingFilters.headOfficeId
+      ? list.filter((s) => String(s?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+      : isHeadOfficeScoped && authHeadOfficeId != null
+        ? list.filter((s) => String(s?.headOfficeId ?? '') === String(authHeadOfficeId))
+        : isSchoolScoped && scopedSchoolId
+          ? list.filter((s) => String(s?.id ?? '') === String(scopedSchoolId))
+          : list
+    return filtered.sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
+  }, [schoolList, pendingFilters.headOfficeId, isHeadOfficeScoped, authHeadOfficeId, isSchoolScoped, scopedSchoolId])
+
+  const headOfficeOptions = useMemo(() => {
+    const normalized = (Array.isArray(headOffices) ? headOffices : [])
+      .map((row) => ({ id: row?.id, name: row?.name || row?.headOfficeName || '' }))
+      .filter((row) => row.id != null && row.name)
+    if (isHeadOfficeScoped && authHeadOfficeId != null && authHeadOfficeName) {
+      const exists = normalized.some((row) => String(row.id) === String(authHeadOfficeId))
+      if (!exists) normalized.unshift({ id: authHeadOfficeId, name: authHeadOfficeName })
+    }
+    return normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [authHeadOfficeId, authHeadOfficeName, headOffices, isHeadOfficeScoped])
 
   const displayed = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -132,10 +259,41 @@ const StudentList = ({ onNavigate }) => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const reset = isSuperAdmin
+      ? { ...emptyFilters }
+      : {
+          headOfficeId: isHeadOfficeScoped && authHeadOfficeId != null ? String(authHeadOfficeId) : '',
+          schoolId: isSchoolScoped && scopedSchoolId ? String(scopedSchoolId) : 'All',
+          className: 'Select',
+          section: 'Select',
+          group: 'Select',
+        }
+    setPendingFilters(reset)
+    setFilters(reset)
     setCurrentPage(1)
   }
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    const nextFilters = {
+      headOfficeId: isHeadOfficeScoped && authHeadOfficeId != null ? String(authHeadOfficeId) : '',
+      schoolId: isSchoolScoped && scopedSchoolId ? String(scopedSchoolId) : 'All',
+      className: 'Select',
+      section: 'Select',
+      group: 'Select',
+    }
+    setPendingFilters(nextFilters)
+    setFilters(nextFilters)
+  }, [authHeadOfficeId, isHeadOfficeScoped, isSchoolScoped, isSuperAdmin, scopedSchoolId])
+
+  useEffect(() => {
+    const hasSelectedClass = selectedClassLookup != null
+    if (pendingFilters.className === 'Select') return
+    if (classOptions.length > 0 && !hasSelectedClass) {
+      setPendingFilters((prev) => ({ ...prev, className: 'Select', section: 'Select' }))
+      setFilters((prev) => ({ ...prev, className: 'Select', section: 'Select' }))
+    }
+  }, [classOptions.length, pendingFilters.className, selectedClassLookup])
 
   const openAdd = () => {
     sessionStorage.removeItem('edit-student-row')
@@ -155,14 +313,6 @@ const StudentList = ({ onNavigate }) => {
     } catch (err) {
       alert(err.message)
     }
-  }
-
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
   }
 
   return (
@@ -227,7 +377,11 @@ const StudentList = ({ onNavigate }) => {
                 </span>
               </button>
 
-              <RowsPerPageSelect value={rowsPerPage} onChange={(v) => { setRowsPerPage(v); setCurrentPage(1) }} />
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(v) => { setRowsPerPage(v); setCurrentPage(1) }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -329,39 +483,16 @@ const StudentList = ({ onNavigate }) => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            className="px-20 py-16 border-top border-neutral-200"
+            paginationProps={{
+              currentPage,
+              totalPages,
+              setCurrentPage,
+              rowsPerPage,
+              pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements} entries`,
+            }}
+          />
         </div>
       </div>
 
@@ -371,38 +502,97 @@ const StudentList = ({ onNavigate }) => {
         onClose={() => setIsFilterSidebarOpen(false)}
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
-            <select
-              id="schoolId"
-              className="form-control form-select"
-              value={scopedSchoolId || pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
-              disabled={isSchoolLocked}
-            >
-              <option value="">Select School</option>
-              {effectiveSchoolList.map((s) => (
-                <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOfficeOptions}
+                schoolOptions={schoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId}
+                onHeadOfficeChange={(value) => {
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'All', className: 'Select', section: 'Select' }))
+                }}
+                selectedSchoolId={pendingFilters.schoolId === 'All' ? '' : pendingFilters.schoolId}
+              onSchoolChange={(value) => setPendingFilters((prev) => ({ ...prev, schoolId: value || 'All', className: 'Select', section: 'Select' }))}
+            />
+          ) : (
+            <>
+              {isHeadOfficeScoped ? (
+                <div>
+                  <label className="text-sm fw-semibold text-primary-light mb-8">Head Office</label>
+                  <input className="form-control" value={authHeadOfficeName || ''} readOnly />
+                </div>
+              ) : null}
+              {isSchoolScoped ? (
+                <div>
+                  <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
+                  <input className="form-control" value={authSchoolName || schoolOptions[0]?.schoolName || ''} readOnly />
+                </div>
+              ) : (
+                <div>
+                  <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
+                  <select
+                    id="schoolId"
+                    className="form-control form-select"
+                    value={pendingFilters.schoolId}
+                    onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value, className: 'Select', section: 'Select' }))}
+                  >
+                    <option value="All">All Schools</option>
+                    {schoolOptions.map((s) => (
+                      <option key={s.id} value={String(s.id)}>{s.schoolName || s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          <div>
-            <label className="text-sm fw-semibold text-primary-light mb-8">Class</label>
-            <select id="className" className="form-control form-select" value={pendingFilters.className} onChange={handlePendingFilterChange}>
-              <option value="Select">Select</option>
-              <option>6</option><option>7</option><option>8</option><option>9</option>
-              <option>10</option><option>11</option><option>12</option>
-            </select>
-          </div>
+              <div>
+                <label className="text-sm fw-semibold text-primary-light mb-8">Class</label>
+                <select
+                  id="className"
+                  className="form-control form-select"
+                  value={pendingFilters.className}
+                  onChange={(e) =>
+                    setPendingFilters((prev) => ({
+                      ...prev,
+                      className: e.target.value,
+                      section: 'Select',
+                    }))
+                  }
+                  disabled={!selectedSchoolIdForLookups}
+                >
+                  <option value="Select">Select</option>
+                  {classOptions.map((item) => {
+                    const label = item?.className || item?.numericName || item?.name || String(item?.id || '')
+                    return (
+                      <option key={String(item?.id ?? label)} value={label}>
+                        {label}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
 
-          <div>
-            <label className="text-sm fw-semibold text-primary-light mb-8">Section</label>
-            <select id="section" className="form-control form-select" value={pendingFilters.section} onChange={handlePendingFilterChange}>
-              <option value="Select">Select</option>
-              <option>A</option><option>B</option><option>C</option><option>D</option>
-            </select>
-          </div>
+              <div>
+                <label className="text-sm fw-semibold text-primary-light mb-8">Section</label>
+                <select
+                  id="section"
+                  className="form-control form-select"
+                  value={pendingFilters.section}
+                  onChange={handlePendingFilterChange}
+                  disabled={!selectedSchoolIdForLookups || pendingFilters.className === 'Select'}
+                >
+                  <option value="Select">Select</option>
+                  {sectionOptions.map((item) => {
+                    const label = item?.sectionName || item?.name || String(item?.id || '')
+                    return (
+                      <option key={String(item?.id ?? label)} value={label}>
+                        {label}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8">Group</label>
