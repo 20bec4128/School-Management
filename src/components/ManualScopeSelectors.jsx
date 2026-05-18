@@ -13,11 +13,57 @@ const ManualScopeSelectors = ({
   onSchoolChange,
   schoolLabel = 'School',
   showSchoolSelector = true,
+  showHeadOfficeSelector = true,
   compact = false,
+  disabled = false,
 }) => {
   if (!enabled) return null
 
   const fieldClassName = compact ? 'avm-field' : 'avm-field full'
+
+  if (!showHeadOfficeSelector) {
+    if (!showSchoolSelector) return null
+
+    return (
+      <div className={fieldClassName}>
+        <label className="avm-label" htmlFor="manualSchoolId">
+          {schoolLabel}
+        </label>
+        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: '0.85rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#667085',
+              fontSize: '0.95rem',
+              lineHeight: 1,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <i className={FIELD_ICONS[schoolLabel] || FIELD_ICONS.School} />
+          </span>
+          <select
+            id="manualSchoolId"
+            className="form-control form-select avm-select avm-input w-100"
+            value={selectedSchoolId}
+            onChange={(e) => onSchoolChange(e.target.value)}
+            disabled={disabled}
+          >
+            <option value="">{`Select ${schoolLabel}`}</option>
+            {schoolOptions.map((school) => (
+              <option key={String(school.id)} value={String(school.id)}>
+                {school.schoolName || school.name || String(school.id)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={compact ? 'avm-grid' : 'avm-field full'}>
@@ -47,6 +93,7 @@ const ManualScopeSelectors = ({
             className="form-control form-select avm-select avm-input"
             value={selectedHeadOfficeId}
             onChange={(e) => onHeadOfficeChange(e.target.value)}
+            disabled={disabled}
           >
             <option value="">Select Head Office</option>
             {headOffices.map((ho) => (
@@ -85,12 +132,12 @@ const ManualScopeSelectors = ({
               className="form-control form-select avm-select avm-input w-100"
               value={selectedSchoolId}
               onChange={(e) => onSchoolChange(e.target.value)}
-              disabled={!selectedHeadOfficeId}
+              disabled={disabled || !selectedHeadOfficeId}
             >
               <option value="">{selectedHeadOfficeId ? `Select ${schoolLabel}` : 'Select Head Office First'}</option>
               {schoolOptions.map((school) => (
                 <option key={String(school.id)} value={String(school.id)}>
-                  {school.schoolName}
+                  {school.schoolName || school.name || String(school.id)}
                 </option>
               ))}
             </select>

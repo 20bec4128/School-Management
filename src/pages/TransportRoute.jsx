@@ -362,7 +362,7 @@ const TransportRoute = ({ onNavigate }) => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown
-                rows={rows}
+                rows={routes}
                 columns={columnOptions}
                 visibleColumns={visibleColumns}
                 loadRows={loadExportRows}
@@ -371,6 +371,9 @@ const TransportRoute = ({ onNavigate }) => {
                 sheetName="Transport Routes"
                 pdfTitle="Transport Route Report"
               />
+
+
+
 
               <button
                 type="button"

@@ -436,42 +436,6 @@ const AddSchool = ({ onNavigate }) => {
             {/* ═══ TAB 0 – Basic Information ═══ */}
             {activeTab === 0 && (
               <div className="row">
-                <FormField label="School URL" required full>
-                  <input
-                    type="text"
-                    id="schoolUrl"
-                    className="form-control"
-                    placeholder="south-point OR liverpool"
-                    value={form.schoolUrl}
-                    onChange={handleChange}
-                    style={{ paddingLeft: '2.5rem' }}
-                  />
-                </FormField>
-
-                <FormField label="School Code" full>
-                  <input
-                    type="text"
-                    id="schoolCode"
-                    className="form-control"
-                    placeholder="Enter school code"
-                    value={form.schoolCode}
-                    onChange={handleChange}
-                    style={{ paddingLeft: '2.5rem' }}
-                  />
-                </FormField>
-
-                <FormField label="School Name" required full>
-                  <input
-                    type="text"
-                    id="schoolName"
-                    className="form-control"
-                    placeholder="Enter school name"
-                    value={form.schoolName}
-                    onChange={handleChange}
-                    style={{ paddingLeft: '2.5rem' }}
-                  />
-                </FormField>
-
                 <FormField label="Head Office" required full>
                   {isSuperAdmin ? (
                     <select id="headOfficeId" className="form-control form-select" value={form.headOfficeId} onChange={handleChange} style={{ paddingLeft: '2.5rem' }}>
@@ -484,6 +448,43 @@ const AddSchool = ({ onNavigate }) => {
                     <input type="text" className="form-control" value={currentHeadOfficeName || ""} disabled style={{ paddingLeft: '2.5rem' }} />
                   )}
                 </FormField>
+                <FormField label="School URL" required   >
+                  <input
+                    type="text"
+                    id="schoolUrl"
+                    className="form-control"
+                    placeholder="south-point OR liverpool"
+                    value={form.schoolUrl}
+                    onChange={handleChange}
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                </FormField>
+
+                <FormField label="School Code" >
+                  <input
+                    type="text"
+                    id="schoolCode"
+                    className="form-control"
+                    placeholder="Enter school code"
+                    value={form.schoolCode}
+                    onChange={handleChange}
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                </FormField>
+
+                <FormField label="School Name" required >
+                  <input
+                    type="text"
+                    id="schoolName"
+                    className="form-control"
+                    placeholder="Enter school name"
+                    value={form.schoolName}
+                    onChange={handleChange}
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                </FormField>
+
+                
 
                 <FormField label="School Admin Username" required>
                   <input type="text" id="adminUsername" className="form-control" placeholder="Admin username" value={form.adminUsername} onChange={handleChange} style={{ paddingLeft: '2.5rem' }} />
@@ -527,7 +528,7 @@ const AddSchool = ({ onNavigate }) => {
                   <input type="date" id="registrationDate" className="form-control" value={form.registrationDate} onChange={handleChange} style={{ paddingLeft: '2.5rem' }} />
                 </FormField>
 
-                <FormField label="Email" required full>
+                <FormField label="Email" required >
                   <input type="email" id="email" className="form-control" placeholder="school@example.com" value={form.email} onChange={handleChange} style={{ paddingLeft: '2.5rem' }} />
                 </FormField>
 

@@ -4,106 +4,62 @@ export function TablePagination({ paginationProps }) {
   const {
     currentPage,
     totalPages,
-    totalRecords,
-    rowsPerPage,
     pageInfo,
     onPageChange,
   } = paginationProps;
 
-  // Generate smart page buttons
-  const getPageNumbers = () => {
-    const pages = [];
-    const delta = 2;
-    const range = [];
-    const rangeWithDots = [];
-
-    for (
-      let i = Math.max(2, currentPage - delta);
-      i <= Math.min(totalPages - 1, currentPage + delta);
-      i++
-    ) {
-      range.push(i);
+  const pageNumbers = Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+    if (totalPages <= 3) {
+      return index + 1;
     }
 
-    if (currentPage - delta > 2) {
-      rangeWithDots.push(1, '...');
-    } else {
-      rangeWithDots.push(1);
+    if (currentPage <= 2) {
+      return index + 1;
     }
 
-    rangeWithDots.push(...range);
-
-    if (currentPage + delta < totalPages - 1) {
-      rangeWithDots.push('...', totalPages);
-    } else if (totalPages > 1) {
-      rangeWithDots.push(totalPages);
+    if (currentPage >= totalPages - 1) {
+      return totalPages - 2 + index;
     }
 
-    return rangeWithDots;
-  };
-
-  const pageNumbers = getPageNumbers();
+    return currentPage - 1 + index;
+  }).filter((page, index, arr) => page > 0 && arr.indexOf(page) === index);
 
   return (
-    <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3">
-      {/* Left: Page info */}
-      <div className="text-muted small">
+    <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
+      <span className="text-sm text-secondary-light">
         {pageInfo}
+      </span>
+
+      <div className="d-flex align-items-center gap-8 ms-auto">
+        <button
+          type="button"
+          className="btn btn-sm btn-light border"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+        >
+          Prev
+        </button>
+
+        {pageNumbers.map((page) => (
+          <button
+            key={page}
+            type="button"
+            className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+            onClick={() => onPageChange(page)}
+          >
+            {page}
+          </button>
+        ))}
+
+        <button
+          type="button"
+          className="btn btn-sm btn-light border"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+        >
+          Next
+        </button>
       </div>
-
-      {/* Right: Pagination controls */}
-      <nav>
-        <ul className="pagination pagination-sm mb-0 tbl-pagination">
-          {/* Previous button */}
-          <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-            <button
-              type="button"
-              className="page-link"
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <i className="ri-arrow-left-s-line"></i>
-            </button>
-          </li>
-
-          {/* Page numbers */}
-          {pageNumbers.map((page, index) => {
-            if (page === '...') {
-              return (
-                <li key={`dots-${index}`} className="page-item disabled">
-                  <span className="page-link">...</span>
-                </li>
-              );
-            }
-
-            const isActive = page === currentPage;
-
-            return (
-              <li key={page} className={`page-item ${isActive ? 'active' : ''}`}>
-                <button
-                  type="button"
-                  className="page-link"
-                  onClick={() => onPageChange(page)}
-                >
-                  {page}
-                </button>
-              </li>
-            );
-          })}
-
-          {/* Next button */}
-          <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-            <button
-              type="button"
-              className="page-link"
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              <i className="ri-arrow-right-s-line"></i>
-            </button>
-          </li>
-        </ul>
-      </nav>
     </div>
   );
 }

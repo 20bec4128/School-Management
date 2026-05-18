@@ -9,6 +9,8 @@ import {
   updateDepartment,
 } from '../apis/departmentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -318,17 +320,7 @@ const TeacherDepartment = () => {
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
 
-              <form className="navbar-search dt-search m-0" onSubmit={(event) => event.preventDefault()}>
-                <input
-                  type="text"
-                  className="dt-input bg-transparent radius-4"
-                  name="search"
-                  placeholder="Search..."
-                  value={search}
-                  onChange={handleSearchChange}
-                />
-                <iconify-icon icon="ion:search-outline" className="icon"></iconify-icon>
-              </form>
+              
 
               <button
                 type="button"
@@ -369,25 +361,27 @@ const TeacherDepartment = () => {
                   ))}
                 </ul>
               </div>
+              <RowsPerPageSelect
+              value={rowsPerPage}
+              onChange={(v) => {
+                setRowsPerPage(v)
+                setCurrentPage(1)
+              }}
+              className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+            />
             </div>
-
-            <div className="d-flex align-items-center gap-8 text-secondary-light">
-              <span>Rows per page:</span>
-              <div className="dt-length">
-                <select
-                  name="dataTable_length"
-                  className="dt-input form-control form-select"
-                  value={rowsPerPage}
-                  onChange={handleRowsPerPageChange}
-                >
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                  <option value="50">50</option>
-                  <option value="100">100</option>
-                </select>
-              </div>
-            </div>
+<form className="navbar-search dt-search m-0" onSubmit={(event) => event.preventDefault()}>
+                <input
+                  type="text"
+                  className="dt-input bg-transparent radius-4"
+                  name="search"
+                  placeholder="Search..."
+                  value={search}
+                  onChange={handleSearchChange}
+                />
+                <iconify-icon icon="ion:search-outline" className="icon"></iconify-icon>
+              </form>
+            
           </div>
 
           <div className="p-0 table-responsive">
@@ -477,45 +471,17 @@ const TeacherDepartment = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1}
-              {' '}-{' '}
-              {totalElements === 0
-                ? 0
-                : Math.min((currentPage - 1) * rowsPerPage + filteredDepartments.length, totalElements)} of {totalElements}
-            </span>
-
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-
-              {getVisiblePages().map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(page)}
-                >
-                  {page}
-                </button>
-              ))}
-
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                totalRecords: totalElements,
+                rowsPerPage,
+                pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
           </div>
         </div>
       </div>

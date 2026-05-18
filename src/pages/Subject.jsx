@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { fetchSubjects, deleteSubject } from '../apis/subjectsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import '../assets/css/addModalShared.css'
+import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
   school: 'Select',
@@ -156,14 +158,6 @@ const SubjectList = ({ onNavigate }) => {
     }
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
-  }
-
   const schoolOptions = useMemo(() => {
     const fromRows = subjects.map((r) => r?.school).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
@@ -197,6 +191,8 @@ const SubjectList = ({ onNavigate }) => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
+                            <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
+              
               <div className="dropdown">
                 <button
                   type="button"
@@ -241,7 +237,14 @@ const SubjectList = ({ onNavigate }) => {
                 </span>
               </button>
 
-              <RowsPerPageSelect value={rowsPerPage} onChange={(v) => { setRowsPerPage(v); setCurrentPage(1) }} />
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(v) => {
+                  setRowsPerPage(v)
+                  setCurrentPage(1)
+                }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -342,32 +345,17 @@ const SubjectList = ({ onNavigate }) => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length} entries
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                Prev
-              </button>
-              {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
-                const base = Math.max(1, currentPage - 1)
-                const pageNumber = Math.min(totalPages, base + index)
-                return pageNumber > 0 ? (
-                  <button
-                    key={pageNumber}
-                    type="button"
-                    className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                    onClick={() => setCurrentPage(pageNumber)}
-                  >
-                    {pageNumber}
-                  </button>
-                ) : null
-              })}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                Next
-              </button>
-            </div>
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                totalRecords: filtered.length,
+                rowsPerPage,
+                pageInfo: `Showing ${filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, filtered.length)} of ${filtered.length} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
           </div>
         </div>
       </div>

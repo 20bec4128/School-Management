@@ -149,6 +149,31 @@ const readEditRow = () => {
   }
 }
 
+const normalizeEditRow = (row) => {
+  if (!row) return null
+
+  const pPhone = splitPhoneValue(row.phone)
+  const fPhone = splitPhoneValue(row.fatherPhone)
+  const mPhone = splitPhoneValue(row.motherPhone)
+  const uPhone = splitPhoneValue(row.parentUsername)
+
+  return {
+    ...emptyForm,
+    ...row,
+    id: row.id ?? null,
+    schoolId: row.schoolId != null ? String(row.schoolId) : '',
+    classId: row.classId != null ? String(row.classId) : '',
+    sectionId: row.sectionId != null ? String(row.sectionId) : '',
+    phone: pPhone.number,
+    fatherPhone: fPhone.number,
+    motherPhone: mPhone.number,
+    parentUsername: uPhone.number,
+    sameAsGuardianAddress: Boolean(row.sameAsGuardianAddress),
+    password: '',
+    parentPassword: '',
+  }
+}
+
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
   Name: 'ri-user-3-line',
@@ -276,46 +301,27 @@ const AddStudent = ({ onNavigate }) => {
   })
 
   const [form, setForm] = useState(() => {
-    if (initialEditRow) {
-      const pPhone = splitPhoneValue(initialEditRow.phone)
-      const fPhone = splitPhoneValue(initialEditRow.fatherPhone)
-      const mPhone = splitPhoneValue(initialEditRow.motherPhone)
-      const uPhone = splitPhoneValue(initialEditRow.parentUsername)
-      
-      return {
-        ...initialEditRow,
-        schoolId: initialEditRow.schoolId ? String(initialEditRow.schoolId) : '',
-        phone: pPhone.number,
-        fatherPhone: fPhone.number,
-        motherPhone: mPhone.number,
-        parentUsername: uPhone.number,
-        password: '',
-        parentPassword: '',
-      }
-    }
+    if (initialEditRow) return normalizeEditRow(initialEditRow)
     const listSchoolId = isSuperAdmin ? (activeSchoolId ? String(activeSchoolId) : '') : (authSchoolId ? String(authSchoolId) : '')
     return { ...emptyForm, schoolId: listSchoolId }
   })
 
   useEffect(() => {
-    if (initialEditRow) {
-      const pPhone = splitPhoneValue(initialEditRow.phone)
-      const fPhone = splitPhoneValue(initialEditRow.fatherPhone)
-      const mPhone = splitPhoneValue(initialEditRow.motherPhone)
-      const uPhone = splitPhoneValue(initialEditRow.parentUsername)
-      setPhoneCodes({
-        phone: pPhone.code,
-        fatherPhone: fPhone.code,
-        motherPhone: mPhone.code,
-        parentUsername: uPhone.code,
-      })
-      setPreviews({
-        fatherPhoto: initialEditRow.fatherPhotoUrl || null,
-        motherPhoto: initialEditRow.motherPhotoUrl || null,
-        transferCertificate: initialEditRow.transferCertificateUrl || null,
-        photo: initialEditRow.photoUrl || null,
-      })
-    }
+    if (!initialEditRow) return
+    const normalizedRow = normalizeEditRow(initialEditRow)
+    setForm(normalizedRow)
+    setPhoneCodes({
+      phone: splitPhoneValue(initialEditRow.phone).code,
+      fatherPhone: splitPhoneValue(initialEditRow.fatherPhone).code,
+      motherPhone: splitPhoneValue(initialEditRow.motherPhone).code,
+      parentUsername: splitPhoneValue(initialEditRow.parentUsername).code,
+    })
+    setPreviews({
+      fatherPhoto: initialEditRow.fatherPhotoUrl || null,
+      motherPhoto: initialEditRow.motherPhotoUrl || null,
+      transferCertificate: initialEditRow.transferCertificateUrl || null,
+      photo: initialEditRow.photoUrl || null,
+    })
   }, [initialEditRow])
 
   useEffect(() => () => sessionStorage.removeItem(EDIT_STORAGE_KEY), [])
@@ -344,6 +350,51 @@ const AddStudent = ({ onNavigate }) => {
       manualScope.setSelectedScope(String(school.headOfficeId), String(initialEditRow.schoolId ?? ''))
     }
   }, [initialEditRow, isSuperAdmin, schools, manualScope])
+
+  useEffect(() => {
+    if (!initialEditRow) return
+
+    setForm((prev) => {
+      let next = prev
+
+      if (!prev.schoolId) {
+        const normalizedSchoolName = String(initialEditRow.schoolName || '').trim().toLowerCase()
+        if (normalizedSchoolName) {
+          const matchedSchool = schools.find((school) =>
+            [school?.schoolName, school?.name].some(
+              (candidate) => String(candidate || '').trim().toLowerCase() === normalizedSchoolName,
+            ),
+          )
+          if (matchedSchool?.id != null) {
+            next = { ...next, schoolId: String(matchedSchool.id) }
+          }
+        }
+      }
+
+      if (!next.classId && prev.className) {
+        const matchedClass = findMatchingClassOption(prev.className, classOptions)
+        if (matchedClass?.id != null) {
+          next = { ...next, classId: String(matchedClass.id) }
+        }
+      }
+
+      if (!next.sectionId && prev.section) {
+        const normalizedSection = String(prev.section).trim().toLowerCase()
+        if (normalizedSection) {
+          const matchedSection = sectionOptions.find((section) =>
+            [section?.name, section?.sectionName].some(
+              (candidate) => String(candidate || '').trim().toLowerCase() === normalizedSection,
+            ),
+          )
+          if (matchedSection?.id != null) {
+            next = { ...next, sectionId: String(matchedSection.id) }
+          }
+        }
+      }
+
+      return next === prev ? prev : next
+    })
+  }, [initialEditRow, schools, classOptions, sectionOptions])
 
   useEffect(() => {
     let cancelled = false

@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import { fetchCertificateTypesLookup } from '../apis/certificateTypesApi'
 
 const students = [
   {
@@ -58,7 +59,6 @@ const students = [
 ]
 
 const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-const certificateTypeOptions = ['Merit Certificate', 'Participation Certificate', 'Completion Certificate']
 
 const emptyFilters = {
   school: 'Select',
@@ -84,12 +84,37 @@ const GenerateCertificate = () => {
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
+  const [certificateTypeOptions, setCertificateTypeOptions] = useState([
+    'Merit Certificate',
+    'Participation Certificate',
+    'Completion Certificate',
+  ])
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const schoolOptions = useMemo(
     () => Array.from(new Set(students.map((r) => r.school))),
     [],
   )
+
+  useEffect(() => {
+    let cancelled = false
+    const loadCertificateTypes = async () => {
+      try {
+        const rows = await fetchCertificateTypesLookup()
+        if (cancelled) return
+        const options = Array.from(
+          new Set((Array.isArray(rows) ? rows : []).map((row) => row?.certificateName).filter(Boolean)),
+        ).sort((a, b) => a.localeCompare(b))
+        if (options.length > 0) setCertificateTypeOptions(options)
+      } catch {
+        if (cancelled) return
+      }
+    }
+    void loadCertificateTypes()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     if (!hasSearched) return []

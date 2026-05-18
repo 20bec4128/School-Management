@@ -3,16 +3,20 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { createSection, deleteSection, fetchSections, updateSection } from '../apis/sectionsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { normalizeRole } from '../utils/roles'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 
 const emptyForm = {
+  headOfficeId: '',
   schoolId: '',
   classId: '',
   teacherId: '',
@@ -21,12 +25,13 @@ const emptyForm = {
 }
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   school: 'Select',
   className: 'Select',
   classTeacher: 'Select',
 }
 
-const STEPS = ['Basic']
+const STEPS = ['Scope & Selection']
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
@@ -43,6 +48,9 @@ const columnOptions = [
   { key: 'classTeacher', label: 'Class Teacher' },
   { key: 'note', label: 'Note' },
 ]
+
+const getSchoolById = (rows, schoolId) =>
+  (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -79,9 +87,14 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Section = () => {
-  const { schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { schoolId: authSchoolId, schoolName: authSchoolName, role: authRole, user } = useAuth()
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const [sections, setSections] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [teachersLookup, setTeachersLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
@@ -107,7 +120,14 @@ const Section = () => {
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const resolvedSchoolName = authSchoolName || ''
   const scopedSchoolId = isSchoolSelectionEnabled && activeSchoolId ? String(activeSchoolId) : resolvedSchoolId
-  const isSchoolLocked = (!isSchoolSelectionEnabled && !!resolvedSchoolId) || (!!activeSchoolId && isSchoolSelectionEnabled)
+  const isSchoolLocked = !isSuperAdmin && ((!isSchoolSelectionEnabled && !!resolvedSchoolId) || (!!activeSchoolId && isSchoolSelectionEnabled))
+  const schoolOptionsFor = useCallback(
+    (headOfficeId) =>
+      [...(Array.isArray(schoolsLookup) ? schoolsLookup : [])]
+        .filter((school) => !headOfficeId || String(school?.headOfficeId ?? '') === String(headOfficeId))
+        .sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || ''))),
+    [schoolsLookup],
+  )
 
   const scopedSections = useMemo(() => {
     if (!isSchoolSelectionEnabled || !activeSchoolId) return sections
@@ -130,7 +150,20 @@ const Section = () => {
   }, [activeSchoolId, isSchoolSelectionEnabled, resolvedSchoolName, schoolsLookup, scopedSchoolId])
 
   const loadLookups = useCallback(async () => {
-    const [schoolsResult, teachersResult] = await Promise.allSettled([fetchSchoolsLookup(), fetchTeachers()])
+    const [headOfficesResult, schoolsResult, teachersResult] = await Promise.allSettled([
+      fetchHeadOfficesPage(0, 500),
+      fetchSchoolsLookup(),
+      fetchTeachers(),
+    ])
+    const headOfficesData = headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : []
+    setHeadOffices(
+      Array.isArray(headOfficesData?.content)
+        ? headOfficesData.content
+            .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
+            .filter((ho) => ho.id != null && ho.name)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+        : [],
+    )
     const schools = schoolsResult.status === 'fulfilled' ? schoolsResult.value : []
     const teachers = teachersResult.status === 'fulfilled' ? teachersResult.value : []
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
@@ -148,6 +181,7 @@ const Section = () => {
     setError('')
     try {
       const data = await fetchSections({
+        headOfficeId: filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined,
         schoolId: scopedSchoolId || undefined,
       })
       setSections(Array.isArray(data) ? data : [])
@@ -157,7 +191,7 @@ const Section = () => {
     } finally {
       setLoading(false)
     }
-  }, [scopedSchoolId])
+  }, [filters.headOfficeId, scopedSchoolId])
 
   const loadClassesForSchool = useCallback(async (schoolId) => {
     if (!schoolId) {
@@ -242,14 +276,22 @@ const Section = () => {
   }
 
   const handleSchoolChange = (setter) => async (e) => {
-    const schoolId = e.target.value
+    const schoolId = typeof e === 'string' ? e : e?.target?.value
     setter((prev) => ({ ...prev, schoolId, classId: '' }))
     await loadClassesForSchool(schoolId)
   }
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+    setPendingFilters((prev) => {
+      if (id === 'headOfficeId') {
+        return { ...prev, headOfficeId: value, school: 'Select' }
+      }
+      if (id === 'school') {
+        return { ...prev, school: value }
+      }
+      return { ...prev, [id]: value }
+    })
   }
 
   const handleApplyFilters = (e) => {
@@ -267,18 +309,31 @@ const Section = () => {
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
+    const selectedSchool = getSchoolById(schoolsLookup, resolvedSchoolId)
+    setAddForm(
+      !isSuperAdmin && resolvedSchoolId
+        ? {
+            ...emptyForm,
+            headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : '',
+            schoolId: resolvedSchoolId,
+          }
+        : emptyForm,
+    )
     setAddStep(0)
     setIsAddOpen(true)
-    void loadClassesForSchool(resolvedSchoolId)
+    if (!isSuperAdmin) {
+      void loadClassesForSchool(resolvedSchoolId)
+    }
   }
 
   const openEdit = (row) => {
     setError('')
     setEditingId(row?.id ?? null)
     const schoolId = row?.schoolId != null ? String(row.schoolId) : resolvedSchoolId
+    const selectedSchool = getSchoolById(schoolsLookup, schoolId)
     void loadClassesForSchool(schoolId)
     setEditForm({
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : '',
       schoolId,
       classId: row?.classId != null ? String(row.classId) : '',
       teacherId: row?.teacherId != null ? String(row.teacherId) : '',
@@ -365,24 +420,30 @@ const Section = () => {
 
   const renderForm = (form, setter) => (
     <>
-      <p className="avm-section-title">Basic Information</p>
+      <p className="avm-section-title">{STEPS[0]}</p>
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select
-            className="avm-select"
-            id="schoolId"
-            value={form.schoolId}
-            onChange={handleSchoolChange(setter)}
-            disabled={saving || isSchoolLocked}
-          >
-            <option value="">--Select School--</option>
-            {effectiveSchoolsLookup.map((s) => (
-              <option key={s.id} value={String(s.id)}>
-                {s.schoolName}
-              </option>
-            ))}
-          </select>
-        </FormField>
+        <ManualScopeSelectors
+          enabled
+          headOffices={headOffices}
+          schoolOptions={schoolOptionsFor(form.headOfficeId)}
+          selectedHeadOfficeId={form.headOfficeId}
+          onHeadOfficeChange={(value) =>
+            setter((prev) => ({ ...prev, headOfficeId: value, schoolId: '', classId: '' }))
+          }
+          selectedSchoolId={form.schoolId}
+          onSchoolChange={(value) => {
+            const selectedSchool = getSchoolById(schoolsLookup, value)
+            void loadClassesForSchool(value)
+            setter((prev) => ({
+              ...prev,
+              schoolId: value,
+              headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+              classId: '',
+            }))
+          }}
+          schoolLabel="School"
+          disabled={saving || (!isSuperAdmin && isSchoolLocked)}
+        />
 
         <FormField label="Name" required full>
           <input
@@ -706,7 +767,7 @@ const Section = () => {
 
       {/* Add Modal */}
       <WizardPopup
-        modalWidth="540px"
+        modalWidth="760px"
         open={isAddOpen}
         title="Add Section"
         steps={STEPS}
@@ -722,7 +783,7 @@ const Section = () => {
 
       {/* Edit Modal */}
       <WizardPopup
-        modalWidth="540px"
+        modalWidth="760px"
         open={isEditOpen}
         title="Edit Section"
         steps={STEPS}
@@ -745,25 +806,51 @@ const Section = () => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="school"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            {isSuperAdmin ? (
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOffices}
+                schoolOptions={schoolOptionsFor(pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)}
+                selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
+                onHeadOfficeChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    headOfficeId: value || 'Select',
+                    school: 'Select',
+                  }))
+                }
+                selectedSchoolId={pendingFilters.school === 'Select' ? '' : pendingFilters.school}
+                onSchoolChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    school: value || 'Select',
+                  }))
+                }
+                schoolLabel="School"
+              />
+            ) : (
+              <div>
+                <label
+                  htmlFor="school"
+                  className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+                >
+                  School
+                </label>
+                <select
+                  id="school"
+                  className="form-control form-select"
+                  value={pendingFilters.school}
+                  onChange={handlePendingFilterChange}
+                >
+                  <option value="Select">Select School</option>
+                  {schoolOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div>

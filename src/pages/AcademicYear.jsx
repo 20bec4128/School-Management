@@ -8,6 +8,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { createAcademicYear, deleteAcademicYear, fetchAcademicYearsPage, updateAcademicYear } from '../apis/academicYearsApi'
 import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
 
 const emptyForm = {
@@ -369,20 +370,14 @@ const AcademicYear = () => {
                 <i className="ri-arrow-right-line" />
               </button>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(v) => {
+                  setRowsPerPage(v)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">

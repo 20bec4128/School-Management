@@ -31,9 +31,9 @@ const ExportDropdown = ({
   columns = [],
   visibleColumns = null,
   mapRow,
-  fileName = 'Export',
-  sheetName = 'Sheet1',
-  pdfTitle = 'Export Report',
+  fileName = '',
+  sheetName = '',
+  pdfTitle = '',
   pdfOrientation = 'landscape',
   onExportExcel,
   onExportPDF,
@@ -156,6 +156,8 @@ const ExportDropdown = ({
 
   const baseName = sanitizeFileName(fileName) || resolveAutoFileName() || 'Export'
   const baseNameNormalized = String(baseName).replace(/\.(xlsx|xls|pdf)$/i, '')
+  const resolvedSheetName = sanitizeFileName(sheetName) || baseNameNormalized || 'Sheet1'
+  const resolvedPdfTitle = String(pdfTitle || resolveAutoFileName() || baseNameNormalized || 'Export Report')
 
   const exportExcel = async () => {
     if (typeof onExportExcel === 'function' && !hasBuiltInExcel) {
@@ -166,7 +168,7 @@ const ExportDropdown = ({
       }
       const worksheet = XLSX.utils.json_to_sheet(domExport.exportRows)
       const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || 'Sheet1'))
+      XLSX.utils.book_append_sheet(workbook, worksheet, String(resolvedSheetName))
       XLSX.writeFile(workbook, `${baseNameNormalized}.xlsx`)
       return
     }
@@ -176,7 +178,7 @@ const ExportDropdown = ({
       if (!domExport) return
       const worksheet = XLSX.utils.json_to_sheet(domExport.exportRows)
       const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || 'Sheet1'))
+      XLSX.utils.book_append_sheet(workbook, worksheet, String(resolvedSheetName))
       XLSX.writeFile(workbook, `${baseNameNormalized}.xlsx`)
       return
     }
@@ -193,7 +195,7 @@ const ExportDropdown = ({
     })
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || 'Sheet1'))
+    XLSX.utils.book_append_sheet(workbook, worksheet, String(resolvedSheetName))
     XLSX.writeFile(workbook, `${baseNameNormalized}.xlsx`)
   }
 
@@ -206,7 +208,7 @@ const ExportDropdown = ({
       }
       const { JsPDF, autoTable } = await ensurePdfTools()
       const doc = new JsPDF({ orientation: pdfOrientation })
-      doc.text(String(pdfTitle || 'Export Report'), 14, 10)
+      doc.text(resolvedPdfTitle, 14, 10)
       autoTable(doc, {
         head: [domExport.exportColumns],
         body: domExport.exportRows.map((row) => domExport.exportColumns.map((label) => String(row[label] ?? ''))),
@@ -221,7 +223,7 @@ const ExportDropdown = ({
       if (!domExport) return
       const { JsPDF, autoTable } = await ensurePdfTools()
       const doc = new JsPDF({ orientation: pdfOrientation })
-      doc.text(String(pdfTitle || 'Export Report'), 14, 10)
+      doc.text(resolvedPdfTitle, 14, 10)
       autoTable(doc, {
         head: [domExport.exportColumns],
         body: domExport.exportRows.map((row) => domExport.exportColumns.map((label) => String(row[label] ?? ''))),
@@ -242,7 +244,7 @@ const ExportDropdown = ({
       }, {})
     })
     const doc = new JsPDF({ orientation: pdfOrientation })
-    doc.text(String(pdfTitle || 'Export Report'), 14, 10)
+    doc.text(resolvedPdfTitle, 14, 10)
     autoTable(doc, {
       head: [exportColumns.map((column) => column.label)],
       body: exportRows.map((row) => exportColumns.map((column) => String(row[column.label] ?? ''))),

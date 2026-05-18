@@ -1,88 +1,47 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import '../assets/css/addModalShared.css'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import ExportDropdown from '../components/ExportDropdown'
-
-const candidates = [
-  {
-    sl: '01',
-    academicYear: '2024-2025',
-    school: 'Windsor Park High School',
-    className: 'Class 10',
-    section: 'A',
-    student: 'Alice Brown',
-    note: 'Strong candidate for merit award.',
-  },
-  {
-    sl: '02',
-    academicYear: '2024-2025',
-    school: 'Windsor Park High School',
-    className: 'Class 10',
-    section: 'B',
-    student: 'Bob Wilson',
-    note: 'Excellent participation record.',
-  },
-  {
-    sl: '03',
-    academicYear: '2024-2025',
-    school: 'Windsor Park High School',
-    className: 'Class 11',
-    section: 'A',
-    student: 'Charlie Davis',
-    note: '',
-  },
-  {
-    sl: '04',
-    academicYear: '2024-2025',
-    school: 'Windsor Park High School',
-    className: 'Class 11',
-    section: 'B',
-    student: 'Diana Prince',
-    note: 'Recommended by class teacher.',
-  },
-  {
-    sl: '05',
-    academicYear: '2024-2025',
-    school: 'Windsor Park High School',
-    className: 'Class 12',
-    section: 'A',
-    student: 'Ethan Hunt',
-    note: '',
-  },
-]
-
-const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-const sectionOptions = ['A', 'B', 'C', 'D']
-const studentOptions = [
-  'Alice Brown',
-  'Bob Wilson',
-  'Charlie Davis',
-  'Diana Prince',
-  'Ethan Hunt',
-  'Sophia Green',
-  'Michael Brown',
-]
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import '../assets/css/addModalShared.css'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSections } from '../apis/sectionsApi'
+import { fetchAcademicYears } from '../apis/academicYearsApi'
+import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import {
+  createCandidate,
+  deleteCandidate,
+  fetchCandidatesPage,
+  updateCandidate,
+} from '../apis/candidatesApi'
 
 const emptyForm = {
-  school: '',
-  className: '',
-  section: '',
-  student: '',
+  headOfficeId: '',
+  schoolId: '',
+  academicYear: '',
+  classId: '',
+  sectionId: '',
+  studentId: '',
   note: '',
 }
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   school: 'Select',
-  className: 'Select',
-  section: 'Select',
+  academicYear: 'Select',
+  classId: 'Select',
+  sectionId: 'Select',
 }
 
-const STEPS = ['Basic']
+const STEPS = ['Scope & Selection']
 
 const FIELD_ICONS = {
   'School Name': 'ri-school-line',
+  'Academic Year': 'ri-calendar-line',
   Class: 'ri-building-line',
   Section: 'ri-layout-grid-line',
   Student: 'ri-user-3-line',
@@ -90,10 +49,11 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
+  { key: 'schoolName', label: 'School' },
   { key: 'academicYear', label: 'Academic Year' },
   { key: 'className', label: 'Class' },
-  { key: 'section', label: 'Section' },
-  { key: 'student', label: 'Student' },
+  { key: 'sectionName', label: 'Section' },
+  { key: 'studentName', label: 'Student' },
   { key: 'note', label: 'Note' },
 ]
 
@@ -131,11 +91,41 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
+const unwrapCollection = (value) => {
+  if (Array.isArray(value)) return value
+  if (Array.isArray(value?.content)) return value.content
+  return []
+}
+
+const schoolLabel = (row) => row?.schoolName || row?.name || ''
+const classLabel = (row) => row?.className || row?.numericName || row?.name || row?.label || ''
+const sectionLabel = (row) => row?.name || row?.sectionName || ''
+const getSchoolById = (rows, schoolId) =>
+  (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
+
 const Candidate = () => {
+  const [rows, setRows] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [classesLookup, setClassesLookup] = useState([])
+  const [sectionsLookup, setSectionsLookup] = useState([])
+  const [academicYearsLookup, setAcademicYearsLookup] = useState([])
+  const [addStudentOptions, setAddStudentOptions] = useState([])
+  const [editStudentOptions, setEditStudentOptions] = useState([])
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [editingId, setEditingId] = useState(null)
+
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
+
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
@@ -145,43 +135,213 @@ const Candidate = () => {
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(candidates.map((r) => r.school))),
-    [],
+  const schoolOptionsFor = useCallback(
+    (headOfficeId) =>
+      [...schoolsLookup]
+        .filter((school) => !headOfficeId || String(school?.headOfficeId ?? '') === String(headOfficeId))
+        .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b))),
+    [schoolsLookup],
   )
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return candidates.filter((r) => {
-      const matchesSearch =
-        !q ||
-        [r.academicYear, r.className, r.section, r.student, r.note]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = filters.school === 'Select' || r.school === filters.school
-      const matchesClass = filters.className === 'Select' || r.className === filters.className
-      const matchesSection = filters.section === 'Select' || r.section === filters.section
-      return matchesSearch && matchesSchool && matchesClass && matchesSection
-    })
-  }, [search, filters])
+  const academicYearOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          academicYearsLookup
+            .map((item) => String(item?.academicYear || '').trim())
+            .filter(Boolean),
+        ),
+      ).sort().reverse(),
+    [academicYearsLookup],
+  )
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  const pendingHeadOfficeId = pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId
+  const pendingSchoolId = pendingFilters.school === 'Select' ? '' : pendingFilters.school
+  const pendingSchoolSet = useMemo(() => {
+    const ids = new Set(
+      schoolOptionsFor(pendingHeadOfficeId).map((school) => String(school?.id ?? '')),
+    )
+    return ids
+  }, [pendingHeadOfficeId, schoolOptionsFor])
 
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+  const filterClassOptions = useMemo(() => {
+    return classesLookup
+      .filter((row) => {
+        const rowSchoolId = String(row?.schoolId ?? '')
+        if (pendingSchoolId) return rowSchoolId === String(pendingSchoolId)
+        if (pendingHeadOfficeId) return pendingSchoolSet.has(rowSchoolId)
+        return true
+      })
+      .slice()
+      .sort((a, b) => classLabel(a).localeCompare(classLabel(b)))
+  }, [classesLookup, pendingHeadOfficeId, pendingSchoolId, pendingSchoolSet])
 
-  const allSelected =
-    paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.sl))
+  const filterSectionOptions = useMemo(() => {
+    return sectionsLookup
+      .filter((row) => {
+        const rowSchoolId = String(row?.schoolId ?? '')
+        if (pendingSchoolId && rowSchoolId !== String(pendingSchoolId)) return false
+        if (pendingHeadOfficeId && !pendingSchoolSet.has(rowSchoolId)) return false
+        if (pendingFilters.classId !== 'Select' && String(row?.classId) !== String(pendingFilters.classId)) {
+          return false
+        }
+        return true
+      })
+      .slice()
+      .sort((a, b) => sectionLabel(a).localeCompare(sectionLabel(b)))
+  }, [sectionsLookup, pendingFilters.classId, pendingHeadOfficeId, pendingSchoolId, pendingSchoolSet])
+
+  const formClassOptions = useCallback(
+    (schoolId) =>
+      classesLookup
+        .filter((row) => !schoolId || String(row?.schoolId) === String(schoolId))
+        .slice()
+        .sort((a, b) => classLabel(a).localeCompare(classLabel(b))),
+    [classesLookup],
+  )
+
+  const formSectionOptions = useCallback(
+    (schoolId, classId) =>
+      sectionsLookup
+        .filter((row) => {
+          if (schoolId && String(row?.schoolId) !== String(schoolId)) return false
+          if (classId && String(row?.classId) !== String(classId)) return false
+          return true
+        })
+        .slice()
+        .sort((a, b) => sectionLabel(a).localeCompare(sectionLabel(b))),
+    [sectionsLookup],
+  )
+
+  const loadLookups = useCallback(async () => {
+    const [headOfficesResult, schoolsResult, classesResult, sectionsResult, academicYearsResult] = await Promise.allSettled([
+      fetchHeadOfficesPage(0, 500),
+      fetchSchoolsLookup(),
+      fetchClasses(),
+      fetchSections(),
+      fetchAcademicYears(),
+    ])
+
+    setHeadOffices(
+      unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
+        .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
+        .filter((ho) => ho.id != null && ho.name)
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    )
+    setSchoolsLookup(unwrapCollection(schoolsResult.status === 'fulfilled' ? schoolsResult.value : []))
+    setClassesLookup(unwrapCollection(classesResult.status === 'fulfilled' ? classesResult.value : []))
+    setSectionsLookup(unwrapCollection(sectionsResult.status === 'fulfilled' ? sectionsResult.value : []))
+    setAcademicYearsLookup(unwrapCollection(academicYearsResult.status === 'fulfilled' ? academicYearsResult.value : []))
+  }, [])
+
+  const loadCandidates = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchCandidatesPage(currentPage - 1, rowsPerPage, {
+        headOfficeId: filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined,
+        schoolId: filters.school !== 'Select' ? filters.school : undefined,
+        classId: filters.classId !== 'Select' ? filters.classId : undefined,
+        sectionId: filters.sectionId !== 'Select' ? filters.sectionId : undefined,
+        academicYear: filters.academicYear !== 'Select' ? filters.academicYear : undefined,
+        search: search.trim(),
+      })
+      setRows(Array.isArray(data?.content) ? data.content : [])
+      setTotalElements(Number.isFinite(data?.totalElements) ? Number(data.totalElements) : 0)
+      setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? Number(data.totalPages) : 1))
+    } catch (e) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError(e?.message || 'Failed to load candidates')
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, filters.academicYear, filters.classId, filters.headOfficeId, filters.school, filters.sectionId, rowsPerPage, search])
+
+  useEffect(() => {
+    void loadLookups()
+  }, [loadLookups])
+
+  useEffect(() => {
+    void loadCandidates()
+  }, [loadCandidates, refreshKey])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  useEffect(() => {
+    if (!isAddOpen) {
+      setAddStudentOptions([])
+      return
+    }
+    if (!addForm.schoolId || !addForm.classId || !addForm.sectionId) {
+      setAddStudentOptions([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const data = await fetchStudentsByClassSection({
+          schoolId: addForm.schoolId,
+          classId: addForm.classId,
+          sectionId: addForm.sectionId,
+        })
+        if (!cancelled) setAddStudentOptions(Array.isArray(data) ? data : [])
+      } catch {
+        if (!cancelled) setAddStudentOptions([])
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [addForm.classId, addForm.schoolId, addForm.sectionId, isAddOpen])
+
+  useEffect(() => {
+    if (!isEditOpen) {
+      setEditStudentOptions([])
+      return
+    }
+    if (!editForm.schoolId || !editForm.classId || !editForm.sectionId) {
+      setEditStudentOptions([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const data = await fetchStudentsByClassSection({
+          schoolId: editForm.schoolId,
+          classId: editForm.classId,
+          sectionId: editForm.sectionId,
+        })
+        if (!cancelled) setEditStudentOptions(Array.isArray(data) ? data : [])
+      } catch {
+        if (!cancelled) setEditStudentOptions([])
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [editForm.classId, editForm.schoolId, editForm.sectionId, isEditOpen])
 
   const handleSelectAll = (e) => {
-    if (e.target.checked)
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.sl)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.sl === id)))
+    if (e.target.checked) {
+      setSelectedRows((prev) => [...new Set([...prev, ...rows.map((row) => row.id)])])
+    } else {
+      setSelectedRows((prev) => prev.filter((id) => !rows.some((row) => row.id === id)))
+    }
   }
 
   const handleSelectRow = (id) => {
@@ -190,30 +350,45 @@ const Candidate = () => {
     )
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    // Reset section and student when class changes
-    if (id === 'className') {
-      setter((prev) => ({ ...prev, className: value, section: '', student: '' }))
-      return
-    }
-    // Reset student when section changes
-    if (id === 'section') {
-      setter((prev) => ({ ...prev, section: value, student: '' }))
-      return
-    }
-    setter((prev) => ({ ...prev, [id]: value }))
+  const updateFormField = (setter, field, value) => {
+    setter((prev) => {
+      if (field === 'headOfficeId') {
+        return { ...prev, headOfficeId: value, schoolId: '', classId: '', sectionId: '', studentId: '' }
+      }
+      if (field === 'schoolId') {
+        return { ...prev, schoolId: value, classId: '', sectionId: '', studentId: '' }
+      }
+      if (field === 'classId') {
+        return { ...prev, classId: value, sectionId: '', studentId: '' }
+      }
+      if (field === 'sectionId') {
+        return { ...prev, sectionId: value, studentId: '' }
+      }
+      return { ...prev, [field]: value }
+    })
   }
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+    setPendingFilters((prev) => {
+      if (id === 'headOfficeId') {
+        return { ...prev, headOfficeId: value, school: 'Select', classId: 'Select', sectionId: 'Select' }
+      }
+      if (id === 'school') {
+        return { ...prev, school: value, classId: 'Select', sectionId: 'Select' }
+      }
+      if (id === 'classId') {
+        return { ...prev, classId: value, sectionId: 'Select' }
+      }
+      return { ...prev, [id]: value }
+    })
   }
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
   }
 
   const handleResetFilters = () => {
@@ -223,114 +398,218 @@ const Candidate = () => {
   }
 
   const openAdd = () => {
+    setError('')
+    setEditingId(null)
     setAddForm(emptyForm)
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
+    setError('')
+    setEditingId(row?.id ?? null)
+    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
+    const selectedSchool = getSchoolById(schoolsLookup, schoolId)
     setEditForm({
-      school: row.school,
-      className: row.className,
-      section: row.section,
-      student: row.student,
-      note: row.note,
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : '',
+      schoolId,
+      academicYear: row?.academicYear || '',
+      classId: row?.classId != null ? String(row.classId) : '',
+      sectionId: row?.sectionId != null ? String(row.sectionId) : '',
+      studentId: row?.studentId != null ? String(row.studentId) : '',
+      note: row?.note || '',
     })
     setEditStep(0)
     setIsEditOpen(true)
+  }
+
+  const buildPayload = (form) => ({
+    schoolId: form.schoolId ? Number(form.schoolId) : null,
+    classId: form.classId ? Number(form.classId) : null,
+    sectionId: form.sectionId ? Number(form.sectionId) : null,
+    studentId: form.studentId ? Number(form.studentId) : null,
+    academicYear: form.academicYear || '',
+    note: form.note || '',
+  })
+
+  const handleCreate = async () => {
+    if (saving) return
+    setSaving(true)
+    setError('')
+    try {
+      await createCandidate(buildPayload(addForm))
+      setIsAddOpen(false)
+      setAddForm(emptyForm)
+      setAddStep(0)
+      setCurrentPage(1)
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setError(e?.message || 'Failed to create candidate')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (saving) return
+    if (!editingId) {
+      setError('No candidate selected for update')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await updateCandidate(editingId, buildPayload(editForm))
+      setIsEditOpen(false)
+      setEditForm(emptyForm)
+      setEditStep(0)
+      setEditingId(null)
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setError(e?.message || 'Failed to update candidate')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!id) return
+    if (!window.confirm('Delete this candidate? This cannot be undone.')) return
+    setSaving(true)
+    setError('')
+    try {
+      await deleteCandidate(id)
+      setSelectedRows((prev) => prev.filter((rowId) => rowId !== id))
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setError(e?.message || 'Failed to delete candidate')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
+    for (let p = start; p <= end; p += 1) pages.push(p)
     return pages
   }
 
-  const renderForm = (form, setter) => (
-    <>
-      <p className="avm-section-title">Basic Information</p>
-      <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select
-            className="avm-select"
-            id="school"
-            value={form.school}
-            onChange={handleChange(setter)}
-          >
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+  const renderForm = (form, setter, studentOptions) => {
+    const classOptions = formClassOptions(form.schoolId)
+    const sectionOptions = formSectionOptions(form.schoolId, form.classId)
 
-        <FormField label="Class" required>
-          <select
-            className="avm-select"
-            id="className"
-            value={form.className}
-            onChange={handleChange(setter)}
-          >
-            <option value="">--Select--</option>
-            {classOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Section" required>
-          <select
-            className="avm-select"
-            id="section"
-            value={form.section}
-            onChange={handleChange(setter)}
-            disabled={!form.className}
-          >
-            <option value="">--Select--</option>
-            {sectionOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Student" required full>
-          <select
-            className="avm-select"
-            id="student"
-            value={form.student}
-            onChange={handleChange(setter)}
-            disabled={!form.section}
-          >
-            <option value="">--Select--</option>
-            {studentOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Note" full>
-          <textarea
-            rows={4}
-            className="avm-input avm-textarea"
-            id="note"
-            placeholder="Note"
-            value={form.note}
-            onChange={handleChange(setter)}
+    return (
+      <>
+        <p className="avm-section-title">{STEPS[0]}</p>
+        <div className="avm-grid">
+          <ManualScopeSelectors
+            enabled
+            headOffices={headOffices}
+            schoolOptions={schoolOptionsFor(form.headOfficeId)}
+            selectedHeadOfficeId={form.headOfficeId}
+            onHeadOfficeChange={(value) => updateFormField(setter, 'headOfficeId', value)}
+            selectedSchoolId={form.schoolId}
+            onSchoolChange={(value) => {
+              const selectedSchool = getSchoolById(schoolsLookup, value)
+              setter((prev) => ({
+                ...prev,
+                schoolId: value,
+                headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+                classId: '',
+                sectionId: '',
+                studentId: '',
+              }))
+            }}
+            schoolLabel="School"
           />
-        </FormField>
-      </div>
-    </>
-  )
+
+          <FormField label="Academic Year" required>
+            <select
+              className="avm-select"
+              id="academicYear"
+              value={form.academicYear}
+              onChange={(e) => updateFormField(setter, 'academicYear', e.target.value)}
+            >
+              <option value="">--Select--</option>
+              {academicYearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Class" required>
+            <select
+              className="avm-select"
+              id="classId"
+              value={form.classId}
+              onChange={(e) => updateFormField(setter, 'classId', e.target.value)}
+            >
+              <option value="">--Select--</option>
+              {classOptions.map((row) => (
+                <option key={row.id} value={String(row.id)}>
+                  {classLabel(row)}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Section" required>
+            <select
+              className="avm-select"
+              id="sectionId"
+              value={form.sectionId}
+              onChange={(e) => updateFormField(setter, 'sectionId', e.target.value)}
+              disabled={!form.classId}
+            >
+              <option value="">--Select--</option>
+              {sectionOptions.map((row) => (
+                <option key={row.id} value={String(row.id)}>
+                  {sectionLabel(row)}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Student" required full>
+            <select
+              className="avm-select"
+              id="studentId"
+              value={form.studentId}
+              onChange={(e) => updateFormField(setter, 'studentId', e.target.value)}
+              disabled={!form.sectionId}
+            >
+              <option value="">{form.sectionId ? '--Select--' : 'Select Section First'}</option>
+              {studentOptions.map((student) => (
+                <option key={student.id} value={String(student.id)}>
+                  {student.name || student.studentName || `Student ${student.id}`}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Note" full noIcon>
+            <textarea
+              rows={4}
+              className="avm-input avm-textarea"
+              id="note"
+              placeholder="Note"
+              value={form.note}
+              onChange={(e) => updateFormField(setter, 'note', e.target.value)}
+            />
+          </FormField>
+        </div>
+      </>
+    )
+  }
+
+  const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(row.id))
 
   return (
     <div className="dashboard-main-body">
-      {/* Breadcrumb */}
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Candidate</h1>
@@ -356,16 +635,19 @@ const Candidate = () => {
         </button>
       </div>
 
-      {/* Table Card */}
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
+          <i className="ri-error-warning-line"></i>
+          <span>{error}</span>
+        </div>
+      ) : null}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
 
-              {/* Filter */}
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
@@ -379,7 +661,6 @@ const Candidate = () => {
                 </span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -411,24 +692,16 @@ const Candidate = () => {
                 </ul>
               </div>
 
-              {/* Rows per page */}
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
@@ -446,54 +719,67 @@ const Candidate = () => {
             </div>
           </div>
 
-          {/* Table */}
           <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 800 }}>
+            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 900 }}>
               <thead>
                 <tr>
                   <th scope="col">
                     <div className="form-check style-check d-flex align-items-center">
-                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={allSelected}
+                        onChange={handleSelectAll}
+                      />
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
+                  {visibleColumns.schoolName ? <th scope="col">School</th> : null}
                   {visibleColumns.academicYear ? <th scope="col">Academic Year</th> : null}
                   {visibleColumns.className ? <th scope="col">Class</th> : null}
-                  {visibleColumns.section ? <th scope="col">Section</th> : null}
-                  {visibleColumns.student ? <th scope="col">Student</th> : null}
+                  {visibleColumns.sectionName ? <th scope="col">Section</th> : null}
+                  {visibleColumns.studentName ? <th scope="col">Student</th> : null}
                   {visibleColumns.note ? <th scope="col">Note</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading candidates...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No candidates found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  rows.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {(currentPage - 1) * rowsPerPage + idx + 1}
+                          </label>
                         </div>
                       </td>
-                      {visibleColumns.academicYear ? <td>{row.academicYear}</td> : null}
-                      {visibleColumns.className ? <td>{row.className}</td> : null}
-                      {visibleColumns.section ? <td>{row.section}</td> : null}
-                      {visibleColumns.student ? (
-                        <td className="fw-medium text-primary-light">{row.student}</td>
+                      {visibleColumns.schoolName ? <td>{row.schoolName || '--'}</td> : null}
+                      {visibleColumns.academicYear ? (
+                        <td className="fw-medium text-primary-light">{row.academicYear || '--'}</td>
+                      ) : null}
+                      {visibleColumns.className ? <td>{row.className || '--'}</td> : null}
+                      {visibleColumns.sectionName ? <td>{row.sectionName || '--'}</td> : null}
+                      {visibleColumns.studentName ? (
+                        <td className="fw-medium text-primary-light">{row.studentName || '--'}</td>
                       ) : null}
                       {visibleColumns.note ? (
                         <td>
@@ -512,7 +798,7 @@ const Candidate = () => {
                               {row.note}
                             </span>
                           ) : (
-                            <span className="text-secondary-light">—</span>
+                            <span className="text-secondary-light">--</span>
                           )}
                         </td>
                       ) : null}
@@ -523,6 +809,7 @@ const Candidate = () => {
                             className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             onClick={() => openEdit(row)}
                             title="Edit"
+                            disabled={saving}
                           >
                             <i className="ri-edit-line"></i>
                           </button>
@@ -530,6 +817,8 @@ const Candidate = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={() => handleDelete(row.id)}
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -542,11 +831,10 @@ const Candidate = () => {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements} entries
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
@@ -561,11 +849,7 @@ const Candidate = () => {
                 <button
                   key={p}
                   type="button"
-                  className={
-                    p === currentPage
-                      ? 'btn btn-sm btn-primary-600'
-                      : 'btn btn-sm btn-light border'
-                  }
+                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
                   onClick={() => setCurrentPage(p)}
                 >
                   {p}
@@ -584,9 +868,8 @@ const Candidate = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
       <WizardPopup
-        modalWidth="540px"
+        modalWidth="760px"
         open={isAddOpen}
         title="Add Candidate"
         steps={STEPS}
@@ -594,15 +877,14 @@ const Candidate = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onSubmit={handleCreate}
+        submitLabel={saving ? 'Saving...' : 'Save'}
       >
-        {renderForm(addForm, setAddForm)}
+        {renderForm(addForm, setAddForm, addStudentOptions)}
       </WizardPopup>
 
-      {/* Edit Modal */}
       <WizardPopup
-        modalWidth="540px"
+        modalWidth="760px"
         open={isEditOpen}
         title="Edit Candidate"
         steps={STEPS}
@@ -610,13 +892,12 @@ const Candidate = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
+        onSubmit={handleUpdate}
+        submitLabel={saving ? 'Saving...' : 'Update'}
       >
-        {renderForm(editForm, setEditForm)}
+        {renderForm(editForm, setEditForm, editStudentOptions)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Candidates"
@@ -625,86 +906,97 @@ const Candidate = () => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label
-              htmlFor="school"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOffices}
+              schoolOptions={schoolOptionsFor(pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)}
+              selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  headOfficeId: value || 'Select',
+                  school: 'Select',
+                  classId: 'Select',
+                  sectionId: 'Select',
+                }))
+              }
+              selectedSchoolId={pendingFilters.school === 'Select' ? '' : pendingFilters.school}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  school: value || 'Select',
+                  classId: 'Select',
+                  sectionId: 'Select',
+                }))
+              }
+              schoolLabel="School"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="academicYear" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Academic Year
             </label>
             <select
-              id="school"
+              id="academicYear"
               className="form-control form-select"
-              value={pendingFilters.school}
+              value={pendingFilters.academicYear}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="Select">Select</option>
+              {academicYearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label
-              htmlFor="className"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
+            <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Class
             </label>
             <select
-              id="className"
+              id="classId"
               className="form-control form-select"
-              value={pendingFilters.className}
+              value={pendingFilters.classId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select</option>
-              {classOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {filterClassOptions.map((row) => (
+                <option key={row.id} value={String(row.id)}>
+                  {classLabel(row)}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label
-              htmlFor="section"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
+            <label htmlFor="sectionId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Section
             </label>
             <select
-              id="section"
+              id="sectionId"
               className="form-control form-select"
-              value={pendingFilters.section}
+              value={pendingFilters.sectionId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select</option>
-              {sectionOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {filterSectionOptions.map((row) => (
+                <option key={row.id} value={String(row.id)}>
+                  {sectionLabel(row)}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
           </div>
           <div>
-            <button
-              type="submit"
-              className="btn btn-primary-600 w-100"
-              onClick={() => setIsFilterSidebarOpen(false)}
-            >
+            <button type="submit" className="btn btn-primary-600 w-100">
               Apply
             </button>
           </div>

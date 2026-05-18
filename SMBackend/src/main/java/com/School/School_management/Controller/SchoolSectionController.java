@@ -37,14 +37,19 @@ public class SchoolSectionController {
     "*"
   })
   public List<SchoolSectionDto> getAll(
-      @RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long classId) {
+      @RequestParam(required = false) Long headOfficeId,
+      @RequestParam(required = false) Long schoolId,
+      @RequestParam(required = false) Long classId) {
     CurrentUser user = CurrentUserHolder.get();
     if (user != null && user.isSchoolScoped()) {
       return schoolSectionService.getAll(user.schoolId(), classId);
     }
     if (user != null && user.isHeadOfficeScopedAdmin() && schoolId == null) {
       // "All schools under head office"
-      return schoolSectionService.getAllForHeadOffice(user.headOfficeId(), classId);
+      return schoolSectionService.getAllForHeadOffice(headOfficeId != null ? headOfficeId : user.headOfficeId(), classId);
+    }
+    if (headOfficeId != null && schoolId == null) {
+      return schoolSectionService.getAllForHeadOffice(headOfficeId, classId);
     }
     return schoolSectionService.getAll(schoolId, classId);
   }

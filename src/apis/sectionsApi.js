@@ -20,8 +20,9 @@ const readApiError = async (res) => {
 const unwrapCollection = (data) =>
   Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : []
 
-export const fetchSections = async ({ schoolId, classId } = {}) => {
+export const fetchSections = async ({ headOfficeId, schoolId, classId } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && headOfficeId !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && schoolId !== '') qs.set('schoolId', String(schoolId))
   if (classId != null && classId !== '') qs.set('classId', String(classId))
   const url = qs.toString() ? `${SECTIONS_API_BASE}?${qs.toString()}` : SECTIONS_API_BASE

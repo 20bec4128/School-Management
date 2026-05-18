@@ -20,6 +20,8 @@ import {
 } from '../apis/leaveApplicationsApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50]
 const LEAVE_APPLICATION_STEPS = ['Basic Information', 'Leave Details']
@@ -1418,9 +1420,14 @@ const LeaveApplicationWorkspace = ({
                     </ul>
                   </div>
 
-                  <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                    {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  <RowsPerPageSelect
+                    value={rowsPerPage}
+                    onChange={(v) => {
+                      setRowsPerPage(v)
+                      setCurrentPage(1)
+                    }}
+                    className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                  />
                 </div>
 
                 <div className="position-relative">
@@ -1525,17 +1532,17 @@ const LeaveApplicationWorkspace = ({
                 </table>
               </div>
 
-              <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-                <span className="text-sm text-secondary-light">
-                  Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}
-                </span>
-                <div className="d-flex align-items-center gap-8">
-                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-                  {getVisiblePages().map((p) => (
-                    <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
-                  ))}
-                  <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
-                </div>
+              <div className="px-20 py-16 border-top border-neutral-200">
+                <TablePagination
+                  paginationProps={{
+                    currentPage,
+                    totalPages,
+                    totalRecords: filteredRows.length,
+                    rowsPerPage,
+                    pageInfo: `Showing ${filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, filteredRows.length)} of ${filteredRows.length} entries`,
+                    onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+                  }}
+                />
               </div>
             </>
           </div>
