@@ -12,11 +12,33 @@ ALTER TABLE library_issues
     ALTER COLUMN student_name DROP NOT NULL,
     ALTER COLUMN borrower_type SET DEFAULT 'STUDENT';
 
-ALTER TABLE library_issues
-    ADD CONSTRAINT fk_library_issues_class FOREIGN KEY (class_id) REFERENCES classes(id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_schema = current_schema()
+          AND table_name = 'library_issues'
+          AND constraint_name = 'fk_library_issues_class'
+    ) THEN
+        ALTER TABLE library_issues
+            ADD CONSTRAINT fk_library_issues_class FOREIGN KEY (class_id) REFERENCES classes(id);
+    END IF;
+END $$;
 
-ALTER TABLE library_issues
-    ADD CONSTRAINT fk_library_issues_employee FOREIGN KEY (employee_id) REFERENCES employees(id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_schema = current_schema()
+          AND table_name = 'library_issues'
+          AND constraint_name = 'fk_library_issues_employee'
+    ) THEN
+        ALTER TABLE library_issues
+            ADD CONSTRAINT fk_library_issues_employee FOREIGN KEY (employee_id) REFERENCES employees(id);
+    END IF;
+END $$;
 
 UPDATE library_issues
 SET borrower_type = COALESCE(NULLIF(UPPER(TRIM(borrower_type)), ''), 'STUDENT');
