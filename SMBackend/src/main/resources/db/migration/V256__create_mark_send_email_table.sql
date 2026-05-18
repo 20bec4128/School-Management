@@ -1,0 +1,15 @@
+CREATE TABLE mark_send_email (
+    id BIGSERIAL PRIMARY KEY,
+    head_office_id BIGINT,
+    school_id BIGINT NOT NULL,
+    school_name VARCHAR(255),
+    exam_term VARCHAR(255) NOT NULL,
+    receiver_type VARCHAR(255) NOT NULL,
+    student_mark VARCHAR(255) NOT NULL,
+    template VARCHAR(255),
+    subject VARCHAR(255) NOT NULL,
+    email_body TEXT NOT NULL,
+    send_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

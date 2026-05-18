@@ -1,29 +1,46 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import { useAuth } from '../context/useAuth'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { normalizeRole } from '../utils/roles'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchSubjects } from '../apis/subjectsApi'
+import { fetchExamTerms } from '../apis/examTermApi'
+import {
+  createSuggestion,
+  deleteSuggestion,
+  fetchSuggestions,
+  updateSuggestion,
+} from '../apis/suggestionApi'
 
 const STEPS = ['Basic Info', 'Suggestion & Media']
 
 const emptyForm = {
   id: null,
-  school: '',
+  headOfficeId: '',
+  schoolId: '',
   title: '',
   examTerm: '',
-  class: '',
-  subject: '',
-  suggestion: '',
-  document: null,
+  className: '',
+  subjectName: '',
+  suggestionText: '',
+  documentName: '',
+  documentPath: '',
   note: '',
+  removeDocument: false,
 }
 
 const emptyFilters = {
-  school: 'Select',
+  schoolId: 'Select',
   examTerm: 'Select',
-  class: 'Select',
-  subject: 'Select',
+  className: 'Select',
+  subjectName: 'Select',
 }
 
 const FIELD_ICONS = {
@@ -37,52 +54,13 @@ const FIELD_ICONS = {
   Note: 'ri-sticky-note-line',
 }
 
-// Dummy data
-const dummySuggestions = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    title: 'Improve Library Facilities',
-    examTerm: 'First Term',
-    class: 'Class 10',
-    subject: 'English',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    title: 'Add More Sports Equipment',
-    examTerm: 'Second Term',
-    class: 'Class 9',
-    subject: 'Physical Education',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    title: 'Reduce Homework Load',
-    examTerm: 'Final Term',
-    class: 'Class 8',
-    subject: 'General',
-  },
-]
-
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolName', label: 'School' },
   { key: 'title', label: 'Title' },
   { key: 'examTerm', label: 'Exam Term' },
-  { key: 'class', label: 'Class' },
-  { key: 'subject', label: 'Subject' },
+  { key: 'className', label: 'Class' },
+  { key: 'subjectName', label: 'Subject' },
 ]
-
-// Helper for document icon
-const getFileIcon = (fileName) => {
-  if (!fileName) return 'ri-file-line'
-  const ext = fileName.split('.').pop().toLowerCase()
-  if (ext === 'pdf') return 'ri-file-pdf-line'
-  if (['doc', 'docx'].includes(ext)) return 'ri-file-word-line'
-  if (['ppt', 'pptx'].includes(ext)) return 'ri-slideshow-line'
-  if (ext === 'txt') return 'ri-file-text-line'
-  return 'ri-file-line'
-}
 
 const FormField = ({ label, required, children, full = false, noIcon = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
@@ -118,84 +96,287 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const Suggestion = () => {
-  // Form states
+const uniqueStrings = (items) =>
+  Array.from(
+    new Set(
+      (Array.isArray(items) ? items : [])
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b))
+
+const getFileIcon = (fileName) => {
+  if (!fileName) return 'ri-file-line'
+  const ext = fileName.split('.').pop().toLowerCase()
+  if (ext === 'pdf') return 'ri-file-pdf-line'
+  if (['doc', 'docx'].includes(ext)) return 'ri-file-word-line'
+  if (['ppt', 'pptx'].includes(ext)) return 'ri-slideshow-line'
+  if (ext === 'txt') return 'ri-file-text-line'
+  return 'ri-file-line'
+}
+
+const Suggestion = ({ onNavigate }) => {
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const normalizedRole = useMemo(() => normalizeRole(role), [role])
+  const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
+  const [rows, setRows] = useState([])
+  const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [classOptions, setClassOptions] = useState([])
+  const [subjectOptions, setSubjectOptions] = useState([])
+  const [examTermOptions, setExamTermOptions] = useState([])
   const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState({ ...emptyForm, id: null })
+  const [editForm, setEditForm] = useState(emptyForm)
   const [addStep, setAddStep] = useState(0)
   const [editStep, setEditStep] = useState(0)
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
-
-  // File upload states
   const [addDocFile, setAddDocFile] = useState(null)
   const [editDocFile, setEditDocFile] = useState(null)
-
-  // File input reset keys
   const [addDocInputKey, setAddDocInputKey] = useState(0)
   const [editDocInputKey, setEditDocInputKey] = useState(0)
-
-  // Table states
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
-
-  // Filter states
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
 
-  // Column visibility
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
 
-  // Filtered & paginated data
+  const schoolFormOptions = useMemo(() => {
+    const list = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    if (isSuperAdmin) return manualScope.schoolOptions || []
+    if (isHeadOfficeAdmin) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      const match = list.find((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      if (match) return [match]
+      if (authSchoolId != null) {
+        return [{ id: authSchoolId, schoolName: authSchoolName || 'My School', headOfficeId: authHeadOfficeId ?? null }]
+      }
+      return []
+    }
+    return list
+  }, [schoolsLookup, isSuperAdmin, manualScope.schoolOptions, isHeadOfficeAdmin, isSchoolAdmin, authHeadOfficeId, authSchoolId, authSchoolName])
+
+  const schoolFilterOptions = useMemo(() => {
+    return Array.from(
+      new Map(
+        rows
+          .filter((row) => row?.schoolId != null)
+          .map((row) => [String(row.schoolId), { id: row.schoolId, name: row.schoolName || 'Unknown School' }]),
+      ).values(),
+    ).sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [rows])
+
+  const examTermFilterOptions = useMemo(
+    () => uniqueStrings(rows.map((row) => row.examTerm)),
+    [rows],
+  )
+
+  const classFilterOptions = useMemo(
+    () => uniqueStrings(rows.map((row) => row.className)),
+    [rows],
+  )
+
+  const subjectFilterOptions = useMemo(
+    () => uniqueStrings(rows.map((row) => row.subjectName)),
+    [rows],
+  )
+
   const filteredData = useMemo(() => {
-    let data = [...dummySuggestions]
-    if (filters.school !== 'Select')
-      data = data.filter((r) => r.school === filters.school)
-    if (filters.examTerm !== 'Select')
-      data = data.filter((r) => r.examTerm === filters.examTerm)
-    if (filters.class !== 'Select')
-      data = data.filter((r) => r.class === filters.class)
-    if (filters.subject !== 'Select')
-      data = data.filter((r) => r.subject === filters.subject)
-    if (search) {
+    let data = [...rows]
+
+    if (filters.schoolId !== 'Select') {
+      data = data.filter((row) => String(row.schoolId ?? '') === String(filters.schoolId))
+    }
+    if (filters.examTerm !== 'Select') {
+      data = data.filter((row) => row.examTerm === filters.examTerm)
+    }
+    if (filters.className !== 'Select') {
+      data = data.filter((row) => row.className === filters.className)
+    }
+    if (filters.subjectName !== 'Select') {
+      data = data.filter((row) => row.subjectName === filters.subjectName)
+    }
+    if (search.trim()) {
       const term = search.toLowerCase()
-      data = data.filter(
-        (r) =>
-          r.title.toLowerCase().includes(term) ||
-          r.school.toLowerCase().includes(term) ||
-          r.class.toLowerCase().includes(term) ||
-          r.subject.toLowerCase().includes(term)
-      )
+      data = data.filter((row) => {
+        const content = [
+          row.schoolName,
+          row.title,
+          row.examTerm,
+          row.className,
+          row.subjectName,
+          row.suggestionText,
+          row.note,
+        ]
+          .map((value) => String(value ?? '').toLowerCase())
+          .join(' ')
+        return content.includes(term)
+      })
     }
     return data
-  }, [filters, search])
+  }, [rows, filters, search])
 
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage)
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filteredData.slice(start, start + rowsPerPage)
-  }, [filteredData, currentPage, rowsPerPage])
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage))
+  const startIndex = (currentPage - 1) * rowsPerPage
+  const paginatedData = useMemo(
+    () => filteredData.slice(startIndex, startIndex + rowsPerPage),
+    [filteredData, startIndex, rowsPerPage],
+  )
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages))
+  }, [totalPages])
+
+  useEffect(() => {
+    fetchSchoolsLookup()
+      .then((data) => setSchoolsLookup(Array.isArray(data) ? data : []))
+      .catch(() => setSchoolsLookup([]))
+  }, [])
+
+  const loadSuggestions = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchSuggestions()
+      setRows(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setRows([])
+      setError(err?.message || 'Failed to load suggestions')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSuggestions()
+  }, [loadSuggestions])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    if (!isEditOpen || !editForm.schoolId) return
+    const match = schoolsLookup.find((school) => String(school?.id ?? '') === String(editForm.schoolId))
+    if (match?.headOfficeId != null) {
+      manualScope.setSelectedScope(String(match.headOfficeId), String(editForm.schoolId))
+    }
+  }, [isSuperAdmin, isEditOpen, editForm.schoolId, schoolsLookup, manualScope])
+
+  useEffect(() => {
+    if (isSchoolAdmin && authSchoolId != null) {
+      setAddForm((prev) => ({ ...prev, schoolId: String(authSchoolId) }))
+      setEditForm((prev) => (prev.schoolId ? prev : { ...prev, schoolId: String(authSchoolId) }))
+    }
+  }, [isSchoolAdmin, authSchoolId])
+
+  useEffect(() => {
+    const selectedSchoolId = isAddOpen
+      ? addForm.schoolId
+      : isEditOpen
+        ? editForm.schoolId
+        : ''
+    if (!selectedSchoolId) {
+      setClassOptions([])
+      setSubjectOptions([])
+      setExamTermOptions([])
+      return
+    }
+
+    let cancelled = false
+    const loadLookups = async () => {
+      try {
+        const [classesData, subjectsData, examTermsData] = await Promise.all([
+          fetchClasses({ schoolId: selectedSchoolId }).catch(() => []),
+          fetchSubjects({ schoolId: selectedSchoolId }).catch(() => []),
+          fetchExamTerms({ schoolId: selectedSchoolId }).catch(() => []),
+        ])
+        if (cancelled) return
+        setClassOptions(
+          uniqueStrings(
+            (Array.isArray(classesData) ? classesData : []).map((item) =>
+              String(item?.className ?? item?.name ?? item?.title ?? '').trim(),
+            ),
+          ),
+        )
+        setSubjectOptions(
+          uniqueStrings(
+            (Array.isArray(subjectsData) ? subjectsData : []).map((item) =>
+              String(item?.subjectName ?? item?.name ?? item?.title ?? '').trim(),
+            ),
+          ),
+        )
+        setExamTermOptions(
+          uniqueStrings(
+            (Array.isArray(examTermsData) ? examTermsData : []).map((item) =>
+              String(item?.examTerm ?? item?.name ?? item?.title ?? item ?? '').trim(),
+            ),
+          ),
+        )
+      } catch {
+        if (!cancelled) {
+          setClassOptions([])
+          setSubjectOptions([])
+          setExamTermOptions([])
+        }
+      }
+    }
+
+    void loadLookups()
+    return () => {
+      cancelled = true
+    }
+  }, [isAddOpen, isEditOpen, addForm.schoolId, editForm.schoolId])
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
+    for (let p = start; p <= end; p += 1) pages.push(p)
     return pages
   }
 
-  const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows(paginatedData.map((row) => row.sl))
-    else setSelectedRows([])
+  const resetForm = (mode) => {
+    const baseSchoolId = isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : ''
+    const baseHeadOfficeId = isSchoolAdmin ? String(authHeadOfficeId ?? '') : ''
+    const next = {
+      ...emptyForm,
+      headOfficeId: baseHeadOfficeId,
+      schoolId: baseSchoolId,
+    }
+    if (mode === 'add') {
+      setAddForm(next)
+      setAddDocFile(null)
+      setAddDocInputKey((key) => key + 1)
+      setAddStep(0)
+    } else {
+      setEditForm(next)
+      setEditDocFile(null)
+      setEditDocInputKey((key) => key + 1)
+      setEditStep(0)
+    }
   }
 
-  const handleSelectRow = (sl) => {
-    if (selectedRows.includes(sl))
-      setSelectedRows(selectedRows.filter((id) => id !== sl))
-    else setSelectedRows([...selectedRows, sl])
+  const openAdd = () => {
+    sessionStorage.removeItem('sm_suggestion_edit_id')
+    if (navigateTo) navigateTo('suggestion-create')
+  }
+
+  const openEdit = (row) => {
+    sessionStorage.setItem('sm_suggestion_edit_id', String(row.id))
+    if (navigateTo) navigateTo('suggestion-create')
   }
 
   const handleChange = (setter) => (e) => {
@@ -204,9 +385,12 @@ const Suggestion = () => {
   }
 
   const handleFileChange = (setter, setFile) => (e) => {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
     if (!file) return
-    setter((prev) => ({ ...prev, document: file }))
+    setter((prev) => ({
+      ...prev,
+      removeDocument: false,
+    }))
     setFile(file)
   }
 
@@ -225,34 +409,179 @@ const Suggestion = () => {
   const handleResetFilters = () => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
+    setSearch('')
     setIsFilterSidebarOpen(false)
     setCurrentPage(1)
   }
 
-  const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setAddDocFile(null)
-    setAddDocInputKey((key) => key + 1)
-    setIsAddOpen(true)
+  const resolveScopeForSubmit = (form) => {
+    const selectedSchool = schoolsLookup.find((item) => String(item?.id ?? '') === String(form.schoolId ?? ''))
+    const schoolId = form.schoolId ? Number(form.schoolId) : null
+    const headOfficeIdFromSchool = selectedSchool?.headOfficeId != null ? Number(selectedSchool.headOfficeId) : null
+
+    if (isSuperAdmin) {
+      const selectedHeadOfficeId = manualScope.selectedHeadOfficeId
+        ? Number(manualScope.selectedHeadOfficeId)
+        : headOfficeIdFromSchool
+      return {
+        headOfficeId: selectedHeadOfficeId,
+        schoolId,
+      }
+    }
+
+    if (isHeadOfficeAdmin) {
+      return {
+        headOfficeId: authHeadOfficeId != null ? Number(authHeadOfficeId) : headOfficeIdFromSchool,
+        schoolId,
+      }
+    }
+
+    return {
+      headOfficeId: headOfficeIdFromSchool != null ? headOfficeIdFromSchool : authHeadOfficeId != null ? Number(authHeadOfficeId) : null,
+      schoolId: schoolId != null ? schoolId : authSchoolId != null ? Number(authSchoolId) : null,
+    }
   }
 
-  const openEdit = (row) => {
-    setEditForm({
-      id: row.sl,
-      school: row.school,
-      title: row.title,
-      examTerm: row.examTerm,
-      class: row.class,
-      subject: row.subject,
-      suggestion: '',
-      document: null,
-      note: '',
-    })
-    setEditStep(0)
-    setEditDocFile(null)
-    setEditDocInputKey((key) => key + 1)
-    setIsEditOpen(true)
+  const validateForm = (form) => {
+    if (!form.schoolId) return 'School is required'
+    if (!form.title.trim()) return 'Title is required'
+    if (!form.examTerm.trim()) return 'Exam term is required'
+    if (!form.className.trim()) return 'Class is required'
+    if (!form.subjectName.trim()) return 'Subject is required'
+    if (!form.suggestionText.trim()) return 'Suggestion is required'
+    return ''
+  }
+
+  const handleSave = async (mode) => {
+    const form = mode === 'add' ? addForm : editForm
+    const docFile = mode === 'add' ? addDocFile : editDocFile
+    const validation = validateForm(form)
+    if (validation) {
+      setError(validation)
+      return
+    }
+
+    const scope = resolveScopeForSubmit(form)
+    if (!scope.schoolId) {
+      setError('School is required')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      const payload = {
+        headOfficeId: scope.headOfficeId,
+        schoolId: scope.schoolId,
+        title: form.title.trim(),
+        examTerm: form.examTerm.trim(),
+        className: form.className.trim(),
+        subjectName: form.subjectName.trim(),
+        suggestionText: form.suggestionText.trim(),
+        note: form.note.trim(),
+        removeDocument: Boolean(form.removeDocument),
+      }
+
+      if (mode === 'add') {
+        await createSuggestion(payload, docFile)
+      } else {
+        await updateSuggestion(form.id, payload, docFile)
+      }
+
+      setSuccessMessage(`Suggestion ${mode === 'add' ? 'created' : 'updated'} successfully!`)
+      setSuccess(true)
+      setIsAddOpen(false)
+      setIsEditOpen(false)
+      resetForm(mode)
+      await loadSuggestions()
+      setTimeout(() => setSuccess(false), 1000)
+    } catch (err) {
+      setError(err?.message || 'Failed to save suggestion')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    if (!window.confirm('Delete this suggestion?')) return
+    setError('')
+    try {
+      await deleteSuggestion(row.id)
+      await loadSuggestions()
+      setSuccessMessage('Suggestion deleted successfully!')
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 1000)
+    } catch (err) {
+      setError(err?.message || 'Failed to delete suggestion')
+    }
+  }
+
+  const renderSchoolField = (form, setter) => {
+    if (isSuperAdmin) {
+      return (
+        <div className="avm-field full">
+          <ManualScopeSelectors
+            enabled={isSuperAdmin}
+            headOffices={manualScope.headOffices}
+            schoolOptions={manualScope.schoolOptions}
+            selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+            onHeadOfficeChange={(value) => {
+              manualScope.setSelectedHeadOfficeId(value)
+              manualScope.setSelectedSchoolId('')
+              setter((prev) => ({
+                ...prev,
+                headOfficeId: value,
+                schoolId: '',
+                className: '',
+                subjectName: '',
+                examTerm: '',
+              }))
+            }}
+            selectedSchoolId={form.schoolId}
+            onSchoolChange={(value) => {
+              manualScope.setSelectedSchoolId(value)
+              setter((prev) => ({
+                ...prev,
+                schoolId: value,
+                className: '',
+                subjectName: '',
+                examTerm: '',
+              }))
+            }}
+            schoolLabel="School"
+            compact
+          />
+        </div>
+      )
+    }
+
+    return (
+      <FormField label="School Name" required full>
+        <select
+          className="avm-select"
+          id="schoolId"
+          value={form.schoolId}
+          onChange={(e) =>
+            setter((prev) => ({
+              ...prev,
+              schoolId: e.target.value,
+              className: '',
+              subjectName: '',
+              examTerm: '',
+              removeDocument: prev.removeDocument,
+            }))
+          }
+          disabled={isSchoolAdmin}
+        >
+          <option value="">--Select School--</option>
+          {schoolFormOptions.map((school) => (
+            <option key={String(school.id)} value={String(school.id)}>
+              {school.schoolName}
+            </option>
+          ))}
+        </select>
+      </FormField>
+    )
   }
 
   const renderForm = (form, setter, step, docFile, setDocFile, docInputId, docInputKey, resetDocInput) => (
@@ -261,17 +590,7 @@ const Suggestion = () => {
         <>
           <p className="avm-section-title">{STEPS[0]}</p>
           <div className="avm-grid">
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="school"
-                value={form.school}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select School--</option>
-                <option>Windsor Park High School</option>
-              </select>
-            </FormField>
+            {renderSchoolField(form, setter)}
 
             <FormField label="Title" required full>
               <input
@@ -292,38 +611,43 @@ const Suggestion = () => {
                 onChange={handleChange(setter)}
               >
                 <option value="">--Select--</option>
-                <option>First Term</option>
-                <option>Second Term</option>
-                <option>Final Term</option>
+                {examTermOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </FormField>
 
             <FormField label="Class" required>
               <select
                 className="avm-select"
-                id="class"
-                value={form.class}
+                id="className"
+                value={form.className}
                 onChange={handleChange(setter)}
               >
                 <option value="">--Select--</option>
-                <option>Class 8</option>
-                <option>Class 9</option>
-                <option>Class 10</option>
+                {classOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </FormField>
 
             <FormField label="Subject" required>
               <select
                 className="avm-select"
-                id="subject"
-                value={form.subject}
+                id="subjectName"
+                value={form.subjectName}
                 onChange={handleChange(setter)}
               >
                 <option value="">--Select--</option>
-                <option>Mathematics</option>
-                <option>Science</option>
-                <option>English</option>
-                <option>Bangla</option>
+                {subjectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </FormField>
           </div>
@@ -338,14 +662,13 @@ const Suggestion = () => {
               <textarea
                 rows={5}
                 className="avm-input avm-textarea"
-                id="suggestion"
+                id="suggestionText"
                 placeholder="Enter your suggestion..."
-                value={form.suggestion}
+                value={form.suggestionText}
                 onChange={handleChange(setter)}
               />
             </FormField>
 
-            {/* Document upload */}
             <div className="avm-field full">
               <label className="avm-label">Document</label>
               <label
@@ -371,7 +694,7 @@ const Suggestion = () => {
                   e.currentTarget.style.background = '#f8fafc'
                 }}
               >
-                {docFile ? (
+                {docFile || form.documentName ? (
                   <div
                     style={{
                       display: 'flex',
@@ -384,7 +707,7 @@ const Suggestion = () => {
                     }}
                   >
                     <i
-                      className={getFileIcon(docFile.name)}
+                      className={getFileIcon(docFile?.name || form.documentName)}
                       style={{ fontSize: '1.5rem', color: '#45597a', flexShrink: 0 }}
                     ></i>
                     <div style={{ minWidth: 0 }}>
@@ -399,10 +722,10 @@ const Suggestion = () => {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {docFile.name}
+                        {docFile?.name || form.documentName}
                       </p>
                       <p style={{ margin: 0, fontSize: '0.75rem', color: '#7a8a9a' }}>
-                        {(docFile.size / 1024).toFixed(1)} KB
+                        {docFile ? `${(docFile.size / 1024).toFixed(1)} KB` : 'Existing file'}
                       </p>
                     </div>
                   </div>
@@ -440,13 +763,18 @@ const Suggestion = () => {
                   onChange={handleFileChange(setter, setDocFile)}
                 />
               </label>
-              {docFile && (
+              {(docFile || form.documentName) && (
                 <button
                   type="button"
                   className="avm-btn light sm"
                   style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}
                   onClick={() => {
-                    setter((prev) => ({ ...prev, document: null }))
+                    setter((prev) => ({
+                      ...prev,
+                      documentName: '',
+                      documentPath: '',
+                      removeDocument: true,
+                    }))
                     setDocFile(null)
                     resetDocInput()
                   }}
@@ -498,6 +826,20 @@ const Suggestion = () => {
           Add Suggestion
         </button>
       </div>
+
+      {error ? (
+        <div className="alert alert-danger d-flex align-items-center gap-10 mb-24 radius-8">
+          <i className="ri-error-warning-line text-lg" />
+          {error}
+        </div>
+      ) : null}
+
+      {success ? (
+        <div className="alert alert-success d-flex align-items-center gap-10 mb-24 radius-8">
+          <i className="ri-checkbox-circle-line text-lg" />
+          {successMessage}
+        </div>
+      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
@@ -587,48 +929,61 @@ const Suggestion = () => {
                       <input
                         className="form-check-input"
                         type="checkbox"
-                        checked={
-                          selectedRows.length === paginatedData.length && paginatedData.length > 0
-                        }
-                        onChange={handleSelectAll}
+                        checked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedRows(paginatedData.map((row) => row.id))
+                          else setSelectedRows([])
+                        }}
                       />
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  {visibleColumns.schoolName ? <th scope="col">School</th> : null}
                   {visibleColumns.title ? <th scope="col">Title</th> : null}
                   {visibleColumns.examTerm ? <th scope="col">Exam Term</th> : null}
-                  {visibleColumns.class ? <th scope="col">Class</th> : null}
-                  {visibleColumns.subject ? <th scope="col">Subject</th> : null}
+                  {visibleColumns.className ? <th scope="col">Class</th> : null}
+                  {visibleColumns.subjectName ? <th scope="col">Subject</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.length === 0 ? (
+                {loading && rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      Loading suggestions...
+                    </td>
+                  </tr>
+                ) : paginatedData.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
                       No records found.
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row) => (
-                    <tr key={row.sl}>
+                  paginatedData.map((row, index) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => {
+                              if (selectedRows.includes(row.id)) {
+                                setSelectedRows(selectedRows.filter((id) => id !== row.id))
+                              } else {
+                                setSelectedRows([...selectedRows, row.id])
+                              }
+                            }}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{String(startIndex + index + 1).padStart(2, '0')}</label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td className="fw-medium">{row.school}</td> : null}
+                      {visibleColumns.schoolName ? <td className="fw-medium">{row.schoolName}</td> : null}
                       {visibleColumns.title ? <td>{row.title}</td> : null}
                       {visibleColumns.examTerm ? <td>{row.examTerm}</td> : null}
-                      {visibleColumns.class ? <td>{row.class}</td> : null}
-                      {visibleColumns.subject ? <td>{row.subject}</td> : null}
+                      {visibleColumns.className ? <td>{row.className}</td> : null}
+                      {visibleColumns.subjectName ? <td>{row.subjectName}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
@@ -643,6 +998,7 @@ const Suggestion = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={() => handleDelete(row)}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -657,32 +1013,32 @@ const Suggestion = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              Showing {filteredData.length === 0 ? 0 : startIndex + 1} -{' '}
               {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
             </span>
             <div className="d-flex align-items-center gap-8">
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={currentPage === 1}
               >
                 Prev
               </button>
-              {getVisiblePages().map((p) => (
+              {getVisiblePages().map((page) => (
                 <button
-                  key={p}
+                  key={page}
                   type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
+                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                  onClick={() => setCurrentPage(page)}
                 >
-                  {p}
+                  {page}
                 </button>
               ))}
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={currentPage === totalPages}
               >
                 Next
@@ -692,7 +1048,6 @@ const Suggestion = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
       <WizardPopup
         modalWidth="620px"
         open={isAddOpen}
@@ -700,10 +1055,10 @@ const Suggestion = () => {
         steps={STEPS}
         step={addStep}
         onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Save"
+        onBack={() => setAddStep((step) => Math.max(0, step - 1))}
+        onNext={() => setAddStep((step) => Math.min(STEPS.length - 1, step + 1))}
+        onSubmit={() => handleSave('add')}
+        submitLabel={saving ? 'Saving...' : 'Save'}
       >
         {renderForm(
           addForm,
@@ -713,11 +1068,10 @@ const Suggestion = () => {
           setAddDocFile,
           'addSuggestionDocument',
           addDocInputKey,
-          () => setAddDocInputKey((key) => key + 1)
+          () => setAddDocInputKey((key) => key + 1),
         )}
       </WizardPopup>
 
-      {/* Edit Modal */}
       <WizardPopup
         modalWidth="620px"
         open={isEditOpen}
@@ -725,10 +1079,10 @@ const Suggestion = () => {
         steps={STEPS}
         step={editStep}
         onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
+        onBack={() => setEditStep((step) => Math.max(0, step - 1))}
+        onNext={() => setEditStep((step) => Math.min(STEPS.length - 1, step + 1))}
+        onSubmit={() => handleSave('edit')}
+        submitLabel={saving ? 'Saving...' : 'Update'}
       >
         {renderForm(
           editForm,
@@ -738,11 +1092,10 @@ const Suggestion = () => {
           setEditDocFile,
           'editSuggestionDocument',
           editDocInputKey,
-          () => setEditDocInputKey((key) => key + 1)
+          () => setEditDocInputKey((key) => key + 1),
         )}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         onClose={() => setIsFilterSidebarOpen(false)}
@@ -750,17 +1103,21 @@ const Suggestion = () => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
             </label>
             <select
-              id="school"
+              id="schoolId"
               className="form-control form-select"
-              value={pendingFilters.school}
+              value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select School</option>
-              <option>Windsor Park High School</option>
+              {schoolFilterOptions.map((school) => (
+                <option key={String(school.id)} value={String(school.id)}>
+                  {school.name}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -774,42 +1131,47 @@ const Suggestion = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select Term</option>
-              <option>First Term</option>
-              <option>Second Term</option>
-              <option>Final Term</option>
+              {examTermFilterOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <label htmlFor="class" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Class
             </label>
             <select
-              id="class"
+              id="className"
               className="form-control form-select"
-              value={pendingFilters.class}
+              value={pendingFilters.className}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select Class</option>
-              <option>Class 8</option>
-              <option>Class 9</option>
-              <option>Class 10</option>
+              {classFilterOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
           <div>
-            <label htmlFor="subject" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="subjectName" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Subject
             </label>
             <select
-              id="subject"
+              id="subjectName"
               className="form-control form-select"
-              value={pendingFilters.subject}
+              value={pendingFilters.subjectName}
               onChange={handlePendingFilterChange}
             >
               <option value="Select">Select Subject</option>
-              <option>Mathematics</option>
-              <option>Science</option>
-              <option>English</option>
-              <option>Bangla</option>
+              {subjectFilterOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
           <div>

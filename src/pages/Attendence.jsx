@@ -210,15 +210,6 @@ const Attendance = () => {
             <span className="text-secondary-light"> / Attendance</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Take Attendance
-        </button>
       </div>
 
       <div className="card h-100">

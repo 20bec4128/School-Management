@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS mark_send_sms (
+    id BIGSERIAL PRIMARY KEY,
+    head_office_id BIGINT,
+    school_id BIGINT NOT NULL,
+    school_name VARCHAR(255),
+    exam_term VARCHAR(255) NOT NULL,
+    receiver_type VARCHAR(255) NOT NULL,
+    receiver VARCHAR(255) NOT NULL,
+    template VARCHAR(255),
+    sms TEXT NOT NULL,
+    gateway VARCHAR(255) NOT NULL,
+    send_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
