@@ -40,9 +40,11 @@ public class HeadOfficeController {
     @GetMapping
     public Page<HeadOfficeDto> getAll(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status
     ) {
-        return headOfficeService.getAll(page, size, CurrentUserHolder.get());
+        return headOfficeService.getAll(page, size, search, status, CurrentUserHolder.get());
     }
 
     @RequirePermission({"HEAD_OFFICE_MANAGE", "*"})

@@ -8,13 +8,14 @@ import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
 import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import { 
-  fetchVisitorPurposes, 
+  fetchVisitorPurposesPage,
   createVisitorPurpose, 
   updateVisitorPurpose, 
   deleteVisitorPurpose 
 } from '../apis/visitorPurposeApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const emptyForm = {
   schoolId: '',
@@ -78,6 +79,8 @@ const VisitorPurpose = () => {
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const [data, setData] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -99,37 +102,40 @@ const VisitorPurpose = () => {
     : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
   const isSchoolLocked = !isSuperAdmin && !!listSchoolId
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      if (isSuperAdmin) {
-        if (listSchoolId) {
-          const list = await fetchVisitorPurposes(listSchoolId)
-          setData(Array.isArray(list) ? list : [])
-        } else {
-          const schoolIds = normalizeSchoolIds(contextSchoolOptions)
-          const list = await fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchVisitorPurposes(schoolId))
-          setData(uniqueBy(list, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.purpose ?? ''}`)))
-        }
-      } else {
-        if (!listSchoolId) {
-          setData([])
-          setError('Select a school before viewing visitor purposes.')
-          return
-        }
-        const list = await fetchVisitorPurposes(listSchoolId)
-        setData(Array.isArray(list) ? list : [])
+      if (!listSchoolId) {
+        setData([])
+        setTotalElements(0)
+        setTotalPages(1)
+        setError('Select a school before viewing visitor purposes.')
+        return
       }
+
+      const pageData = await fetchVisitorPurposesPage({
+        schoolId: listSchoolId,
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search,
+      })
+      setData(Array.isArray(pageData?.content) ? pageData.content : [])
+      setTotalElements(Number(pageData?.totalElements ?? 0))
+      setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
     } catch (err) {
       console.error('Failed to fetch visitor purposes:', err)
       setError(err?.message || 'Failed to fetch visitor purposes')
       setData([])
+      setTotalElements(0)
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }
-  }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
+  }, [currentPage, listSchoolId, rowsPerPage, search])
 
   useEffect(() => {
     void loadData()
@@ -141,27 +147,11 @@ const VisitorPurpose = () => {
     }
   }, [isSuperAdmin, listSchoolId])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return data.filter((r) => {
-      const matchesSearch = !q || [String(r.schoolId), r.purpose].join(' ').toLowerCase().includes(q)
-      const matchesSchool = !filters.schoolId || String(r.schoolId) === String(filters.schoolId)
-      return matchesSearch && matchesSchool
-    })
-  }, [search, filters, data])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const allSelected = paginated.length > 0 && paginated.every((r) => selectedRows.includes(r.id))
+  const allSelected = data.length > 0 && data.every((r) => selectedRows.includes(r.id))
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((r) => r.id)])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginated.some((r) => r.id === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...data.map((r) => r.id)])])
+    else setSelectedRows((prev) => prev.filter((id) => !data.some((r) => r.id === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -249,14 +239,6 @@ const VisitorPurpose = () => {
     } catch (err) {
       alert('Failed to delete visitor purpose')
     }
-  }
-
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
   }
 
   const renderForm = (form, setter) => (
@@ -372,9 +354,14 @@ const VisitorPurpose = () => {
                 </ul>
               </div>
 
-              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(value) => {
+                  setRowsPerPage(value)
+                  setCurrentPage(1)
+                }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             {/* Search */}
@@ -409,9 +396,9 @@ const VisitorPurpose = () => {
               <tbody>
                 {loading ? (
                    <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">Loading...</td></tr>
-                ) : paginated.length === 0 ? (
+                ) : data.length === 0 ? (
                   <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No visitor purposes found.</td></tr>
-                ) : paginated.map((row, idx) => (
+                ) : data.map((row, idx) => (
                   <tr key={row.id}>
                     <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -450,15 +437,39 @@ const VisitorPurpose = () => {
           {/* Pagination */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {currentStart} - {currentEnd} of {totalElements} entries
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              {getVisiblePages().map((p) => (
-                <button key={p} type="button" className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(p)}>{p}</button>
-              ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || totalPages < 1}
+              >
+                Prev
+              </button>
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                const base = Math.max(1, currentPage - 1)
+                const pageNumber = Math.min(totalPages, base + index)
+                return pageNumber > 0 ? (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                    onClick={() => setCurrentPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                ) : null
+              })}
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.min(Math.max(1, totalPages), p + 1))}
+                disabled={currentPage === totalPages || totalPages < 1}
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>

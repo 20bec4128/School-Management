@@ -6,9 +6,10 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { deleteHoliday, fetchHolidays } from '../apis/holidayApi'
+import { deleteHoliday, fetchHolidaysPage } from '../apis/holidayApi'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 
 
@@ -46,6 +47,8 @@ const Holiday = ({ onNavigate }) => {
 
   const [rows, setRows] = useState([])
   const [schools, setSchools] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -58,7 +61,7 @@ const Holiday = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
+    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : '')
     : activeSchoolId
       ? String(activeSchoolId)
       : authSchoolId
@@ -82,31 +85,10 @@ const Holiday = ({ onNavigate }) => {
       : []
     return [...filtered, ...fallback]
   }, [isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, schools, isHeadOfficeAdmin, authHeadOfficeId, listSchoolId, authSchoolName, authSchoolId])
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.schoolName, row.title, row.fromDate, row.toDate, row.note]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = !filters.schoolId || String(row.schoolId ?? '') === String(filters.schoolId)
-      const matchesViewOnWeb =
-        filters.isViewOnWeb === 'Select' ||
-        (filters.isViewOnWeb === 'Yes' ? row.isViewOnWeb : !row.isViewOnWeb)
-      return matchesSearch && matchesSchool && matchesViewOnWeb
-    })
-  }, [rows, search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage))
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filteredRows.slice(start, start + rowsPerPage)
-  }, [currentPage, filteredRows, rowsPerPage])
-
-  const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
+  const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(String(row.id)))
 
   const loadSchools = useCallback(async () => {
     try {
@@ -118,54 +100,45 @@ const Holiday = ({ onNavigate }) => {
   }, [])
 
   const loadData = useCallback(async () => {
+    if (!listSchoolId) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError('Select a school before viewing holidays.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      if (isSuperAdmin) {
-        const list = await fetchHolidays(listSchoolId ? { schoolId: listSchoolId } : {})
-        setRows(
-          Array.isArray(list)
-            ? list.map((item) => ({
-                id: item?.id,
-                schoolId: item?.schoolId ?? null,
-                schoolName: item?.schoolName || '',
-                title: item?.title || '',
-                fromDate: item?.fromDate || '',
-                toDate: item?.toDate || '',
-                note: item?.note || '',
-                isViewOnWeb: Boolean(item?.isViewOnWeb),
-              }))
-            : [],
-        )
-        return
-      }
-      if (!listSchoolId) {
-        setRows([])
-        setError('Select a school before viewing holidays.')
-        return
-      }
-      const list = await fetchHolidays({ schoolId: listSchoolId })
-      setRows(
-        Array.isArray(list)
-          ? list.map((item) => ({
-              id: item?.id,
-              schoolId: item?.schoolId ?? null,
-              schoolName: item?.schoolName || '',
-              title: item?.title || '',
-              fromDate: item?.fromDate || '',
-              toDate: item?.toDate || '',
-              note: item?.note || '',
-              isViewOnWeb: Boolean(item?.isViewOnWeb),
-            }))
-          : [],
-      )
+      const data = await fetchHolidaysPage({
+        schoolId: listSchoolId,
+        search,
+        isViewOnWeb: filters.isViewOnWeb,
+        page: currentPage - 1,
+        size: rowsPerPage,
+      })
+      const content = Array.isArray(data?.content) ? data.content : []
+      setRows(content.map((item) => ({
+        id: item?.id,
+        schoolId: item?.schoolId ?? null,
+        schoolName: item?.schoolName || '',
+        title: item?.title || '',
+        fromDate: item?.fromDate || '',
+        toDate: item?.toDate || '',
+        note: item?.note || '',
+        isViewOnWeb: Boolean(item?.isViewOnWeb),
+      })))
+      setTotalElements(Number(data?.totalElements ?? content.length))
+      setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
     } catch (err) {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
       setError(err?.message || 'Failed to load holidays')
     } finally {
       setLoading(false)
     }
-  }, [listSchoolId, isSuperAdmin])
+  }, [currentPage, filters.isViewOnWeb, listSchoolId, rowsPerPage, search])
 
   useEffect(() => { 
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -176,10 +149,14 @@ const Holiday = ({ onNavigate }) => {
     void loadData() 
   }, [loadData])
 
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
+
 
   const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...paginatedRows.map((row) => String(row.id))])])
-    else setSelectedRows((prev) => prev.filter((id) => !paginatedRows.some((row) => String(row.id) === id)))
+    if (e.target.checked) setSelectedRows((prev) => [...new Set([...prev, ...rows.map((row) => String(row.id))])])
+    else setSelectedRows((prev) => prev.filter((id) => !rows.some((row) => String(row.id) === id)))
   }
 
   const handleSelectRow = (id) => {
@@ -198,6 +175,9 @@ const Holiday = ({ onNavigate }) => {
     setFilters(pendingFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
+    if (isSuperAdmin && pendingFilters.schoolId) {
+      manualScope.setSelectedSchoolId(pendingFilters.schoolId)
+    }
   }
 
   const handleResetFilters = () => {
@@ -231,16 +211,6 @@ const Holiday = ({ onNavigate }) => {
       setError(err?.message || 'Failed to delete holiday')
     }
   }
-
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let page = start; page <= end; page += 1) pages.push(page)
-    return pages
-  }
-
-
 
   return (
     <div className="dashboard-main-body">
@@ -293,9 +263,14 @@ const Holiday = ({ onNavigate }) => {
                   ))}
                 </ul>
               </div>
-              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <RowsPerPageSelect
+                value={rowsPerPage}
+                onChange={(value) => {
+                  setRowsPerPage(value)
+                  setCurrentPage(1)
+                }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
             <div className="position-relative">
               <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search holiday..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }} />
@@ -319,9 +294,9 @@ const Holiday = ({ onNavigate }) => {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">Loading holidays...</td></tr>
-                ) : paginatedRows.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No holidays found.</td></tr>
-                ) : paginatedRows.map((row, index) => (
+                ) : rows.map((row, index) => (
                   <tr key={row.id}>
                     <td><div className="form-check style-check d-flex align-items-center"><input type="checkbox" className="form-check-input" checked={selectedRows.includes(String(row.id))} onChange={() => handleSelectRow(String(row.id))} /><label className="form-check-label">{(currentPage - 1) * rowsPerPage + index + 1}</label></div></td>
                     {visibleColumns.school ? <td>{row.schoolName || '-'}</td> : null}
@@ -342,11 +317,40 @@ const Holiday = ({ onNavigate }) => {
           </div>
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length}</span>
+            <span className="text-sm text-secondary-light">
+              Showing {currentStart} - {currentEnd} of {totalElements} entries
+            </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              {getVisiblePages().map((page) => <button key={page} type="button" className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'} onClick={() => setCurrentPage(page)}>{page}</button>)}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || totalPages < 1}
+              >
+                Prev
+              </button>
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                const base = Math.max(1, currentPage - 1)
+                const pageNumber = Math.min(totalPages, base + index)
+                return pageNumber > 0 ? (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                    onClick={() => setCurrentPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                ) : null
+              })}
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.min(Math.max(1, totalPages), p + 1))}
+                disabled={currentPage === totalPages || totalPages < 1}
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>

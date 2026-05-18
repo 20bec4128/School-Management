@@ -228,7 +228,7 @@ const Lesson = ({ onNavigate }) => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               {/* Export Dropdown */}
-              <ExportDropdown onExportExcel={handleExportCSV} />
+              <ExportDropdown onExportExcel={()=>{}} />
 
               <div className="dropdown">
                 <button

@@ -12,9 +12,15 @@ import com.School.School_management.Service.NoticeService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +50,25 @@ public class NoticeServiceImpl implements NoticeService {
             rows = noticeRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId);
         }
         return rows.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NoticeDto.Response> page(Long schoolId, String search, String noticeFor, Boolean isViewOnWeb, int page, int size) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        final String q = normalizeOptional(search);
+        final String type = normalizeOptional(noticeFor);
+        List<NoticeDto.Response> filtered = noticeRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId).stream()
+                .map(this::toResponse)
+                .filter(dto -> matches(dto, q, type, isViewOnWeb))
+                .sorted(Comparator.comparing(NoticeDto.Response::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override
@@ -152,6 +177,30 @@ public class NoticeServiceImpl implements NoticeService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean matches(NoticeDto.Response dto, String search, String noticeFor, Boolean isViewOnWeb) {
+        if (noticeFor != null && !equalsIgnoreCaseSafe(dto.getNoticeFor(), noticeFor)) {
+            return false;
+        }
+        if (isViewOnWeb != null && !Objects.equals(dto.getIsViewOnWeb(), isViewOnWeb)) {
+            return false;
+        }
+        if (search == null) {
+            return true;
+        }
+        String q = search.toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(dto.getTitle(), q)
+                || containsIgnoreCase(dto.getNotice(), q)
+                || containsIgnoreCase(dto.getNoticeFor(), q);
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private boolean equalsIgnoreCaseSafe(String value, String query) {
+        return value != null && value.equalsIgnoreCase(query);
     }
 
     private LocalDate requireDate(LocalDate value) {

@@ -4,6 +4,7 @@ import com.School.School_management.Dto.AcademicYearDto;
 import com.School.School_management.Service.AcademicYearService;
 import com.School.School_management.auth.RequirePermission;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,6 +29,17 @@ public class AcademicYearController {
     @GetMapping
     public List<AcademicYearDto> list(@RequestParam(required = false) Long schoolId) {
         return academicYearService.list(schoolId);
+    }
+
+    @GetMapping("/page")
+    public Page<AcademicYearDto> page(
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean running,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return academicYearService.page(schoolId, search, running, page, size);
     }
 
     @PostMapping

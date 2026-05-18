@@ -5,9 +5,10 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 import { useAuth } from '../context/useAuth'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { createAcademicYear, deleteAcademicYear, fetchAcademicYears, updateAcademicYear } from '../apis/academicYearsApi'
+import { createAcademicYear, deleteAcademicYear, fetchAcademicYearsPage, updateAcademicYear } from '../apis/academicYearsApi'
 import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
+import { TablePagination } from '../components/table'
 
 const emptyForm = {
   schoolId: '',
@@ -97,6 +98,8 @@ const AcademicYear = () => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
   const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [schools, setSchools] = useState([])
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -150,19 +153,27 @@ const AcademicYear = () => {
     setSchools(Array.isArray(list) ? list : [])
   }
 
-  const loadAcademicYears = async ({ schoolId } = {}) => {
-    if (isSchoolAdmin) {
-      if (authSchoolId == null) {
-        setRows([])
-        return
-      }
-      const data = await fetchAcademicYears({ schoolId: authSchoolId })
-      setRows(Array.isArray(data) ? data.map(normalizeRow) : [])
-      return
-    }
+  const loadAcademicYears = async () => {
+    const schoolFilter = filters.schoolId !== 'All' ? filters.schoolId : ''
+    const runningFilter =
+      filters.status === 'Running' ? true : filters.status === 'Stopped' ? false : undefined
 
-    const data = schoolId == null ? await fetchAcademicYears() : await fetchAcademicYears({ schoolId })
-    setRows(Array.isArray(data) ? data.map(normalizeRow) : [])
+    const effectiveSchoolId = isSchoolAdmin
+      ? (authSchoolId != null ? String(authSchoolId) : '')
+      : schoolFilter
+
+    const pageData = await fetchAcademicYearsPage({
+      schoolId: effectiveSchoolId || undefined,
+      page: currentPage - 1,
+      size: rowsPerPage,
+      search,
+      running: runningFilter,
+    })
+
+    const content = Array.isArray(pageData?.content) ? pageData.content : []
+    setRows(content.map(normalizeRow))
+    setTotalElements(Number(pageData?.totalElements ?? 0))
+    setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
   }
 
   useEffect(() => {
@@ -196,35 +207,15 @@ const AcademicYear = () => {
     }
   }, [authSchoolId, isSchoolAdmin, status, token])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.schoolName, row.academicYear, formatDate(row.sessionStart), formatDate(row.sessionEnd), row.note]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = filters.schoolId === 'All' || String(row.schoolId) === String(filters.schoolId)
-      const matchesStatus =
-        filters.status === 'All' ||
-        (filters.status === 'Running' ? row.isRunning : !row.isRunning)
-      return matchesSearch && matchesSchool && matchesStatus
-    })
-  }, [filters.schoolId, filters.status, rows, search])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
+    if (status !== 'ready' || !token) return
+    setBusy(true)
+    setLoadError('')
+    loadAcademicYears()
+      .catch((error) => setLoadError(error?.message || 'Failed to load academic years'))
+      .finally(() => setBusy(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, rowsPerPage, search, filters.schoolId, filters.status, status, token, authSchoolId, isSchoolAdmin])
 
   const resolveSchoolName = (schoolId) => {
     if (schoolId == null) return ''
@@ -426,14 +417,14 @@ const AcademicYear = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No academic years found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row, index) => (
+                  rows.map((row, index) => (
                     <tr key={row.id ?? `${row.schoolId}-${row.academicYear}-${index}`}>
                       <td>{(currentPage - 1) * rowsPerPage + index + 1}</td>
                       {visibleColumns.schoolName ? <td>{row.schoolName || resolveSchoolName(row.schoolId)}</td> : null}
@@ -481,32 +472,17 @@ const AcademicYear = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              <button type="button" className="btn btn-sm btn-primary-600">
-                {currentPage}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                totalRecords: totalElements,
+                rowsPerPage,
+                pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements}`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
           </div>
         </div>
       </div>

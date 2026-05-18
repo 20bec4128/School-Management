@@ -97,12 +97,16 @@ public class HeadOfficeServiceImpl implements HeadOfficeService {
     }
 
     @Override
-    public Page<HeadOfficeDto> getAll(int page, int size, CurrentUser user) {
+    public Page<HeadOfficeDto> getAll(int page, int size, String search, String status, CurrentUser user) {
         ensureCanManage(user);
         Pageable pageable = size < 0
                 ? Pageable.unpaged()
                 : PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by(Sort.Direction.DESC, "id"));
-        return headOfficeRepository.findAll(pageable).map(this::toDto);
+        String q = search == null ? null : search.trim();
+        if (q != null && q.isEmpty()) q = null;
+        String s = status == null ? null : status.trim();
+        if (s != null && (s.isEmpty() || "Select".equalsIgnoreCase(s) || "All".equalsIgnoreCase(s))) s = null;
+        return headOfficeRepository.search(q, s, pageable).map(this::toDto);
     }
 
     @Override

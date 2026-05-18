@@ -16,11 +16,17 @@ import com.School.School_management.auth.CurrentUserHolder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -65,6 +71,25 @@ public class GalleryVideoServiceImpl implements GalleryVideoService {
         }
 
         return rows.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<GalleryVideoDto.Response> page(Long schoolId, Long galleryId, String search, int page, int size) {
+        CurrentUser user = CurrentUserHolder.get();
+        if (user == null) throw new ForbiddenException();
+
+        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        final String q = normalizeOptional(search);
+        List<GalleryVideoDto.Response> filtered = galleryVideoRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId).stream()
+                .map(this::toResponse)
+                .filter(dto -> matches(dto, galleryId, q))
+                .sorted(Comparator.comparing(GalleryVideoDto.Response::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override
@@ -194,5 +219,23 @@ public class GalleryVideoServiceImpl implements GalleryVideoService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean matches(GalleryVideoDto.Response dto, Long galleryId, String search) {
+        if (galleryId != null && !Objects.equals(dto.getGalleryId(), galleryId)) {
+            return false;
+        }
+        if (search == null) {
+            return true;
+        }
+        String q = search.toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(dto.getTitle(), q)
+                || containsIgnoreCase(dto.getCaption(), q)
+                || containsIgnoreCase(dto.getVideoPath(), q)
+                || containsIgnoreCase(dto.getGalleryTitle(), q);
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
     }
 }

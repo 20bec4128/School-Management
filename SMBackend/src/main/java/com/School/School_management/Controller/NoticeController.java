@@ -4,6 +4,7 @@ import com.School.School_management.Dto.NoticeDto;
 import com.School.School_management.Service.NoticeService;
 import com.School.School_management.auth.RequirePermission;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,6 +31,18 @@ public class NoticeController {
     @GetMapping
     public ResponseEntity<List<NoticeDto.Response>> list(@RequestParam(required = false) Long schoolId) {
         return ResponseEntity.ok(noticeService.list(schoolId));
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<Page<NoticeDto.Response>> page(
+            @RequestParam Long schoolId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String noticeFor,
+            @RequestParam(required = false) Boolean isViewOnWeb,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(noticeService.page(schoolId, search, noticeFor, isViewOnWeb, page, size));
     }
 
     @PostMapping

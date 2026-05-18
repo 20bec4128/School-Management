@@ -2,6 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { ensurePdfTools } from '../utils/pdfAutoTable'
 
+const textFromCell = (cell) => {
+  if (!cell) return ''
+  const input = cell.querySelector?.('input, textarea, select')
+  if (input) {
+    if (input.tagName === 'SELECT') {
+      return String(input.options?.[input.selectedIndex]?.text ?? input.value ?? '').trim()
+    }
+    if (input.type === 'checkbox' || input.type === 'radio') {
+      return input.checked ? 'Yes' : 'No'
+    }
+    return String(input.value ?? '').trim()
+  }
+  return String(cell.textContent ?? '').replace(/\s+/g, ' ').trim()
+}
+
+const sanitizeFileName = (value) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  // Windows-safe file name.
+  return raw.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
+}
+
 const ExportDropdown = ({
   title = 'Export',
   rows = [],
@@ -23,6 +45,7 @@ const ExportDropdown = ({
   extraActions = [],
 }) => {
   const [open, setOpen] = useState(false)
+  const [domExportAvailable, setDomExportAvailable] = useState(false)
   const wrapperRef = useRef(null)
   const hasBuiltInExcel = Array.isArray(columns) && columns.length > 0 && (Array.isArray(rows) || typeof loadRows === 'function')
   const hasBuiltInPDF = hasBuiltInExcel
@@ -64,13 +87,100 @@ const ExportDropdown = ({
     return Array.isArray(rows) ? rows : []
   }
 
-  const baseName = String(fileName || 'Export').replace(/\.(xlsx|xls|pdf)$/i, '')
+  const resolveAutoFileName = () => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return ''
+
+    const container = wrapper.closest('.card') || wrapper.parentElement
+    const candidates = [
+      container?.querySelector?.('.card-header h6'),
+      container?.querySelector?.('.card-header h5'),
+      container?.querySelector?.('.card-header h4'),
+      container?.querySelector?.('h6'),
+      container?.querySelector?.('h5'),
+      container?.querySelector?.('h4'),
+      document.querySelector?.('h1'),
+      document.querySelector?.('h2'),
+    ].filter(Boolean)
+
+    for (const el of candidates) {
+      const text = sanitizeFileName(el?.textContent)
+      if (text && text.length >= 3) return text
+    }
+
+    return ''
+  }
+
+  const getDomTableExport = () => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return null
+
+    // Most pages place ExportDropdown in the same "card" as the table.
+    const container = wrapper.closest('.card') || wrapper.parentElement
+    const table = container?.querySelector?.('table')
+    if (!table) return null
+
+    const ths = Array.from(table.querySelectorAll('thead th'))
+    const headerLabels = ths
+      .map((th) => String(th.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+
+    // Drop typical non-data columns.
+    const exportableHeaderIndexes = headerLabels
+      .map((label, idx) => ({ label, idx }))
+      .filter(({ label }) => {
+        const normalized = label.toLowerCase()
+        if (normalized === 'action' || normalized === 'actions') return false
+        if (normalized === 's.l' || normalized === 'sl' || normalized === '#') return false
+        return true
+      })
+
+    const exportColumns = exportableHeaderIndexes.map(({ label }) => label)
+    if (exportColumns.length === 0) return null
+
+    const trs = Array.from(table.querySelectorAll('tbody tr'))
+    const exportRows = trs
+      .map((tr) => {
+        const tds = Array.from(tr.querySelectorAll('td'))
+        if (tds.length === 0) return null
+        const rowObj = {}
+        exportableHeaderIndexes.forEach(({ label, idx }) => {
+          rowObj[label] = textFromCell(tds[idx] ?? null)
+        })
+        return rowObj
+      })
+      .filter(Boolean)
+
+    return { exportColumns, exportRows }
+  }
+
+  const baseName = sanitizeFileName(fileName) || resolveAutoFileName() || 'Export'
+  const baseNameNormalized = String(baseName).replace(/\.(xlsx|xls|pdf)$/i, '')
 
   const exportExcel = async () => {
     if (typeof onExportExcel === 'function' && !hasBuiltInExcel) {
-      await onExportExcel()
+      const domExport = getDomTableExport()
+      if (!domExport) {
+        await onExportExcel()
+        return
+      }
+      const worksheet = XLSX.utils.json_to_sheet(domExport.exportRows)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || 'Sheet1'))
+      XLSX.writeFile(workbook, `${baseNameNormalized}.xlsx`)
       return
     }
+
+    if (!hasBuiltInExcel && typeof onExportExcel !== 'function') {
+      const domExport = getDomTableExport()
+      if (!domExport) return
+      const worksheet = XLSX.utils.json_to_sheet(domExport.exportRows)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || 'Sheet1'))
+      XLSX.writeFile(workbook, `${baseNameNormalized}.xlsx`)
+      return
+    }
+
     const sourceRows = await getSourceRows()
     const exportColumns = getVisibleColumns()
     const exportRows = sourceRows.map((row, index) => {
@@ -84,12 +194,40 @@ const ExportDropdown = ({
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || 'Sheet1'))
-    XLSX.writeFile(workbook, `${baseName}.xlsx`)
+    XLSX.writeFile(workbook, `${baseNameNormalized}.xlsx`)
   }
 
   const exportPDF = async () => {
     if (typeof onExportPDF === 'function' && !hasBuiltInPDF) {
-      await onExportPDF()
+      const domExport = getDomTableExport()
+      if (!domExport) {
+        await onExportPDF()
+        return
+      }
+      const { JsPDF, autoTable } = await ensurePdfTools()
+      const doc = new JsPDF({ orientation: pdfOrientation })
+      doc.text(String(pdfTitle || 'Export Report'), 14, 10)
+      autoTable(doc, {
+        head: [domExport.exportColumns],
+        body: domExport.exportRows.map((row) => domExport.exportColumns.map((label) => String(row[label] ?? ''))),
+        headStyles: { fillColor: [31, 41, 55] },
+      })
+      doc.save(`${baseNameNormalized}.pdf`)
+      return
+    }
+
+    if (!hasBuiltInPDF && typeof onExportPDF !== 'function') {
+      const domExport = getDomTableExport()
+      if (!domExport) return
+      const { JsPDF, autoTable } = await ensurePdfTools()
+      const doc = new JsPDF({ orientation: pdfOrientation })
+      doc.text(String(pdfTitle || 'Export Report'), 14, 10)
+      autoTable(doc, {
+        head: [domExport.exportColumns],
+        body: domExport.exportRows.map((row) => domExport.exportColumns.map((label) => String(row[label] ?? ''))),
+        headStyles: { fillColor: [31, 41, 55] },
+      })
+      doc.save(`${baseNameNormalized}.pdf`)
       return
     }
     const { JsPDF, autoTable } = await ensurePdfTools()
@@ -110,12 +248,12 @@ const ExportDropdown = ({
       body: exportRows.map((row) => exportColumns.map((column) => String(row[column.label] ?? ''))),
       headStyles: { fillColor: [31, 41, 55] },
     })
-    doc.save(`${baseName}.pdf`)
+    doc.save(`${baseNameNormalized}.pdf`)
   }
 
   const canOpen = !(disabled || loading)
-  const canExportExcel = Boolean(onExportExcel || hasBuiltInExcel)
-  const canExportPDF = Boolean(onExportPDF || hasBuiltInPDF)
+  const canExportExcel = Boolean(onExportExcel || hasBuiltInExcel || domExportAvailable)
+  const canExportPDF = Boolean(onExportPDF || hasBuiltInPDF || domExportAvailable)
 
   return (
     <div className={`dropdown ${className}`.trim()} ref={wrapperRef}>
@@ -126,6 +264,9 @@ const ExportDropdown = ({
         disabled={!canOpen}
         onClick={() => {
           if (!canOpen) return
+          if (!open) {
+            setDomExportAvailable(Boolean(getDomTableExport()))
+          }
           setOpen((prev) => !prev)
         }}
       >

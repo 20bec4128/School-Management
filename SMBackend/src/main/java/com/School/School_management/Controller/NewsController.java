@@ -4,6 +4,7 @@ import com.School.School_management.Dto.NewsDto;
 import com.School.School_management.Service.NewsService;
 import com.School.School_management.auth.RequirePermission;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,6 +31,17 @@ public class NewsController {
     @GetMapping
     public ResponseEntity<List<NewsDto.Response>> list(@RequestParam(required = false) Long schoolId) {
         return ResponseEntity.ok(newsService.list(schoolId));
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<Page<NewsDto.Response>> page(
+            @RequestParam Long schoolId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Boolean isViewOnWeb,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(newsService.page(schoolId, search, isViewOnWeb, page, size));
     }
 
     @PostMapping

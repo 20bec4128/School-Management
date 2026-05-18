@@ -7,10 +7,11 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { fetchAcademicYears } from '../apis/academicYearsApi'
 import { fetchComplainTypes } from '../apis/complainTypeApi'
-import { deleteComplain, fetchComplains } from '../apis/complainApi'
-import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy, uniqueStrings } from '../utils/schoolScope'
+import { deleteComplain, fetchComplainsPage } from '../apis/complainApi'
+import { uniqueBy, uniqueStrings } from '../utils/schoolScope'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const EDIT_STORAGE_KEY = 'manage-complain-edit-row'
 
@@ -39,6 +40,8 @@ const ManageComplain = ({ onNavigate }) => {
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const [data, setData] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [complainTypes, setComplainTypes] = useState([])
   const [academicYears, setAcademicYears] = useState([])
   const [loading, setLoading] = useState(false)
@@ -55,6 +58,8 @@ const ManageComplain = ({ onNavigate }) => {
     ? (activeSchoolId ? String(activeSchoolId) : '')
     : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []) : contextSchoolOptions
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   const academicYearSuggestions = useMemo(
     () => uniqueStrings(academicYears.map((year) => year?.academicYear)),
@@ -72,93 +77,64 @@ const ManageComplain = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      if (isSuperAdmin) {
-        if (listSchoolId) {
-          const [complainList, typeList, yearList] = await Promise.all([
-            fetchComplains(listSchoolId),
-            fetchComplainTypes(listSchoolId),
-            fetchAcademicYears({ schoolId: listSchoolId }),
-          ])
-          setData(Array.isArray(complainList) ? complainList : [])
-          setComplainTypes(Array.isArray(typeList) ? typeList : [])
-          setAcademicYears(Array.isArray(yearList) ? yearList : [])
-        } else {
-          const schoolIds = normalizeSchoolIds(contextSchoolOptions)
-          const [complainList, typeList, yearList] = await Promise.all([
-            fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchComplains(schoolId)),
-            fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchComplainTypes(schoolId)),
-            fetchRowsForSchoolIds(schoolIds, (schoolId) => fetchAcademicYears({ schoolId })),
-          ])
-          setData(uniqueBy(complainList, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.complainDate ?? ''}-${row?.complainBy ?? ''}`)))
-          setComplainTypes(uniqueBy(typeList, (row) => String(row?.id ?? `${row?.schoolId ?? ''}-${row?.complainType ?? ''}`)))
-          setAcademicYears(Array.isArray(yearList) ? yearList : [])
-        }
-      } else {
-        if (!listSchoolId) {
-          setData([])
-          setComplainTypes([])
-          setAcademicYears([])
-          setError('Select a school before viewing complains.')
-          return
-        }
-        const [complainList, typeList, yearList] = await Promise.all([
-          fetchComplains(listSchoolId),
-          fetchComplainTypes(listSchoolId),
-          fetchAcademicYears({ schoolId: listSchoolId }),
-        ])
-        setData(Array.isArray(complainList) ? complainList : [])
-        setComplainTypes(Array.isArray(typeList) ? typeList : [])
-        setAcademicYears(Array.isArray(yearList) ? yearList : [])
+      if (!listSchoolId) {
+        setData([])
+        setTotalElements(0)
+        setTotalPages(1)
+        setComplainTypes([])
+        setAcademicYears([])
+        setError('Select a school before viewing complains.')
+        return
       }
+
+      const [pageData, typeList, yearList] = await Promise.all([
+        fetchComplainsPage({
+          schoolId: listSchoolId,
+          page: currentPage - 1,
+          size: rowsPerPage,
+          search,
+          academicYear: filters.academicYear !== 'Select' ? filters.academicYear : undefined,
+          complainTypeId: filters.complainTypeId !== 'Select' ? filters.complainTypeId : undefined,
+          userType: filters.userType !== 'Select' ? filters.userType : undefined,
+        }),
+        fetchComplainTypes(listSchoolId),
+        fetchAcademicYears({ schoolId: listSchoolId }),
+      ])
+
+      setData(Array.isArray(pageData?.content) ? pageData.content : [])
+      setTotalElements(Number(pageData?.totalElements ?? 0))
+      setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
+      setComplainTypes(Array.isArray(typeList) ? typeList : [])
+      setAcademicYears(Array.isArray(yearList) ? yearList : [])
     } catch (err) {
       console.error('Failed to fetch complain data:', err)
       setError(err?.message || 'Failed to fetch complains')
       setData([])
+      setTotalElements(0)
+      setTotalPages(1)
       setComplainTypes([])
       setAcademicYears([])
     } finally {
       setLoading(false)
     }
-  }, [isSuperAdmin, listSchoolId, contextSchoolOptions])
+  }, [currentPage, filters.academicYear, filters.complainTypeId, filters.userType, listSchoolId, rowsPerPage, search])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData()
   }, [loadData])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return data.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [String(row.schoolId), row.academicYear, row.userType, row.complainBy, row.complainTypeName, row.complainDate, row.actionDate, row.complain]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      const matchesSchool = !filters.schoolId || String(row.schoolId) === String(filters.schoolId)
-      const matchesAcademicYear = filters.academicYear === 'Select' || row.academicYear === filters.academicYear
-      const matchesUserType = filters.userType === 'Select' || row.userType === filters.userType
-      const matchesComplainType =
-        filters.complainTypeId === 'Select' || String(row.complainTypeId || '') === String(filters.complainTypeId)
-      return matchesSearch && matchesSchool && matchesAcademicYear && matchesUserType && matchesComplainType
-    })
-  }, [data, filters, search])
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.id))
+  const allSelected = data.length > 0 && data.every((row) => selectedRows.includes(row.id))
 
   const handleSelectAll = (event) => {
     if (event.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.id)])])
+      setSelectedRows((prev) => [...new Set([...prev, ...data.map((row) => row.id)])])
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.id === id)))
+      setSelectedRows((prev) => prev.filter((id) => !data.some((row) => row.id === id)))
     }
   }
 
@@ -202,14 +178,6 @@ const ManageComplain = ({ onNavigate }) => {
     } catch {
       alert('Failed to delete complain')
     }
-  }
-
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let page = start; page <= end; page += 1) pages.push(page)
-    return pages
   }
 
   return (
@@ -292,20 +260,14 @@ const ManageComplain = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(event) => {
-                  setRowsPerPage(Number(event.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -352,14 +314,14 @@ const ManageComplain = ({ onNavigate }) => {
                       Loading...
                     </td>
                   </tr>
-                ) : paginated.length === 0 ? (
+                ) : data.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
                       No complains found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row, index) => (
+                  data.map((row, index) => (
                     <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -408,28 +370,36 @@ const ManageComplain = ({ onNavigate }) => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing {currentStart} - {currentEnd} of {totalElements} entries
             </span>
             <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
-                Prev
-              </button>
-              {getVisiblePages().map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(page)}
-                >
-                  {page}
-                </button>
-              ))}
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || totalPages < 1}
+              >
+                Prev
+              </button>
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                const base = Math.max(1, currentPage - 1)
+                const pageNumber = Math.min(totalPages, base + index)
+                return pageNumber > 0 ? (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    className={pageNumber === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
+                    onClick={() => setCurrentPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                ) : null
+              })}
+              <button
+                type="button"
+                className="btn btn-sm btn-light border"
+                onClick={() => setCurrentPage((p) => Math.min(Math.max(1, totalPages), p + 1))}
+                disabled={currentPage === totalPages || totalPages < 1}
               >
                 Next
               </button>

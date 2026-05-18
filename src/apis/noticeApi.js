@@ -26,6 +26,24 @@ export const fetchNotices = async ({ schoolId } = {}) => {
   return res.json()
 }
 
+export const fetchNoticesPage = async ({ schoolId, search = '', noticeFor = '', isViewOnWeb, page = 0, size = 10 } = {}) => {
+  const qs = new URLSearchParams({
+    schoolId: String(schoolId),
+    page: String(Math.max(0, page)),
+    size: String(Math.max(1, size)),
+  })
+  const q = String(search || '').trim()
+  if (q) qs.set('search', q)
+  const type = String(noticeFor || '').trim()
+  if (type) qs.set('noticeFor', type)
+  if (isViewOnWeb !== undefined && isViewOnWeb !== null && isViewOnWeb !== 'Select') {
+    qs.set('isViewOnWeb', String(isViewOnWeb))
+  }
+  const res = await apiFetch(`${BASE}/page?${qs.toString()}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(await readApiError(res))
+  return res.json()
+}
+
 export const createNotice = async (payload) => {
   const res = await apiFetch(BASE, {
     method: 'POST',

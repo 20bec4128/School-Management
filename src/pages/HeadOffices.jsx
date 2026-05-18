@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { TablePagination } from '../components/table'
 import {
   activateHeadOffice,
   createHeadOfficeWithAdmin,
@@ -71,6 +72,8 @@ const FormField = ({ label, required, children, full = false }) => {
 
 const HeadOffices = () => {
   const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState("");
@@ -96,10 +99,21 @@ const HeadOffices = () => {
     setLoading(true)
     setError('')
     try {
-      const page = await fetchHeadOfficesPage(0, 500)
-      setRows(Array.isArray(page?.content) ? page.content : [])
+      const statusFilter = filters.status !== 'Select' ? filters.status : ''
+      const nameFilter = filters.name !== 'Select' ? filters.name : ''
+      const effectiveSearch = String(search || nameFilter || '').trim()
+
+      const pageData = await fetchHeadOfficesPage(currentPage - 1, rowsPerPage, {
+        search: effectiveSearch,
+        status: statusFilter,
+      })
+      setRows(Array.isArray(pageData?.content) ? pageData.content : [])
+      setTotalElements(Number(pageData?.totalElements ?? 0))
+      setTotalPages(Math.max(1, Number(pageData?.totalPages ?? 1)))
     } catch (e) {
       setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
       setError(e?.message || 'Failed to load head offices')
     } finally {
       setLoading(false)
@@ -108,24 +122,7 @@ const HeadOffices = () => {
 
   useEffect(() => {
     void load()
-  }, [])
-
-  const filteredData = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      const matchesSearch = !q || row.name?.toLowerCase().includes(q) || row.id?.toString().includes(q);
-      const matchesName = filters.name === 'Select' || row.name === filters.name
-      const matchesStatus = filters.status === 'Select' || String(row.status || '').toUpperCase() === String(filters.status || '').toUpperCase()
-      return matchesSearch && matchesName && matchesStatus;
-    });
-  }, [rows, search, filters]);
-
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(start, start + rowsPerPage);
-  }, [currentPage, filteredData, rowsPerPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
+  }, [currentPage, filters.name, filters.status, rowsPerPage, search])
 
   const handleChange = (e) => {
     const { id, value } = e.target
@@ -247,14 +244,6 @@ const HeadOffices = () => {
     }
   }
 
-  const getVisiblePages = () => {
-    const pages = [];
-    const start = Math.max(1, currentPage - 1);
-    const end = Math.min(totalPages, start + 2);
-    for (let p = start; p <= end; p++) pages.push(p);
-    return pages;
-  };
-
   const handleFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
@@ -273,9 +262,18 @@ const HeadOffices = () => {
     setCurrentPage(1)
   }
 
-  const handleExportExcel = () => {
+  const loadExportRows = async () => {
+    const statusFilter = filters.status !== 'Select' ? filters.status : ''
+    const nameFilter = filters.name !== 'Select' ? filters.name : ''
+    const effectiveSearch = String(search || nameFilter || '').trim()
+    const pageData = await fetchHeadOfficesPage(0, 10000, { search: effectiveSearch, status: statusFilter })
+    return Array.isArray(pageData?.content) ? pageData.content : []
+  }
+
+  const handleExportExcel = async () => {
+    const exportRows = await loadExportRows()
     const ws = XLSX.utils.json_to_sheet(
-      filteredData.map((row) => ({
+      exportRows.map((row) => ({
         ID: row.id,
         Name: row.name,
         Status: row.status,
@@ -378,10 +376,10 @@ const HeadOffices = () => {
               <tbody>
                 {loading ? (
                    <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">Loading...</td></tr>
-                ) : paginatedData.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
                 ) : (
-                  paginatedData.map((row, idx) => (
+                  rows.map((row) => (
                     <tr key={row.id}>
                       <td>{row.id}</td>
                       {visibleColumns.name ? (
@@ -444,17 +442,17 @@ const HeadOffices = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              {getVisiblePages().map((p) => (
-                <button key={p} type="button" className={p === currentPage ? "btn btn-sm btn-primary-600" : "btn btn-sm btn-light border"} onClick={() => setCurrentPage(p)}>{p}</button>
-              ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
-            </div>
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                totalRecords: totalElements,
+                rowsPerPage,
+                pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements}`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
           </div>
         </div>
       </div>

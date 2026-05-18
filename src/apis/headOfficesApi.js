@@ -17,8 +17,10 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchHeadOfficesPage = async (page = 0, size = 20) => {
+export const fetchHeadOfficesPage = async (page = 0, size = 20, { search, status } = {}) => {
   const qs = new URLSearchParams({ page: String(Math.max(0, page)), size: String(Math.max(1, size)) })
+  if (search != null && String(search).trim() !== '') qs.set('search', String(search).trim())
+  if (status != null && String(status).trim() !== '' && String(status) !== 'Select' && String(status) !== 'All') qs.set('status', String(status).trim())
   const res = await apiFetch(`${BASE}?${qs.toString()}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))
   return res.json()

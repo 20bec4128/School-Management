@@ -7,9 +7,14 @@ import com.School.School_management.Repository.VisitorInfoRepository;
 import com.School.School_management.Repository.VisitorPurposeRepository;
 import com.School.School_management.Service.VisitorInfoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,6 +33,34 @@ public class VisitorInfoServiceImpl implements VisitorInfoService {
         return repository.findBySchoolIdAndIsDeletedFalse(schoolId).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Page<VisitorInfoDto> pageBySchool(Long schoolId, String search, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        final String searchTerm = normalizeSearch(search);
+        List<VisitorInfoDto> rows = repository.findBySchoolIdAndIsDeletedFalse(schoolId).stream()
+                .map(this::toDto)
+                .filter((row) -> {
+                    if (searchTerm == null) return true;
+                    String hay = String.join(" ",
+                            safe(row.getName()),
+                            safe(row.getPhone()),
+                            safe(row.getComingFrom()),
+                            safe(row.getIdCard()),
+                            safe(row.getPurposeName())
+                    ).toLowerCase();
+                    return hay.contains(searchTerm.toLowerCase());
+                })
+                .sorted(
+                        Comparator.comparing(VisitorInfoDto::getDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                                .thenComparing(VisitorInfoDto::getId, Comparator.nullsLast(Comparator.reverseOrder()))
+                )
+                .collect(Collectors.toList());
+
+        int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), rows.size());
+        int end = Math.min(start + pageable.getPageSize(), rows.size());
+        return new PageImpl<>(rows.subList(start, end), pageable, rows.size());
     }
 
     @Override
@@ -95,5 +128,15 @@ public class VisitorInfoServiceImpl implements VisitorInfoService {
             dto.setPurposeName(entity.getPurpose().getPurpose());
         }
         return dto;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null) return null;
+        String trimmed = search.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
