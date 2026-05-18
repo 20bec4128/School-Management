@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
+import { useAuth } from '../context/useAuth'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { createExamTerm, deleteExamTerm, fetchExamTermsPage, updateExamTerm } from '../apis/examTermApi'
+import { normalizeRole } from '../utils/roles'
+
 const STEPS = ['Term Information']
 
 const emptyForm = {
   id: null,
-  school: '',
+  schoolId: '',
   gradeName: '',
   gradePoint: '',
   markFrom: '',
@@ -18,7 +23,7 @@ const emptyForm = {
 }
 
 const emptyFilters = {
-  school: 'Select',
+  schoolId: 'Select',
   gradeName: 'Select',
 }
 
@@ -30,46 +35,6 @@ const FIELD_ICONS = {
   'Mark To': 'ri-bar-chart-2-line',
   Note: 'ri-sticky-note-line',
 }
-
-// Dummy data
-const dummyTerms = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    gradeName: 'First Term',
-    gradePoint: '4.00',
-    markFrom: '80',
-    markTo: '100',
-    note: 'First Term Examination',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    gradeName: 'Second Term',
-    gradePoint: '3.50',
-    markFrom: '65',
-    markTo: '79',
-    note: 'Second Term Examination',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    gradeName: 'Third Term',
-    gradePoint: '3.00',
-    markFrom: '50',
-    markTo: '64',
-    note: 'Third Term Examination',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    gradeName: 'Final Term',
-    gradePoint: '4.50',
-    markFrom: '85',
-    markTo: '100',
-    note: 'Final Term Examination',
-  },
-]
 
 const columnOptions = [
   { key: 'school', label: 'School' },
@@ -115,193 +80,310 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ExamTerm = () => {
-  // Form states
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState({ ...emptyForm, id: null })
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
+  const {
+    status,
+    token,
+    user,
+    role: authRole,
+    headOfficeId: authHeadOfficeId,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+  } = useAuth()
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
-  // Table states
+  const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+
+  const [schools, setSchools] = useState([])
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRows, setSelectedRows] = useState([])
 
-  // Filter states
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [addStep, setAddStep] = useState(0)
+  const [editStep, setEditStep] = useState(0)
+  const [addForm, setAddForm] = useState(() => ({
+    ...emptyForm,
+    schoolId: isSchoolAdmin ? (authSchoolId != null ? String(authSchoolId) : '') : '',
+  }))
+  const [editForm, setEditForm] = useState({ ...emptyForm })
+
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
-  // Column visibility
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  // Filtered & paginated data
-  const filteredData = useMemo(() => {
-    let data = [...dummyTerms]
-    if (filters.school !== 'Select')
-      data = data.filter((r) => r.school === filters.school)
-    if (filters.gradeName !== 'Select')
-      data = data.filter((r) => r.gradeName === filters.gradeName)
-    if (search) {
-      const term = search.toLowerCase()
-      data = data.filter(
-        (r) =>
-          r.gradeName.toLowerCase().includes(term) ||
-          r.school.toLowerCase().includes(term) ||
-          r.note.toLowerCase().includes(term)
-      )
+  const schoolsById = useMemo(() => {
+    const map = new Map()
+    for (const s of Array.isArray(schools) ? schools : []) {
+      if (s?.id == null) continue
+      map.set(String(s.id), s)
     }
-    return data
-  }, [filters, search])
+    return map
+  }, [schools])
 
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage)
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filteredData.slice(start, start + rowsPerPage)
-  }, [filteredData, currentPage, rowsPerPage])
+  const schoolOptions = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    if (isSuperAdmin) return list
+    if (isHeadOfficeAdmin) return list.filter((s) => String(s?.headOfficeId ?? '') === String(authHeadOfficeId))
+    return []
+  }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
+
+  const schoolNameById = (schoolId) => {
+    if (schoolId == null) return ''
+    return schoolsById.get(String(schoolId))?.schoolName || ''
+  }
+
+  const loadLookups = async () => {
+    if (isSchoolAdmin) return
+    const list = await fetchSchoolsLookup()
+    setSchools(Array.isArray(list) ? list : [])
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 400)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const effectiveSearch = useMemo(() => {
+    const parts = [debouncedSearch]
+    if (filters.gradeName && filters.gradeName !== 'Select') parts.push(filters.gradeName)
+    return parts.filter(Boolean).join(' ').trim()
+  }, [debouncedSearch, filters.gradeName])
+
+  const loadExamTerms = async ({ schoolId, page = 0, size = 10, searchText = '' } = {}) => {
+    const effectiveSchoolId = isSchoolAdmin ? authSchoolId : (schoolId || null)
+    if (!effectiveSchoolId && !isSuperAdmin) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
+      return
+    }
+
+    const data = await fetchExamTermsPage({
+      schoolId: effectiveSchoolId,
+      page,
+      size,
+      search: searchText,
+    })
+    const list = Array.isArray(data?.content) ? data.content : []
+    setRows(list)
+    setTotalElements(data?.totalElements ?? 0)
+    setTotalPages(data?.totalPages ?? 0)
+  }
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    setLoadError('')
+    setBusy(true)
+    Promise.resolve()
+      .then(loadLookups)
+      .then(() =>
+        loadExamTerms({
+          schoolId: filters.schoolId && filters.schoolId !== 'Select' ? Number(filters.schoolId) : null,
+          page: currentPage - 1,
+          size: rowsPerPage,
+          searchText: effectiveSearch,
+        }),
+      )
+      .catch((e) => setLoadError(e?.message || 'Failed to load exam terms'))
+      .finally(() => setBusy(false))
+  }, [status, token, currentPage, rowsPerPage, effectiveSearch, filters.schoolId, role])
 
   const getVisiblePages = () => {
     const pages = []
     const start = Math.max(1, currentPage - 1)
     const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
+    for (let p = start; p <= end; p += 1) pages.push(p)
     return pages
   }
 
-  const handleSelectAll = (e) => {
-    if (e.target.checked) setSelectedRows(paginatedData.map((row) => row.sl))
-    else setSelectedRows([])
-  }
-
-  const handleSelectRow = (sl) => {
-    if (selectedRows.includes(sl))
-      setSelectedRows(selectedRows.filter((id) => id !== sl))
-    else setSelectedRows([...selectedRows, sl])
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
-    setFilters({ ...pendingFilters })
-    setIsFilterSidebarOpen(false)
-    setCurrentPage(1)
-  }
-
-  const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setIsFilterSidebarOpen(false)
-    setCurrentPage(1)
-  }
-
   const openAdd = () => {
-    setAddForm(emptyForm)
+    setAddForm({
+      ...emptyForm,
+      schoolId: isSchoolAdmin ? (authSchoolId != null ? String(authSchoolId) : '') : '',
+    })
     setAddStep(0)
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
     setEditForm({
-      id: row.sl,
-      school: row.school,
-      gradeName: row.gradeName,
-      gradePoint: row.gradePoint,
-      markFrom: row.markFrom,
-      markTo: row.markTo,
-      note: row.note,
+      id: row.id,
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      gradeName: row.gradeName ?? '',
+      gradePoint: row.gradePoint != null ? String(row.gradePoint) : '',
+      markFrom: row.markFrom != null ? String(row.markFrom) : '',
+      markTo: row.markTo != null ? String(row.markTo) : '',
+      note: row.note ?? '',
     })
     setEditStep(0)
     setIsEditOpen(true)
   }
 
-  const renderForm = (form, setter, step) => (
-    <>
-      {step === 0 && (
-        <>
-          <p className="avm-section-title">{STEPS[0]}</p>
-          <div className="avm-grid">
-            <FormField label="School Name" required full>
-              <select
-                className="avm-select"
-                id="school"
-                value={form.school}
-                onChange={handleChange(setter)}
-              >
-                <option value="">--Select School--</option>
-                <option>Windsor Park High School</option>
-              </select>
-            </FormField>
+  const validateForm = (form) => {
+    if (!isSchoolAdmin && !form.schoolId) return 'School is required'
+    if (!form.gradeName) return 'Grade Name is required'
+    if (form.gradePoint === '') return 'Grade Point is required'
+    if (form.markFrom === '') return 'Mark From is required'
+    if (form.markTo === '') return 'Mark To is required'
+    if (Number(form.markFrom) > Number(form.markTo)) return 'Mark From cannot be greater than Mark To'
+    return ''
+  }
 
-            <FormField label="Grade Name" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="gradeName"
-                placeholder="Grade Name"
-                value={form.gradeName}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
+  const submitForm = async (form, closeModal) => {
+    const err = validateForm(form)
+    if (err) {
+      setLoadError(err)
+      return
+    }
 
-            <FormField label="Grade Point" required>
-              <input
-                type="text"
-                className="avm-input"
-                id="gradePoint"
-                placeholder="Grade Point"
-                value={form.gradePoint}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
+    setBusy(true)
+    setLoadError('')
+    try {
+      const payload = {
+        schoolId: isSchoolAdmin ? Number(authSchoolId) : Number(form.schoolId),
+        gradeName: form.gradeName.trim(),
+        gradePoint: Number(form.gradePoint),
+        markFrom: Number(form.markFrom),
+        markTo: Number(form.markTo),
+        note: form.note?.trim() || null,
+      }
+      if (form.id) {
+        await updateExamTerm(form.id, payload)
+      } else {
+        await createExamTerm(payload)
+      }
+      closeModal()
+      await loadExamTerms({
+        schoolId: filters.schoolId && filters.schoolId !== 'Select' ? Number(filters.schoolId) : null,
+        page: currentPage - 1,
+        size: rowsPerPage,
+        searchText: effectiveSearch,
+      })
+    } catch (e) {
+      setLoadError(e?.message || 'Failed to save exam term')
+    } finally {
+      setBusy(false)
+    }
+  }
 
-            <FormField label="Mark From" required>
-              <input
-                type="number"
-                className="avm-input"
-                id="markFrom"
-                placeholder="Mark From"
-                value={form.markFrom}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
+  const handleSelectAll = (e) => {
+    if (e.target.checked) setSelectedRows(rows.map((row) => String(row.id)))
+    else setSelectedRows([])
+  }
 
-            <FormField label="Mark To" required>
-              <input
-                type="number"
-                className="avm-input"
-                id="markTo"
-                placeholder="Mark To"
-                value={form.markTo}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
+  const handleSelectRow = (id) => {
+    setSelectedRows((prev) =>
+      prev.includes(String(id)) ? prev.filter((rowId) => rowId !== String(id)) : [...prev, String(id)],
+    )
+  }
 
-            <FormField label="Note" full noIcon>
-              <textarea
-                rows={4}
-                className="avm-input avm-textarea"
-                id="note"
-                placeholder="Note"
-                value={form.note}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-          </div>
-        </>
+  const renderForm = (form, setter) => (
+    <div className="avm-grid">
+      {!isSchoolAdmin ? (
+        <FormField label="School Name" required full>
+          <select
+            className="avm-select"
+            id="schoolId"
+            value={form.schoolId}
+            onChange={(e) => setter((prev) => ({ ...prev, schoolId: e.target.value }))}
+          >
+            <option value="">--Select School--</option>
+            {schoolOptions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.schoolName}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      ) : (
+        <FormField label="School Name" required full>
+          <input className="avm-input" value={authSchoolName || ''} readOnly />
+        </FormField>
       )}
-    </>
+
+      <FormField label="Grade Name" required full>
+        <input
+          type="text"
+          className="avm-input"
+          id="gradeName"
+          placeholder="Term Name"
+          value={form.gradeName}
+          onChange={(e) => setter((prev) => ({ ...prev, gradeName: e.target.value }))}
+        />
+      </FormField>
+
+      <FormField label="Grade Point" required>
+        <input
+          type="number"
+          step="0.01"
+          className="avm-input"
+          id="gradePoint"
+          placeholder="Grade Point"
+          value={form.gradePoint}
+          onChange={(e) => setter((prev) => ({ ...prev, gradePoint: e.target.value }))}
+        />
+      </FormField>
+
+      <FormField label="Mark From" required>
+        <input
+          type="number"
+          className="avm-input"
+          id="markFrom"
+          placeholder="Mark From"
+          value={form.markFrom}
+          onChange={(e) => setter((prev) => ({ ...prev, markFrom: e.target.value }))}
+        />
+      </FormField>
+
+      <FormField label="Mark To" required>
+        <input
+          type="number"
+          className="avm-input"
+          id="markTo"
+          placeholder="Mark To"
+          value={form.markTo}
+          onChange={(e) => setter((prev) => ({ ...prev, markTo: e.target.value }))}
+        />
+      </FormField>
+
+      <FormField label="Note" full noIcon>
+        <textarea
+          rows="3"
+          className="avm-input avm-textarea"
+          id="note"
+          placeholder="Note"
+          value={form.note}
+          onChange={(e) => setter((prev) => ({ ...prev, note: e.target.value }))}
+        />
+      </FormField>
+    </div>
   )
+
+  const applyFilters = (e) => {
+    e.preventDefault()
+    setFilters({ ...pendingFilters })
+    setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
+  }
+
+  const resetFilters = () => {
+    setPendingFilters(emptyFilters)
+    setFilters(emptyFilters)
+    setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
+  }
 
   return (
     <div className="dashboard-main-body">
@@ -318,11 +400,7 @@ const ExamTerm = () => {
             <span className="text-secondary-light"> / Exam Term</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
+        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
           <span className="d-flex text-md">
             <i className="ri-add-large-line"></i>
           </span>
@@ -330,11 +408,13 @@ const ExamTerm = () => {
         </button>
       </div>
 
+      {loadError ? <div className="alert alert-danger mb-16">{loadError}</div> : null}
+
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
+              <ExportDropdown />
 
               <button
                 type="button"
@@ -418,9 +498,7 @@ const ExamTerm = () => {
                       <input
                         className="form-check-input"
                         type="checkbox"
-                        checked={
-                          selectedRows.length === paginatedData.length && paginatedData.length > 0
-                        }
+                        checked={rows.length > 0 && selectedRows.length === rows.length}
                         onChange={handleSelectAll}
                       />
                       <label className="form-check-label">S.L</label>
@@ -436,28 +514,36 @@ const ExamTerm = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.length === 0 ? (
+                {busy ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
-                      No records found.
+                      Loading...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      No exam term records found.
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row) => (
-                    <tr key={row.sl}>
+                  rows.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            checked={selectedRows.includes(String(row.id))}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school ? <td className="fw-medium">{row.school}</td> : null}
-                      {visibleColumns.gradeName ? <td>{row.gradeName}</td> : null}
+                      {visibleColumns.school ? (
+                        <td className="fw-medium text-primary-light">{row.schoolName || schoolNameById(row.schoolId)}</td>
+                      ) : null}
+                      {visibleColumns.gradeName ? <td className="fw-medium">{row.gradeName}</td> : null}
                       {visibleColumns.gradePoint ? <td>{row.gradePoint}</td> : null}
                       {visibleColumns.markFrom ? <td>{row.markFrom}</td> : null}
                       {visibleColumns.markTo ? <td>{row.markTo}</td> : null}
@@ -476,6 +562,23 @@ const ExamTerm = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={async () => {
+                              if (!window.confirm('Are you sure you want to delete this exam term?')) return
+                              setBusy(true)
+                              try {
+                                await deleteExamTerm(row.id)
+                                await loadExamTerms({
+                                  schoolId: filters.schoolId && filters.schoolId !== 'Select' ? Number(filters.schoolId) : null,
+                                  page: currentPage - 1,
+                                  size: rowsPerPage,
+                                  searchText: effectiveSearch,
+                                })
+                              } catch (e) {
+                                setLoadError(e?.message || 'Failed to delete exam term')
+                              } finally {
+                                setBusy(false)
+                              }
+                            }}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -490,9 +593,10 @@ const ExamTerm = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
+              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
+              {Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements}
             </span>
+
             <div className="d-flex align-items-center gap-8">
               <button
                 type="button"
@@ -525,7 +629,6 @@ const ExamTerm = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
       <WizardPopup
         modalWidth="580px"
         open={isAddOpen}
@@ -535,13 +638,12 @@ const ExamTerm = () => {
         onClose={() => setIsAddOpen(false)}
         onBack={() => setAddStep((s) => Math.max(0, s - 1))}
         onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
+        onSubmit={() => submitForm(addForm, () => setIsAddOpen(false))}
         submitLabel="Save"
       >
-        {renderForm(addForm, setAddForm, addStep)}
+        {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* Edit Modal */}
       <WizardPopup
         modalWidth="580px"
         open={isEditOpen}
@@ -551,31 +653,34 @@ const ExamTerm = () => {
         onClose={() => setIsEditOpen(false)}
         onBack={() => setEditStep((s) => Math.max(0, s - 1))}
         onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
+        onSubmit={() => submitForm(editForm, () => setIsEditOpen(false))}
         submitLabel="Update"
       >
-        {renderForm(editForm, setEditForm, editStep)}
+        {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
-      {/* Filter Sidebar */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         onClose={() => setIsFilterSidebarOpen(false)}
         title="Filter Exam Term"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={applyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
             </label>
             <select
-              id="school"
+              id="schoolId"
               className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
+              value={pendingFilters.schoolId}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value }))}
             >
               <option value="Select">Select School</option>
-              <option>Windsor Park High School</option>
+              {schoolOptions.map((school) => (
+                <option key={school.id} value={String(school.id)}>
+                  {school.schoolName}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -586,7 +691,7 @@ const ExamTerm = () => {
               id="gradeName"
               className="form-control form-select"
               value={pendingFilters.gradeName}
-              onChange={handlePendingFilterChange}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, gradeName: e.target.value }))}
             >
               <option value="Select">Select Term</option>
               <option>First Term</option>
@@ -596,7 +701,7 @@ const ExamTerm = () => {
             </select>
           </div>
           <div>
-            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
+            <button type="button" onClick={resetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
           </div>

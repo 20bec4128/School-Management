@@ -88,7 +88,9 @@ import ExamResult from "./pages/ExamResult";
 import ExamGrade from "./pages/ExamGrade";
 import ExamTerm from "./pages/ExamTerm";
 import Schedule from "./pages/Schedule";
+import ScheduleCreate from "./pages/ScheduleCreate";
 import Suggestion from "./pages/Suggestion";
+import SuggestionCreate from "./pages/SuggestionCreate";
 import Attendance from "./pages/Attendence";
 import Managemark from "./pages/Managemark";
 import Examtermresult from "./pages/Examtermresult";
@@ -97,9 +99,13 @@ import MeritList from "./pages/MeritList";
 import MarkSheet from "./pages/MarkSheet";
 import ResultCard from "./pages/ResultCard";
 import MarkSendByEmail from "./pages/MarkSendByEmail";
+import MarkSendByEmailCreate from "./pages/MarkSendByEmailCreate";
 import MarkSendBySMS from "./pages/MarkSendBySMS";
+import MarkSendBySMSCreate from "./pages/MarkSendBySMSCreate";
 import ResultEmail from "./pages/ResultEmail";
+import ResultEmailCreate from "./pages/ResultEmailCreate";
 import ResultSMS from "./pages/ResultSMS";
+import ResultSmsCreate from "./pages/ResultSmsCreate";
 import LeaveType from "./pages/LeaveType";
 import AddLeaveType from "./pages/AddLeaveType";
 import LeaveApplication from "./pages/LeaveApplication";
@@ -348,7 +354,9 @@ const routeEntries = [
   { pageKey: "exam-grade", component: ExamGrade },
   { pageKey: "exam-term", component: ExamTerm },
   { pageKey: "schedule", component: Schedule },
+  { pageKey: "schedule-create", component: ScheduleCreate },
   { pageKey: "suggestion", component: Suggestion },
+  { pageKey: "suggestion-create", component: SuggestionCreate },
   { pageKey: "attendance", component: Attendance },
   { pageKey: "manage-mark", component: Managemark },
   { pageKey: "exam-term-result", component: Examtermresult },
@@ -357,9 +365,13 @@ const routeEntries = [
   { pageKey: "mark-sheet", component: MarkSheet },
   { pageKey: "result-card", component: ResultCard },
   { pageKey: "mark-send-email", component: MarkSendByEmail },
+  { pageKey: "mark-send-email-create", component: MarkSendByEmailCreate },
+  { pageKey: "mark-send-sms-create", component: MarkSendBySMSCreate },
   { pageKey: "mark-send-sms", component: MarkSendBySMS },
   { pageKey: "result-email", component: ResultEmail },
+  { pageKey: "result-email-create", component: ResultEmailCreate },
   { pageKey: "result-sms", component: ResultSMS },
+  { pageKey: "result-sms-create", component: ResultSmsCreate },
   { pageKey: "leave-type", component: LeaveType },
   { pageKey: "add-leave-type", component: AddLeaveType },
   { pageKey: "leave-application", component: LeaveApplication },
@@ -562,7 +574,9 @@ const routeEntries = [
   { pageKey: "exam-grade", component: ExamGrade },
   { pageKey: "exam-term", component: ExamTerm },
   { pageKey: "schedule", component: Schedule },
+  { pageKey: "schedule-create", component: ScheduleCreate },
   { pageKey: "suggestion", component: Suggestion },
+  { pageKey: "suggestion-create", component: SuggestionCreate },
   { pageKey: "attendance", component: Attendance },
   { pageKey: "manage-mark", component: Managemark },
   { pageKey: "exam-term-result", component: Examtermresult },
@@ -571,8 +585,11 @@ const routeEntries = [
   { pageKey: "mark-sheet", component: MarkSheet },
   { pageKey: "result-card", component: ResultCard },
   { pageKey: "mark-send-email", component: MarkSendByEmail },
+  { pageKey: "mark-send-email-create", component: MarkSendByEmailCreate },
+  { pageKey: "mark-send-sms-create", component: MarkSendBySMSCreate },
   { pageKey: "mark-send-sms", component: MarkSendBySMS },
   { pageKey: "result-email", component: ResultEmail },
+  { pageKey: "result-email-create", component: ResultEmailCreate },
   { pageKey: "result-sms", component: ResultSMS },
   { pageKey: "leave-type", component: LeaveType },
   { pageKey: "add-leave-type", component: AddLeaveType },

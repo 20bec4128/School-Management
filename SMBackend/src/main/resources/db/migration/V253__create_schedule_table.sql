@@ -1,0 +1,14 @@
+CREATE TABLE schedule (
+    id BIGSERIAL PRIMARY KEY,
+    school_id BIGINT NOT NULL,
+    exam_term VARCHAR(255) NOT NULL,
+    class_name VARCHAR(255) NOT NULL,
+    subject_name VARCHAR(255) NOT NULL,
+    exam_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    room_no VARCHAR(100),
+    note TEXT,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

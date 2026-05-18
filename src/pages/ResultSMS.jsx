@@ -1,452 +1,195 @@
-import { useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
-import SlideSidebar from '../components/SlideSidebar'
-import useColumnVisibility from '../hooks/useColumnVisibility'
-import '../assets/css/addModalShared.css'
-import ExportDropdown from '../components/ExportDropdown'
-
-const resultSmsData = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    sessionYear: '2024-2025',
-    receiverType: 'Student',
-    sendDate: '2024-03-18',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    sessionYear: '2024-2025',
-    receiverType: 'Parent',
-    sendDate: '2024-03-19',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    sessionYear: '2024-2025',
-    receiverType: 'Guardian',
-    sendDate: '2024-03-20',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    sessionYear: '2025-2026',
-    receiverType: 'Student',
-    sendDate: '2024-03-21',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    sessionYear: '2025-2026',
-    receiverType: 'Parent',
-    sendDate: '2024-03-22',
-  },
-]
-
-const receiverOptionsMap = {
-  Student: ['Alice Brown', 'Michael Brown', 'Sophia Wilson', 'David Johnson', 'Emma Davis'],
-  Parent: ['Mr. Brown', 'Mrs. Brown', 'Mrs. Wilson', 'Mr. Johnson', 'Mrs. Davis'],
-  Guardian: ['Guardian - Alice', 'Guardian - Michael', 'Guardian - Sophia'],
-}
-
-const templateOptions = {
-  'Result Alert Template': {
-    sms: 'Dear [name], your result for [exam] is [exam_result]. Total: [total_obtain]/[total_mark], Grade: [letter_grade]',
-  },
-  'Parent Notification Template': {
-    sms: 'Dear Parent, your child [student_name] scored [total_obtain]/[total_mark] in [exam]. Grade: [letter_grade]',
-  },
-  'Student Result Template': {
-    sms: 'Hello [name], your exam result: [exam] - [exam_result]. Percentage: [percentage]%',
-  },
-}
-
-const emptyForm = {
-  school: '',
-  receiverType: '',
-  receiver: '',
-  template: '',
-  sms: '',
-  gateway: '',
-}
+import { useEffect, useMemo, useState } from "react";
+import SlideSidebar from "../components/SlideSidebar";
+import useColumnVisibility from "../hooks/useColumnVisibility";
+import ExportDropdown from "../components/ExportDropdown";
+import "../assets/css/addModalShared.css";
+import { useAuth } from "../context/useAuth";
+import {
+  fetchResultSmsPage,
+  deleteResultSms,
+} from "../apis/resultSmsApi";
 
 const emptyFilters = {
-  school: 'Select',
-  sessionYear: 'Select',
-  receiverType: 'Select',
-}
-
-const STEPS = ['Basic Information', 'SMS Content']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Receiver Type': 'ri-group-line',
-  Receiver: 'ri-user-3-line',
-  Template: 'ri-file-list-3-line',
-  SMS: 'ri-message-2-line',
-  Gateway: 'ri-radar-line',
-  'Dynamic Tag': 'ri-price-tag-3-line',
-}
+  school: "Select",
+  exam: "Select",
+  receiverType: "Select",
+  subject: "Select",
+};
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
-  { key: 'sessionYear', label: 'Session Year' },
-  { key: 'receiverType', label: 'Receiver Type' },
-  { key: 'sendDate', label: 'Send Date' },
-]
+  { key: "schoolName", label: "School" },
+  { key: "examTerm", label: "Exam Term" },
+  { key: "receiverType", label: "Receiver Type" },
+  { key: "receiver", label: "Receiver" },
+  { key: "subject", label: "Subject" },
+  { key: "sendDate", label: "Send Date" },
+];
 
-const dynamicTags = ['[name]', '[email]', '[phone]', '[exam_result]']
+const uniqueStrings = (items) =>
+  Array.from(
+    new Set((items || []).map((i) => String(i ?? "").trim()).filter(Boolean)),
+  ).sort();
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
+const ResultSMS = ({ onNavigate }) => {
+  const { schoolId, headOfficeId } = useAuth();
+  const [search, setSearch] = useState("");
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedRows, setSelectedRows] = useState([]);
 
-const ResultSMS = () => {
-  const [search, setSearch] = useState('')
-  const [rowsPerPage, setRowsPerPage] = useState(10)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
-  const [findErrors, setFindErrors] = useState({})
+  const [rows, setRows] = useState([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false);
+  const [pendingFilters, setPendingFilters] = useState(emptyFilters);
+  const [filters, setFilters] = useState(emptyFilters);
+
+  const { visibleColumns, visibleColumnCount, toggleColumn } =
+    useColumnVisibility(columnOptions);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchResultSmsPage({
+        headOfficeId,
+        schoolId,
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search: search,
+      });
+      setRows(data?.content || []);
+      setTotalElements(data?.totalElements || 0);
+    } catch (err) {
+      setError(err?.message || "Failed to fetch result SMS dispatch logs.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [currentPage, rowsPerPage, search, schoolId, headOfficeId]);
 
   const schoolOptions = useMemo(
-    () => Array.from(new Set(resultSmsData.map((item) => item.school))),
-    [],
-  )
-  const sessionYearOptions = useMemo(
-    () => Array.from(new Set(resultSmsData.map((item) => item.sessionYear))),
-    [],
-  )
+    () => uniqueStrings(rows.map((item) => item.schoolName)),
+    [rows],
+  );
+  const examOptions = useMemo(
+    () => uniqueStrings(rows.map((item) => item.examTerm)),
+    [rows],
+  );
   const receiverTypeOptions = useMemo(
-    () => Array.from(new Set(resultSmsData.map((item) => item.receiverType))),
-    [],
-  )
-  const gatewayOptions = useMemo(() => ['Twilio', 'MSG91', 'TextLocal', 'Vonage'], [])
+    () => uniqueStrings(rows.map((item) => item.receiverType)),
+    [rows],
+  );
+  const subjectOptions = useMemo(
+    () => uniqueStrings(rows.map((item) => item.subject)),
+    [rows],
+  );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return resultSmsData.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.school, row.sessionYear, row.receiverType, row.sendDate]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (filters.school !== "Select" && row.schoolName !== filters.school)
+        return false;
+      if (filters.exam !== "Select" && row.examTerm !== filters.exam)
+        return false;
+      if (
+        filters.receiverType !== "Select" &&
+        row.receiverType !== filters.receiverType
+      )
+        return false;
+      if (filters.subject !== "Select" && row.subject !== filters.subject)
+        return false;
+      return true;
+    });
+  }, [rows, filters]);
 
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
-      const matchesSessionYear = filters.sessionYear === 'Select' || row.sessionYear === filters.sessionYear
-      const matchesReceiverType = filters.receiverType === 'Select' || row.receiverType === filters.receiverType
+  const totalPages = Math.max(1, Math.ceil(totalElements / rowsPerPage));
 
-      return matchesSearch && matchesSchool && matchesSessionYear && matchesReceiverType
-    })
-  }, [search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
+  const allSelected =
+    filteredRows.length > 0 &&
+    filteredRows.every((row) => selectedRows.includes(row.id));
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
+      setSelectedRows((prev) => [
+        ...new Set([...prev, ...filteredRows.map((row) => row.id)]),
+      ]);
     } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+      setSelectedRows((prev) =>
+        prev.filter((id) => !filteredRows.some((row) => row.id === id)),
+      );
     }
-  }
+  };
 
   const handleSelectRow = (id) => {
     setSelectedRows((prev) =>
       prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-
-    setter((prev) => {
-      if (id === 'receiverType') {
-        return {
-          ...prev,
-          receiverType: value,
-          receiver: '',
-        }
-      }
-
-      if (id === 'template') {
-        return {
-          ...prev,
-          template: value,
-          sms: templateOptions[value]?.sms || prev.sms,
-        }
-      }
-
-      return { ...prev, [id]: value }
-    })
-  }
+    );
+  };
 
   const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-    setFindErrors((prev) => ({ ...prev, [id]: '' }))
-  }
-
-  const validateFind = () => {
-    const errs = {}
-    if (pendingFilters.school === 'Select') errs.school = 'School Name is required.'
-    return errs
-  }
+    const { id, value } = e.target;
+    setPendingFilters((prev) => ({ ...prev, [id]: value }));
+  };
 
   const handleApplyFilters = (e) => {
-    e.preventDefault()
-    const errors = validateFind()
-    if (Object.keys(errors).length > 0) {
-      setFindErrors(errors)
-      return
-    }
-    setFilters(pendingFilters)
-    setCurrentPage(1)
-    setIsFilterSidebarOpen(false)
-  }
+    e.preventDefault();
+    setFilters(pendingFilters);
+    setCurrentPage(1);
+    setIsFilterSidebarOpen(false);
+  };
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setFindErrors({})
-    setCurrentPage(1)
-  }
+    setPendingFilters(emptyFilters);
+    setFilters(emptyFilters);
+    setCurrentPage(1);
+  };
 
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setIsAddOpen(true)
-  }
+    sessionStorage.removeItem("RESULT_SMS_EDIT_ID");
+    onNavigate?.("result-sms-create");
+  };
 
   const openEdit = (row) => {
-    setEditForm({
-      school: row.school,
-      receiverType: row.receiverType,
-      receiver: receiverOptionsMap[row.receiverType]?.[0] || '',
-      template: '',
-      sms: '',
-      gateway: '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
+    sessionStorage.setItem("RESULT_SMS_EDIT_ID", String(row.id));
+    onNavigate?.("result-sms-create");
+  };
+
+  const handleDelete = async (row) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this result SMS history record?",
+      )
+    )
+      return;
+    try {
+      await deleteResultSms(row.id);
+      setSelectedRows((prev) => prev.filter((id) => id !== row.id));
+      loadData();
+    } catch (err) {
+      alert(err?.message || "Failed to remove entry record item.");
+    }
+  };
 
   const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
-  }
-
-  const renderForm = (form, setter, step) => {
-    const receiverOptions = form.receiverType ? receiverOptionsMap[form.receiverType] || [] : []
-    const remainingCharacters = 160 - form.sms.length
-
-    return (
-      <>
-        {step === 0 && (
-          <>
-            <p className="avm-section-title">{STEPS[0]}</p>
-            <div className="avm-grid">
-              <FormField label="School Name" required full>
-                <select
-                  className="avm-select"
-                  id="school"
-                  value={form.school}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select School--</option>
-                  {schoolOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Receiver Type" required>
-                <select
-                  className="avm-select"
-                  id="receiverType"
-                  value={form.receiverType}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select--</option>
-                  {receiverTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Receiver" required>
-                <select
-                  className="avm-select"
-                  id="receiver"
-                  value={form.receiver}
-                  onChange={handleChange(setter)}
-                  disabled={!form.receiverType}
-                >
-                  <option value="">--Select--</option>
-                  {receiverOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <p className="avm-section-title">{STEPS[1]}</p>
-            <div className="avm-grid">
-              <FormField label="Template">
-                <select
-                  className="avm-select"
-                  id="template"
-                  value={form.template}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select--</option>
-                  {Object.keys(templateOptions).map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="Gateway" required>
-                <select
-                  className="avm-select"
-                  id="gateway"
-                  value={form.gateway}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select--</option>
-                  {gatewayOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              <FormField label="SMS" required full>
-                <textarea
-                  rows="4"
-                  className="avm-input avm-textarea"
-                  id="sms"
-                  placeholder="Enter SMS"
-                  value={form.sms}
-                  onChange={handleChange(setter)}
-                />
-              </FormField>
-
-              <div className="avm-field full">
-                <span
-                  style={{
-                    fontSize: '0.82rem',
-                    color: remainingCharacters < 0 ? '#dc3545' : '#667085',
-                  }}
-                >
-                  You have remain character/letter : {remainingCharacters}
-                </span>
-              </div>
-
-              <FormField label="Dynamic Tag" full noIcon>
-                <div
-                  style={{
-                    border: '1px solid #d0d5dd',
-                    borderRadius: '0.9rem',
-                    padding: '0.9rem',
-                    background: '#f8fafc',
-                  }}
-                >
-                  <div className="avm-chip-wrap" style={{ marginTop: 0 }}>
-                    {dynamicTags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        className="avm-chip"
-                        style={{ border: 'none', cursor: 'pointer' }}
-                        onClick={() =>
-                          setter((prev) => ({
-                            ...prev,
-                            sms: prev.sms ? `${prev.sms} ${tag}` : tag,
-                          }))
-                        }
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </FormField>
-            </div>
-          </>
-        )}
-      </>
-    )
-  }
+    const pages = [];
+    const start = Math.max(1, currentPage - 1);
+    const end = Math.min(totalPages, start + 2);
+    for (let p = start; p <= end; p += 1) pages.push(p);
+    return pages;
+  };
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">Result SMS</h1>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">
+            Result SMS
+          </h1>
           <div>
             <button
               type="button"
@@ -468,6 +211,8 @@ const ResultSMS = () => {
           Send SMS
         </button>
       </div>
+
+      {error && <div className="alert alert-danger radius-8">{error}</div>}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
@@ -523,8 +268,8 @@ const ResultSMS = () => {
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
                 onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
                 }}
               >
                 {[5, 10, 20, 50].map((n) => (
@@ -542,8 +287,8 @@ const ResultSMS = () => {
                 placeholder="Search result SMS..."
                 value={search}
                 onChange={(e) => {
-                  setSearch(e.target.value)
-                  setCurrentPage(1)
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
                 }}
               />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
@@ -553,7 +298,10 @@ const ResultSMS = () => {
           </div>
 
           <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 900 }}>
+            <table
+              className="table bordered-table mb-0 data-table"
+              style={{ minWidth: 1000 }}
+            >
               <thead>
                 <tr>
                   <th scope="col">
@@ -567,16 +315,27 @@ const ResultSMS = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
-                  {visibleColumns.sessionYear ? <th scope="col">Session Year</th> : null}
+                  {visibleColumns.schoolName ? <th scope="col">School</th> : null}
+                  {visibleColumns.examTerm ? <th scope="col">Exam Term</th> : null}
                   {visibleColumns.receiverType ? <th scope="col">Receiver Type</th> : null}
+                  {visibleColumns.receiver ? <th scope="col">Receiver</th> : null}
+                  {visibleColumns.subject ? <th scope="col">Subject</th> : null}
                   {visibleColumns.sendDate ? <th scope="col">Send Date</th> : null}
                   <th scope="col">Action</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={visibleColumnCount + 1}
+                      className="text-center py-40"
+                    >
+                      Loading records...
+                    </td>
+                  </tr>
+                ) : filteredRows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={visibleColumnCount + 1}
@@ -586,39 +345,40 @@ const ResultSMS = () => {
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
+                  filteredRows.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input
-                            className="form-check-input"
                             type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
+                            className="form-check-input"
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
                           />
-                          <label className="form-check-label">{row.sl}</label>
+                          <label className="form-check-label">
+                            {String(
+                              idx + 1 + (currentPage - 1) * rowsPerPage,
+                            ).padStart(2, "0")}
+                          </label>
                         </div>
                       </td>
-                      {visibleColumns.school ? (
-                        <td className="fw-medium text-primary-light">{row.school}</td>
+                      {visibleColumns.schoolName ? (
+                        <td className="fw-medium text-primary-light">
+                          {row.schoolName}
+                        </td>
                       ) : null}
-                      {visibleColumns.sessionYear ? <td>{row.sessionYear}</td> : null}
+                      {visibleColumns.examTerm ? <td>{row.examTerm}</td> : null}
                       {visibleColumns.receiverType ? <td>{row.receiverType}</td> : null}
+                      {visibleColumns.receiver ? <td>{row.receiver}</td> : null}
+                      {visibleColumns.subject ? <td className="fw-medium">{row.subject}</td> : null}
                       {visibleColumns.sendDate ? <td>{row.sendDate}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
                           <button
                             type="button"
-                            className="bg-success-focus bg-hover-success-200 text-success-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Send SMS"
-                          >
-                            <i className="ri-message-2-line"></i>
-                          </button>
-                          <button
-                            type="button"
                             className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
                             title="Edit"
+                            onClick={() => openEdit(row)}
                           >
                             <i className="ri-edit-line"></i>
                           </button>
@@ -626,6 +386,7 @@ const ResultSMS = () => {
                             type="button"
                             className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
                             title="Delete"
+                            onClick={() => handleDelete(row)}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -640,8 +401,10 @@ const ResultSMS = () => {
 
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+              Showing{" "}
+              {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{" "}
+              {Math.min(currentPage * rowsPerPage, totalElements)} of{" "}
+              {totalElements}
             </span>
 
             <div className="d-flex align-items-center gap-8">
@@ -659,8 +422,8 @@ const ResultSMS = () => {
                   type="button"
                   className={
                     p === currentPage
-                      ? 'btn btn-sm btn-primary-600'
-                      : 'btn btn-sm btn-light border'
+                      ? "btn btn-sm btn-primary-600"
+                      : "btn btn-sm btn-light border"
                   }
                   onClick={() => setCurrentPage(p)}
                 >
@@ -670,7 +433,9 @@ const ResultSMS = () => {
               <button
                 type="button"
                 className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 disabled={currentPage === totalPages}
               >
                 Next
@@ -680,83 +445,53 @@ const ResultSMS = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="620px"
-        open={isAddOpen}
-        title="Send SMS"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsAddOpen(false)}
-        submitLabel="Send"
-      >
-        {renderForm(addForm, setAddForm, addStep)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="620px"
-        open={isEditOpen}
-        title="Edit Result SMS"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={() => setIsEditOpen(false)}
-        submitLabel="Update"
-      >
-        {renderForm(editForm, setEditForm, editStep)}
-      </WizardPopup>
-
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Result SMS"
         onClose={() => setIsFilterSidebarOpen(false)}
         className="filter-sidebar"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
+        <form
+          className="p-20 d-grid grid-cols-2 gap-16"
+          onSubmit={handleApplyFilters}
+        >
+          <div style={{ gridColumn: "1 / -1" }}>
             <label
               htmlFor="school"
               className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
             >
-              School Name <span className="text-danger-600">*</span>
+              School
             </label>
             <select
               id="school"
-              className={`form-control form-select ${findErrors.school ? 'border-danger-600' : ''}`}
+              className="form-control form-select"
               value={pendingFilters.school}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">--Select School--</option>
+              <option value="Select">Select School</option>
               {schoolOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
             </select>
-            {findErrors.school && (
-              <div className="text-danger-600 text-sm mt-4">{findErrors.school}</div>
-            )}
           </div>
 
           <div>
             <label
-              htmlFor="sessionYear"
+              htmlFor="exam"
               className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
             >
-              Session Year
+              Exam
             </label>
             <select
-              id="sessionYear"
+              id="exam"
               className="form-control form-select"
-              value={pendingFilters.sessionYear}
+              value={pendingFilters.exam}
               onChange={handlePendingFilterChange}
             >
-              <option value="Select">Select Session Year</option>
-              {sessionYearOptions.map((option) => (
+              <option value="Select">Select Exam</option>
+              {examOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -786,6 +521,28 @@ const ResultSMS = () => {
             </select>
           </div>
 
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label
+              htmlFor="subject"
+              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+            >
+              Subject
+            </label>
+            <select
+              id="subject"
+              className="form-control form-select"
+              value={pendingFilters.subject}
+              onChange={handlePendingFilterChange}
+            >
+              <option value="Select">Select Subject</option>
+              {subjectOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <button
               type="button"
@@ -795,7 +552,6 @@ const ResultSMS = () => {
               Reset
             </button>
           </div>
-
           <div>
             <button type="submit" className="btn btn-primary-600 w-100">
               Apply
@@ -804,7 +560,7 @@ const ResultSMS = () => {
         </form>
       </SlideSidebar>
     </div>
-  )
-}
+  );
+};
 
-export default ResultSMS
+export default ResultSMS;
