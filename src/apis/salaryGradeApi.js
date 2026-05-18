@@ -17,8 +17,9 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchSalaryGrades = async ({ schoolId } = {}) => {
+export const fetchSalaryGrades = async ({ headOfficeId, schoolId } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   const url = qs.size ? `${BASE}?${qs.toString()}` : BASE
 
@@ -27,8 +28,9 @@ export const fetchSalaryGrades = async ({ schoolId } = {}) => {
   return res.json()
 }
 
-export const fetchSalaryGradesPage = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+export const fetchSalaryGradesPage = async ({ headOfficeId, schoolId, page = 0, size = 10, search = '' } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   qs.set('page', String(page))
   qs.set('size', String(size))

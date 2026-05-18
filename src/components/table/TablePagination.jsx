@@ -1,12 +1,16 @@
 import React from 'react';
 
-export function TablePagination({ paginationProps }) {
+export function TablePagination({ paginationProps, pagination }) {
+  const resolvedPagination = paginationProps ?? pagination ?? {};
   const {
-    currentPage,
-    totalPages,
-    pageInfo,
+    currentPage = 1,
+    totalPages = 1,
+    pageInfo = '',
     onPageChange,
-  } = paginationProps;
+    setCurrentPage,
+  } = resolvedPagination;
+
+  const handlePageChange = onPageChange ?? setCurrentPage ?? (() => {});
 
   const pageNumbers = Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
     if (totalPages <= 3) {
@@ -34,7 +38,7 @@ export function TablePagination({ paginationProps }) {
         <button
           type="button"
           className="btn btn-sm btn-light border"
-          onClick={() => onPageChange(currentPage - 1)}
+          onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
         >
           Prev
@@ -45,7 +49,7 @@ export function TablePagination({ paginationProps }) {
             key={page}
             type="button"
             className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-            onClick={() => onPageChange(page)}
+            onClick={() => handlePageChange(page)}
           >
             {page}
           </button>
@@ -54,7 +58,7 @@ export function TablePagination({ paginationProps }) {
         <button
           type="button"
           className="btn btn-sm btn-light border"
-          onClick={() => onPageChange(currentPage + 1)}
+          onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
         >
           Next

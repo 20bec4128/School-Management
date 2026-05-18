@@ -1,34 +1,40 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
-import { fetchSchoolsPage } from '../apis/schoolsApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
   createStudentType,
   deleteStudentType,
   fetchStudentTypesPage,
   updateStudentType,
 } from '../apis/studentTypeApi'
+import { normalizeRole } from '../utils/roles'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const emptyForm = {
+  headOfficeId: '',
   schoolId: '',
   studentType: '',
   note: '',
 }
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: 'All',
   studentType: 'Select',
 }
 
 const STEPS = ['Basic']
 
 const FIELD_ICONS = {
+  'Head Office': 'ri-building-4-line',
   'School Name': 'ri-school-line',
   'Student Type': 'ri-group-line',
   Note: 'ri-sticky-note-line',
@@ -63,7 +69,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
               zIndex: 1,
             }}
           >
-            <i className={icon}></i>
+            <i className={icon} />
           </span>
           {children}
         </div>
@@ -74,10 +80,14 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
+const getSchoolById = (rows, schoolId) =>
+  (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
+
 const StudentType = () => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { role, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const { activeSchoolId } = useSchool()
-  // ── Data state ──────────────────────────────────────────────────────────────
+  const manualScope = useManualSchoolScope(normalizeRole(role) === 'SUPER_ADMIN')
+
   const [studentTypes, setStudentTypes] = useState([])
   const [schools, setSchools] = useState([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +96,6 @@ const StudentType = () => {
   const [editingId, setEditingId] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
-  // ── Table state ──────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -94,7 +103,6 @@ const StudentType = () => {
   const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
 
-  // ── Modal / sidebar state ────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [addStep, setAddStep] = useState(0)
@@ -106,90 +114,128 @@ const StudentType = () => {
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const roleUpper = String(role || '').toUpperCase()
+
+  const roleUpper = normalizeRole(role)
+  const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = roleUpper === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const isTeacherScope = roleUpper === 'TEACHER'
+
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const resolvedSchoolLabel = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
 
-  // ── Derived options ──────────────────────────────────────────────────────────
+  const schoolOptions = useMemo(() => {
+    const rows = Array.isArray(schools) ? schools : []
+    if (isSuperAdmin) {
+      return manualScope.selectedHeadOfficeId
+        ? manualScope.schoolOptions
+        : []
+    }
+    if (isHeadOfficeAdmin) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin || isTeacherScope) {
+      return rows.filter((school) => String(school?.id ?? '') === String(resolvedSchoolId))
+    }
+    return rows
+  }, [authHeadOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, isTeacherScope, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, resolvedSchoolId, schools])
+
   const studentTypeOptions = useMemo(
-    () => Array.from(new Set(studentTypes.map((item) => item.studentType))).sort(),
+    () => Array.from(new Set(studentTypes.map((item) => item.studentType))).filter(Boolean).sort(),
     [studentTypes],
   )
 
-  // ── Filtering (client-side within the current page) ──────────────────────────
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return studentTypes.filter((row) => {
       const schoolName = row.schoolName || row.school || ''
       const matchesSearch =
         !q || [schoolName, row.studentType, row.note].join(' ').toLowerCase().includes(q)
-      const matchesSchool =
-        filters.school === 'Select' || schoolName === filters.school
       const matchesStudentType =
         filters.studentType === 'Select' || row.studentType === filters.studentType
-      return matchesSearch && matchesSchool && matchesStudentType
+      return matchesSearch && matchesStudentType
     })
-  }, [studentTypes, search, filters])
+  }, [filters.studentType, search, studentTypes])
 
-  const allSelected =
-    filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
+  const allSelected = filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
 
-  // ── Data fetching ────────────────────────────────────────────────────────────
+  const loadSchools = async () => {
+    const list = await fetchSchoolsLookup()
+    setSchools(Array.isArray(list) ? list : [])
+  }
+
+  const loadRows = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const headOfficeId = isSuperAdmin
+        ? (filters.headOfficeId || undefined)
+        : isHeadOfficeAdmin
+          ? (authHeadOfficeId != null ? String(authHeadOfficeId) : undefined)
+          : undefined
+      const schoolId = isSchoolAdmin || isTeacherScope
+        ? (resolvedSchoolId || undefined)
+        : filters.schoolId !== 'All'
+          ? filters.schoolId
+          : undefined
+
+      const data = await fetchStudentTypesPage({
+        headOfficeId,
+        schoolId,
+        page: currentPage - 1,
+        size: rowsPerPage,
+      })
+
+      setStudentTypes(Array.isArray(data?.content) ? data.content : [])
+      setTotalElements(Number(data?.totalElements ?? 0))
+      setTotalPages(Math.max(1, Number(data?.totalPages ?? 1)))
+    } catch (e) {
+      setStudentTypes([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError(e?.message || 'Failed to load student types')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      setLoading(true)
-      setError('')
       try {
-        const data = await fetchStudentTypesPage(currentPage - 1, rowsPerPage)
-        if (cancelled) return
-        if (Array.isArray(data)) {
-          setStudentTypes(data)
-          setTotalElements(data.length)
-          setTotalPages(1)
-        } else {
-          setStudentTypes(Array.isArray(data?.content) ? data.content : [])
-          setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
-          setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
-        }
-      } catch (e) {
-        if (cancelled) return
-        setStudentTypes([])
-        setTotalElements(0)
-        setTotalPages(1)
-        setError(e?.message || 'Failed to load student types')
-      } finally {
-        if (!cancelled) setLoading(false)
+        await loadSchools()
+      } catch {
+        if (!cancelled) setSchools([])
       }
     }
     load()
-    return () => { cancelled = true }
-  }, [currentPage, rowsPerPage, refreshKey])
-
-  useEffect(() => {
-    fetchSchoolsPage(0, 200)
-      .then((data) => {
-        const list = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : [])
-        setSchools(
-          list.filter((school) => {
-            const status = String(school?.status || '').trim().toUpperCase()
-            const isDeleted =
-              school?.isDeleted === true || String(school?.isDeleted || '').trim().toLowerCase() === 'true'
-            return !isDeleted && (status === '' || status === 'ACTIVE')
-          }),
-        )
-      })
-      .catch(() => setSchools([]))
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
-    if (!isTeacherScope || !resolvedSchoolLabel) return
-    setPendingFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
-    setFilters((prev) => (prev.school === 'Select' ? { ...prev, school: resolvedSchoolLabel } : prev))
-  }, [isTeacherScope, resolvedSchoolLabel])
+    if (isSuperAdmin) return
+    const nextFilters = {
+      headOfficeId: isHeadOfficeAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : '',
+      schoolId: (isSchoolAdmin || isTeacherScope) && resolvedSchoolId ? String(resolvedSchoolId) : 'All',
+      studentType: 'Select',
+    }
+    setFilters(nextFilters)
+    setPendingFilters(nextFilters)
+  }, [authHeadOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, isTeacherScope, resolvedSchoolId])
 
-  // ── Selection helpers ────────────────────────────────────────────────────────
+  useEffect(() => {
+    void loadRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, rowsPerPage, refreshKey, filters.headOfficeId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
+
+  useEffect(() => {
+    if (!isTeacherScope || !resolvedSchoolLabel) return
+    setPendingFilters((prev) => (prev.schoolId === 'All' ? { ...prev, schoolId: resolvedSchoolId } : prev))
+    setFilters((prev) => (prev.schoolId === 'All' ? { ...prev, schoolId: resolvedSchoolId } : prev))
+  }, [isTeacherScope, resolvedSchoolId, resolvedSchoolLabel])
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedRows((prev) => [...new Set([...prev, ...filtered.map((row) => row.id)])])
@@ -199,20 +245,11 @@ const StudentType = () => {
   }
 
   const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  // ── Form helpers ─────────────────────────────────────────────────────────────
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
+    setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
-    if (isTeacherScope && id === 'school') return
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
@@ -224,19 +261,44 @@ const StudentType = () => {
   }
 
   const handleResetFilters = () => {
-    const next = isTeacherScope
-      ? { ...emptyFilters, school: resolvedSchoolLabel || 'Select' }
-      : emptyFilters
+    const next = isSuperAdmin
+      ? { ...emptyFilters }
+      : {
+          headOfficeId: isHeadOfficeAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : '',
+          schoolId: (isSchoolAdmin || isTeacherScope) && resolvedSchoolId ? String(resolvedSchoolId) : 'All',
+          studentType: 'Select',
+        }
     setPendingFilters(next)
     setFilters(next)
     setCurrentPage(1)
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope('', '')
+    }
   }
 
-  // ── Open modals ──────────────────────────────────────────────────────────────
   const openAdd = () => {
     setError('')
     setEditingId(null)
-    setAddForm(isTeacherScope && resolvedSchoolId ? { ...emptyForm, schoolId: resolvedSchoolId } : emptyForm)
+    const schoolId = (isSchoolAdmin || isTeacherScope) && resolvedSchoolId ? resolvedSchoolId : ''
+    const school = getSchoolById(schools, schoolId)
+    const headOfficeId = isSuperAdmin
+      ? (manualScope.selectedHeadOfficeId || filters.headOfficeId || '')
+      : isHeadOfficeAdmin
+        ? (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+        : school?.headOfficeId != null
+          ? String(school.headOfficeId)
+          : ''
+
+    setAddForm({
+      headOfficeId,
+      schoolId,
+      studentType: '',
+      note: '',
+    })
+
+    if (isSuperAdmin && headOfficeId) {
+      manualScope.setSelectedScope(headOfficeId, '')
+    }
     setAddStep(0)
     setIsAddOpen(true)
   }
@@ -244,23 +306,30 @@ const StudentType = () => {
   const openEdit = (row) => {
     setError('')
     setEditingId(row.id)
+    const school = getSchoolById(schools, row.schoolId)
+    const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
     setEditForm({
-      schoolId: isTeacherScope ? resolvedSchoolId : row.schoolId != null ? String(row.schoolId) : '',
+      headOfficeId,
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
       studentType: row.studentType || '',
       note: row.note || '',
     })
+    if (isSuperAdmin && headOfficeId) {
+      manualScope.setSelectedScope(headOfficeId, row.schoolId != null ? String(row.schoolId) : '')
+    }
     setEditStep(0)
     setIsEditOpen(true)
   }
 
-  // ── CRUD handlers ────────────────────────────────────────────────────────────
-  const buildPayload = (form) => ({
-    schoolId: isTeacherScope
-      ? (resolvedSchoolId ? Number(resolvedSchoolId) : null)
-      : (form.schoolId ? Number(form.schoolId) : null),
-    studentType: form.studentType || '',
-    note: form.note || '',
-  })
+  const buildPayload = (form) => {
+    const school = getSchoolById(schools, form.schoolId)
+    return {
+      headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : school?.headOfficeId != null ? Number(school.headOfficeId) : null,
+      schoolId: form.schoolId ? Number(form.schoolId) : null,
+      studentType: form.studentType || '',
+      note: form.note || '',
+    }
+  }
 
   const handleCreate = async () => {
     if (saving) return
@@ -282,7 +351,10 @@ const StudentType = () => {
 
   const handleUpdate = async () => {
     if (saving) return
-    if (!editingId) { setError('No record selected for update'); return }
+    if (!editingId) {
+      setError('No record selected for update')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -315,51 +387,70 @@ const StudentType = () => {
     }
   }
 
-  // ── Pagination ───────────────────────────────────────────────────────────────
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
-  }
-
-  // ── School name lookup (for display in table) ────────────────────────────────
   const schoolNameById = useMemo(() => {
     const map = {}
-    schools.forEach((s) => { map[s.id] = s.schoolName })
+    schools.forEach((s) => {
+      map[s.id] = s.schoolName
+    })
     return map
   }, [schools])
 
   const teacherSchoolName = resolvedSchoolLabel || schoolNameById[resolvedSchoolId] || ''
 
-  const getSchoolName = (row) =>
-    row.schoolName || row.school || schoolNameById[row.schoolId] || '-'
+  const getSchoolName = (row) => row.schoolName || row.school || schoolNameById[row.schoolId] || '-'
 
-  // ── Form renderer ─────────────────────────────────────────────────────────────
   const renderForm = (form, setter) => (
     <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          {isTeacherScope ? (
-            <input type="text" className="avm-input" value={teacherSchoolName} readOnly />
-          ) : (
-            <select
-              className="avm-select"
-              id="schoolId"
-              value={form.schoolId}
-              onChange={handleChange(setter)}
-            >
-              <option value="">-- Select School --</option>
-              {schools.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.schoolName}
-                </option>
-              ))}
-            </select>
-          )}
-        </FormField>
+        {isSuperAdmin ? (
+          <ManualScopeSelectors
+            enabled
+            headOffices={manualScope.headOffices}
+            schoolOptions={manualScope.schoolOptions}
+            selectedHeadOfficeId={form.headOfficeId}
+            onHeadOfficeChange={(value) => {
+              setter((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
+              manualScope.setSelectedScope(value, '')
+            }}
+            selectedSchoolId={form.schoolId}
+            onSchoolChange={(value) => {
+              const school = getSchoolById(schools, value)
+              const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : form.headOfficeId
+              setter((prev) => ({
+                ...prev,
+                headOfficeId: nextHeadOfficeId,
+                schoolId: value,
+              }))
+              if (nextHeadOfficeId) {
+                manualScope.setSelectedScope(nextHeadOfficeId, value)
+              }
+            }}
+          />
+        ) : (
+          <>
+            {isHeadOfficeAdmin ? (
+              <FormField label="Head Office" required full>
+                <input className="avm-input" value={authHeadOfficeName || ''} readOnly />
+              </FormField>
+            ) : null}
+
+            <FormField label="School Name" required full>
+              {(isSchoolAdmin || isTeacherScope) ? (
+                <input type="text" className="avm-input" value={teacherSchoolName} readOnly />
+              ) : (
+                <select className="avm-select" id="schoolId" value={form.schoolId} onChange={handleChange(setter)}>
+                  <option value="">-- Select School --</option>
+                  {schoolOptions.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {s.schoolName}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+          </>
+        )}
 
         <FormField label="Student Type" required full>
           <input
@@ -386,23 +477,21 @@ const StudentType = () => {
     </>
   )
 
-  // ── Filter sidebar school options (from live schools list) ───────────────────
-  const schoolFilterOptions = useMemo(
-    () => Array.from(new Set(schools.map((s) => s.schoolName))).sort(),
-    [schools],
-  )
+  const handleChange = (setter) => (e) => {
+    const { id, value } = e.target
+    setter((prev) => ({ ...prev, [id]: value }))
+  }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
+
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Student Type</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Student Type</span>
@@ -410,45 +499,37 @@ const StudentType = () => {
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-          >
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
             <span className="d-flex text-md">
-              <i className="ri-add-large-line"></i>
+              <i className="ri-add-large-line" />
             </span>
             Add Student Type
           </button>
         </div>
       </div>
 
-      {error && (
+      {error ? (
         <div className="alert alert-danger d-flex align-items-center gap-8" role="alert">
-          <i className="ri-error-warning-line"></i>
+          <i className="ri-error-warning-line" />
           <span>{error}</span>
         </div>
-      )}
+      ) : null}
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          {/* ── Toolbar ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export */}
               <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
 
-              {/* Filter */}
               <button
                 type="button"
                 className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
-                <span><i className="ri-arrow-right-line"></i></span>
+                <span><i className="ri-arrow-right-line" /></span>
               </button>
 
-              {/* Columns */}
               <div className="dropdown">
                 <button
                   type="button"
@@ -457,7 +538,7 @@ const StudentType = () => {
                   aria-expanded="false"
                 >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
-                  <span><i className="ri-arrow-down-s-line"></i></span>
+                  <span><i className="ri-arrow-down-s-line" /></span>
                 </button>
                 <ul className="dropdown-menu p-12 border bg-base shadow">
                   {columnOptions.map((column) => (
@@ -486,22 +567,23 @@ const StudentType = () => {
               />
             </div>
 
-            {/* Search */}
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search student type..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
               />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                <i className="ri-search-line"></i>
+                <i className="ri-search-line" />
               </span>
             </div>
           </div>
 
-          {/* ── Table ── */}
           <div className="p-0 table-responsive">
             <table className="table bordered-table mb-0 data-table" style={{ minWidth: 760 }}>
               <thead>
@@ -549,9 +631,7 @@ const StudentType = () => {
                         </div>
                       </td>
                       {visibleColumns.school && <td>{getSchoolName(row)}</td>}
-                      {visibleColumns.studentType && (
-                        <td className="fw-medium text-primary-light">{row.studentType}</td>
-                      )}
+                      {visibleColumns.studentType && <td className="fw-medium text-primary-light">{row.studentType}</td>}
                       {visibleColumns.note && <td>{row.note}</td>}
                       <td>
                         <div className="d-flex align-items-center gap-10">
@@ -561,7 +641,7 @@ const StudentType = () => {
                             onClick={() => openEdit(row)}
                             title="Edit"
                           >
-                            <i className="ri-edit-line"></i>
+                            <i className="ri-edit-line" />
                           </button>
                           <button
                             type="button"
@@ -570,7 +650,7 @@ const StudentType = () => {
                             title="Delete"
                             disabled={saving}
                           >
-                            <i className="ri-delete-bin-line"></i>
+                            <i className="ri-delete-bin-line" />
                           </button>
                         </div>
                       </td>
@@ -581,10 +661,9 @@ const StudentType = () => {
             </table>
           </div>
 
-          {/* ── Pagination ── */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
             <span className="text-sm text-secondary-light">
-              Showing {totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)} of {totalElements} entries
+              Showing {currentStart} - {currentEnd} of {totalElements} entries
             </span>
             <div className="d-flex align-items-center gap-8">
               <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
@@ -612,7 +691,6 @@ const StudentType = () => {
         </div>
       </div>
 
-      {/* ── Add Modal ── */}
       <WizardPopup
         modalWidth="540px"
         open={isAddOpen}
@@ -628,7 +706,6 @@ const StudentType = () => {
         {renderForm(addForm, setAddForm)}
       </WizardPopup>
 
-      {/* ── Edit Modal ── */}
       <WizardPopup
         modalWidth="540px"
         open={isEditOpen}
@@ -644,7 +721,6 @@ const StudentType = () => {
         {renderForm(editForm, setEditForm)}
       </WizardPopup>
 
-      {/* ── Filter Sidebar ── */}
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Student Type"
@@ -652,26 +728,50 @@ const StudentType = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            {isTeacherScope ? (
-              <input type="text" className="form-control" value={teacherSchoolName} readOnly />
-            ) : (
-              <select
-                id="school"
-                className="form-control form-select"
-                value={pendingFilters.school}
-                onChange={handlePendingFilterChange}
-              >
-                <option value="Select">Select School</option>
-                {schoolFilterOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            )}
-          </div>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) => {
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'All' }))
+                manualScope.setSelectedScope(value, '')
+              }}
+              selectedSchoolId={pendingFilters.schoolId === 'All' ? '' : pendingFilters.schoolId}
+              onSchoolChange={(value) => setPendingFilters((prev) => ({ ...prev, schoolId: value || 'All' }))}
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <div>
+                  <label htmlFor="studentTypeFilterHeadOffice" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                    Head Office
+                  </label>
+                  <input id="studentTypeFilterHeadOffice" className="form-control" value={authHeadOfficeName || ''} readOnly />
+                </div>
+              ) : null}
+
+              <div>
+                <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  School
+                </label>
+                <select
+                  id="schoolId"
+                  className="form-control form-select"
+                  value={pendingFilters.schoolId}
+                  onChange={handlePendingFilterChange}
+                >
+                  <option value="All">All Schools</option>
+                  {schoolOptions.map((school) => (
+                    <option key={school.id} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label htmlFor="studentType" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
@@ -685,7 +785,9 @@ const StudentType = () => {
             >
               <option value="Select">Select</option>
               {studentTypeOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
+                <option key={option} value={option}>
+                  {option}
+                </option>
               ))}
             </select>
           </div>

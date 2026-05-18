@@ -1,15 +1,17 @@
 import apiClient from './apiClient'
 
-export const fetchOnlineExams = async ({ schoolId } = {}) => {
+export const fetchOnlineExams = async ({ headOfficeId, schoolId } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   const query = qs.toString()
   const response = await apiClient.get(query ? `/api/online-exams?${query}` : '/api/online-exams')
   return response.data
 }
 
-export const fetchOnlineExamsPage = async ({ schoolId, classId, subjectId, isPublish, page = 0, size = 10, search = '' } = {}) => {
+export const fetchOnlineExamsPage = async ({ headOfficeId, schoolId, classId, subjectId, isPublish, page = 0, size = 10, search = '' } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   if (classId != null && String(classId).trim() !== '' && String(classId) !== 'Select') qs.set('classId', String(classId))
   if (subjectId != null && String(subjectId).trim() !== '' && String(subjectId) !== 'Select') qs.set('subjectId', String(subjectId))

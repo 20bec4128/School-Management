@@ -8,6 +8,7 @@ import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchDesignations } from '../apis/designationsApi'
 import { fetchSchoolRoles } from '../apis/schoolRbacApi'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import {
   createLeaveType,
   deleteLeaveType,
@@ -29,7 +30,8 @@ const makeEmptyForm = (defaultSchoolId = '', defaultApplicantType = '') => ({
 })
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: 'Select',
+  schoolId: 'Select',
   applicantType: 'Select',
   designation: 'Select',
 }
@@ -213,34 +215,54 @@ const LeaveType = ({ onNavigate } = {}) => {
     setApplicantRoles(Array.isArray(data) ? data : [])
   }
 
-  const schoolOptions = useMemo(() => {
+  const filterSchoolOptions = useMemo(() => {
     const values = []
     const seen = new Set()
-    const push = (name) => {
-      if (!name) return
-      const normalized = String(name).trim()
-      if (!normalized || seen.has(normalized)) return
-      seen.add(normalized)
-      values.push(normalized)
-    }
+    const selectedHeadOfficeId =
+      isSuperAdmin && pendingFilters.headOfficeId !== 'Select' ? String(pendingFilters.headOfficeId) : ''
 
-    for (const row of rows) {
-      push(row.schoolName)
+    const push = (schoolId, schoolName, headOfficeId) => {
+      if (schoolId == null) return
+      if (selectedHeadOfficeId && String(headOfficeId ?? '') !== selectedHeadOfficeId) return
+      if (isHeadOfficeAdmin && String(headOfficeId ?? '') !== String(authHeadOfficeId ?? '')) return
+      const id = String(schoolId)
+      if (seen.has(id)) return
+      seen.add(id)
+      values.push({
+        id,
+        schoolName: schoolName || `School ${schoolId}`,
+      })
     }
 
     for (const item of schools) {
-      if (isHeadOfficeAdmin && String(item?.headOfficeId ?? '') !== String(authHeadOfficeId ?? '')) {
-        continue
-      }
-      push(item?.schoolName)
+      push(item?.id, item?.schoolName || item?.name, item?.headOfficeId)
     }
 
-    if (isFixedSchoolRole) {
-      push(authSchoolName || (authSchoolId != null ? `School ${authSchoolId}` : ''))
+    for (const row of rows) {
+      push(
+        row.schoolId,
+        row.schoolName,
+        row.headOfficeId ?? schoolsById.get(String(row.schoolId ?? ''))?.headOfficeId ?? null,
+      )
     }
 
-    return values.sort((a, b) => a.localeCompare(b))
-  }, [rows, schools, isHeadOfficeAdmin, isFixedSchoolRole, authHeadOfficeId, authSchoolName, authSchoolId])
+    if (isFixedSchoolRole && authSchoolId != null) {
+      push(authSchoolId, authSchoolName || `School ${authSchoolId}`, authHeadOfficeId)
+    }
+
+    return values.sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+  }, [
+    rows,
+    schools,
+    schoolsById,
+    pendingFilters.headOfficeId,
+    isSuperAdmin,
+    isHeadOfficeAdmin,
+    isFixedSchoolRole,
+    authHeadOfficeId,
+    authSchoolId,
+    authSchoolName,
+  ])
 
   const designationOptions = useMemo(
     () =>
@@ -273,14 +295,18 @@ const LeaveType = ({ onNavigate } = {}) => {
           .join(' ')
           .toLowerCase()
           .includes(q)
-      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
+      const rowHeadOfficeId = row.headOfficeId ?? schoolsById.get(String(row.schoolId ?? ''))?.headOfficeId ?? null
+      const matchesHeadOffice =
+        filters.headOfficeId === 'Select' || String(rowHeadOfficeId ?? '') === String(filters.headOfficeId)
+      const matchesSchool =
+        filters.schoolId === 'Select' || String(row.schoolId ?? '') === String(filters.schoolId)
       const matchesApplicantType =
         filters.applicantType === 'Select' || row.applicantType === filters.applicantType
       const matchesDesignation =
         filters.designation === 'Select' || row.designationName === filters.designation
-      return matchesSearch && matchesSchool && matchesApplicantType && matchesDesignation
+      return matchesSearch && matchesHeadOffice && matchesSchool && matchesApplicantType && matchesDesignation
     })
-  }, [rows, search, filters])
+  }, [rows, search, filters, schoolsById])
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage))
 
@@ -572,6 +598,10 @@ const LeaveType = ({ onNavigate } = {}) => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
+    if (id === 'headOfficeId') {
+      setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'Select' }))
+      return
+    }
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
   }
 
@@ -872,6 +902,8 @@ const LeaveType = ({ onNavigate } = {}) => {
   }
 
   const canCreate = !isHeadOfficeAdmin || !!scopeSchoolId
+  const selectedFilterHeadOfficeId =
+    isSuperAdmin ? pendingFilters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : ''
 
   return (
     <div className="dashboard-main-body">
@@ -1150,22 +1182,22 @@ const LeaveType = ({ onNavigate } = {}) => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            <ManualScopeSelectors
+              enabled={isSuperAdmin || isHeadOfficeAdmin}
+              headOffices={isSuperAdmin ? headOffices : []}
+              schoolOptions={filterSchoolOptions}
+              selectedHeadOfficeId={selectedFilterHeadOfficeId}
+              onHeadOfficeChange={(value) =>
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value || 'Select', schoolId: 'Select' }))
+              }
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({ ...prev, schoolId: value || 'Select' }))
+              }
+              showSchoolSelector
+              showHeadOfficeSelector={isSuperAdmin}
+              compact={false}
+            />
           </div>
 
           <div>

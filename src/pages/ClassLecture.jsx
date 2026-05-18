@@ -4,6 +4,12 @@ import {
   deleteClassLecture,
   fetchClassLectures,
 } from "../apis/classLectureApi";
+import SlideSidebar from "../components/SlideSidebar";
+import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
+import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import { useAuth } from "../context/useAuth";
+import { useSchool } from "../context/useSchool";
+import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import "../assets/css/addModalShared.css";
 import ExportDropdown from "../components/ExportDropdown";
 import RowsPerPageSelect from "../components/RowsPerPageSelect";
@@ -23,23 +29,32 @@ const columnOptions = [
 ];
 
 const ClassLecture = ({ onNavigate }) => {
+  const { role, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth();
+  const { activeSchoolId } = useSchool();
   const [lectures, setLectures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [schoolsLookup, setSchoolsLookup] = useState([]);
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([]);
 
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRows, setSelectedRows] = useState([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [filters, setFilters] = useState({
+    headOfficeId: "Select",
+    schoolId: "Select",
     class: "All",
     subject: "All",
     lectureType: "All",
   });
 
   const [pendingFilters, setPendingFilters] = useState({
+    headOfficeId: "Select",
+    schoolId: "Select",
     class: "All",
     subject: "All",
     lectureType: "All",
@@ -49,6 +64,64 @@ const ClassLecture = ({ onNavigate }) => {
     useColumnVisibility(columnOptions);
 
   const navigateTo = typeof onNavigate === "function" ? onNavigate : () => {};
+  const roleUpper = String(role || "").toUpperCase();
+  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isHeadOfficeAdmin = roleUpper === "HEAD_OFFICE_ADMIN";
+  const isSchoolAdmin = roleUpper === "SCHOOL_ADMIN";
+  const resolvedSchoolId = activeSchoolId
+    ? String(activeSchoolId)
+    : authSchoolId
+      ? String(authSchoolId)
+      : "";
+  const resolvedSchoolName = authSchoolName || "";
+  const schoolByName = useMemo(() => {
+    const map = new Map();
+    for (const school of Array.isArray(schoolsLookup) ? schoolsLookup : []) {
+      const name = String(school?.schoolName || school?.name || "").trim();
+      if (!name) continue;
+      map.set(name.toLowerCase(), school);
+    }
+    return map;
+  }, [schoolsLookup]);
+
+  const headOfficeOptions = useMemo(() => {
+    const list = (Array.isArray(headOfficesLookup) ? headOfficesLookup : [])
+      .map((row) => ({ id: row?.id, name: row?.name || row?.headOfficeName || "" }))
+      .filter((row) => row.id != null && row.name);
+    if (isHeadOfficeAdmin && authHeadOfficeId != null && authHeadOfficeName) {
+      const exists = list.some((row) => String(row.id) === String(authHeadOfficeId));
+      if (!exists) list.unshift({ id: authHeadOfficeId, name: authHeadOfficeName });
+    }
+    return list.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [authHeadOfficeId, authHeadOfficeName, headOfficesLookup, isHeadOfficeAdmin]);
+
+  const appliedHeadOfficeId = filters.headOfficeId !== "Select"
+    ? String(filters.headOfficeId)
+    : isHeadOfficeAdmin && authHeadOfficeId != null
+      ? String(authHeadOfficeId)
+      : "";
+
+  const selectedSchoolOptions = useMemo(() => {
+    const list = Array.isArray(schoolsLookup) ? schoolsLookup.slice() : [];
+    const filtered = pendingFilters.headOfficeId && pendingFilters.headOfficeId !== "Select"
+      ? list.filter((school) => String(school?.headOfficeId ?? "") === String(pendingFilters.headOfficeId))
+      : isHeadOfficeAdmin && authHeadOfficeId != null
+        ? list.filter((school) => String(school?.headOfficeId ?? "") === String(authHeadOfficeId))
+        : isSchoolAdmin && resolvedSchoolId
+          ? list.filter((school) => String(school?.id ?? "") === String(resolvedSchoolId))
+          : list;
+    return filtered
+      .map((row) => ({ id: row?.id, schoolName: row?.schoolName || row?.name || "" }))
+      .filter((row) => row.id != null && row.schoolName)
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
+  }, [authHeadOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, resolvedSchoolId, schoolsLookup]);
+
+  const pendingSchoolId = pendingFilters.schoolId !== "Select" ? String(pendingFilters.schoolId) : "";
+  const pendingHeadOfficeId = pendingFilters.headOfficeId !== "Select"
+    ? String(pendingFilters.headOfficeId)
+    : isHeadOfficeAdmin && authHeadOfficeId != null
+      ? String(authHeadOfficeId)
+      : "";
 
   const loadLectures = useCallback(async () => {
     setLoading(true);
@@ -69,10 +142,98 @@ const ClassLecture = ({ onNavigate }) => {
     void loadLectures();
   }, [loadLectures]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    const run = async () => {
+      try {
+        const [headOfficePage, schoolRows] = await Promise.allSettled([
+          fetchHeadOfficesPage(0, 500),
+          fetchSchoolsLookup(),
+        ]);
+
+        if (ignore) return;
+
+        setHeadOfficesLookup(
+          headOfficePage.status === "fulfilled" && Array.isArray(headOfficePage.value?.content)
+            ? headOfficePage.value.content
+            : [],
+        );
+        setSchoolsLookup(
+          schoolRows.status === "fulfilled" && Array.isArray(schoolRows.value)
+            ? schoolRows.value
+            : [],
+        );
+      } catch {
+        if (!ignore) {
+          setHeadOfficesLookup([]);
+          setSchoolsLookup([]);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const previewLectures = useMemo(() => {
+    const selectedSchoolIdValue = pendingSchoolId;
+    const selectedHeadOfficeIdValue = pendingHeadOfficeId;
+    return lectures.filter((row) => {
+      const lectureSchoolName = String(row?.school || row?.schoolName || "").trim().toLowerCase();
+      const matchedSchool =
+        selectedSchoolIdValue && selectedSchoolIdValue !== "Select"
+          ? String(schoolByName.get(lectureSchoolName)?.id ?? "") === String(selectedSchoolIdValue)
+          : true;
+      const matchedHeadOffice =
+        selectedHeadOfficeIdValue
+          ? String(schoolByName.get(lectureSchoolName)?.headOfficeId ?? "") === selectedHeadOfficeIdValue
+          : true;
+      return matchedSchool && matchedHeadOffice;
+    });
+  }, [lectures, pendingHeadOfficeId, pendingSchoolId, schoolByName]);
+
+  const scopedLectures = useMemo(() => {
+    const selectedSchoolIdValue = filters.schoolId !== "Select" ? String(filters.schoolId) : "";
+    const selectedHeadOfficeIdValue = appliedHeadOfficeId;
+    return lectures.filter((row) => {
+      const lectureSchool = String(row?.school || row?.schoolName || "").trim().toLowerCase();
+      const matchedSchool =
+        selectedSchoolIdValue && selectedSchoolIdValue !== "Select"
+          ? String(schoolByName.get(lectureSchool)?.id ?? "") === String(selectedSchoolIdValue)
+          : true;
+      const matchedHeadOffice =
+        selectedHeadOfficeIdValue
+          ? String(schoolByName.get(lectureSchool)?.headOfficeId ?? "") === selectedHeadOfficeIdValue
+          : true;
+      return matchedSchool && matchedHeadOffice;
+    });
+  }, [appliedHeadOfficeId, filters.schoolId, lectures, schoolByName]);
+
+  const classOptions = useMemo(
+    () =>
+      Array.from(new Set(previewLectures.map((item) => item?.class).filter(Boolean))),
+    [previewLectures],
+  );
+
+  const subjectOptions = useMemo(
+    () =>
+      Array.from(new Set(previewLectures.map((item) => item?.subject).filter(Boolean))),
+    [previewLectures],
+  );
+
+  const lectureTypeOptions = useMemo(
+    () =>
+      Array.from(new Set(previewLectures.map((item) => item?.classLecture).filter(Boolean))),
+    [previewLectures],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    return lectures.filter((row) => {
+    return scopedLectures.filter((row) => {
       const matchesSearch =
         !q ||
         [
@@ -104,29 +265,7 @@ const ClassLecture = ({ onNavigate }) => {
         matchesSearch && matchesClass && matchesSubject && matchesLectureType
       );
     });
-  }, [lectures, filters, search]);
-
-  const classOptions = useMemo(
-    () =>
-      Array.from(new Set(lectures.map((item) => item?.class).filter(Boolean))),
-    [lectures],
-  );
-
-  const subjectOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(lectures.map((item) => item?.subject).filter(Boolean)),
-      ),
-    [lectures],
-  );
-
-  const lectureTypeOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(lectures.map((item) => item?.classLecture).filter(Boolean)),
-      ),
-    [lectures],
-  );
+  }, [scopedLectures, filters, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
 
@@ -161,6 +300,27 @@ const ClassLecture = ({ onNavigate }) => {
     setSelectedRows((prev) =>
       prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
     );
+  };
+
+  const handleApplyFilters = (event) => {
+    event.preventDefault();
+    setFilters(pendingFilters);
+    setCurrentPage(1);
+    setIsFilterOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    const reset = {
+      headOfficeId: "Select",
+      schoolId: "Select",
+      class: "All",
+      subject: "All",
+      lectureType: "All",
+    };
+
+    setPendingFilters(reset);
+    setFilters(reset);
+    setCurrentPage(1);
   };
 
   const openAdd = () => {
@@ -299,141 +459,18 @@ const ClassLecture = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <div className="dropdown">
-                <button
-                  type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Filter
-                  </span>
-                  <span>
-                    <i className="ri-arrow-down-s-line"></i>
-                  </span>
-                </button>
-
-                <div
-                  className="dropdown-menu p-12 border bg-base shadow"
-                  style={{ minWidth: 280 }}
-                >
-                  <div className="mb-10">
-                    <label
-                      htmlFor="filterClass"
-                      className="text-sm fw-semibold text-primary-light d-inline-block mb-6"
-                    >
-                      Class
-                    </label>
-
-                    <select
-                      id="filterClass"
-                      className="form-control form-select"
-                      value={pendingFilters.class}
-                      onChange={(e) =>
-                        setPendingFilters((prev) => ({
-                          ...prev,
-                          class: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="All">All</option>
-                      {classOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="mb-10">
-                    <label
-                      htmlFor="filterSubject"
-                      className="text-sm fw-semibold text-primary-light d-inline-block mb-6"
-                    >
-                      Subject
-                    </label>
-
-                    <select
-                      id="filterSubject"
-                      className="form-control form-select"
-                      value={pendingFilters.subject}
-                      onChange={(e) =>
-                        setPendingFilters((prev) => ({
-                          ...prev,
-                          subject: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="All">All</option>
-                      {subjectOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="mb-12">
-                    <label
-                      htmlFor="filterLectureType"
-                      className="text-sm fw-semibold text-primary-light d-inline-block mb-6"
-                    >
-                      Lecture Type
-                    </label>
-
-                    <select
-                      id="filterLectureType"
-                      className="form-control form-select"
-                      value={pendingFilters.lectureType}
-                      onChange={(e) =>
-                        setPendingFilters((prev) => ({
-                          ...prev,
-                          lectureType: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="All">All</option>
-                      {lectureTypeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="d-flex gap-8">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-light border w-100"
-                      onClick={() => {
-                        const reset = {
-                          class: "All",
-                          subject: "All",
-                          lectureType: "All",
-                        };
-
-                        setPendingFilters(reset);
-                        setFilters(reset);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      Reset
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary-600 w-100"
-                      onClick={() => {
-                        setFilters(pendingFilters);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      Apply
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <button
+                type="button"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                onClick={() => setIsFilterOpen(true)}
+              >
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                  Filter
+                </span>
+                <span>
+                  <i className="ri-arrow-down-s-line"></i>
+                </span>
+              </button>
 
               <RowsPerPageSelect
                 value={rowsPerPage}
@@ -611,7 +648,7 @@ const ClassLecture = ({ onNavigate }) => {
             </table>
           </div>
 
-          <div className="px-20 py-16 border-top border-neutral-200">
+      <div className="px-20 py-16 border-top border-neutral-200">
             <TablePagination
               paginationProps={{
                 currentPage,
@@ -625,6 +662,158 @@ const ClassLecture = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      <SlideSidebar
+        isOpen={isFilterOpen}
+        title="Filter Class Lecture"
+        onClose={() => setIsFilterOpen(false)}
+        className="filter-sidebar"
+      >
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {(isSuperAdmin || isHeadOfficeAdmin) ? (
+            <ManualScopeSelectors
+              enabled
+              compact
+              headOffices={headOfficeOptions}
+              schoolOptions={selectedSchoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId === "Select" ? "" : pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  headOfficeId: value || "Select",
+                  schoolId: "Select",
+                  class: "All",
+                  subject: "All",
+                  lectureType: "All",
+                }))
+              }
+              selectedSchoolId={pendingFilters.schoolId === "Select" ? "" : pendingFilters.schoolId}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  schoolId: value || "Select",
+                  class: "All",
+                  subject: "All",
+                  lectureType: "All",
+                }))
+              }
+              showHeadOfficeSelector={isSuperAdmin}
+            />
+          ) : (
+            <div className="mb-10">
+              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-6">
+                School
+              </label>
+              <input
+                className="form-control"
+                value={resolvedSchoolName || selectedSchoolOptions[0]?.schoolName || ""}
+                readOnly
+              />
+            </div>
+          )}
+
+          <div className="mb-10">
+            <label
+              htmlFor="filterClass"
+              className="text-sm fw-semibold text-primary-light d-inline-block mb-6"
+            >
+              Class
+            </label>
+
+            <select
+              id="filterClass"
+              className="form-control form-select"
+              value={pendingFilters.class}
+              onChange={(e) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  class: e.target.value,
+                }))
+              }
+            >
+              <option value="All">All</option>
+              {classOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-10">
+            <label
+              htmlFor="filterSubject"
+              className="text-sm fw-semibold text-primary-light d-inline-block mb-6"
+            >
+              Subject
+            </label>
+
+            <select
+              id="filterSubject"
+              className="form-control form-select"
+              value={pendingFilters.subject}
+              onChange={(e) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  subject: e.target.value,
+                }))
+              }
+            >
+              <option value="All">All</option>
+              {subjectOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-12">
+            <label
+              htmlFor="filterLectureType"
+              className="text-sm fw-semibold text-primary-light d-inline-block mb-6"
+            >
+              Lecture Type
+            </label>
+
+            <select
+              id="filterLectureType"
+              className="form-control form-select"
+              value={pendingFilters.lectureType}
+              onChange={(e) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  lectureType: e.target.value,
+                }))
+              }
+            >
+              <option value="All">All</option>
+              {lectureTypeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="d-flex gap-8">
+            <button
+              type="button"
+              className="btn btn-danger-200 text-danger-600 w-100"
+              onClick={handleResetFilters}
+            >
+              Reset
+            </button>
+
+            <button
+              type="submit"
+              className="btn btn-primary-600 w-100"
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+      </SlideSidebar>
     </div>
   );
 };

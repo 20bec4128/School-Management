@@ -37,19 +37,31 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SalaryGradeDto> list(Long schoolId) {
+    public List<SalaryGradeDto> list(Long headOfficeId, Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
-        if (user.isSuperAdmin() && schoolId == null) {
+        List<Long> scopedSchoolIds = resolveSchoolIds(user, headOfficeId, schoolId);
+
+        if (scopedSchoolIds == null) {
             return salaryGradeRepository.findAllByOrderByIdDesc()
                     .stream()
                     .map(this::toDto)
                     .collect(Collectors.toList());
         }
 
-        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return salaryGradeRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
+        if (scopedSchoolIds.isEmpty()) {
+            return List.of();
+        }
+
+        if (scopedSchoolIds.size() == 1) {
+            return salaryGradeRepository.findBySchoolIdOrderByIdDesc(scopedSchoolIds.get(0))
+                    .stream()
+                    .map(this::toDto)
+                    .collect(Collectors.toList());
+        }
+
+        return salaryGradeRepository.findBySchoolIdInOrderByIdDesc(scopedSchoolIds)
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
@@ -57,14 +69,16 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<SalaryGradeDto> listPaginated(Long schoolId, int page, int size, String search) {
+    public Page<SalaryGradeDto> listPaginated(Long headOfficeId, Long schoolId, int page, int size, String search) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         String normalizedSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
 
-        if (user.isSuperAdmin() && schoolId == null) {
+        List<Long> scopedSchoolIds = resolveSchoolIds(user, headOfficeId, schoolId);
+
+        if (scopedSchoolIds == null) {
             List<SalaryGradeDto> rows = salaryGradeRepository.findAllByOrderByIdDesc()
                     .stream()
                     .map(this::toDto)
@@ -81,8 +95,16 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
             return slice(rows, pageable);
         }
 
-        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return salaryGradeRepository.searchSalaryGrades(effectiveSchoolId, normalizedSearch, pageable)
+        if (scopedSchoolIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        if (scopedSchoolIds.size() == 1) {
+            return salaryGradeRepository.searchSalaryGrades(scopedSchoolIds.get(0), normalizedSearch, pageable)
+                    .map(this::toDto);
+        }
+
+        return salaryGradeRepository.searchSalaryGradesIn(scopedSchoolIds, normalizedSearch, pageable)
                 .map(this::toDto);
     }
 
@@ -157,16 +179,59 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
         entity.setNote(normalizeOptional(dto.getNote()));
     }
 
-    private Long effectiveSchoolIdForRead(CurrentUser user, Long requestedSchoolId) {
+    private List<Long> resolveSchoolIds(CurrentUser user, Long requestedHeadOfficeId, Long requestedSchoolId) {
+        if (user.isSchoolScoped()) {
+            if (user.schoolId() == null) throw new ForbiddenException();
+            return List.of(user.schoolId());
+        }
+
+        if (user.isHeadOfficeScopedAdmin()) {
+            Long effectiveHeadOfficeId = user.headOfficeId();
+            if (requestedHeadOfficeId != null && !Objects.equals(requestedHeadOfficeId, effectiveHeadOfficeId)) {
+                throw new ForbiddenException();
+            }
+            if (requestedSchoolId != null) {
+                ensureSchoolInHeadOffice(requestedSchoolId, effectiveHeadOfficeId);
+                return List.of(requestedSchoolId);
+            }
+            return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(effectiveHeadOfficeId)
+                    .stream()
+                    .map(ManageSchool::getId)
+                    .toList();
+        }
+
+        if (user.isSuperAdmin()) {
+            if (requestedSchoolId != null && requestedHeadOfficeId != null) {
+                ensureSchoolInHeadOffice(requestedSchoolId, requestedHeadOfficeId);
+                return List.of(requestedSchoolId);
+            }
+
+            if (requestedSchoolId != null) {
+                return List.of(requestedSchoolId);
+            }
+
+            if (requestedHeadOfficeId != null) {
+                return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(requestedHeadOfficeId)
+                        .stream()
+                        .map(ManageSchool::getId)
+                        .toList();
+            }
+
+            return null;
+        }
+
+        if (requestedSchoolId == null) throw new BadRequestException("schoolId is required");
+        return List.of(requestedSchoolId);
+    }
+
+    private Long effectiveSchoolIdForWrite(CurrentUser user, Long requestedSchoolId) {
         if (user.isSchoolScoped()) {
             if (user.schoolId() == null) throw new ForbiddenException();
             return user.schoolId();
         }
 
         if (user.isHeadOfficeScopedAdmin()) {
-            if (requestedSchoolId == null) {
-                throw new BadRequestException("schoolId is required");
-            }
+            if (requestedSchoolId == null) throw new BadRequestException("schoolId is required");
             ensureSchoolInHeadOffice(requestedSchoolId, user.headOfficeId());
             return requestedSchoolId;
         }
@@ -175,7 +240,7 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
         return requestedSchoolId;
     }
 
-    private Long effectiveSchoolIdForWrite(CurrentUser user, Long requestedSchoolId) {
+    private Long effectiveSchoolIdForRead(CurrentUser user, Long requestedSchoolId) {
         if (user.isSchoolScoped()) {
             if (user.schoolId() == null) throw new ForbiddenException();
             return user.schoolId();

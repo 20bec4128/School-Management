@@ -7,6 +7,7 @@ import "../assets/css/addModalShared.css";
 import { useAuth } from "../context/useAuth";
 import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import {
   deleteDesignation,
   fetchDesignationsPage,
@@ -76,12 +77,14 @@ const ManageDesignation = ({ onNavigate }) => {
   const [selectedRows, setSelectedRows] = useState([]);
 
   const [filters, setFilters] = useState({
-    school: "All",
+    headOfficeId: "All",
+    schoolId: "All",
     designation: "All",
   });
 
   const [pendingFilters, setPendingFilters] = useState({
-    school: "All",
+    headOfficeId: "All",
+    schoolId: "All",
     designation: "All",
   });
 
@@ -249,21 +252,56 @@ const ManageDesignation = ({ onNavigate }) => {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
+      const rowHeadOfficeId = schoolById.get(String(row.schoolId ?? ""))?.headOfficeId ?? null;
+      const matchesHeadOffice =
+        filters.headOfficeId === "All" ||
+        String(rowHeadOfficeId ?? "") === String(filters.headOfficeId);
       const matchesSchool =
-        filters.school === "All" || row.schoolName === filters.school;
+        filters.schoolId === "All" || String(row.schoolId ?? "") === String(filters.schoolId);
 
       const matchesDesignation =
         filters.designation === "All" ||
         row.designation === filters.designation;
 
-      return matchesSchool && matchesDesignation;
+      return matchesHeadOffice && matchesSchool && matchesDesignation;
     });
-  }, [filters, rows]);
+  }, [filters, rows, schoolById]);
 
-  const schoolOptions = useMemo(
+  const selectedFilterHeadOfficeId =
+    isSuperAdmin ? pendingFilters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? "") : "";
+
+  const schoolOptions = useMemo(() => {
+    const map = new Map();
+    for (const school of Array.isArray(schools) ? schools : []) {
+      if (school?.id == null) continue;
+      if (isHeadOfficeAdmin && String(school?.headOfficeId ?? "") !== String(authHeadOfficeId ?? "")) continue;
+      if (isSuperAdmin && selectedFilterHeadOfficeId && String(school?.headOfficeId ?? "") !== String(selectedFilterHeadOfficeId)) continue;
+      map.set(String(school.id), {
+        id: String(school.id),
+        schoolName: school.schoolName || school.name || `School ${school.id}`,
+        headOfficeId: school.headOfficeId ?? null,
+      });
+    }
+    return Array.from(map.entries())
+      .map(([, value]) => value)
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
+  }, [schools, isHeadOfficeAdmin, authHeadOfficeId, isSuperAdmin, selectedFilterHeadOfficeId]);
+
+  const headOfficeOptions = useMemo(
     () =>
-      Array.from(new Set(rows.map((item) => item.schoolName).filter(Boolean))),
-    [rows],
+      Array.from(
+        new Map(
+          (Array.isArray(headOffices) ? headOffices : [])
+            .filter((item) => item?.id != null)
+            .map((item) => [String(item.id), item]),
+        ).values(),
+      )
+        .map((item) => ({
+          id: String(item.id),
+          name: item.name || item.headOfficeName || `Head Office ${item.id}`,
+        }))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [headOffices],
   );
 
   const designationOptions = useMemo(
@@ -664,32 +702,30 @@ const ManageDesignation = ({ onNavigate }) => {
             setIsFilterSidebarOpen(false);
           }}
         >
-          <div>
-            <label
-              htmlFor="filterSchoolDesignation"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
-            </label>
-
-            <select
-              id="filterSchoolDesignation"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={(e) =>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <ManualScopeSelectors
+              enabled={isSuperAdmin || isHeadOfficeAdmin}
+              headOffices={isSuperAdmin ? headOfficeOptions : []}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={selectedFilterHeadOfficeId}
+              onHeadOfficeChange={(value) =>
                 setPendingFilters((prev) => ({
                   ...prev,
-                  school: e.target.value,
+                  headOfficeId: value || "All",
+                  schoolId: "All",
                 }))
               }
-            >
-              <option value="All">All</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  schoolId: value || "All",
+                }))
+              }
+              showSchoolSelector
+              showHeadOfficeSelector={isSuperAdmin}
+              compact={false}
+            />
           </div>
 
           <div>
@@ -726,7 +762,8 @@ const ManageDesignation = ({ onNavigate }) => {
               className="btn btn-danger-200 text-danger-600 w-100"
               onClick={() => {
                 const reset = {
-                  school: "All",
+                  headOfficeId: "All",
+                  schoolId: "All",
                   designation: "All",
                 };
 

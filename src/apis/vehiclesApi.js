@@ -17,8 +17,9 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchVehicles = async ({ schoolId } = {}) => {
+export const fetchVehicles = async ({ headOfficeId, schoolId } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   const url = qs.toString() ? `${BASE}?${qs.toString()}` : BASE
   const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
@@ -27,11 +28,12 @@ export const fetchVehicles = async ({ schoolId } = {}) => {
   return Array.isArray(data) ? data : []
 }
 
-export const fetchVehiclesPage = async ({ schoolId, search = '', page = 0, size = 10 } = {}) => {
+export const fetchVehiclesPage = async ({ headOfficeId, schoolId, search = '', page = 0, size = 10 } = {}) => {
   const qs = new URLSearchParams({
     page: String(Math.max(0, page)),
     size: String(Math.max(1, size)),
   })
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   if (search && String(search).trim() !== '') qs.set('search', String(search).trim())
   const res = await apiFetch(`${BASE}/page?${qs.toString()}`, { headers: { Accept: 'application/json' } })

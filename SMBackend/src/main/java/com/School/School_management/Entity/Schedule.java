@@ -11,7 +11,6 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class Schedule {
 
     @Id
@@ -60,5 +59,79 @@ public class Schedule {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Long getSchoolId() { return schoolId; }
+    public void setSchoolId(Long schoolId) { this.schoolId = schoolId; }
+    public String getExamTerm() { return examTerm; }
+    public void setExamTerm(String examTerm) { this.examTerm = examTerm; }
+    public String getClassName() { return className; }
+    public void setClassName(String className) { this.className = className; }
+    public String getSubjectName() { return subjectName; }
+    public void setSubjectName(String subjectName) { this.subjectName = subjectName; }
+    public LocalDate getExamDate() { return examDate; }
+    public void setExamDate(LocalDate examDate) { this.examDate = examDate; }
+    public LocalTime getStartTime() { return startTime; }
+    public void setStartTime(LocalTime startTime) { this.startTime = startTime; }
+    public LocalTime getEndTime() { return endTime; }
+    public void setEndTime(LocalTime endTime) { this.endTime = endTime; }
+    public String getRoomNo() { return roomNo; }
+    public void setRoomNo(String roomNo) { this.roomNo = roomNo; }
+    public String getNote() { return note; }
+    public void setNote(String note) { this.note = note; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private Long id;
+        private Long schoolId;
+        private String examTerm;
+        private String className;
+        private String subjectName;
+        private LocalDate examDate;
+        private LocalTime startTime;
+        private LocalTime endTime;
+        private String roomNo;
+        private String note;
+        private LocalDateTime createdAt;
+        private LocalDateTime updatedAt;
+
+        public Builder id(Long id) { this.id = id; return this; }
+        public Builder schoolId(Long schoolId) { this.schoolId = schoolId; return this; }
+        public Builder examTerm(String examTerm) { this.examTerm = examTerm; return this; }
+        public Builder className(String className) { this.className = className; return this; }
+        public Builder subjectName(String subjectName) { this.subjectName = subjectName; return this; }
+        public Builder examDate(LocalDate examDate) { this.examDate = examDate; return this; }
+        public Builder startTime(LocalTime startTime) { this.startTime = startTime; return this; }
+        public Builder endTime(LocalTime endTime) { this.endTime = endTime; return this; }
+        public Builder roomNo(String roomNo) { this.roomNo = roomNo; return this; }
+        public Builder note(String note) { this.note = note; return this; }
+        public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
+        public Builder updatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; return this; }
+
+        public Schedule build() {
+            Schedule schedule = new Schedule();
+            schedule.setId(id);
+            schedule.setSchoolId(schoolId);
+            schedule.setExamTerm(examTerm);
+            schedule.setClassName(className);
+            schedule.setSubjectName(subjectName);
+            schedule.setExamDate(examDate);
+            schedule.setStartTime(startTime);
+            schedule.setEndTime(endTime);
+            schedule.setRoomNo(roomNo);
+            schedule.setNote(note);
+            schedule.setCreatedAt(createdAt);
+            schedule.setUpdatedAt(updatedAt);
+            return schedule;
+        }
     }
 }

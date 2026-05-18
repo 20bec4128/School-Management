@@ -23,7 +23,8 @@ export const fetchStudentsPage = async (page, size, filters = {}) => {
         size: String(size),
     });
     
-    if (filters.schoolId) params.append('schoolId', filters.schoolId);
+    if (filters.headOfficeId) params.append('headOfficeId', filters.headOfficeId);
+    if (filters.schoolId && filters.schoolId !== 'Select' && filters.schoolId !== 'All') params.append('schoolId', filters.schoolId);
     if (filters.className && filters.className !== 'Select') params.append('className', filters.className);
     if (filters.section && filters.section !== 'Select') params.append('section', filters.section);
     if (filters.group && filters.group !== 'Select') params.append('group', filters.group);

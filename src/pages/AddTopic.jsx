@@ -6,13 +6,13 @@ import { fetchSubjects } from '../apis/subjectsApi'
 import { fetchLessons } from '../apis/lessonsApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { findSchoolById } from '../utils/schoolScope'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 
 const EDIT_STORAGE_KEY = 'edit-topic-row'
-const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
 const emptyForm = {
   schoolId: 'Select',
@@ -155,6 +155,10 @@ const AddTopic = ({ onNavigate }) => {
   }, [isSuperAdmin, manualScope.schoolOptions, schoolsLookup])
 
   const schoolIdForLookups = form.schoolId !== 'Select' ? form.schoolId : ''
+  const academicYearOptions = useAcademicYearOptions({
+    schoolId: schoolIdForLookups,
+    enabled: Boolean(schoolIdForLookups),
+  })
 
   useEffect(() => {
     if (!schoolIdForLookups) {
@@ -211,7 +215,16 @@ const AddTopic = ({ onNavigate }) => {
 
   const handleChange = (id, value) => {
     setForm((prev) => {
-      if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select', lessonId: 'Select' }
+      if (id === 'schoolId') {
+        return {
+          ...prev,
+          schoolId: value,
+          academicYear: 'Select',
+          classId: 'Select',
+          subjectId: 'Select',
+          lessonId: 'Select',
+        }
+      }
       if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select', lessonId: 'Select' }
       if (id === 'subjectId') return { ...prev, subjectId: value, lessonId: 'Select' }
       return { ...prev, [id]: value }
@@ -356,9 +369,10 @@ const AddTopic = ({ onNavigate }) => {
                   className="form-select avm-input ps-44"
                   value={form.academicYear}
                   onChange={(e) => handleChange('academicYear', e.target.value)}
+                  disabled={!schoolIdForLookups}
                 >
                   <option value="Select">Select</option>
-                  {ACADEMIC_YEAR_OPTIONS.map((y) => (
+                  {academicYearOptions.map((y) => (
                     <option key={y} value={y}>
                       {y}
                     </option>

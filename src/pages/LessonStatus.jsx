@@ -6,10 +6,9 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import FindEmptyState from '../components/FindEmptyState'
-
-const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
 const STATUS_OPTIONS = [
   { value: 'YET_TO_START', label: 'Yet To Start' },
@@ -23,8 +22,6 @@ const emptyFilters = {
   classId: 'Select',
   subjectId: 'Select',
 }
-
-const DEFAULT_ACADEMIC_YEAR = ACADEMIC_YEAR_OPTIONS[0]
 
 const getChildScope = (children, selectedChildId) => {
   const list = Array.isArray(children) ? children : []
@@ -80,6 +77,18 @@ const LessonStatus = () => {
       ? selectedChild?.classId ?? null
       : null
   const canManageLessonStatus = can(user, ['LESSON_PLAN_MANAGE', 'LESSON_PLAN_MANAGE_ASSIGNED', '*'])
+  const academicYearOptions = useAcademicYearOptions({
+    schoolId:
+      isStudentScope
+        ? effectiveSchoolId ?? ''
+        : pendingFilters.schoolId !== 'Select'
+          ? pendingFilters.schoolId
+          : '',
+    enabled:
+      (isStudentScope && Boolean(effectiveSchoolId)) ||
+      pendingFilters.schoolId !== 'Select',
+  })
+  const defaultAcademicYear = academicYearOptions[0] || 'Select'
 
   useEffect(() => {
     let ignore = false
@@ -88,7 +97,7 @@ const LessonStatus = () => {
         setLoading(true)
         setError('')
         if (isStudentScope) {
-          if (!effectiveSchoolId || !effectiveClassId) {
+          if (!effectiveSchoolId || !effectiveClassId || defaultAcademicYear === 'Select') {
             if (!ignore) {
               setSchoolsLookup([])
               setClassesLookup([])
@@ -99,7 +108,7 @@ const LessonStatus = () => {
           }
           const nextFilters = {
             schoolId: String(effectiveSchoolId),
-            academicYear: DEFAULT_ACADEMIC_YEAR,
+            academicYear: defaultAcademicYear,
             classId: String(effectiveClassId),
             subjectId: 'Select',
           }
@@ -125,7 +134,7 @@ const LessonStatus = () => {
     return () => {
       ignore = true
     }
-  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
+  }, [defaultAcademicYear, effectiveClassId, effectiveSchoolId, isStudentScope])
 
   const filteredLessons = useMemo(() => {
     if (!hasSearched) return []
@@ -206,7 +215,7 @@ const LessonStatus = () => {
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => {
-      if (id === 'schoolId') return { ...prev, schoolId: value, classId: 'Select', subjectId: 'Select' }
+      if (id === 'schoolId') return { ...prev, schoolId: value, academicYear: 'Select', classId: 'Select', subjectId: 'Select' }
       if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
       return { ...prev, [id]: value }
     })
@@ -523,7 +532,7 @@ const LessonStatus = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">--Select--</option>
-              {ACADEMIC_YEAR_OPTIONS.map((y) => (
+              {academicYearOptions.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>

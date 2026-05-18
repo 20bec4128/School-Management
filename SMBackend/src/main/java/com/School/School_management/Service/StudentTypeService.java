@@ -4,8 +4,12 @@ import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Dto.StudentTypeDto;
 import com.School.School_management.Entity.ManageSchool;
 import com.School.School_management.Entity.Studenttype;
+import com.School.School_management.Exception.NotFoundException;
 import com.School.School_management.Exception.StudentTypeNotFoundException;
+import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.StudentTypeRepository;
+import java.util.List;
+import java.util.Objects;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -17,43 +21,52 @@ import org.springframework.transaction.annotation.Transactional;
 public class StudentTypeService {
 
     private final StudentTypeRepository studentTypeRepository;
+    private final SchoolRepository schoolRepository;
 
-    public StudentTypeService(StudentTypeRepository studentTypeRepository) {
+    public StudentTypeService(StudentTypeRepository studentTypeRepository, SchoolRepository schoolRepository) {
         this.studentTypeRepository = studentTypeRepository;
+        this.schoolRepository = schoolRepository;
     }
 
-    // ── Fetch paginated list ──────────────────────────────────────────────────
     @Transactional(readOnly = true)
-    public PaginationResponse<StudentTypeDto.Response> getAll(int page, int size) {
+    public PaginationResponse<StudentTypeDto.Response> getAll(Long headOfficeId, Long schoolId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").ascending());
-        Page<StudentTypeDto.Response> pageResult = studentTypeRepository.findAll(pageable)
-                .map(this::toResponse);
+        List<Long> schoolIds = resolveSchoolIds(headOfficeId, schoolId);
+        Page<Studenttype> pageResult;
 
+        if (schoolIds == null) {
+            pageResult = studentTypeRepository.findAll(pageable);
+        } else if (schoolIds.isEmpty()) {
+            pageResult = Page.empty(pageable);
+        } else if (schoolIds.size() == 1) {
+            pageResult = studentTypeRepository.findBySchoolId(schoolIds.get(0), pageable);
+        } else {
+            pageResult = studentTypeRepository.findBySchoolIdIn(schoolIds, pageable);
+        }
+
+        Page<StudentTypeDto.Response> responsePage = pageResult.map(this::toResponse);
         return new PaginationResponse<>(
-                pageResult.getContent(),
-                pageResult.getTotalPages(),
-                pageResult.getTotalElements(),
+                responsePage.getContent(),
+                responsePage.getTotalPages(),
+                responsePage.getTotalElements(),
                 page,
                 size,
-                pageResult.hasNext(),
-                pageResult.hasPrevious()
+                responsePage.hasNext(),
+                responsePage.hasPrevious()
         );
     }
 
-    // ── Create ────────────────────────────────────────────────────────────────
     @Transactional
     public StudentTypeDto.Response create(StudentTypeDto.Request request) {
-        if (request.getSchoolId() == null) {
-            throw new IllegalArgumentException("School ID is required");
-        }
+        Long schoolId = requireSchoolId(request.getSchoolId());
+        ManageSchool school = requireSchool(schoolId);
+        validateScope(request.getHeadOfficeId(), school);
+
         if (studentTypeRepository.existsBySchoolIdAndStudentTypeIgnoreCase(
-                request.getSchoolId(), request.getStudentType())) {
+                schoolId, request.getStudentType())) {
             throw new IllegalArgumentException(
                     "Student type '" + request.getStudentType() + "' already exists for this school");
         }
-
-        ManageSchool school = new ManageSchool();
-        school.setId(request.getSchoolId());    // reference by ID (no extra query needed)
 
         Studenttype entity = Studenttype.builder()
                 .school(school)
@@ -64,23 +77,20 @@ public class StudentTypeService {
         return toResponse(studentTypeRepository.save(entity));
     }
 
-    // ── Update ────────────────────────────────────────────────────────────────
     @Transactional
     public StudentTypeDto.Response update(Long id, StudentTypeDto.Request request) {
         Studenttype entity = studentTypeRepository.findById(id)
                 .orElseThrow(() -> new StudentTypeNotFoundException(id));
 
-        if (request.getSchoolId() == null) {
-            throw new IllegalArgumentException("School ID is required");
-        }
+        Long schoolId = requireSchoolId(request.getSchoolId());
+        ManageSchool school = requireSchool(schoolId);
+        validateScope(request.getHeadOfficeId(), school);
+
         if (studentTypeRepository.existsBySchoolIdAndStudentTypeIgnoreCaseAndIdNot(
-                request.getSchoolId(), request.getStudentType(), id)) {
+                schoolId, request.getStudentType(), id)) {
             throw new IllegalArgumentException(
                     "Student type '" + request.getStudentType() + "' already exists for this school");
         }
-
-        ManageSchool school = new ManageSchool();
-        school.setId(request.getSchoolId());
 
         entity.setSchool(school);
         entity.setStudentType(request.getStudentType());
@@ -89,7 +99,6 @@ public class StudentTypeService {
         return toResponse(studentTypeRepository.save(entity));
     }
 
-    // ── Delete ────────────────────────────────────────────────────────────────
     @Transactional
     public void delete(Long id) {
         if (!studentTypeRepository.existsById(id)) {
@@ -98,7 +107,6 @@ public class StudentTypeService {
         studentTypeRepository.deleteById(id);
     }
 
-    // ── Mapper ────────────────────────────────────────────────────────────────
     private StudentTypeDto.Response toResponse(Studenttype entity) {
         return StudentTypeDto.Response.builder()
                 .id(entity.getId())
@@ -107,5 +115,43 @@ public class StudentTypeService {
                 .studentType(entity.getStudentType())
                 .note(entity.getNote())
                 .build();
+    }
+
+    private List<Long> resolveSchoolIds(Long headOfficeId, Long schoolId) {
+        if (schoolId != null) {
+            if (headOfficeId != null) {
+                validateScope(headOfficeId, requireSchool(schoolId));
+            }
+            return List.of(schoolId);
+        }
+
+        if (headOfficeId != null) {
+            return schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(headOfficeId)
+                    .stream()
+                    .map(ManageSchool::getId)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+
+        return null;
+    }
+
+    private Long requireSchoolId(Long schoolId) {
+        if (schoolId == null) {
+            throw new IllegalArgumentException("School ID is required");
+        }
+        return schoolId;
+    }
+
+    private ManageSchool requireSchool(Long schoolId) {
+        return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                .orElseThrow(NotFoundException::new);
+    }
+
+    private void validateScope(Long headOfficeId, ManageSchool school) {
+        if (headOfficeId == null || school == null || school.getHeadOfficeId() == null) return;
+        if (!Objects.equals(headOfficeId, school.getHeadOfficeId())) {
+            throw new IllegalArgumentException("School does not belong to the selected head office");
+        }
     }
 }

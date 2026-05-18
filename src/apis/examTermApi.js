@@ -17,8 +17,9 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchExamTerms = async ({ schoolId } = {}) => {
+export const fetchExamTerms = async ({ headOfficeId, schoolId } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   const url = qs.size ? `${BASE}?${qs.toString()}` : BASE
   const res = await apiFetch(url, { headers: { Accept: 'application/json' } })
@@ -26,8 +27,9 @@ export const fetchExamTerms = async ({ schoolId } = {}) => {
   return res.json()
 }
 
-export const fetchExamTermsPage = async ({ schoolId, page = 0, size = 10, search = '' } = {}) => {
+export const fetchExamTermsPage = async ({ headOfficeId, schoolId, page = 0, size = 10, search = '' } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   qs.set('page', String(page))
   qs.set('size', String(size))

@@ -20,18 +20,21 @@ public class SalaryGradeController {
     }
 
     @GetMapping
-    public List<SalaryGradeDto> list(@RequestParam(required = false) Long schoolId) {
-        return salaryGradeService.list(schoolId);
+    public List<SalaryGradeDto> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId) {
+        return salaryGradeService.list(headOfficeId, schoolId);
     }
 
     @GetMapping("/page")
     public Page<SalaryGradeDto> listPaginated(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return salaryGradeService.listPaginated(schoolId, page, size, search);
+        return salaryGradeService.listPaginated(headOfficeId, schoolId, page, size, search);
     }
 
     @PostMapping

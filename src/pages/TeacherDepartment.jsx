@@ -5,22 +5,28 @@ import AddDepartmentModal from '../components/AddDepartmentModal'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import {
   deleteDepartment,
-  fetchDepartmentsPage,
+  fetchAllDepartments,
   updateDepartment,
 } from '../apis/departmentsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: 'Select',
+  schoolId: 'Select',
   title: 'Select',
   status: 'Select',
 }
 
 const emptySidebarForm = {
+  headOfficeId: 'Select',
   schoolId: '',
   departmentTitle: '',
   isViewOnWeb: 'Yes',
@@ -36,6 +42,8 @@ const columnOptions = [
 ]
 
 const TeacherDepartment = () => {
+  const { role, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
   const [departments, setDepartments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -45,9 +53,8 @@ const TeacherDepartment = () => {
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalElements, setTotalElements] = useState(0)
   const [schoolsLookup, setSchoolsLookup] = useState([])
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([])
   const [selectedRows, setSelectedRows] = useState([])
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -58,9 +65,77 @@ const TeacherDepartment = () => {
   const [editForm, setEditForm] = useState(emptySidebarForm)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => schoolsLookup.map((s) => s.schoolName),
+  const roleUpper = String(role || '').toUpperCase()
+  const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = roleUpper === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
+  const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const scopedSchoolName = authSchoolName || ''
+
+  const schoolLookupById = useMemo(
+    () => new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((row) => [String(row?.id), row])),
     [schoolsLookup],
+  )
+
+  const headOfficeOptions = useMemo(() => {
+    const list = (Array.isArray(headOfficesLookup) ? headOfficesLookup : [])
+      .map((row) => ({ id: row?.id, name: row?.name || row?.headOfficeName || '' }))
+      .filter((row) => row.id != null && row.name)
+    if (isHeadOfficeAdmin && authHeadOfficeId != null && authHeadOfficeName) {
+      const exists = list.some((row) => String(row.id) === String(authHeadOfficeId))
+      if (!exists) list.unshift({ id: authHeadOfficeId, name: authHeadOfficeName })
+    }
+    return list.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [authHeadOfficeId, authHeadOfficeName, headOfficesLookup, isHeadOfficeAdmin])
+
+  const resolveSchoolHeadOfficeId = useCallback(
+    (schoolId) => {
+      if (schoolId == null || schoolId === '' || schoolId === 'Select' || schoolId === 'All') return ''
+      return String(schoolLookupById.get(String(schoolId))?.headOfficeId ?? '')
+    },
+    [schoolLookupById],
+  )
+
+  const getFilteredSchools = useCallback(
+    (headOfficeId, fallbackSchoolId = '') => {
+      const list = Array.isArray(schoolsLookup) ? schoolsLookup.slice() : []
+      const selectedHeadOfficeId =
+        headOfficeId && headOfficeId !== 'Select'
+          ? String(headOfficeId)
+          : isHeadOfficeAdmin && authHeadOfficeId != null
+            ? String(authHeadOfficeId)
+            : ''
+      const filtered = selectedHeadOfficeId
+        ? list.filter((school) => String(school?.headOfficeId ?? '') === selectedHeadOfficeId)
+        : isSchoolAdmin && scopedSchoolId
+          ? list.filter((school) => String(school?.id ?? '') === String(scopedSchoolId))
+          : list
+      const mapped = filtered
+        .map((row) => ({ id: row?.id, schoolName: row?.schoolName || row?.name || '' }))
+        .filter((row) => row.id != null && row.schoolName)
+        .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)))
+      if (fallbackSchoolId && !mapped.some((row) => String(row.id) === String(fallbackSchoolId))) {
+        const fallbackRow = schoolLookupById.get(String(fallbackSchoolId))
+        if (fallbackRow) {
+          mapped.unshift({
+            id: fallbackRow.id,
+            schoolName: fallbackRow.schoolName || fallbackRow.name || String(fallbackRow.id),
+          })
+        }
+      }
+      return mapped
+    },
+    [authHeadOfficeId, isHeadOfficeAdmin, isSchoolAdmin, schoolLookupById, schoolsLookup, scopedSchoolId],
+  )
+
+  const filterSchoolOptions = useMemo(
+    () => getFilteredSchools(pendingFilters.headOfficeId, pendingFilters.schoolId !== 'Select' ? pendingFilters.schoolId : ''),
+    [getFilteredSchools, pendingFilters.headOfficeId, pendingFilters.schoolId],
+  )
+  const schoolOptions = filterSchoolOptions
+  const editSchoolOptions = useMemo(
+    () => getFilteredSchools(editForm.headOfficeId, editForm.schoolId),
+    [editForm.headOfficeId, editForm.schoolId, getFilteredSchools],
   )
   const titleOptions = useMemo(
     () => Array.from(new Set(departments.map((item) => item.title).filter(Boolean))).sort(),
@@ -71,6 +146,7 @@ const TeacherDepartment = () => {
     const normalizedSearch = search.trim().toLowerCase()
 
     return departments.filter((row) => {
+      const departmentHeadOfficeId = resolveSchoolHeadOfficeId(row.schoolId)
       const matchesSearch =
         normalizedSearch === '' ||
         [row.schoolName, row.title, row.note, row.status]
@@ -78,15 +154,23 @@ const TeacherDepartment = () => {
           .toLowerCase()
           .includes(normalizedSearch)
 
-      const matchesSchool = filters.school === 'Select' || row.schoolName === filters.school
+      const matchesHeadOffice =
+        filters.headOfficeId === 'Select' || departmentHeadOfficeId === String(filters.headOfficeId)
+      const matchesSchool =
+        filters.schoolId === 'Select' || String(row.schoolId ?? '') === String(filters.schoolId)
       const matchesTitle = filters.title === 'Select' || row.title === filters.title
       const matchesStatus = filters.status === 'Select' || row.status === filters.status
 
-      return matchesSearch && matchesSchool && matchesTitle && matchesStatus
+      return matchesSearch && matchesHeadOffice && matchesSchool && matchesTitle && matchesStatus
     })
-  }, [departments, filters, search])
+  }, [departments, filters, resolveSchoolHeadOfficeId, search])
 
-  const paginatedDepartments = useMemo(() => filteredDepartments, [filteredDepartments])
+  const totalElements = filteredDepartments.length
+  const totalPages = Math.max(1, Math.ceil(totalElements / rowsPerPage))
+  const paginatedDepartments = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage
+    return filteredDepartments.slice(start, start + rowsPerPage)
+  }, [currentPage, filteredDepartments, rowsPerPage])
 
   const allVisibleSelected =
     paginatedDepartments.length > 0 &&
@@ -96,25 +180,15 @@ const TeacherDepartment = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchDepartmentsPage(currentPage - 1, rowsPerPage)
-      if (Array.isArray(data)) {
-        setDepartments(data)
-        setTotalElements(data.length)
-        setTotalPages(1)
-      } else {
-        setDepartments(Array.isArray(data?.content) ? data.content : [])
-        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
-        setTotalPages(Math.max(1, Number.isFinite(data?.totalPages) ? data.totalPages : 1))
-      }
+      const data = await fetchAllDepartments()
+      setDepartments(Array.isArray(data) ? data : [])
     } catch (e) {
       setDepartments([])
-      setTotalElements(0)
-      setTotalPages(1)
       setError(e?.message || 'Failed to load departments')
     } finally {
       setLoading(false)
     }
-  }, [currentPage, rowsPerPage])
+  }, [])
 
   const loadSchoolsLookup = useCallback(async () => {
     try {
@@ -134,6 +208,22 @@ const TeacherDepartment = () => {
   }, [loadSchoolsLookup])
 
   useEffect(() => {
+    let ignore = false
+    const run = async () => {
+      try {
+        const page = await fetchHeadOfficesPage(0, 500)
+        if (!ignore) setHeadOfficesLookup(Array.isArray(page?.content) ? page.content : [])
+      } catch {
+        if (!ignore) setHeadOfficesLookup([])
+      }
+    }
+    void run()
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages)
     }
@@ -151,7 +241,12 @@ const TeacherDepartment = () => {
 
   const handlePendingFilterChange = (event) => {
     const { id, value } = event.target
-    setPendingFilters((current) => ({ ...current, [id]: value }))
+    setPendingFilters((current) => {
+      if (id === 'headOfficeId') {
+        return { ...current, headOfficeId: value, schoolId: 'Select' }
+      }
+      return { ...current, [id]: value }
+    })
   }
 
   const handleApplyFilters = (event) => {
@@ -168,7 +263,12 @@ const TeacherDepartment = () => {
 
   const handleSidebarInputChange = (event) => {
     const { id, value } = event.target
-    setEditForm((current) => ({ ...current, [id]: value }))
+    setEditForm((current) => {
+      if (id === 'headOfficeId') {
+        return { ...current, headOfficeId: value, schoolId: '' }
+      }
+      return { ...current, [id]: value }
+    })
   }
 
   const openAddSidebar = () => {
@@ -183,7 +283,9 @@ const TeacherDepartment = () => {
   const openEditSidebar = (row) => {
     setError('')
     setEditingDepartmentId(row.id)
+    const schoolRow = row.schoolId != null ? schoolLookupById.get(String(row.schoolId)) : null
     setEditForm({
+      headOfficeId: schoolRow?.headOfficeId != null ? String(schoolRow.headOfficeId) : '',
       schoolId: row.schoolId != null ? String(row.schoolId) : '',
       departmentTitle: row.title || '',
       isViewOnWeb: row.isViewOnWeb || 'Yes',
@@ -209,7 +311,7 @@ const TeacherDepartment = () => {
 
   const handleAddSuccess = async () => {
     if (currentPage !== 1) setCurrentPage(1)
-    else await loadDepartments()
+    await loadDepartments()
   }
 
   const mapFormToPayload = (form) => ({
@@ -497,6 +599,7 @@ const TeacherDepartment = () => {
         open={isAddSidebarOpen}
         onClose={closeAddSidebar}
         schoolsLookup={schoolsLookup}
+        headOfficesLookup={headOfficesLookup}
         onSuccess={handleAddSuccess}
       />
 
@@ -514,29 +617,30 @@ const TeacherDepartment = () => {
       >
         <div>
           <div className="avm-grid">
-            <div className="avm-field full">
-              <label htmlFor="schoolId" className="avm-label">
-                School Name
-              </label>
-              <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
-                  <i className="ri-school-line"></i>
-                </span>
-                <select
-                  id="schoolId"
-                  className="avm-select"
-                  value={editForm.schoolId}
-                  onChange={(event) => handleSidebarInputChange(event)}
-                >
-                  <option value="">Select School</option>
-                  {schoolsLookup.map((row) => (
-                    <option key={row.id} value={String(row.id)}>
-                      {row.schoolName}
-                    </option>
-                  ))}
-                </select>
+            {isSuperAdmin || isHeadOfficeAdmin ? (
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOfficeOptions}
+                schoolOptions={editSchoolOptions}
+                selectedHeadOfficeId={editForm.headOfficeId === 'Select' ? '' : editForm.headOfficeId}
+                onHeadOfficeChange={(value) => setEditForm((current) => ({ ...current, headOfficeId: value || 'Select', schoolId: '' }))}
+                selectedSchoolId={editForm.schoolId}
+                onSchoolChange={(value) => setEditForm((current) => ({ ...current, schoolId: value || '' }))}
+                showHeadOfficeSelector={isSuperAdmin}
+              />
+            ) : (
+              <div className="avm-field full">
+                <label htmlFor="schoolId" className="avm-label">
+                  School Name
+                </label>
+                <div className="avm-input-with-icon" style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', fontSize: '0.95rem', lineHeight: 1, pointerEvents: 'none', zIndex: 1 }}>
+                    <i className="ri-school-line"></i>
+                  </span>
+                  <input className="avm-input" value={scopedSchoolName || editSchoolOptions[0]?.schoolName || ''} readOnly />
+                </div>
               </div>
-            </div>
+            )}
             <div className="avm-field full">
               <label htmlFor="departmentTitle" className="avm-label">
                 Department Title
@@ -606,24 +710,29 @@ const TeacherDepartment = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+          {(isSuperAdmin || isHeadOfficeAdmin) ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOfficeOptions}
+              schoolOptions={filterSchoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) => setPendingFilters((current) => ({ ...current, headOfficeId: value || 'Select', schoolId: 'Select' }))}
+              selectedSchoolId={pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId}
+              onSchoolChange={(value) => setPendingFilters((current) => ({ ...current, schoolId: value || 'Select' }))}
+              showHeadOfficeSelector={isSuperAdmin}
+            />
+          ) : (
+            <div>
+              <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                School
+              </label>
+              <input
+                className="form-control"
+                value={scopedSchoolName || filterSchoolOptions[0]?.schoolName || ''}
+                readOnly
+              />
+            </div>
+          )}
           <div>
             <label htmlFor="title" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Title

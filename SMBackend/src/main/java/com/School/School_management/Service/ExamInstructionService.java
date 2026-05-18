@@ -5,8 +5,8 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 
 public interface ExamInstructionService {
-    List<ExamInstructionDto> list(Long schoolId);
-    Page<ExamInstructionDto> listPaginated(Long schoolId, String status, int page, int size, String search);
+    List<ExamInstructionDto> list(Long headOfficeId, Long schoolId);
+    Page<ExamInstructionDto> listPaginated(Long headOfficeId, Long schoolId, String status, int page, int size, String search);
     ExamInstructionDto create(ExamInstructionDto dto);
     ExamInstructionDto update(Long id, ExamInstructionDto dto);
     void delete(Long id);

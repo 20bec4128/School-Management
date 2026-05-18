@@ -3,18 +3,21 @@ import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { deleteAssignment, fetchAssignments, fetchAssignmentsForStudent } from '../apis/assignmentsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const EDIT_STORAGE_KEY = 'edit-assignment-row'
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   schoolId: 'Select',
   classId: 'Select',
   sectionId: 'Select',
@@ -81,6 +84,7 @@ const Assignment = ({ onNavigate }) => {
 
   const [rows, setRows] = useState([])
   const [schools, setSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [classes, setClasses] = useState([])
   const [sections, setSections] = useState([])
   const [subjects, setSubjects] = useState([])
@@ -137,6 +141,12 @@ const Assignment = ({ onNavigate }) => {
     void loadData()
   }, [loadData])
 
+  useEffect(() => {
+    void fetchHeadOfficesPage(0, 500)
+      .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
+      .catch(() => setHeadOffices([]))
+  }, [])
+
   const nameMaps = useMemo(() => {
     const schoolMap = new Map(schools.map(s => [String(s.id), s.schoolName || s.name]))
     const classMap = new Map(classes.map(c => [String(c.id), c.className]))
@@ -154,6 +164,23 @@ const Assignment = ({ onNavigate }) => {
       subjectName: r.subjectName || nameMaps.subjectMap.get(String(r.subjectId)) || r.subjectId,
     }))
   }, [rows, nameMaps])
+
+  const schoolOptions = useMemo(() => {
+    const filtered = pendingFilters.headOfficeId && pendingFilters.headOfficeId !== 'Select'
+      ? schools.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+      : schools
+    return filtered
+      .map((row) => ({ id: row?.id, schoolName: row?.schoolName || row?.name || '' }))
+      .filter((row) => row.id != null && row.schoolName)
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)))
+  }, [schools, pendingFilters.headOfficeId])
+
+  const headOfficeOptions = useMemo(() => {
+    return (Array.isArray(headOffices) ? headOffices : [])
+      .map((row) => ({ id: row?.id, name: row?.name || row?.headOfficeName || '' }))
+      .filter((row) => row.id != null && row.name)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [headOffices])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -420,13 +447,15 @@ const Assignment = ({ onNavigate }) => {
 
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Assignment" onClose={() => setIsFilterSidebarOpen(false)}>
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
-            <select className="form-control form-select" value={pendingFilters.schoolId} onChange={(e) => setPendingFilters(p => ({ ...p, schoolId: e.target.value }))}>
-              <option value="Select">--Select School--</option>
-              {schools.map(s => <option key={s.id} value={String(s.id)}>{s.schoolName}</option>)}
-            </select>
-          </div>
+          <ManualScopeSelectors
+            enabled
+            headOffices={headOfficeOptions}
+            schoolOptions={schoolOptions}
+            selectedHeadOfficeId={pendingFilters.headOfficeId}
+            onHeadOfficeChange={(value) => setPendingFilters((p) => ({ ...p, headOfficeId: value, schoolId: 'Select' }))}
+            selectedSchoolId={pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId}
+            onSchoolChange={(value) => setPendingFilters((p) => ({ ...p, schoolId: value || 'Select' }))}
+          />
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8">Status</label>
             <select className="form-control form-select" value={pendingFilters.status} onChange={(e) => setPendingFilters(p => ({ ...p, status: e.target.value }))}>

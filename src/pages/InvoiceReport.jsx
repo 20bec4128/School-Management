@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -28,6 +29,7 @@ const InvoiceReport = () => {
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const academicYearOptions = useAcademicYearOptions()
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -240,6 +242,9 @@ const InvoiceReport = () => {
               onChange={(e) => setPendingFilters((p) => ({ ...p, academicYear: e.target.value }))}
             >
               <option value="Select">Select Year</option>
+              {academicYearOptions.map((year) => (
+                <option key={year}>{year}</option>
+              ))}
             </select>
           </div>
           <div>

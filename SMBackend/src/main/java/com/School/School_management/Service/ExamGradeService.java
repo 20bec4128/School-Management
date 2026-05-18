@@ -5,9 +5,9 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 
 public interface ExamGradeService {
-    List<ExamGradeDto> list(Long schoolId);
+    List<ExamGradeDto> list(Long headOfficeId, Long schoolId);
 
-    Page<ExamGradeDto> listPaginated(Long schoolId, int page, int size, String search);
+    Page<ExamGradeDto> listPaginated(Long headOfficeId, Long schoolId, int page, int size, String search);
 
     ExamGradeDto create(ExamGradeDto dto);
 

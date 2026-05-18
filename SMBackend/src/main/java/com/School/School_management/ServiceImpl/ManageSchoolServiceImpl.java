@@ -149,8 +149,14 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         String normalizedSearch = (search == null || search.trim().isEmpty()) ? null : search.trim();
 
         if (schoolId != null) {
-            // When scoped to a single school, we can still filter that one school by status/search if needed, 
-            // but usually it's just that one record.
+            ManageSchool school = schoolRepository.findByIdAndIsDeletedFalse(schoolId)
+                    .orElse(null);
+            if (school == null) {
+                return new PageImpl<>(List.of(), pageable, 0);
+            }
+            if (headOfficeId != null && !headOfficeId.equals(school.getHeadOfficeId())) {
+                return new PageImpl<>(List.of(), pageable, 0);
+            }
             return schoolRepository.findByIdAndIsDeletedFalse(schoolId)
                     .filter(s -> normalizedStatus == null || normalizedStatus.equalsIgnoreCase(s.getStatus()))
                     .filter(s -> normalizedSearch == null || s.getSchoolName().toLowerCase().contains(normalizedSearch.toLowerCase()))

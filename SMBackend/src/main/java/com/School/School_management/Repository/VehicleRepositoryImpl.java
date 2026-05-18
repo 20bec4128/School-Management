@@ -26,17 +26,22 @@ public class VehicleRepositoryImpl implements VehicleRepositoryCustom {
 
     @Override
     public List<Vehicle> findAllActiveWithDetailsOrderByIdDesc() {
-        return runListQuery(null, null);
+        return runListQuery(null, null, null);
+    }
+
+    @Override
+    public List<Vehicle> findByHeadOfficeIdActiveWithDetailsOrderByIdDesc(Long headOfficeId) {
+        return runListQuery(headOfficeId, null, null);
     }
 
     @Override
     public List<Vehicle> findBySchoolIdActiveWithDetailsOrderByIdDesc(Long schoolId) {
-        return runListQuery(schoolId, null);
+        return runListQuery(null, schoolId, null);
     }
 
     @Override
-    public Page<Vehicle> findPageWithDetails(Long schoolId, String search, Pageable pageable) {
-        CriteriaQuery<Vehicle> dataQuery = buildDataQuery(schoolId, search);
+    public Page<Vehicle> findPageWithDetails(Long headOfficeId, Long schoolId, String search, Pageable pageable) {
+        CriteriaQuery<Vehicle> dataQuery = buildDataQuery(headOfficeId, schoolId, search);
         TypedQuery<Vehicle> typedQuery = entityManager.createQuery(dataQuery);
         typedQuery.setFirstResult((int) pageable.getOffset());
         typedQuery.setMaxResults(pageable.getPageSize());
@@ -46,7 +51,7 @@ public class VehicleRepositoryImpl implements VehicleRepositoryCustom {
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<Vehicle> countRoot = countQuery.from(Vehicle.class);
         countQuery.select(cb.countDistinct(countRoot));
-        countQuery.where(buildPredicates(cb, countRoot, schoolId, search));
+        countQuery.where(buildPredicates(cb, countRoot, headOfficeId, schoolId, search));
         Long total = entityManager.createQuery(countQuery).getSingleResult();
         return new PageImpl<>(content, pageable, total == null ? 0L : total);
     }
@@ -63,29 +68,32 @@ public class VehicleRepositoryImpl implements VehicleRepositoryCustom {
         return entityManager.createQuery(query).getResultList().stream().findFirst();
     }
 
-    private List<Vehicle> runListQuery(Long schoolId, String search) {
-        return entityManager.createQuery(buildDataQuery(schoolId, search)).getResultList();
+    private List<Vehicle> runListQuery(Long headOfficeId, Long schoolId, String search) {
+        return entityManager.createQuery(buildDataQuery(headOfficeId, schoolId, search)).getResultList();
     }
 
-    private CriteriaQuery<Vehicle> buildDataQuery(Long schoolId, String search) {
+    private CriteriaQuery<Vehicle> buildDataQuery(Long headOfficeId, Long schoolId, String search) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Vehicle> query = cb.createQuery(Vehicle.class);
         Root<Vehicle> root = query.from(Vehicle.class);
         root.fetch("school", JoinType.LEFT);
         root.fetch("driverEmployee", JoinType.LEFT);
         query.select(root).distinct(true);
-        query.where(buildPredicates(cb, root, schoolId, search));
+        query.where(buildPredicates(cb, root, headOfficeId, schoolId, search));
         query.orderBy(cb.desc(root.get("id")));
         return query;
     }
 
-    private Predicate[] buildPredicates(CriteriaBuilder cb, Root<Vehicle> root, Long schoolId, String search) {
+    private Predicate[] buildPredicates(CriteriaBuilder cb, Root<Vehicle> root, Long headOfficeId, Long schoolId, String search) {
         List<Predicate> predicates = new ArrayList<>();
         predicates.add(cb.isFalse(root.get("deleted")));
 
         Join<Vehicle, ?> schoolJoin = root.join("school", JoinType.LEFT);
         Join<Vehicle, ?> driverJoin = root.join("driverEmployee", JoinType.LEFT);
 
+        if (headOfficeId != null) {
+            predicates.add(cb.equal(schoolJoin.get("headOfficeId"), headOfficeId));
+        }
         if (schoolId != null) {
             predicates.add(cb.equal(schoolJoin.get("id"), schoolId));
         }

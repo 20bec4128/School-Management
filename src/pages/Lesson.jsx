@@ -6,9 +6,12 @@ import {
   deleteLesson,
   fetchLessons,
 } from "../apis/lessonsApi";
+import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import { fetchAcademicYears } from "../apis/academicYearsApi";
 import { fetchClasses } from "../apis/classesApi";
 import { fetchSubjects } from "../apis/subjectsApi";
+import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import { useAuth } from "../context/useAuth";
 import { useSchool } from "../context/useSchool";
 import RowsPerPageSelect from "../components/RowsPerPageSelect";
@@ -16,13 +19,6 @@ import { TablePagination } from "../components/table";
 import "../assets/css/addModalShared.css";
 import FindEmptyState from "../components/FindEmptyState";
 import ExportDropdown from '../components/ExportDropdown'
-
-const ACADEMIC_YEAR_OPTIONS = [
-  "2025-2026",
-  "2024-2025",
-  "2023-2024",
-  "2022-2023",
-];
 
 const emptyForm = {
   schoolId: "Select",
@@ -34,6 +30,7 @@ const emptyForm = {
 };
 
 const emptyFilters = {
+  headOfficeId: "Select",
   schoolId: "Select",
   academicYear: "Select",
   classId: "Select",
@@ -76,6 +73,8 @@ const FormField = ({ label, id, required, children, full = false }) => (
 const Lesson = ({ onNavigate }) => {
   const {
     role,
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
   } = useAuth();
@@ -83,6 +82,8 @@ const Lesson = ({ onNavigate }) => {
 
   const [data, setData] = useState([]); // Standardized to 'data'
   const [schoolsLookup, setSchoolsLookup] = useState([]);
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([]);
+  const [academicYearsLookup, setAcademicYearsLookup] = useState([]);
   const [classesLookup, setClassesLookup] = useState([]);
   const [subjectsLookup, setSubjectsLookup] = useState([]);
 
@@ -100,27 +101,106 @@ const Lesson = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } =
     useColumnVisibility(columnOptions);
 
+  const roleUpper = String(role || "").toUpperCase();
+  const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isHeadOfficeAdmin = roleUpper === "HEAD_OFFICE_ADMIN";
   const isTeacherScope = String(role || "").toUpperCase() === "TEACHER";
   const resolvedSchoolId = activeSchoolId
     ? String(activeSchoolId)
     : authSchoolId
       ? String(authSchoolId)
       : "";
+  const headOfficeOptions = useMemo(() => {
+    const list = (Array.isArray(headOfficesLookup) ? headOfficesLookup : [])
+      .map((row) => ({
+        id: row?.id,
+        name: row?.name || row?.headOfficeName || "",
+      }))
+      .filter((row) => row.id != null && row.name);
+    if (isHeadOfficeAdmin && authHeadOfficeId != null && authHeadOfficeName) {
+      const exists = list.some((row) => String(row.id) === String(authHeadOfficeId));
+      if (!exists) list.unshift({ id: authHeadOfficeId, name: authHeadOfficeName });
+    }
+    return list.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [authHeadOfficeId, authHeadOfficeName, headOfficesLookup, isHeadOfficeAdmin]);
+
+  const schoolOptions = useMemo(() => {
+    const list = Array.isArray(schoolsLookup) ? schoolsLookup.slice() : [];
+    const selectedHeadOfficeId = pendingFilters.headOfficeId !== "Select"
+      ? String(pendingFilters.headOfficeId)
+      : isHeadOfficeAdmin && authHeadOfficeId != null
+        ? String(authHeadOfficeId)
+        : "";
+    const filtered = selectedHeadOfficeId
+      ? list.filter((s) => String(s?.headOfficeId ?? "") === selectedHeadOfficeId)
+      : isHeadOfficeAdmin && authHeadOfficeId != null
+        ? list.filter((s) => String(s?.headOfficeId ?? "") === String(authHeadOfficeId))
+        : resolvedSchoolId
+          ? list.filter((s) => String(s?.id ?? "") === String(resolvedSchoolId))
+        : list;
+    return filtered
+      .map((row) => ({ id: row?.id, schoolName: row?.schoolName || row?.name || "" }))
+      .filter((row) => row.id != null && row.schoolName)
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
+  }, [authHeadOfficeId, isHeadOfficeAdmin, pendingFilters.headOfficeId, resolvedSchoolId, schoolsLookup]);
+
+  const selectedSchoolIdForLookups = useMemo(() => {
+    if (pendingFilters.schoolId && pendingFilters.schoolId !== "Select") {
+      return pendingFilters.schoolId;
+    }
+    if (!isSuperAdmin && resolvedSchoolId) {
+      return resolvedSchoolId;
+    }
+    return "";
+  }, [isSuperAdmin, pendingFilters.schoolId, resolvedSchoolId]);
 
   // --- LOOKUP LOADING ---
   useEffect(() => {
     const loadLookups = async () => {
-      const [s, c, sub] = await Promise.all([
+      const [ho, s] = await Promise.allSettled([
+        fetchHeadOfficesPage(0, 500),
         fetchSchoolsLookup(),
-        fetchClasses(),
-        fetchSubjects(),
       ]);
-      setSchoolsLookup(s);
-      setClassesLookup(c);
-      setSubjectsLookup(sub);
+      setHeadOfficesLookup(ho.status === "fulfilled" ? (Array.isArray(ho.value?.content) ? ho.value.content : []) : []);
+      setSchoolsLookup(s.status === "fulfilled" ? s.value : []);
     };
     loadLookups();
   }, []);
+
+  useEffect(() => {
+    if (!selectedSchoolIdForLookups) {
+      setAcademicYearsLookup([]);
+      setClassesLookup([]);
+      setSubjectsLookup([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadSchoolLookups = async () => {
+      try {
+        const [years, classes, subjects] = await Promise.all([
+          fetchAcademicYears({ schoolId: selectedSchoolIdForLookups }),
+          fetchClasses({ schoolId: selectedSchoolIdForLookups }),
+          fetchSubjects({ schoolId: selectedSchoolIdForLookups }),
+        ]);
+        if (cancelled) return;
+        setAcademicYearsLookup(Array.isArray(years) ? years : []);
+        setClassesLookup(Array.isArray(classes) ? classes : []);
+        setSubjectsLookup(Array.isArray(subjects) ? subjects : []);
+      } catch {
+        if (cancelled) return;
+        setAcademicYearsLookup([]);
+        setClassesLookup([]);
+        setSubjectsLookup([]);
+      }
+    };
+
+    void loadSchoolLookups();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSchoolIdForLookups]);
 
   // --- FILTERING & PAGINATION ---
   const filtered = useMemo(() => {
@@ -166,6 +246,10 @@ const Lesson = ({ onNavigate }) => {
   // --- ACTIONS ---
   const handleApplyFilters = async (e) => {
     if (e) e.preventDefault();
+    if (pendingFilters.schoolId === "Select") {
+      window.alert("Please select a school.");
+      return;
+    }
     setLoading(true);
     try {
       const result = await fetchLessons({ ...pendingFilters });
@@ -176,6 +260,31 @@ const Lesson = ({ onNavigate }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleScopeChange = (field, value) => {
+    setPendingFilters((prev) => {
+      if (field === "headOfficeId") {
+        return {
+          ...prev,
+          headOfficeId: value || "Select",
+          schoolId: "Select",
+          academicYear: "Select",
+          classId: "Select",
+          subjectId: "Select",
+        };
+      }
+      if (field === "schoolId") {
+        return {
+          ...prev,
+          schoolId: value || "Select",
+          academicYear: "Select",
+          classId: "Select",
+          subjectId: "Select",
+        };
+      }
+      return prev;
+    });
   };
 
   const openEdit = (row) => {
@@ -223,6 +332,12 @@ const Lesson = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Lesson</h1>
           <span className="text-secondary-light">Dashboard / Lesson</span>
         </div>
+        <button
+                className="btn btn-primary-600 radius-8 px-20 py-11 d-flex align-items-center gap-2"
+                onClick={() => onNavigate?.("add-lesson")}
+              >
+                <i className="ri-add-line"></i> Add Lesson
+              </button>
       </div>
 
       <div className="card h-100">
@@ -292,12 +407,7 @@ const Lesson = ({ onNavigate }) => {
                   <i className="ri-search-line"></i>
                 </span>
               </div>
-              <button
-                className="btn btn-primary-600 radius-8 px-20 py-11 d-flex align-items-center gap-2"
-                onClick={() => onNavigate?.("add-lesson")}
-              >
-                <i className="ri-add-line"></i> Add Lesson
-              </button>
+              
             </div>
           </div>
 
@@ -391,24 +501,94 @@ const Lesson = ({ onNavigate }) => {
         onClose={() => setIsFindSidebarOpen(false)}
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin || isHeadOfficeAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={headOfficeOptions}
+              schoolOptions={schoolOptions}
+              selectedHeadOfficeId={
+                isHeadOfficeAdmin && authHeadOfficeId != null
+                  ? String(authHeadOfficeId)
+                  : pendingFilters.headOfficeId === "Select"
+                    ? ""
+                    : pendingFilters.headOfficeId
+              }
+              onHeadOfficeChange={(value) => handleScopeChange("headOfficeId", value)}
+              selectedSchoolId={pendingFilters.schoolId === "Select" ? "" : pendingFilters.schoolId}
+              onSchoolChange={(value) => handleScopeChange("schoolId", value)}
+              showHeadOfficeSelector={isSuperAdmin}
+            />
+          ) : (
+            <div>
+              <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
+                School
+              </label>
+              <select
+                className="form-control form-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) => handleScopeChange("schoolId", e.target.value)}
+              >
+                <option value="Select">All Schools</option>
+                {schoolOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.schoolName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
-              School
+              Academic Year<span className="text-danger-600">*</span>
             </label>
             <select
               className="form-control form-select"
-              value={pendingFilters.schoolId}
-              onChange={(e) =>
-                setPendingFilters({
-                  ...pendingFilters,
-                  schoolId: e.target.value,
-                })
-              }
+              value={pendingFilters.academicYear}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, academicYear: e.target.value }))}
+              disabled={!selectedSchoolIdForLookups}
             >
-              <option value="Select">All Schools</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.schoolName}
+              <option value="Select">--Select--</option>
+              {academicYearsLookup.map((year) => (
+                <option key={year.id} value={year.academicYear}>
+                  {year.academicYear}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
+              Class<span className="text-danger-600">*</span>
+            </label>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.classId}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, classId: e.target.value }))}
+              disabled={!selectedSchoolIdForLookups}
+            >
+              <option value="Select">--Select--</option>
+              {classesLookup.map((cls) => (
+                <option key={cls.id} value={String(cls.id)}>
+                  {cls.className || cls.name || `Class ${cls.id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8 d-inline-block">
+              Subject<span className="text-danger-600">*</span>
+            </label>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.subjectId}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, subjectId: e.target.value }))}
+              disabled={!selectedSchoolIdForLookups}
+            >
+              <option value="Select">--Select--</option>
+              {subjectsLookup.map((subject) => (
+                <option key={subject.id} value={String(subject.id)}>
+                  {subject.name || subject.subjectName || `Subject ${subject.id}`}
                 </option>
               ))}
             </select>

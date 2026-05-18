@@ -10,6 +10,7 @@ import { normalizeRole } from '../utils/roles'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import {
   createExamInstruction,
   deleteExamInstruction,
@@ -24,7 +25,8 @@ const emptyForm = {
 }
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: '',
   status: 'Select',
 }
 
@@ -84,7 +86,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ExamInstruction = () => {
-  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId } = useAuth()
+  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
   const isSuperAdmin = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === 'SUPER_ADMIN',
     [authRole, user],
@@ -114,6 +116,9 @@ const ExamInstruction = () => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+
+  const getSchoolById = (schoolId) =>
+    (Array.isArray(schools) ? schools : []).find((school) => String(school?.id ?? '') === String(schoolId ?? '')) || null
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -154,10 +159,19 @@ const ExamInstruction = () => {
     return rows
   }, [authHeadOfficeId, isSuperAdmin, manualScope.selectedHeadOfficeId, schools])
 
-  const schoolOptions = useMemo(() => {
+  const filterSchoolOptions = useMemo(() => {
     const list = Array.isArray(schools) ? schools : []
-    return Array.from(new Set(list.map((s) => s.schoolName || s.name))).filter(Boolean)
-  }, [schools])
+    if (filters.headOfficeId) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(filters.headOfficeId))
+    }
+    if (authHeadOfficeId != null) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+    if (authSchoolId != null) {
+      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId))
+    }
+    return list
+  }, [authHeadOfficeId, authSchoolId, filters.headOfficeId, schools])
 
   const loadData = async () => {
     if (status !== 'ready' || !token) return
@@ -165,7 +179,8 @@ const ExamInstruction = () => {
     setLoadError('')
     try {
       const pageData = await fetchExamInstructionsPage({
-        schoolId: filters.school !== 'Select' ? schools.find(s => (s.schoolName || s.name) === filters.school)?.id : undefined,
+        headOfficeId: filters.headOfficeId || undefined,
+        schoolId: filters.schoolId || undefined,
         status: filters.status !== 'Select' ? filters.status : undefined,
         page: currentPage - 1,
         size: rowsPerPage,
@@ -212,15 +227,11 @@ const ExamInstruction = () => {
     setter((prev) => ({ ...prev, [id]: value }))
   }
 
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
   const handleApplyFilters = (e) => {
     e.preventDefault()
     setFilters(pendingFilters)
     setCurrentPage(1)
+    setIsFilterSidebarOpen(false)
   }
 
   const handleResetFilters = () => {
@@ -285,6 +296,23 @@ const ExamInstruction = () => {
     const end = Math.min(totalPages, start + 2)
     for (let p = start; p <= end; p++) pages.push(p)
     return pages
+  }
+
+  const handleFilterHeadOfficeChange = (value) => {
+    setPendingFilters((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: '',
+    }))
+  }
+
+  const handleFilterSchoolChange = (value) => {
+    const selectedSchool = getSchoolById(value)
+    setPendingFilters((prev) => ({
+      ...prev,
+      schoolId: value,
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+    }))
   }
 
   const renderForm = (form, setter) => (
@@ -429,13 +457,14 @@ const ExamInstruction = () => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-              >
-                {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+                onChange={(value) => {
+                  setRowsPerPage(value)
+                  setCurrentPage(1)
+                }}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -625,21 +654,48 @@ const ExamInstruction = () => {
         onClose={() => setIsFilterSidebarOpen(false)}
         className="filter-sidebar"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={(Array.isArray(manualScope.headOffices) && manualScope.headOffices.length > 0
+                ? manualScope.headOffices
+                : headOffices.map((ho) => ({ id: ho.id, name: ho.name || ho.headOfficeName || '' }))).filter((ho) => ho.id != null && ho.name)}
+              schoolOptions={filterSchoolOptions.map((school) => ({ id: school.id, schoolName: school.schoolName || school.name || '' }))}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={handleFilterHeadOfficeChange}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={handleFilterSchoolChange}
+              schoolLabel="School Name"
+            />
+          ) : (
+            <div className="avm-field full">
+              <label htmlFor="schoolId" className="avm-label">
+                School Name
+              </label>
+              <select
+                id="schoolId"
+                className="avm-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const selectedSchool = getSchoolById(value)
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: value,
+                    headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+                  }))
+                }}
+              >
+                <option value="">All Schools</option>
+                {filterSchoolOptions.map((school) => (
+                  <option key={String(school.id)} value={String(school.id)}>
+                    {school.schoolName || school.name || String(school.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="status" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
@@ -649,7 +705,7 @@ const ExamInstruction = () => {
               id="status"
               className="form-control form-select"
               value={pendingFilters.status}
-              onChange={handlePendingFilterChange}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, status: e.target.value }))}
             >
               <option value="Select">Select</option>
               <option value="Active">Active</option>

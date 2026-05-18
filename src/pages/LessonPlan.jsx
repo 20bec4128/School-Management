@@ -5,9 +5,8 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { useAuth } from '../context/useAuth'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
-
-const ACADEMIC_YEAR_OPTIONS = ['2025-2026', '2024-2025', '2023-2024', '2022-2023']
 
 const emptyFilters = {
   school: 'Select',
@@ -15,8 +14,6 @@ const emptyFilters = {
   classId: 'Select',
   subjectId: 'Select',
 }
-
-const DEFAULT_ACADEMIC_YEAR = ACADEMIC_YEAR_OPTIONS[0]
 
 const getChildScope = (children, selectedChildId) => {
   const list = Array.isArray(children) ? children : []
@@ -58,6 +55,18 @@ const LessonPlan = () => {
     : roleUpper === 'PARENT'
       ? selectedChild?.classId ?? null
       : null
+  const academicYearOptions = useAcademicYearOptions({
+    schoolId:
+      isStudentScope
+        ? effectiveSchoolId ?? ''
+        : pendingFilters.school !== 'Select'
+          ? pendingFilters.school
+          : '',
+    enabled:
+      (isStudentScope && Boolean(effectiveSchoolId)) ||
+      pendingFilters.school !== 'Select',
+  })
+  const defaultAcademicYear = academicYearOptions[0] || 'Select'
 
   useEffect(() => {
     let ignore = false
@@ -66,7 +75,7 @@ const LessonPlan = () => {
         setLoading(true)
         setError('')
         if (isStudentScope) {
-          if (!effectiveSchoolId || !effectiveClassId) {
+          if (!effectiveSchoolId || !effectiveClassId || defaultAcademicYear === 'Select') {
             if (!ignore) {
               setRows([])
               setHasSearched(false)
@@ -76,14 +85,14 @@ const LessonPlan = () => {
           }
           const data = await fetchLessonPlanView({
             schoolId: effectiveSchoolId,
-            academicYear: DEFAULT_ACADEMIC_YEAR,
+            academicYear: defaultAcademicYear,
             classId: effectiveClassId,
           })
           if (ignore) return
           setRows(Array.isArray(data) ? data : [])
           const nextFilters = {
             school: String(effectiveSchoolId),
-            academicYear: DEFAULT_ACADEMIC_YEAR,
+            academicYear: defaultAcademicYear,
             classId: String(effectiveClassId),
             subjectId: 'Select',
           }
@@ -108,7 +117,7 @@ const LessonPlan = () => {
     return () => {
       ignore = true
     }
-  }, [effectiveClassId, effectiveSchoolId, isStudentScope])
+  }, [defaultAcademicYear, effectiveClassId, effectiveSchoolId, isStudentScope])
 
   const filtered = useMemo(() => {
     if (!hasSearched) return []
@@ -122,7 +131,11 @@ const LessonPlan = () => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+    setPendingFilters((prev) => {
+      if (id === 'school') return { ...prev, school: value, academicYear: 'Select', classId: 'Select', subjectId: 'Select' }
+      if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
+      return { ...prev, [id]: value }
+    })
     setFindErrors((prev) => ({ ...prev, [id]: '' }))
   }
 
@@ -325,7 +338,7 @@ const LessonPlan = () => {
               onChange={handlePendingFilterChange}
             >
               <option value="Select">--Select--</option>
-              {ACADEMIC_YEAR_OPTIONS.map((y) => (
+              {academicYearOptions.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>

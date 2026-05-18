@@ -27,19 +27,23 @@ public class AcademicYearController {
     }
 
     @GetMapping
-    public List<AcademicYearDto> list(@RequestParam(required = false) Long schoolId) {
-        return academicYearService.list(schoolId);
+    public List<AcademicYearDto> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId
+    ) {
+        return academicYearService.list(headOfficeId, schoolId);
     }
 
     @GetMapping("/page")
     public Page<AcademicYearDto> page(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean running,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return academicYearService.page(schoolId, search, running, page, size);
+        return academicYearService.page(headOfficeId, schoolId, search, running, page, size);
     }
 
     @PostMapping

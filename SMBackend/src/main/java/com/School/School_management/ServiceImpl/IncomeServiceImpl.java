@@ -52,17 +52,26 @@ public class IncomeServiceImpl implements IncomeService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<IncomeDto> listPaginated(Long schoolId, Long incomeHeadId, String incomeMethod, int page, int size, String search) {
+    public Page<IncomeDto> listPaginated(
+            Long schoolId,
+            Long incomeHeadId,
+            String incomeMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            int page,
+            int size,
+            String search
+    ) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         String normalizedSearch = normalizeOptional(search);
         String normalizedMethod = normalizeOptional(incomeMethod);
         if (user.isSuperAdmin() && schoolId == null) {
-            return repository.findPageWithDetails(null, incomeHeadId, normalizedMethod, normalizedSearch, pageable).map(this::toDto);
+            return repository.findPageWithDetails(null, incomeHeadId, normalizedMethod, startDate, endDate, normalizedSearch, pageable).map(this::toDto);
         }
         Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return repository.findPageWithDetails(effectiveSchoolId, incomeHeadId, normalizedMethod, normalizedSearch, pageable).map(this::toDto);
+        return repository.findPageWithDetails(effectiveSchoolId, incomeHeadId, normalizedMethod, startDate, endDate, normalizedSearch, pageable).map(this::toDto);
     }
 
     @Override

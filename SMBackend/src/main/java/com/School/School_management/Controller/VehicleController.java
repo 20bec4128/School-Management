@@ -21,18 +21,21 @@ public class VehicleController {
     }
 
     @GetMapping
-    public ResponseEntity<List<VehicleDto>> list(@RequestParam(required = false) Long schoolId) {
-        return ResponseEntity.ok(service.list(schoolId));
+    public ResponseEntity<List<VehicleDto>> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId) {
+        return ResponseEntity.ok(service.list(headOfficeId, schoolId));
     }
 
     @GetMapping("/page")
     public ResponseEntity<Page<VehicleDto>> listPaginated(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(service.listPaginated(schoolId, search, page, size));
+        return ResponseEntity.ok(service.listPaginated(headOfficeId, schoolId, search, page, size));
     }
 
     @GetMapping("/{id}")

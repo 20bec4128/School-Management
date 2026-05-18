@@ -5,6 +5,7 @@ public class StudentTypeDto {
 
     public static class Request {
 
+        private Long headOfficeId;
         private Long schoolId;
 
         private String studentType;
@@ -14,10 +15,19 @@ public class StudentTypeDto {
         public Request() {
         }
 
-        public Request(Long schoolId, String studentType, String note) {
+        public Request(Long headOfficeId, Long schoolId, String studentType, String note) {
+            this.headOfficeId = headOfficeId;
             this.schoolId = schoolId;
             this.studentType = studentType;
             this.note = note;
+        }
+
+        public Long getHeadOfficeId() {
+            return headOfficeId;
+        }
+
+        public void setHeadOfficeId(Long headOfficeId) {
+            this.headOfficeId = headOfficeId;
         }
 
         public Long getSchoolId() {
@@ -49,9 +59,15 @@ public class StudentTypeDto {
         }
 
         public static class RequestBuilder {
+            private Long headOfficeId;
             private Long schoolId;
             private String studentType;
             private String note;
+
+            public RequestBuilder headOfficeId(Long headOfficeId) {
+                this.headOfficeId = headOfficeId;
+                return this;
+            }
 
             public RequestBuilder schoolId(Long schoolId) {
                 this.schoolId = schoolId;
@@ -70,6 +86,7 @@ public class StudentTypeDto {
 
             public Request build() {
                 Request request = new Request();
+                request.setHeadOfficeId(this.headOfficeId);
                 request.setSchoolId(this.schoolId);
                 request.setStudentType(this.studentType);
                 request.setNote(this.note);

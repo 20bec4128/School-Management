@@ -39,24 +39,18 @@ public class OnlineExamServiceImpl implements OnlineExamService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<OnlineExamDto> list(Long schoolId) {
+    public List<OnlineExamDto> list(Long headOfficeId, Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
-        List<OnlineExam> rows;
-        if (user.isSuperAdmin() && schoolId == null) {
-            rows = repository.findAllByDeletedFalseOrderByIdDesc();
-        } else {
-            Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-            rows = repository.findBySchool_IdAndDeletedFalseOrderByIdDesc(effectiveSchoolId);
-        }
+        List<OnlineExam> rows = resolveVisibleRows(user, headOfficeId, schoolId);
         return rows.stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<OnlineExamDto> listPaginated(Long schoolId, Long classId, Long subjectId, String isPublish, int page, int size, String search) {
-        List<OnlineExamDto> all = list(schoolId);
+    public Page<OnlineExamDto> listPaginated(Long headOfficeId, Long schoolId, Long classId, Long subjectId, String isPublish, int page, int size, String search) {
+        List<OnlineExamDto> all = list(headOfficeId, schoolId);
         
         String q = search == null ? "" : search.trim().toLowerCase();
         List<OnlineExamDto> filtered = all.stream()
@@ -149,6 +143,43 @@ public class OnlineExamServiceImpl implements OnlineExamService {
 
     private Long effectiveSchoolIdForWrite(CurrentUser user, Long requestedSchoolId) {
         return effectiveSchoolIdForRead(user, requestedSchoolId);
+    }
+
+    private List<OnlineExam> resolveVisibleRows(CurrentUser user, Long headOfficeId, Long schoolId) {
+        if (user.isSchoolScoped()) {
+            Long effectiveSchoolId = user.schoolId();
+            if (schoolId != null && !Objects.equals(schoolId, effectiveSchoolId)) {
+                throw new ForbiddenException();
+            }
+            if (headOfficeId != null) {
+                ensureSchoolInHeadOffice(effectiveSchoolId, headOfficeId);
+            }
+            return repository.findBySchool_IdAndDeletedFalseOrderByIdDesc(effectiveSchoolId);
+        }
+
+        if (schoolId != null) {
+            if (user.isHeadOfficeScopedAdmin()) {
+                ensureSchoolInHeadOffice(schoolId, user.headOfficeId());
+            }
+            return repository.findBySchool_IdAndDeletedFalseOrderByIdDesc(schoolId);
+        }
+
+        if (headOfficeId != null) {
+            if (user.isHeadOfficeScopedAdmin() && !Objects.equals(headOfficeId, user.headOfficeId())) {
+                throw new ForbiddenException();
+            }
+            return repository.findBySchool_HeadOfficeIdAndDeletedFalseOrderByIdDesc(headOfficeId);
+        }
+
+        if (user.isHeadOfficeScopedAdmin()) {
+            return repository.findBySchool_HeadOfficeIdAndDeletedFalseOrderByIdDesc(user.headOfficeId());
+        }
+
+        if (user.isSuperAdmin()) {
+            return repository.findAllByDeletedFalseOrderByIdDesc();
+        }
+
+        throw new BadRequestException("schoolId is required");
     }
 
     private void ensureSchoolInHeadOffice(Long schoolId, Long headOfficeId) {

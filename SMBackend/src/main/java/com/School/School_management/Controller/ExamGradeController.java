@@ -27,18 +27,22 @@ public class ExamGradeController {
     }
 
     @GetMapping
-    public List<ExamGradeDto> list(@RequestParam(required = false) Long schoolId) {
-        return examGradeService.list(schoolId);
+    public List<ExamGradeDto> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId
+    ) {
+        return examGradeService.list(headOfficeId, schoolId);
     }
 
     @GetMapping("/page")
     public Page<ExamGradeDto> listPaginated(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return examGradeService.listPaginated(schoolId, page, size, search);
+        return examGradeService.listPaginated(headOfficeId, schoolId, page, size, search);
     }
 
     @PostMapping

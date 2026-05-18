@@ -19,19 +19,23 @@ public class ExamInstructionController {
     }
 
     @GetMapping
-    public List<ExamInstructionDto> list(@RequestParam(required = false) Long schoolId) {
-        return service.list(schoolId);
+    public List<ExamInstructionDto> list(
+            @RequestParam(required = false) Long headOfficeId,
+            @RequestParam(required = false) Long schoolId
+    ) {
+        return service.list(headOfficeId, schoolId);
     }
 
     @GetMapping("/page")
     public Page<ExamInstructionDto> listPaginated(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return service.listPaginated(schoolId, status, page, size, search);
+        return service.listPaginated(headOfficeId, schoolId, status, page, size, search);
     }
 
     @PostMapping

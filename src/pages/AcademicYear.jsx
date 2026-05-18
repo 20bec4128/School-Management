@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import '../assets/css/addModalShared.css'
 import { useAuth } from '../context/useAuth'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
@@ -12,6 +14,7 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
 
 const emptyForm = {
+  headOfficeId: '',
   schoolId: '',
   sessionStart: '',
   sessionEnd: '',
@@ -20,9 +23,16 @@ const emptyForm = {
 }
 
 const emptyFilters = {
+  headOfficeId: '',
   schoolId: 'All',
   status: 'All',
 }
+
+const getDefaultFilters = (isHeadOfficeAdmin, authHeadOfficeId, isSchoolAdmin, authSchoolId) => ({
+  headOfficeId: isHeadOfficeAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : '',
+  schoolId: isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : 'All',
+  status: 'All',
+})
 
 const columnOptions = [
   { key: 'schoolName', label: 'School' },
@@ -36,11 +46,15 @@ const columnOptions = [
 const STEPS = ['Academic Year']
 
 const FIELD_ICONS = {
+  headOfficeId: 'ri-building-4-line',
   schoolId: 'ri-school-line',
   sessionStart: 'ri-calendar-event-line',
   sessionEnd: 'ri-calendar-check-line',
   note: 'ri-sticky-note-line',
 }
+
+const getSchoolById = (rows, schoolId) =>
+  (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const formatDate = (value) => {
   if (!value) return '--'
@@ -89,7 +103,7 @@ const FormField = ({ label, id, required, children, full = false, noIcon = false
 )
 
 const AcademicYear = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -97,6 +111,7 @@ const AcademicYear = () => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -107,7 +122,6 @@ const AcademicYear = () => {
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
   const [filters, setFilters] = useState(emptyFilters)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
@@ -128,26 +142,32 @@ const AcademicYear = () => {
     return map
   }, [schools])
 
-  const schoolOptions = useMemo(() => {
+  const allSchoolOptions = useMemo(() => {
     return Array.isArray(schools)
       ? [...schools].sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
       : []
   }, [schools])
 
-  const accessibleSchoolOptions = useMemo(() => {
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
-      return schoolOptions.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+  const schoolOptions = useMemo(() => {
+    const rows = Array.isArray(allSchoolOptions) ? allSchoolOptions : []
+    if (isSuperAdmin) {
+      if (!manualScope.selectedHeadOfficeId) return []
+      return manualScope.schoolOptions
     }
-    return schoolOptions
-  }, [authHeadOfficeId, isHeadOfficeAdmin, schoolOptions])
+    if (isHeadOfficeAdmin) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+    if (isSchoolAdmin) {
+      return rows.filter((school) => String(school?.id ?? '') === String(authSchoolId))
+    }
+    return rows
+  }, [allSchoolOptions, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
   const scopeSchoolName = useMemo(() => {
-    if (scopeSchoolId && schoolsById.has(String(scopeSchoolId))) {
-      return schoolsById.get(String(scopeSchoolId))?.schoolName || ''
-    }
     if (isSchoolAdmin) return authSchoolName || (authSchoolId != null ? `School ${authSchoolId}` : '')
+    if (isHeadOfficeAdmin) return authHeadOfficeName || (authHeadOfficeId != null ? `Head Office ${authHeadOfficeId}` : '')
     return ''
-  }, [authSchoolId, authSchoolName, isSchoolAdmin, schoolsById, scopeSchoolId])
+  }, [authHeadOfficeId, authHeadOfficeName, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin])
 
   const loadSchools = async () => {
     const list = await fetchSchoolsLookup()
@@ -155,16 +175,24 @@ const AcademicYear = () => {
   }
 
   const loadAcademicYears = async () => {
-    const schoolFilter = filters.schoolId !== 'All' ? filters.schoolId : ''
     const runningFilter =
       filters.status === 'Running' ? true : filters.status === 'Stopped' ? false : undefined
 
+    const effectiveHeadOfficeId = isSuperAdmin
+      ? filters.headOfficeId || undefined
+      : isHeadOfficeAdmin
+        ? (authHeadOfficeId != null ? String(authHeadOfficeId) : undefined)
+        : undefined
+
     const effectiveSchoolId = isSchoolAdmin
-      ? (authSchoolId != null ? String(authSchoolId) : '')
-      : schoolFilter
+      ? (authSchoolId != null ? String(authSchoolId) : undefined)
+      : filters.schoolId !== 'All'
+        ? filters.schoolId
+        : undefined
 
     const pageData = await fetchAcademicYearsPage({
-      schoolId: effectiveSchoolId || undefined,
+      headOfficeId: effectiveHeadOfficeId,
+      schoolId: effectiveSchoolId,
       page: currentPage - 1,
       size: rowsPerPage,
       search,
@@ -179,10 +207,12 @@ const AcademicYear = () => {
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
-    if (isSchoolAdmin && authSchoolId != null) {
-      setScopeSchoolId(String(authSchoolId))
-    }
-  }, [authSchoolId, isSchoolAdmin, status, token])
+    if (isSuperAdmin) return
+
+    const nextFilters = getDefaultFilters(isHeadOfficeAdmin, authHeadOfficeId, isSchoolAdmin, authSchoolId)
+    setFilters(nextFilters)
+    setPendingFilters(nextFilters)
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -206,7 +236,7 @@ const AcademicYear = () => {
     return () => {
       alive = false
     }
-  }, [authSchoolId, isSchoolAdmin, status, token])
+  }, [status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -216,7 +246,7 @@ const AcademicYear = () => {
       .catch((error) => setLoadError(error?.message || 'Failed to load academic years'))
       .finally(() => setBusy(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, rowsPerPage, search, filters.schoolId, filters.status, status, token, authSchoolId, isSchoolAdmin])
+  }, [currentPage, rowsPerPage, search, filters.headOfficeId, filters.schoolId, filters.status, status, token, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
 
   const resolveSchoolName = (schoolId) => {
     if (schoolId == null) return ''
@@ -225,23 +255,42 @@ const AcademicYear = () => {
 
   const openAdd = () => {
     setLoadError('')
+    const schoolId = isSchoolAdmin
+      ? (authSchoolId != null ? String(authSchoolId) : '')
+      : ''
+    const headOfficeId = isSuperAdmin
+      ? (manualScope.selectedHeadOfficeId || filters.headOfficeId || '')
+      : isHeadOfficeAdmin
+        ? (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+        : getSchoolById(allSchoolOptions, schoolId)?.headOfficeId != null
+          ? String(getSchoolById(allSchoolOptions, schoolId)?.headOfficeId)
+          : ''
     setAddForm({
       ...emptyForm,
-      schoolId: isSchoolAdmin ? String(authSchoolId ?? '') : '',
+      headOfficeId,
+      schoolId,
     })
+    if (isSuperAdmin && headOfficeId) {
+      manualScope.setSelectedScope(headOfficeId, '')
+    }
     setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
     setLoadError('')
+    const school = getSchoolById(schools, row?.schoolId)
     setEditId(row?.id ?? null)
     setEditForm({
+      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : '',
       schoolId: String(row?.schoolId ?? ''),
       sessionStart: row?.sessionStart || '',
       sessionEnd: row?.sessionEnd || '',
       isRunning: Boolean(row?.isRunning),
       note: row?.note || '',
     })
+    if (isSuperAdmin && school?.headOfficeId != null) {
+      manualScope.setSelectedScope(String(school.headOfficeId), String(row?.schoolId ?? ''))
+    }
     setIsEditOpen(true)
   }
 
@@ -490,28 +539,67 @@ const AcademicYear = () => {
         onClose={() => setIsAddOpen(false)}
         onSubmit={() => saveAcademicYear('add')}
         submitLabel="Save"
-        modalWidth="640px"
+      modalWidth="640px"
       >
         <div className="row">
-          {(isSuperAdmin || isHeadOfficeAdmin) ? (
-            <FormField label="School" id="schoolId" required full>
-              <select
-                className="form-control ps-44 form-select"
-                value={addForm.schoolId}
-                onChange={(e) => setAddForm({ ...addForm, schoolId: e.target.value })}
-              >
-                <option value="">--Select School--</option>
-                {accessibleSchoolOptions.map((school) => (
-                  <option key={school.id} value={String(school.id)}>
-                    {school.schoolName}
-                  </option>
-                ))}
-              </select>
-            </FormField>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={addForm.headOfficeId}
+              onHeadOfficeChange={(value) => {
+                setAddForm((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
+                manualScope.setSelectedScope(value, '')
+              }}
+              selectedSchoolId={addForm.schoolId}
+              onSchoolChange={(value) => {
+                const school = getSchoolById(allSchoolOptions, value)
+                const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : addForm.headOfficeId
+                setAddForm((prev) => ({
+                  ...prev,
+                  headOfficeId: nextHeadOfficeId,
+                  schoolId: value,
+                }))
+                if (nextHeadOfficeId) {
+                  manualScope.setSelectedScope(nextHeadOfficeId, value)
+                }
+              }}
+            />
           ) : (
-            <FormField label="School" id="schoolId" required full>
-              <input className="form-control ps-44" value={scopeSchoolName} readOnly />
-            </FormField>
+            <>
+              {isHeadOfficeAdmin ? (
+                <FormField label="Head Office" id="headOfficeId" required full>
+                  <input className="form-control ps-44" value={authHeadOfficeName || ''} readOnly />
+                </FormField>
+              ) : null}
+
+              <FormField label="School" id="schoolId" required full>
+                {isSchoolAdmin ? (
+                  <input className="form-control ps-44" value={scopeSchoolName} readOnly />
+                ) : (
+                  <select
+                    className="form-control ps-44 form-select"
+                    value={addForm.schoolId}
+                    onChange={(e) => {
+                      const school = getSchoolById(schools, e.target.value)
+                      setAddForm((prev) => ({
+                        ...prev,
+                        schoolId: e.target.value,
+                        headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
+                      }))
+                    }}
+                  >
+                    <option value="">--Select School--</option>
+                    {schoolOptions.map((school) => (
+                      <option key={school.id} value={String(school.id)}>
+                        {school.schoolName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+            </>
           )}
 
           <FormField label="Session Start" id="sessionStart" required>
@@ -567,12 +655,46 @@ const AcademicYear = () => {
         onClose={() => setIsEditOpen(false)}
         onSubmit={() => saveAcademicYear('edit')}
         submitLabel="Update"
-        modalWidth="640px"
+      modalWidth="640px"
       >
         <div className="row">
-          <FormField label="School" id="schoolId" required full>
-            <input className="form-control ps-44" value={resolveSchoolName(editForm.schoolId)} readOnly />
-          </FormField>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={editForm.headOfficeId}
+              onHeadOfficeChange={(value) => {
+                setEditForm((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
+                manualScope.setSelectedScope(value, '')
+              }}
+              selectedSchoolId={editForm.schoolId}
+              onSchoolChange={(value) => {
+                const school = getSchoolById(allSchoolOptions, value)
+                const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : editForm.headOfficeId
+                setEditForm((prev) => ({
+                  ...prev,
+                  headOfficeId: nextHeadOfficeId,
+                  schoolId: value,
+                }))
+                if (nextHeadOfficeId) {
+                  manualScope.setSelectedScope(nextHeadOfficeId, value)
+                }
+              }}
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <FormField label="Head Office" id="headOfficeId" required full>
+                  <input className="form-control ps-44" value={authHeadOfficeName || ''} readOnly />
+                </FormField>
+              ) : null}
+
+              <FormField label="School" id="schoolId" required full>
+                <input className="form-control ps-44" value={resolveSchoolName(editForm.schoolId)} readOnly />
+              </FormField>
+            </>
+          )}
 
           <FormField label="Session Start" id="sessionStart" required>
             <input
@@ -633,24 +755,57 @@ const AcademicYear = () => {
             setIsFilterSidebarOpen(false)
           }}
         >
-          <div>
-            <label htmlFor="academicYearFilterSchool" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="academicYearFilterSchool"
-              className="form-control form-select"
-              value={pendingFilters.schoolId}
-              onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value }))}
-            >
-              <option value="All">All</option>
-              {accessibleSchoolOptions.map((school) => (
-                <option key={school.id} value={String(school.id)}>
-                  {school.schoolName}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) => {
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'All' }))
+                manualScope.setSelectedScope(value, '')
+              }}
+              selectedSchoolId={pendingFilters.schoolId === 'All' ? '' : pendingFilters.schoolId}
+              onSchoolChange={(value) => {
+                setPendingFilters((prev) => ({ ...prev, schoolId: value || 'All' }))
+              }}
+            />
+          ) : (
+            <>
+              {isHeadOfficeAdmin ? (
+                <div>
+                  <label htmlFor="academicYearFilterHeadOffice" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                    Head Office
+                  </label>
+                  <input
+                    id="academicYearFilterHeadOffice"
+                    className="form-control"
+                    value={authHeadOfficeName || ''}
+                    readOnly
+                  />
+                </div>
+              ) : null}
+
+              <div>
+                <label htmlFor="academicYearFilterSchool" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  School
+                </label>
+                <select
+                  id="academicYearFilterSchool"
+                  className="form-control form-select"
+                  value={pendingFilters.schoolId}
+                  onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value }))}
+                >
+                  <option value="All">All</option>
+                  {schoolOptions.map((school) => (
+                    <option key={school.id} value={String(school.id)}>
+                      {school.schoolName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label htmlFor="academicYearFilterStatus" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
@@ -672,10 +827,15 @@ const AcademicYear = () => {
             type="button"
             className="btn btn-danger-200 text-danger-600 w-100"
             onClick={() => {
-              const reset = { ...emptyFilters }
+              const reset = isSuperAdmin
+                ? { ...emptyFilters }
+                : getDefaultFilters(isHeadOfficeAdmin, authHeadOfficeId, isSchoolAdmin, authSchoolId)
               setPendingFilters(reset)
               setFilters(reset)
               setCurrentPage(1)
+              if (isSuperAdmin) {
+                manualScope.setSelectedScope('', '')
+              }
             }}
           >
             Reset

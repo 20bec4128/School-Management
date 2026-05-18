@@ -2,6 +2,7 @@ package com.School.School_management.Repository;
 
 import com.School.School_management.Entity.SalaryGrade;
 import java.util.List;
+import java.util.Collection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,9 +17,17 @@ public interface SalaryGradeRepository extends JpaRepository<SalaryGrade, Long> 
 
     Page<SalaryGrade> findBySchoolIdOrderByIdDesc(Long schoolId, Pageable pageable);
 
+    List<SalaryGrade> findBySchoolIdInOrderByIdDesc(Collection<Long> schoolIds);
+
+    Page<SalaryGrade> findBySchoolIdInOrderByIdDesc(Collection<Long> schoolIds, Pageable pageable);
+
     @Query("SELECT s FROM SalaryGrade s WHERE s.schoolId = :schoolId " +
            "AND (:search IS NULL OR LOWER(s.gradeName) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<SalaryGrade> searchSalaryGrades(@Param("schoolId") Long schoolId, @Param("search") String search, Pageable pageable);
+
+    @Query("SELECT s FROM SalaryGrade s WHERE s.schoolId IN :schoolIds " +
+           "AND (:search IS NULL OR LOWER(s.gradeName) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<SalaryGrade> searchSalaryGradesIn(@Param("schoolIds") Collection<Long> schoolIds, @Param("search") String search, Pageable pageable);
 
     List<SalaryGrade> findAllByOrderByIdDesc();
 

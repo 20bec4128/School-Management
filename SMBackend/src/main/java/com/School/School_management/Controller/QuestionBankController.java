@@ -25,6 +25,7 @@ public class QuestionBankController {
 
     @GetMapping("/page")
     public ResponseEntity<Map<String, Object>> getQuestionBanksPage(
+            @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Long subjectId,
@@ -34,7 +35,7 @@ public class QuestionBankController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(questionBankService.getQuestionBanksPage(schoolId, classId, subjectId, questionType, questionLevel, status, page, size, search));
+        return ResponseEntity.ok(questionBankService.getQuestionBanksPage(headOfficeId, schoolId, classId, subjectId, questionType, questionLevel, status, page, size, search));
     }
 
     @PostMapping("/create")

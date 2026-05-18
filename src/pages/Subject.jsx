@@ -5,12 +5,15 @@ import { TablePagination } from '../components/table'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { fetchSubjects, deleteSubject } from '../apis/subjectsApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   school: 'Select',
   className: 'Select',
   type: 'Select',
@@ -50,6 +53,7 @@ const SubjectList = ({ onNavigate }) => {
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([])
 
   const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const isSchoolLocked = Boolean(scopedSchoolId) && role !== 'SUPER_ADMIN'
@@ -78,6 +82,12 @@ const SubjectList = ({ onNavigate }) => {
 
   useEffect(() => {
     fetchSchoolsLookup().then(setSchoolsLookup).catch(() => setSchoolsLookup([]))
+  }, [])
+
+  useEffect(() => {
+    void fetchHeadOfficesPage(0, 500)
+      .then((page) => setHeadOfficesLookup(Array.isArray(page?.content) ? page.content : []))
+      .catch(() => setHeadOfficesLookup([]))
   }, [])
 
   useEffect(() => {
@@ -159,9 +169,13 @@ const SubjectList = ({ onNavigate }) => {
   }
 
   const schoolOptions = useMemo(() => {
-    const fromRows = subjects.map((r) => r?.school).filter(Boolean)
+    const rows = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    const filtered = pendingFilters.headOfficeId && pendingFilters.headOfficeId !== 'Select'
+      ? rows.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+      : rows
+    const fromRows = filtered.map((r) => r?.schoolName || r?.name).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
-  }, [subjects])
+  }, [schoolsLookup, pendingFilters.headOfficeId])
 
   const teacherFilterOptions = useMemo(() => {
     const fromRows = subjects.map((r) => r?.teacher).filter(Boolean)
@@ -366,6 +380,22 @@ const SubjectList = ({ onNavigate }) => {
         onClose={() => setIsFilterSidebarOpen(false)}
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          <div>
+            <label className="text-sm fw-semibold text-primary-light mb-8">Head Office</label>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.headOfficeId}
+              onChange={(e) => setPendingFilters((p) => ({ ...p, headOfficeId: e.target.value, school: 'Select' }))}
+            >
+              <option value="Select">Select Head Office</option>
+              {headOfficesLookup.map((ho) => (
+                <option key={String(ho.id)} value={String(ho.id)}>
+                  {ho.name || ho.headOfficeName}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
             <select

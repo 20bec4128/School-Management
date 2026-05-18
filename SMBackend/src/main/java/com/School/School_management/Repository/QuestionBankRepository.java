@@ -8,5 +8,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface QuestionBankRepository extends JpaRepository<QuestionBank, Long> {
     List<QuestionBank> findBySchool_IdAndDeletedFalseOrderByIdDesc(Long schoolId);
+    List<QuestionBank> findBySchool_HeadOfficeIdAndDeletedFalseOrderByIdDesc(Long headOfficeId);
     List<QuestionBank> findAllByDeletedFalseOrderByIdDesc();
 }

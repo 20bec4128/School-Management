@@ -2,17 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
 import ExportDropdown from '../components/ExportDropdown'
 import { fetchOnlineExamsPage, deleteOnlineExam } from '../apis/onlineExamsApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 
 const EDIT_STORAGE_KEY = 'edit-online-exam-row'
 
 const emptyFilters = {
-  school: 'Select',
+  headOfficeId: '',
+  schoolId: '',
   className: 'Select',
   subject: 'Select',
   isPublish: 'Select',
@@ -31,11 +36,16 @@ const getClassLabel = (row) => row?.className || row?.numericName || row?.name |
 const getSubjectLabel = (row) => row?.subjectName || row?.name || row?.label || ''
 
 const OnlineExam = ({ onNavigate } = {}) => {
-  const { status, token, role: authRole, user } = useAuth()
+  const { status, token, role: authRole, user, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [schools, setSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
   const [rows, setRows] = useState([])
@@ -54,21 +64,45 @@ const OnlineExam = ({ onNavigate } = {}) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const getSchoolById = (schoolId) =>
+    (Array.isArray(schools) ? schools : []).find((school) => String(school?.id ?? '') === String(schoolId ?? '')) || null
+
   useEffect(() => {
     if (status !== 'ready' || !token) return
-    fetchSchoolsLookup()
-      .then((rowsData) => setSchools(Array.isArray(rowsData) ? rowsData : []))
+    Promise.all([
+      fetchHeadOfficesPage(0, 500),
+      fetchSchoolsLookup(),
+    ])
+      .then(([headOfficePage, rowsData]) => {
+        setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
+        setSchools(Array.isArray(rowsData) ? rowsData : [])
+      })
       .catch((err) => {
-        console.error('Failed to load schools', err)
+        console.error('Failed to load online exam lookups', err)
+        setHeadOffices([])
         setSchools([])
       })
   }, [status, token])
 
   const selectedSchoolId = useMemo(() => {
-    if (pendingFilters.school === 'Select') return ''
-    const school = schools.find((item) => (item.schoolName || item.name) === pendingFilters.school)
-    return school?.id ? String(school.id) : ''
-  }, [pendingFilters.school, schools])
+    if (pendingFilters.schoolId) return String(pendingFilters.schoolId)
+    if (isSchoolAdmin) return authSchoolId ? String(authSchoolId) : ''
+    return ''
+  }, [authSchoolId, isSchoolAdmin, pendingFilters.schoolId])
+
+  const filterSchoolOptions = useMemo(() => {
+    const list = Array.isArray(schools) ? schools : []
+    if (pendingFilters.headOfficeId) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+    }
+    if (isHeadOfficeAdmin) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    }
+    return list
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schools])
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -105,7 +139,9 @@ const OnlineExam = ({ onNavigate } = {}) => {
     setLoadError('')
     try {
       const pageData = await fetchOnlineExamsPage({
-        schoolId: filters.school !== 'Select' ? schools.find((item) => (item.schoolName || item.name) === filters.school)?.id : undefined,
+        headOfficeId: filters.headOfficeId || undefined,
+        ...(filters.headOfficeId ? {} : isHeadOfficeAdmin ? { headOfficeId: authHeadOfficeId } : {}),
+        schoolId: filters.schoolId || (isSchoolAdmin ? authSchoolId : undefined),
         classId: filters.className !== 'Select' ? classesLookup.find((item) => getClassLabel(item) === filters.className)?.id : undefined,
         subjectId: filters.subject !== 'Select' ? subjectsLookup.find((item) => getSubjectLabel(item) === filters.subject)?.id : undefined,
         isPublish: filters.isPublish !== 'Select' ? filters.isPublish : undefined,
@@ -174,19 +210,6 @@ const OnlineExam = ({ onNavigate } = {}) => {
     else setSelectedRows([...selectedRows, id])
   }
 
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => {
-      if (id === 'school') {
-        return { ...prev, school: value, className: 'Select', subject: 'Select' }
-      }
-      if (id === 'className') {
-        return { ...prev, className: value, subject: 'Select' }
-      }
-      return { ...prev, [id]: value }
-    })
-  }
-
   const handleApplyFilters = (e) => {
     e.preventDefault()
     setFilters({ ...pendingFilters })
@@ -198,6 +221,32 @@ const OnlineExam = ({ onNavigate } = {}) => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setIsFilterSidebarOpen(false)
+    setCurrentPage(1)
+  }
+
+  const handleFilterHeadOfficeChange = (value) => {
+    setPendingFilters((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: '',
+      className: 'Select',
+      subject: 'Select',
+    }))
+  }
+
+  const handleFilterSchoolChange = (value) => {
+    const selectedSchool = getSchoolById(value)
+    setPendingFilters((prev) => ({
+      ...prev,
+      schoolId: value,
+      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
+      className: 'Select',
+      subject: 'Select',
+    }))
+  }
+
+  const handleRowsPerPageChange = (value) => {
+    setRowsPerPage(value)
     setCurrentPage(1)
   }
 
@@ -275,20 +324,11 @@ const OnlineExam = ({ onNavigate } = {}) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                onChange={handleRowsPerPageChange}
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -445,25 +485,40 @@ const OnlineExam = ({ onNavigate } = {}) => {
         onClose={() => setIsFilterSidebarOpen(false)}
         title="Filter Online Exam"
       >
-        <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
-            </label>
-            <select
-              id="school"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select School</option>
-              {schools.map((school) => (
-                <option key={school.id} value={school.schoolName || school.name}>
-                  {school.schoolName || school.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={(Array.isArray(manualScope.headOffices) && manualScope.headOffices.length > 0
+                ? manualScope.headOffices
+                : headOffices.map((ho) => ({ id: ho.id, name: ho.name || ho.headOfficeName || '' }))).filter((ho) => ho.id != null && ho.name)}
+              schoolOptions={filterSchoolOptions.map((school) => ({ id: school.id, schoolName: school.schoolName || school.name || '' }))}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={handleFilterHeadOfficeChange}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={handleFilterSchoolChange}
+              schoolLabel="School"
+            />
+          ) : (
+            <div className="avm-field full">
+              <label htmlFor="schoolId" className="avm-label">
+                School
+              </label>
+              <select
+                id="schoolId"
+                className="avm-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) => handleFilterSchoolChange(e.target.value)}
+              >
+                <option value="">All Schools</option>
+                {filterSchoolOptions.map((school) => (
+                  <option key={String(school.id)} value={String(school.id)}>
+                    {school.schoolName || school.name || String(school.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor="className" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Class
@@ -472,7 +527,11 @@ const OnlineExam = ({ onNavigate } = {}) => {
               id="className"
               className="form-control form-select"
               value={pendingFilters.className}
-              onChange={handlePendingFilterChange}
+              onChange={(e) => setPendingFilters((prev) => ({
+                ...prev,
+                className: e.target.value,
+                subject: 'Select',
+              }))}
             >
               <option value="Select">Select Class</option>
               {classesLookup.map((item) => (
@@ -490,7 +549,7 @@ const OnlineExam = ({ onNavigate } = {}) => {
               id="subject"
               className="form-control form-select"
               value={pendingFilters.subject}
-              onChange={handlePendingFilterChange}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, subject: e.target.value }))}
             >
               <option value="Select">Select Subject</option>
               {subjectsLookup.map((item) => (
@@ -508,7 +567,7 @@ const OnlineExam = ({ onNavigate } = {}) => {
               id="isPublish"
               className="form-control form-select"
               value={pendingFilters.isPublish}
-              onChange={handlePendingFilterChange}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, isPublish: e.target.value }))}
             >
               <option value="Select">Select</option>
               <option value="Yes">Published</option>

@@ -9,6 +9,7 @@ import {
 import { fetchDesignations } from "../apis/designationsApi";
 import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import { useAuth } from "../context/useAuth";
 import { useSchool } from "../context/useSchool";
 import "../assets/css/addModalShared.css";
@@ -80,7 +81,8 @@ const ManageEmployee = ({ onNavigate }) => {
 
   const [filters, setFilters] = useState({
     name: "",
-    school: "All",
+    headOfficeId: "All",
+    schoolId: "All",
     designation: "All",
     email: "",
     joiningDate: "",
@@ -89,7 +91,8 @@ const ManageEmployee = ({ onNavigate }) => {
 
   const [pendingFilters, setPendingFilters] = useState({
     name: "",
-    school: "All",
+    headOfficeId: "All",
+    schoolId: "All",
     designation: "All",
     email: "",
     joiningDate: "",
@@ -384,8 +387,13 @@ const ManageEmployee = ({ onNavigate }) => {
           .toLowerCase()
           .includes(filters.name.toLowerCase());
 
+      const rowHeadOfficeId = schoolById.get(String(row.schoolId ?? ""))?.headOfficeId ?? null;
+      const matchesHeadOffice =
+        filters.headOfficeId === "All" ||
+        String(rowHeadOfficeId ?? "") === String(filters.headOfficeId);
+
       const matchesSchool =
-        filters.school === "All" || String(row.schoolId) === filters.school;
+        filters.schoolId === "All" || String(row.schoolId) === filters.schoolId;
 
       const matchesDesignation =
         filters.designation === "All" ||
@@ -406,6 +414,7 @@ const ManageEmployee = ({ onNavigate }) => {
 
       return (
         matchesName &&
+        matchesHeadOffice &&
         matchesSchool &&
         matchesDesignation &&
         matchesEmail &&
@@ -413,23 +422,61 @@ const ManageEmployee = ({ onNavigate }) => {
         matchesWeb
       );
     });
-  }, [displayRows, filters]);
+  }, [displayRows, filters, schoolById]);
 
   const schoolOptionsForFilter = useMemo(() => {
     const map = new Map();
 
-    for (const row of displayRows) {
-      if (!row.schoolId) continue;
+    const selectedFilterHeadOfficeId =
+      pendingFilters.headOfficeId !== "All"
+        ? String(pendingFilters.headOfficeId)
+        : isHeadOfficeAdmin
+          ? String(authHeadOfficeId ?? "")
+          : "";
 
-      if (!map.has(row.schoolId)) {
-        map.set(row.schoolId, row.schoolName || `School ${row.schoolId}`);
+    for (const school of Array.isArray(schools) ? schools : []) {
+      if (school?.id == null) continue;
+      if (
+        isHeadOfficeAdmin &&
+        String(school?.headOfficeId ?? "") !== String(authHeadOfficeId ?? "")
+      ) {
+        continue;
       }
+      if (
+        isSuperAdmin &&
+        selectedFilterHeadOfficeId &&
+        String(school?.headOfficeId ?? "") !== selectedFilterHeadOfficeId
+      ) {
+        continue;
+      }
+      map.set(String(school.id), {
+        id: String(school.id),
+        schoolName: school.schoolName || school.name || `School ${school.id}`,
+        headOfficeId: school.headOfficeId ?? null,
+      });
     }
 
     return Array.from(map.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => String(a.label).localeCompare(String(b.label)));
-  }, [displayRows]);
+      .map(([, item]) => item)
+      .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
+  }, [schools, pendingFilters.headOfficeId, isHeadOfficeAdmin, isSuperAdmin, authHeadOfficeId]);
+
+  const headOfficeOptionsForFilter = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (Array.isArray(headOffices) ? headOffices : [])
+            .filter((item) => item?.id != null)
+            .map((item) => [String(item.id), item]),
+        ).values(),
+      )
+        .map((item) => ({
+          id: String(item.id),
+          name: item.name || item.headOfficeName || `Head Office ${item.id}`,
+        }))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [headOffices],
+  );
 
   const designationOptionsForFilter = useMemo(() => {
     const map = new Map();
@@ -469,6 +516,23 @@ const ManageEmployee = ({ onNavigate }) => {
         ? prev.filter((rowId) => rowId !== id)
         : [...prev, id],
     );
+  };
+
+  const handlePendingFilterChange = (e) => {
+    const { id, value } = e.target;
+    if (id === "headOfficeId") {
+      setPendingFilters((prev) => ({
+        ...prev,
+        headOfficeId: value,
+        schoolId: "All",
+      }));
+      return;
+    }
+
+    setPendingFilters((prev) => ({
+      ...prev,
+      [id]: value,
+    }));
   };
 
   const clearEditState = () => {
@@ -939,31 +1003,36 @@ const ManageEmployee = ({ onNavigate }) => {
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="filterEmployeeSchool"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              School
-            </label>
-            <select
-              id="filterEmployeeSchool"
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={(e) =>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <ManualScopeSelectors
+              enabled={isSuperAdmin || isHeadOfficeAdmin || isSchoolAdmin}
+              headOffices={isSuperAdmin ? headOfficeOptionsForFilter : []}
+              schoolOptions={schoolOptionsForFilter}
+              selectedHeadOfficeId={
+                isSuperAdmin
+                  ? pendingFilters.headOfficeId
+                  : isHeadOfficeAdmin
+                    ? String(authHeadOfficeId ?? "")
+                    : ""
+              }
+              onHeadOfficeChange={(value) =>
                 setPendingFilters((prev) => ({
                   ...prev,
-                  school: e.target.value,
+                  headOfficeId: value || "All",
+                  schoolId: "All",
                 }))
               }
-            >
-              <option value="All">All</option>
-              {schoolOptionsForFilter.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) =>
+                setPendingFilters((prev) => ({
+                  ...prev,
+                  schoolId: value || "All",
+                }))
+              }
+              showSchoolSelector
+              showHeadOfficeSelector={isSuperAdmin}
+              compact={false}
+            />
           </div>
 
           <div>
@@ -1067,7 +1136,8 @@ const ManageEmployee = ({ onNavigate }) => {
               onClick={() => {
                 const reset = {
                   name: "",
-                  school: "All",
+                  headOfficeId: "All",
+                  schoolId: "All",
                   designation: "All",
                   email: "",
                   joiningDate: "",

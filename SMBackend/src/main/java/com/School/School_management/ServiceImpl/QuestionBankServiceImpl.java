@@ -4,6 +4,7 @@ import com.School.School_management.Dto.QuestionBankDto;
 import com.School.School_management.Entity.*;
 import com.School.School_management.Repository.*;
 import com.School.School_management.Service.QuestionBankService;
+import java.util.Collections;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,10 +31,12 @@ public class QuestionBankServiceImpl implements QuestionBankService {
     private SubjectRepository subjectRepository;
 
     @Override
-    public Map<String, Object> getQuestionBanksPage(Long schoolId, Long classId, Long subjectId, String questionType, String questionLevel, String status, int page, int size, String search) {
+    public Map<String, Object> getQuestionBanksPage(Long headOfficeId, Long schoolId, Long classId, Long subjectId, String questionType, String questionLevel, String status, int page, int size, String search) {
         List<QuestionBank> all;
         if (schoolId != null) {
             all = questionBankRepository.findBySchool_IdAndDeletedFalseOrderByIdDesc(schoolId);
+        } else if (headOfficeId != null) {
+            all = questionBankRepository.findBySchool_HeadOfficeIdAndDeletedFalseOrderByIdDesc(headOfficeId);
         } else {
             all = questionBankRepository.findAllByDeletedFalseOrderByIdDesc();
         }

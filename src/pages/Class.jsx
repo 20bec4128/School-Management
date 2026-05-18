@@ -22,6 +22,7 @@ const emptyForm = {
 }
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   school: 'Select',
   classTeacher: 'Select',
 }
@@ -183,9 +184,13 @@ const Class = () => {
   }, [loadClasses])
 
   const schoolNameOptions = useMemo(() => {
-    const fromRows = classes.map((r) => r?.schoolName).filter(Boolean)
+    const rows = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    const filtered = pendingFilters.headOfficeId && pendingFilters.headOfficeId !== 'Select'
+      ? rows.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+      : rows
+    const fromRows = filtered.map((r) => r?.schoolName || r?.name).filter(Boolean)
     return Array.from(new Set(fromRows)).sort()
-  }, [classes])
+  }, [schoolsLookup, pendingFilters.headOfficeId])
 
   const teacherFilterOptions = useMemo(() => {
     const fromRows = classes.map((r) => r?.teacherName).filter(Boolean)
@@ -275,7 +280,7 @@ const Class = () => {
           ? String(row.headOfficeId)
           : row?.schoolId != null
             ? getSchoolHeadOfficeId(row.schoolId)
-            : isSuperAdmin
+          : isSuperAdmin
               ? ''
               : resolvedHeadOfficeId,
       schoolId: row?.schoolId != null ? String(row.schoolId) : isSchoolAdmin ? resolvedSchoolId : activeSchoolId ? String(activeSchoolId) : '',
@@ -401,6 +406,61 @@ const Class = () => {
               </option>
             ))}
           </select>
+        </FormField>
+
+        <FormField label="Class Name" required full>
+          <input
+            className="avm-input"
+            type="text"
+            id="className"
+            value={form.className}
+            onChange={handleChange(setter)}
+            placeholder="Enter Class Name"
+            disabled={saving}
+          />
+        </FormField>
+
+        <FormField label="Numeric Name" full>
+          <input
+            className="avm-input"
+            type="text"
+            id="numericName"
+            value={form.numericName}
+            onChange={handleChange(setter)}
+            placeholder="Enter Numeric Name"
+            disabled={saving}
+          />
+        </FormField>
+
+        <FormField label="Class Teacher" full>
+          <select
+            className="avm-select"
+            id="teacherId"
+            value={form.teacherId}
+            onChange={handleChange(setter)}
+            disabled={saving}
+          >
+            <option value="">--Select Teacher--</option>
+            {Array.isArray(_teachersLookup)
+              ? _teachersLookup.map((teacher) => (
+                  <option key={teacher.id} value={String(teacher.id)}>
+                    {teacher.name}
+                  </option>
+                ))
+              : null}
+          </select>
+        </FormField>
+
+        <FormField label="Note" full noIcon>
+          <textarea
+            className="avm-input avm-textarea"
+            id="note"
+            value={form.note}
+            onChange={handleChange(setter)}
+            placeholder="Enter Note"
+            rows={4}
+            disabled={saving}
+          />
         </FormField>
       </div>
     </>
@@ -688,6 +748,28 @@ const Class = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label
+              htmlFor="headOfficeId"
+              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+            >
+              Head Office
+            </label>
+            <select
+              id="headOfficeId"
+              className="form-control form-select"
+              value={pendingFilters.headOfficeId}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, headOfficeId: e.target.value, school: 'Select' }))}
+            >
+              <option value="Select">Select Head Office</option>
+              {headOfficesLookup.map((ho) => (
+                <option key={String(ho.id)} value={String(ho.id)}>
+                  {ho.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ gridColumn: '1 / -1' }}>
             <label
               htmlFor="school"

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -179,7 +180,7 @@ const MeritList = () => {
     () => ['Windsor Park High School', 'Riverside Academy', 'Sunrise Public School'],
     [],
   )
-  const academicYearOptions = useMemo(() => ['2023-2024', '2024-2025', '2025-2026'], [])
+  const academicYearOptions = useAcademicYearOptions()
   const classOptions = useMemo(() => ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'], [])
   const sectionOptions = useMemo(() => ['A', 'B', 'C'], [])
 
