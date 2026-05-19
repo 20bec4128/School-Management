@@ -3,8 +3,12 @@ package com.School.School_management.ServiceImpl;
 import com.School.School_management.Dto.ComplainDto;
 import com.School.School_management.Entity.Complain;
 import com.School.School_management.Entity.ComplainType;
+import com.School.School_management.Entity.ManageTeacher;
+import com.School.School_management.Entity.Student;
 import com.School.School_management.Repository.ComplainRepository;
 import com.School.School_management.Repository.ComplainTypeRepository;
+import com.School.School_management.Repository.StudentRepository;
+import com.School.School_management.Repository.TeacherRepository;
 import com.School.School_management.Service.ComplainService;
 import java.util.Comparator;
 import java.util.List;
@@ -24,10 +28,19 @@ public class ComplainServiceImpl implements ComplainService {
 
     private final ComplainRepository repository;
     private final ComplainTypeRepository complainTypeRepository;
+    private final StudentRepository studentRepository;
+    private final TeacherRepository teacherRepository;
 
-    public ComplainServiceImpl(ComplainRepository repository, ComplainTypeRepository complainTypeRepository) {
+    public ComplainServiceImpl(
+            ComplainRepository repository,
+            ComplainTypeRepository complainTypeRepository,
+            StudentRepository studentRepository,
+            TeacherRepository teacherRepository
+    ) {
         this.repository = repository;
         this.complainTypeRepository = complainTypeRepository;
+        this.studentRepository = studentRepository;
+        this.teacherRepository = teacherRepository;
     }
 
     @Override
@@ -83,7 +96,29 @@ public class ComplainServiceImpl implements ComplainService {
         entity.setSchoolId(dto.getSchoolId());
         entity.setAcademicYear(dto.getAcademicYear());
         entity.setUserType(dto.getUserType());
-        entity.setComplainBy(dto.getComplainBy());
+        Student student = null;
+        if (dto.getStudentId() != null) {
+            student = studentRepository.findById(dto.getStudentId())
+                    .orElseThrow(() -> new RuntimeException("Student not found"));
+        }
+        entity.setStudent(student);
+
+        ManageTeacher teacher = null;
+        if (dto.getTeacherId() != null) {
+            teacher = teacherRepository.findById(dto.getTeacherId())
+                    .orElseThrow(() -> new RuntimeException("Teacher not found"));
+        }
+        entity.setTeacher(teacher);
+
+        String complainBy = normalize(dto.getComplainBy());
+        if (complainBy == null) {
+            if (student != null && student.getName() != null) {
+                complainBy = student.getName();
+            } else if (teacher != null && teacher.getName() != null) {
+                complainBy = teacher.getName();
+            }
+        }
+        entity.setComplainBy(complainBy);
         entity.setComplainDate(dto.getComplainDate());
         entity.setActionDate(dto.getActionDate());
         entity.setComplain(dto.getComplain());
@@ -104,6 +139,24 @@ public class ComplainServiceImpl implements ComplainService {
         dto.setAcademicYear(entity.getAcademicYear());
         dto.setUserType(entity.getUserType());
         dto.setComplainBy(entity.getComplainBy());
+        if (entity.getStudent() != null) {
+            dto.setStudentId(entity.getStudent().getId());
+            dto.setStudentName(entity.getStudent().getName());
+            if (entity.getStudent().getSchoolClass() != null) {
+                dto.setStudentClassId(entity.getStudent().getSchoolClass().getId());
+                String className = entity.getStudent().getSchoolClass().getClassName();
+                if (className == null || className.trim().isEmpty()) {
+                    className = entity.getStudent().getSchoolClass().getNumericName();
+                }
+                dto.setStudentClassName(className);
+            } else {
+                dto.setStudentClassName(entity.getStudent().getClassName());
+            }
+        }
+        if (entity.getTeacher() != null) {
+            dto.setTeacherId(entity.getTeacher().getId());
+            dto.setTeacherName(entity.getTeacher().getName());
+        }
         dto.setComplainDate(entity.getComplainDate());
         dto.setActionDate(entity.getActionDate());
         dto.setComplain(entity.getComplain());
@@ -143,6 +196,8 @@ public class ComplainServiceImpl implements ComplainService {
         }
         String q = search.toLowerCase(Locale.ROOT);
         return containsIgnoreCase(dto.getComplainBy(), q)
+                || containsIgnoreCase(dto.getStudentName(), q)
+                || containsIgnoreCase(dto.getTeacherName(), q)
                 || containsIgnoreCase(dto.getAcademicYear(), q)
                 || containsIgnoreCase(dto.getUserType(), q)
                 || containsIgnoreCase(dto.getComplainTypeName(), q)

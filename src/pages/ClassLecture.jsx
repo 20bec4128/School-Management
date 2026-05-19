@@ -23,6 +23,7 @@ const columnOptions = [
   { key: "class", label: "Class" },
   { key: "section", label: "Section" },
   { key: "subject", label: "Subject" },
+  { key: "lesson", label: "Lesson" },
   { key: "teacher", label: "Teacher" },
   { key: "classLecture", label: "Class Lecture" },
   { key: "academicYear", label: "Academic Year" },
@@ -242,6 +243,7 @@ const ClassLecture = ({ onNavigate }) => {
           row?.class,
           row?.section,
           row?.subject,
+          row?.lesson,
           row?.teacher,
           row?.classLecture,
           row?.academicYear,
@@ -524,6 +526,7 @@ const ClassLecture = ({ onNavigate }) => {
                   {visibleColumns.class && <th scope="col">Class</th>}
                   {visibleColumns.section && <th scope="col">Section</th>}
                   {visibleColumns.subject && <th scope="col">Subject</th>}
+                  {visibleColumns.lesson && <th scope="col">Lesson</th>}
                   {visibleColumns.teacher && <th scope="col">Teacher</th>}
                   {visibleColumns.classLecture && (
                     <th scope="col">Class Lecture</th>
@@ -580,6 +583,7 @@ const ClassLecture = ({ onNavigate }) => {
                         <td className="text-center">{row.section}</td>
                       )}
                       {visibleColumns.subject && <td>{row.subject}</td>}
+                      {visibleColumns.lesson && <td>{row.lesson}</td>}
                       {visibleColumns.teacher && (
                         <td className="fw-medium text-primary-light">
                           {row.teacher}

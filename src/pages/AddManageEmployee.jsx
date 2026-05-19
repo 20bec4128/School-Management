@@ -530,7 +530,6 @@ const AddManageEmployee = ({ onNavigate }) => {
 
   useEffect(() => {
     if (!formSchoolId) {
-      setDesignations([]);
       setRoles([]);
       return;
     }
@@ -539,14 +538,9 @@ const AddManageEmployee = ({ onNavigate }) => {
 
     const run = async () => {
       try {
-        const [designationRows, roleRows] = await Promise.all([
-          fetchDesignations({ schoolId: formSchoolId }),
-          fetchSchoolRoles({ schoolId: formSchoolId }),
-        ]);
+        const roleRows = await fetchSchoolRoles({ schoolId: formSchoolId });
 
         if (cancelled) return;
-
-        setDesignations(Array.isArray(designationRows) ? designationRows : []);
 
         setRoles(
           Array.isArray(roleRows)
@@ -557,7 +551,6 @@ const AddManageEmployee = ({ onNavigate }) => {
         );
       } catch {
         if (cancelled) return;
-        setDesignations([]);
         setRoles([]);
       }
     };
@@ -568,6 +561,37 @@ const AddManageEmployee = ({ onNavigate }) => {
       cancelled = true;
     };
   }, [formSchoolId]);
+
+  useEffect(() => {
+    if (!formSchoolId || !String(form.role || "").trim()) {
+      setDesignations([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const designationRows = await fetchDesignations({
+          schoolId: formSchoolId,
+          role: form.role,
+        });
+
+        if (cancelled) return;
+
+        setDesignations(Array.isArray(designationRows) ? designationRows : []);
+      } catch {
+        if (cancelled) return;
+        setDesignations([]);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.role, formSchoolId]);
 
   useEffect(() => {
     if (!formSchoolId) {
@@ -921,9 +945,17 @@ const AddManageEmployee = ({ onNavigate }) => {
                     designationId: e.target.value,
                   }))
                 }
-                disabled={!formSchoolId}
+                disabled={!formSchoolId || !String(form.role || "").trim()}
               >
-                <option value="">--Select--</option>
+                <option value="">
+                  {!formSchoolId
+                    ? "--Select school first--"
+                    : !String(form.role || "").trim()
+                      ? "--Select role first--"
+                      : designations.length === 0
+                        ? "--No designations found--"
+                        : "--Select--"}
+                </option>
                 {designations.map((item) => (
                   <option key={item.id} value={String(item.id)}>
                     {item.name}
@@ -1524,7 +1556,7 @@ const AddManageEmployee = ({ onNavigate }) => {
               }}
             ></i>
             <span style={{ fontSize: "0.82rem", color: "#92400e" }}>
-              Designations and roles load after a school is selected.
+              Roles load after a school is selected, and designations load after a role is selected.
             </span>
           </div>
         </div>

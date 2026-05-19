@@ -34,6 +34,14 @@ public class Complain {
     private String complainBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id")
+    private Student student;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_id")
+    private ManageTeacher teacher;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "complain_type_id")
     private ComplainType complainType;
 
@@ -74,6 +82,12 @@ public class Complain {
 
     public String getComplainBy() { return complainBy; }
     public void setComplainBy(String complainBy) { this.complainBy = complainBy; }
+
+    public Student getStudent() { return student; }
+    public void setStudent(Student student) { this.student = student; }
+
+    public ManageTeacher getTeacher() { return teacher; }
+    public void setTeacher(ManageTeacher teacher) { this.teacher = teacher; }
 
     public ComplainType getComplainType() { return complainType; }
     public void setComplainType(ComplainType complainType) { this.complainType = complainType; }

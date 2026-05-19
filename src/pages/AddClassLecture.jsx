@@ -12,6 +12,7 @@ import { fetchLessons } from '../apis/lessonsApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import { findSchoolById } from '../utils/schoolScope'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
@@ -33,7 +34,7 @@ const emptyForm = {
   lesson: '',
   teacherId: 'Select',
   lectureType: 'Select',
-  academicYear: '',
+  academicYear: 'Select',
   lectureUrl: '',
   note: '',
 }
@@ -156,7 +157,7 @@ const AddClassLecture = ({ onNavigate }) => {
             ? String(initialEditRow.teacherId)
             : 'Select',
         lectureType: initialEditRow.classLecture || 'Select',
-        academicYear: initialEditRow.academicYear || '',
+        academicYear: initialEditRow.academicYear || 'Select',
         lectureUrl: initialEditRow.lectureUrl || '',
         note: initialEditRow.note || '',
       }
@@ -181,6 +182,11 @@ const AddClassLecture = ({ onNavigate }) => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [activeStep] = useState(0)
+
+  const academicYearOptions = useAcademicYearOptions({
+    schoolId: form.schoolId !== 'Select' ? form.schoolId : '',
+    enabled: form.schoolId !== 'Select',
+  })
 
   useEffect(() => () => sessionStorage.removeItem(EDIT_STORAGE_KEY), [])
 
@@ -270,7 +276,7 @@ const AddClassLecture = ({ onNavigate }) => {
       form.schoolId === 'Select' ||
       form.classId === 'Select' ||
       form.subjectId === 'Select' ||
-      !String(form.academicYear || '').trim()
+      form.academicYear === 'Select'
     ) {
       setLessonsLookup([])
       return
@@ -588,6 +594,7 @@ const AddClassLecture = ({ onNavigate }) => {
       ...prev,
       schoolId: value || 'Select',
       school: selectedSchool?.schoolName || selectedSchool?.name || '',
+      academicYear: 'Select',
       classId: 'Select',
       class: '',
       sectionId: 'Select',
@@ -692,11 +699,10 @@ const AddClassLecture = ({ onNavigate }) => {
     if (form.classId === 'Select') return 'Class is required.'
     if (form.sectionId === 'Select') return 'Section is required.'
     if (form.subjectId === 'Select') return 'Subject is required.'
+    if (form.academicYear === 'Select') return 'Academic year is required.'
     if (form.lessonId === 'Select') return 'Lesson is required.'
     if (form.teacherId === 'Select') return 'Teacher is required.'
     if (form.lectureType === 'Select') return 'Lecture type is required.'
-    if (!String(form.academicYear || '').trim())
-      return 'Academic year is required.'
 
     return ''
   }
@@ -711,7 +717,7 @@ const AddClassLecture = ({ onNavigate }) => {
     lesson: form.lesson || '',
     teacherId: form.teacherId !== 'Select' ? Number(form.teacherId) : null,
     classLecture: form.lectureType !== 'Select' ? form.lectureType : '',
-    academicYear: form.academicYear || '',
+    academicYear: form.academicYear !== 'Select' ? form.academicYear : '',
     lectureUrl: form.lectureUrl || '',
     note: form.note || '',
   })
@@ -873,9 +879,8 @@ const AddClassLecture = ({ onNavigate }) => {
           </FormField>
 
           <FormField label="Academic Year" required>
-            <input
-              type="text"
-              className="form-control avm-input ps-44"
+            <select
+              className="form-select avm-input ps-44"
               value={form.academicYear}
               onChange={(e) =>
                 setForm((prev) => ({
@@ -885,8 +890,15 @@ const AddClassLecture = ({ onNavigate }) => {
                   lesson: '',
                 }))
               }
-              placeholder="2026-2027"
-            />
+              disabled={form.schoolId === 'Select'}
+            >
+              <option value="Select">Select Academic Year</option>
+              {academicYearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
           </FormField>
 
           <FormField label="Lesson" required>
@@ -898,7 +910,7 @@ const AddClassLecture = ({ onNavigate }) => {
                 form.schoolId === 'Select' ||
                 form.classId === 'Select' ||
                 form.subjectId === 'Select' ||
-                !String(form.academicYear || '').trim()
+                form.academicYear === 'Select'
               }
             >
               <option value="Select">Select Lesson</option>

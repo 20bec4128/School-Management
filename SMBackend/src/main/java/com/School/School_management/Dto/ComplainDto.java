@@ -8,6 +8,12 @@ public class ComplainDto {
     private String academicYear;
     private String userType;
     private String complainBy;
+    private Long studentId;
+    private String studentName;
+    private Long studentClassId;
+    private String studentClassName;
+    private Long teacherId;
+    private String teacherName;
     private Long complainTypeId;
     private String complainTypeName;
     private LocalDate complainDate;
@@ -30,6 +36,24 @@ public class ComplainDto {
 
     public String getComplainBy() { return complainBy; }
     public void setComplainBy(String complainBy) { this.complainBy = complainBy; }
+
+    public Long getStudentId() { return studentId; }
+    public void setStudentId(Long studentId) { this.studentId = studentId; }
+
+    public String getStudentName() { return studentName; }
+    public void setStudentName(String studentName) { this.studentName = studentName; }
+
+    public Long getStudentClassId() { return studentClassId; }
+    public void setStudentClassId(Long studentClassId) { this.studentClassId = studentClassId; }
+
+    public String getStudentClassName() { return studentClassName; }
+    public void setStudentClassName(String studentClassName) { this.studentClassName = studentClassName; }
+
+    public Long getTeacherId() { return teacherId; }
+    public void setTeacherId(Long teacherId) { this.teacherId = teacherId; }
+
+    public String getTeacherName() { return teacherName; }
+    public void setTeacherName(String teacherName) { this.teacherName = teacherName; }
 
     public Long getComplainTypeId() { return complainTypeId; }
     public void setComplainTypeId(Long complainTypeId) { this.complainTypeId = complainTypeId; }

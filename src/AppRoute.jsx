@@ -59,6 +59,7 @@ import Candidate from "./pages/Candidate";
 import Donar from "./pages/Donar";
 import Scholarship from "./pages/Scholarship";
 import Guardian from "./pages/Guardian";
+import AddGuardian from "./pages/AddGuardian";
 import Class from "./pages/Class";
 import Section from "./pages/Section";
 import Subject from "./pages/Subject";
@@ -332,6 +333,7 @@ const routeEntries = [
   { pageKey: "donar", component: Donar },
   { pageKey: "scholarship", component: Scholarship },
   { pageKey: "guardian", component: Guardian },
+  { pageKey: "add-guardian", component: AddGuardian },
   { pageKey: "class", component: Class },
   { pageKey: "section", component: Section },
   { pageKey: "subject", component: Subject },

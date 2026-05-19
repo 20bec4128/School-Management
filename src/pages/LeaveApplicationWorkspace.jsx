@@ -9,7 +9,8 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchSchoolRoles } from '../apis/schoolRbacApi'
 import { fetchDesignations } from '../apis/designationsApi'
 import { fetchEmployees } from '../apis/employeesApi'
-import { fetchStudentsPage } from '../apis/studentsApi'
+import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import { fetchClasses } from '../apis/classesApi'
 import { fetchLeaveTypes } from '../apis/leaveTypeApi'
 import {
   createLeaveApplication,
@@ -33,6 +34,7 @@ const createEmptyForm = (defaults = {}) => ({
   headOfficeId: defaults.headOfficeId != null ? String(defaults.headOfficeId) : '',
   schoolId: defaults.schoolId != null ? String(defaults.schoolId) : '',
   applicantType: '',
+  classId: '',
   designationId: '',
   applicantId: '',
   leaveTypeId: '',
@@ -84,6 +86,7 @@ const FIELD_ICONS = {
   'Head Office': 'ri-building-4-line',
   'School Name': 'ri-school-line',
   'Applicant Type': 'ri-user-3-line',
+  Class: 'ri-building-line',
   Designation: 'ri-award-line',
   Applicant: 'ri-user-2-line',
   'Leave Type': 'ri-file-list-3-line',
@@ -150,12 +153,14 @@ const LeaveApplicationWorkspace = ({
   const [schools, setSchools] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [roles, setRoles] = useState([])
+  const [classes, setClasses] = useState([])
   const [designations, setDesignations] = useState([])
   const [applicants, setApplicants] = useState([])
   const [leaveTypes, setLeaveTypes] = useState([])
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -433,7 +438,7 @@ const LeaveApplicationWorkspace = ({
     const seen = new Set()
     for (const item of list) {
       const name = normalizeApplicantType(item?.name)
-      if (!name || name === 'SUPER_ADMIN' || name === 'HEAD_OFFICE_ADMIN') continue
+      if (!name || name === 'SUPER_ADMIN' || name === 'HEAD_OFFICE_ADMIN' || name === 'PARENT') continue
       if (seen.has(name)) continue
       seen.add(name)
       normalized.push({ ...item, name })
@@ -442,6 +447,17 @@ const LeaveApplicationWorkspace = ({
     normalized.sort((a, b) => a.name.localeCompare(b.name))
     setRoles(normalized)
     return normalized
+  }
+
+  const loadClassesForSchool = async (schoolId) => {
+    if (!schoolId) {
+      setClasses([])
+      return []
+    }
+    const data = await fetchClasses({ schoolId: Number(schoolId) }).catch(() => [])
+    const list = Array.isArray(data) ? data : []
+    setClasses(list)
+    return list
   }
 
   const loadDesignationsForForm = async (schoolId, applicantType) => {
@@ -469,15 +485,21 @@ const LeaveApplicationWorkspace = ({
     return fallbackList
   }
 
-  const loadApplicantsForForm = async (schoolId, applicantType, designationId) => {
+  const loadApplicantsForForm = async (schoolId, applicantType, designationId, classId) => {
     const normalizedRoleName = normalizeApplicantType(applicantType)
     if (!schoolId || !normalizedRoleName) {
       setApplicants([])
       return []
     }
     if (normalizedRoleName === 'STUDENT') {
-      const page = await fetchStudentsPage(0, 1000, { schoolId: Number(schoolId) })
-      const list = Array.isArray(page?.content) ? page.content : []
+      if (!classId) {
+        setApplicants([])
+        return []
+      }
+      const list = await fetchStudentsByClassSection({
+        schoolId: Number(schoolId),
+        classId: Number(classId),
+      }).catch(() => [])
       const rowsList = list.map((item) => ({
         id: item?.id,
         name: item?.name || item?.studentName || '',
@@ -581,6 +603,7 @@ const LeaveApplicationWorkspace = ({
 
   const resetFormLookups = () => {
     setRoles([])
+    setClasses([])
     setDesignations([])
     setApplicants([])
     setLeaveTypes([])
@@ -589,12 +612,16 @@ const LeaveApplicationWorkspace = ({
   const syncFormLookups = async (form) => {
     const schoolId = formSchoolId(form)
     const applicantType = normalizeApplicantType(form.applicantType)
+    const classId = form.classId ? String(form.classId) : ''
     const designationId = form.designationId ? String(form.designationId) : ''
     if (!schoolId) {
       resetFormLookups()
       return
     }
-    await loadRolesForSchool(Number(schoolId))
+    await Promise.all([
+      loadRolesForSchool(Number(schoolId)),
+      loadClassesForSchool(Number(schoolId)),
+    ])
     if (!applicantType) {
       setDesignations([])
       setApplicants([])
@@ -602,9 +629,15 @@ const LeaveApplicationWorkspace = ({
       return
     }
     if (applicantType === 'STUDENT') {
+      if (!classId) {
+        setDesignations([])
+        setApplicants([])
+        setLeaveTypes([])
+        return
+      }
       await Promise.all([
         loadDesignationsForForm(Number(schoolId), applicantType),
-        loadApplicantsForForm(Number(schoolId), applicantType, null),
+        loadApplicantsForForm(Number(schoolId), applicantType, null, classId),
         loadLeaveTypesForForm(Number(schoolId), applicantType, null),
       ])
       return
@@ -629,20 +662,26 @@ const LeaveApplicationWorkspace = ({
       if (id === 'headOfficeId') {
         next.schoolId = ''
         next.applicantType = ''
+        next.classId = ''
         next.designationId = ''
         next.applicantId = ''
         next.leaveTypeId = ''
       }
       if (id === 'schoolId') {
         next.applicantType = ''
+        next.classId = ''
         next.designationId = ''
         next.applicantId = ''
         next.leaveTypeId = ''
       }
       if (id === 'applicantType') {
+        next.classId = ''
         next.designationId = ''
         next.applicantId = ''
         next.leaveTypeId = ''
+      }
+      if (id === 'classId') {
+        next.applicantId = ''
       }
       if (id === 'designationId') {
         next.applicantId = ''
@@ -650,7 +689,7 @@ const LeaveApplicationWorkspace = ({
       }
       return next
     })
-    if (id === 'headOfficeId' || id === 'schoolId' || id === 'applicantType' || id === 'designationId') {
+    if (id === 'headOfficeId' || id === 'schoolId' || id === 'applicantType' || id === 'classId' || id === 'designationId') {
       const next = {
         ...form,
         [id]: value,
@@ -658,20 +697,26 @@ const LeaveApplicationWorkspace = ({
       if (id === 'headOfficeId') {
         next.schoolId = ''
         next.applicantType = ''
+        next.classId = ''
         next.designationId = ''
         next.applicantId = ''
         next.leaveTypeId = ''
       }
       if (id === 'schoolId') {
         next.applicantType = ''
+        next.classId = ''
         next.designationId = ''
         next.applicantId = ''
         next.leaveTypeId = ''
       }
       if (id === 'applicantType') {
+        next.classId = ''
         next.designationId = ''
         next.applicantId = ''
         next.leaveTypeId = ''
+      }
+      if (id === 'classId') {
+        next.applicantId = ''
       }
       if (id === 'designationId') {
         next.applicantId = ''
@@ -718,6 +763,7 @@ const LeaveApplicationWorkspace = ({
       headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : '',
       schoolId: row.schoolId != null ? String(row.schoolId) : '',
       applicantType: row.applicantType || '',
+      classId: row.classId != null ? String(row.classId) : '',
       designationId: row.designationId != null ? String(row.designationId) : '',
       applicantId: row.applicantId != null ? String(row.applicantId) : '',
       leaveTypeId: row.leaveTypeId != null ? String(row.leaveTypeId) : '',
@@ -741,6 +787,7 @@ const LeaveApplicationWorkspace = ({
     return {
       headOfficeId: formHeadOfficeId(form) ? Number(formHeadOfficeId(form)) : null,
       schoolId,
+      classId: applicantType === 'STUDENT' && form.classId ? Number(form.classId) : null,
       applicantType,
       designationId,
       applicantId: Number(form.applicantId),
@@ -757,6 +804,7 @@ const LeaveApplicationWorkspace = ({
     if (!schoolId) return 'School is required.'
     const applicantType = normalizeApplicantType(form.applicantType)
     if (!applicantType) return 'Applicant type is required.'
+    if (applicantType === 'STUDENT' && !form.classId) return 'Class is required for student applicant type.'
     if (applicantType !== 'STUDENT' && !form.designationId) return 'Designation is required for non-student applicant types.'
     if (!form.applicantId) return 'Applicant is required.'
     if (!form.leaveTypeId) return 'Leave type is required.'
@@ -775,9 +823,13 @@ const LeaveApplicationWorkspace = ({
     }
     setSaving(true)
     setError('')
+    setSuccess(false)
     try {
       await createLeaveApplication(buildPayload(addForm), addAttachment)
-      setIsAddOpen(false)
+      setSuccess(true)
+      if (showTable) {
+        setIsAddOpen(false)
+      }
       setAddForm(createEmptyForm({
         headOfficeId: isSchoolAdmin || role === 'TEACHER' || role === 'STUDENT' || role === 'PARENT'
           ? authHeadOfficeId
@@ -787,7 +839,13 @@ const LeaveApplicationWorkspace = ({
         schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? scopeSchoolId || '' : '',
       }))
       setAddAttachment(null)
-      await refreshRows()
+      if (!showTable && typeof onNavigate === 'function') {
+        setTimeout(() => {
+          onNavigate('leave-application')
+        }, 1000)
+      } else {
+        await refreshRows()
+      }
     } catch (e) {
       setError(e?.message || 'Failed to create leave application')
     } finally {
@@ -967,6 +1025,7 @@ const LeaveApplicationWorkspace = ({
     if (!schoolId) return 'School is required.'
     const applicantType = normalizeApplicantType(form.applicantType)
     if (!applicantType) return 'Applicant type is required.'
+    if (applicantType === 'STUDENT' && !form.classId) return 'Class is required for student applicant type.'
     if (applicantType !== 'STUDENT' && !form.designationId) return 'Designation is required for non-student applicant types.'
     if (!form.applicantId) return 'Applicant is required.'
     if (!form.leaveTypeId) return 'Leave type is required.'
@@ -977,8 +1036,13 @@ const LeaveApplicationWorkspace = ({
     const attachment = isAdd ? addAttachment : editAttachment
     const schoolId = formSchoolId(form)
     const applicantType = normalizeApplicantType(form.applicantType)
+    const isStudentApplicant = applicantType === 'STUDENT'
     const designationRequired = applicantType && applicantType !== 'STUDENT'
-    const applicantDisabled = !schoolId || !applicantType || (designationRequired && !form.designationId)
+    const applicantDisabled =
+      !schoolId ||
+      !applicantType ||
+      (isStudentApplicant && !form.classId) ||
+      (designationRequired && !form.designationId)
     const leaveTypeDisabled = !schoolId || !applicantType || (designationRequired && !form.designationId)
 
     return (
@@ -1049,6 +1113,27 @@ const LeaveApplicationWorkspace = ({
             </select>
           </FormField>
 
+          {isStudentApplicant ? (
+            <FormField label="Class" required>
+              <select
+                className="avm-select"
+                id="classId"
+                value={form.classId}
+                onChange={handleFormChange(form, setter)}
+                disabled={!schoolId}
+              >
+                <option value="">
+                  {!schoolId ? '--Select School First--' : '--Select Class--'}
+                </option>
+                {classes.map((item) => (
+                  <option key={item.id} value={String(item.id)}>
+                    {item.className || item.numericName || item.name || `Class ${item.id}`}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          ) : null}
+
           {designationRequired ? (
             <FormField label="Designation" required noIcon>
               <div
@@ -1113,7 +1198,7 @@ const LeaveApplicationWorkspace = ({
             </select>
             {!applicantDisabled && applicants.length === 0 ? (
               <small className="text-secondary-light d-block mt-8">
-                No applicants found for the selected role and designation.
+                No applicants found for the selected role and scope.
               </small>
             ) : null}
           </FormField>
@@ -1297,6 +1382,13 @@ const LeaveApplicationWorkspace = ({
           <div className="alert alert-danger d-flex align-items-center gap-10 mb-24 radius-8">
             <i className="ri-error-warning-line text-lg"></i>
             {error}
+          </div>
+        ) : null}
+
+        {success ? (
+          <div className="alert alert-success d-flex align-items-center gap-10 mb-24 radius-8">
+            <i className="ri-checkbox-circle-line text-lg"></i>
+            Leave application created successfully! Redirecting...
           </div>
         ) : null}
 

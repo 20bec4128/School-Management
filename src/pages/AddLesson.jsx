@@ -11,6 +11,8 @@ import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
 import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import "../assets/css/addModalShared.css";
 
+const LESSON_LIST_SCOPE_KEY = "sm_lesson_list_scope";
+
 const FIELD_ICONS = {
   "Head Office": "ri-building-4-line",
   "School Name": "ri-school-line",
@@ -186,6 +188,16 @@ const AddLesson = ({ onNavigate }) => {
         }),
       );
       await Promise.all(promises);
+      try {
+        sessionStorage.setItem(
+          LESSON_LIST_SCOPE_KEY,
+          JSON.stringify({
+            schoolId: String(commonInfo.schoolId || ""),
+          }),
+        );
+      } catch {
+        // ignore
+      }
       onNavigate?.("lesson");
     } catch (err) {
       setSubmitError(err.message || "Failed to save lessons");

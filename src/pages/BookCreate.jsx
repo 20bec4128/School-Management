@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
@@ -114,6 +114,8 @@ const BookCreate = ({ onNavigate }) => {
   const [imagePreview, setImagePreview] = useState(() => resolveMediaUrl(form.bookCover))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const redirectTimerRef = useRef(null)
 
   const selectedSchool = useMemo(
     () => getSchoolById(manualScope.schoolOptions, form.schoolId),
@@ -211,6 +213,7 @@ const BookCreate = ({ onNavigate }) => {
 
     setSaving(true)
     setError('')
+    setSuccess(false)
     try {
       const payload = {
         headOfficeId,
@@ -231,8 +234,14 @@ const BookCreate = ({ onNavigate }) => {
       } else {
         await createBook(payload)
       }
+      setSuccess(true)
       sessionStorage.removeItem('edit-book-row')
-      onNavigate?.('book')
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current)
+      }
+      redirectTimerRef.current = setTimeout(() => {
+        onNavigate?.('book')
+      }, 1000)
     } catch (err) {
       console.error('Failed to save book:', err)
       setError(err?.message || 'Failed to save book')
@@ -240,6 +249,15 @@ const BookCreate = ({ onNavigate }) => {
       setSaving(false)
     }
   }
+
+  useEffect(
+    () => () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current)
+      }
+    },
+    [],
+  )
 
   return (
     <div className="dashboard-main-body">
@@ -264,6 +282,12 @@ const BookCreate = ({ onNavigate }) => {
             }}
           >
             {error ? <div className="full text-danger">{error}</div> : null}
+            {success ? (
+              <div className="full alert alert-success d-flex align-items-center gap-8">
+                <i className="ri-checkbox-circle-line"></i>
+                Book saved successfully! Redirecting...
+              </div>
+            ) : null}
             {isSuperAdmin ? (
               <ManualScopeSelectors
                 enabled

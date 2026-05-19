@@ -3,6 +3,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { createTeacher, updateTeacher } from '../apis/teachersApi'
 import { fetchAllDepartments } from '../apis/departmentsApi'
 import { fetchDesignations } from '../apis/designationsApi'
+import { fetchSchoolRoles } from '../apis/schoolRbacApi'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
@@ -106,6 +107,7 @@ const AddTeacher = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState(0)
   const [schools, setSchools] = useState([])
   const [departments, setDepartments] = useState([])
+  const [roles, setRoles] = useState([])
   const [designations, setDesignations] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -118,6 +120,7 @@ const AddTeacher = ({ onNavigate }) => {
         ...initialEditRow,
         schoolId: initialEditRow.schoolId ? String(initialEditRow.schoolId) : '',
         designationId: initialEditRow.designationId ? String(initialEditRow.designationId) : '',
+        role: String(initialEditRow.role || '').trim().toUpperCase(),
         isViewOnWeb: normalizeYesNo(initialEditRow.isViewOnWeb, emptyForm.isViewOnWeb),
       }
     }
@@ -136,6 +139,47 @@ const AddTeacher = ({ onNavigate }) => {
   }, [])
 
   useEffect(() => {
+    if (!form.schoolId) {
+      setRoles([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadRoles = async () => {
+      try {
+        const data = await fetchSchoolRoles({ schoolId: form.schoolId })
+        if (cancelled) return
+
+        const list = Array.isArray(data) ? data : []
+        const normalized = []
+        const seen = new Set()
+
+        for (const item of list) {
+          const roleName = String(item?.name || '').trim().toUpperCase()
+          if (!roleName) continue
+          if (roleName === 'SUPER_ADMIN' || roleName === 'HEAD_OFFICE_ADMIN') continue
+          if (seen.has(roleName)) continue
+          seen.add(roleName)
+          normalized.push(roleName)
+        }
+
+        if (!seen.has('TEACHER')) normalized.push('TEACHER')
+        normalized.sort((a, b) => a.localeCompare(b))
+        setRoles(normalized)
+      } catch {
+        if (!cancelled) setRoles([])
+      }
+    }
+
+    void loadRoles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [form.schoolId])
+
+  useEffect(() => {
     if (!initialEditRow || !isSuperAdmin) return
 
     const schoolId = initialEditRow.schoolId != null ? String(initialEditRow.schoolId) : ''
@@ -152,11 +196,11 @@ const AddTeacher = ({ onNavigate }) => {
   }, [initialEditRow, isSuperAdmin, schools, manualScope])
 
   useEffect(() => {
-    if (!form.schoolId) { setDesignations([]); return }
-    fetchDesignations({ schoolId: form.schoolId, role: 'TEACHER' })
+    if (!form.schoolId || !form.role) { setDesignations([]); return }
+    fetchDesignations({ schoolId: form.schoolId, role: form.role })
       .then(setDesignations)
       .catch(() => setDesignations([]))
-  }, [form.schoolId])
+  }, [form.role, form.schoolId])
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.schoolOptions
@@ -186,11 +230,13 @@ const AddTeacher = ({ onNavigate }) => {
     if (!form.phone) { setError('Phone is required'); setActiveTab(0); return }
     if (!form.username) { setError('Username is required'); setActiveTab(2); return }
     if (!form.password && !initialEditRow) { setError('Password is required'); setActiveTab(2); return }
+    if (!form.role) { setError('Role is required'); setActiveTab(2); return }
 
     setLoading(true)
     try {
       const payload = {
         ...form,
+        role: String(form.role || '').trim().toUpperCase(),
         schoolId: Number(form.schoolId),
         designationId: form.designationId ? Number(form.designationId) : null,
       }
@@ -226,6 +272,7 @@ const AddTeacher = ({ onNavigate }) => {
       if (!form.username.trim()) return 'Username is required'
       if (!isEditing && !form.password.trim()) return 'Password is required'
       if (!form.designationId) return 'Designation is required'
+      if (!form.role) return 'Role is required'
       if (!form.joiningDate) return 'Joining Date is required'
     }
     return null
@@ -331,15 +378,15 @@ const AddTeacher = ({ onNavigate }) => {
                         headOffices={manualScope.headOffices}
                         schoolOptions={schoolOptions}
                         selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-                        onHeadOfficeChange={(val) => { manualScope.setSelectedHeadOfficeId(val); setForm(p => ({ ...p, schoolId: '', designationId: '' })) }}
+                        onHeadOfficeChange={(val) => { manualScope.setSelectedHeadOfficeId(val); setForm(p => ({ ...p, schoolId: '', designationId: '', role: '' })) }}
                         selectedSchoolId={form.schoolId}
-                        onSchoolChange={(val) => setForm(p => ({ ...p, schoolId: val, designationId: '' }))}
+                        onSchoolChange={(val) => setForm(p => ({ ...p, schoolId: val, designationId: '', role: '' }))}
                         compact
                       />
                     </div>
                   ) : (
                     <FormField label="School Name" required>
-                      <select className="form-control form-select ps-40" id="schoolId" value={form.schoolId} onChange={(e) => setForm(p => ({ ...p, schoolId: e.target.value, designationId: '' }))}>
+                      <select className="form-control form-select ps-40" id="schoolId" value={form.schoolId} onChange={(e) => setForm(p => ({ ...p, schoolId: e.target.value, designationId: '', role: '' }))}>
                         <option value="">--Select School--</option>
                         {schoolOptions.map((s) => (
                           <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
@@ -442,14 +489,33 @@ const AddTeacher = ({ onNavigate }) => {
                       <option>Monthly</option><option>Hourly</option>
                     </select>
                   </FormField>
-                  <FormField label="Designation" required>
-                    <select className="form-control form-select ps-40" id="designationId" value={form.designationId} onChange={handleChange} disabled={!form.schoolId}>
+                  <FormField label="Role" required>
+                    <select
+                      className="form-control form-select ps-40"
+                      id="role"
+                      value={form.role}
+                      onChange={(e) => setForm((p) => ({ ...p, role: e.target.value, designationId: '' }))}
+                      disabled={!form.schoolId}
+                    >
                       <option value="">--Select--</option>
-                      {designations.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+                      {roles.map((roleName) => (
+                        <option key={roleName} value={roleName}>
+                          {roleName.replace(/_/g, ' ')}
+                        </option>
+                      ))}
                     </select>
                   </FormField>
-                  <FormField label="Role" required>
-                    <input type="text" id="role" className="form-control ps-40" value={form.role} onChange={handleChange} />
+                  <FormField label="Designation" required>
+                    <select
+                      className="form-control form-select ps-40"
+                      id="designationId"
+                      value={form.designationId}
+                      onChange={handleChange}
+                      disabled={!form.schoolId || !form.role}
+                    >
+                      <option value="">--Select--</option>
+                      {designations.map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+                    </select>
                   </FormField>
                   <FormField label="Joining Date" required>
                     <input type="date" id="joiningDate" className="form-control ps-40" value={form.joiningDate} onChange={handleChange} />

@@ -20,6 +20,8 @@ import "../assets/css/addModalShared.css";
 import FindEmptyState from "../components/FindEmptyState";
 import ExportDropdown from '../components/ExportDropdown'
 
+const LESSON_LIST_SCOPE_KEY = "sm_lesson_list_scope";
+
 const emptyForm = {
   schoolId: "Select",
   academicYear: "Select",
@@ -101,6 +103,30 @@ const Lesson = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } =
     useColumnVisibility(columnOptions);
 
+  const exportColumns = useMemo(
+    () => [
+      { key: "schoolName", label: "School" },
+      { key: "academicYear", label: "Academic Year" },
+      { key: "className", label: "Class" },
+      { key: "subjectName", label: "Subject" },
+      { key: "lesson", label: "Lesson" },
+      { key: "note", label: "Note" },
+    ],
+    [],
+  );
+
+  const exportVisibleColumns = useMemo(
+    () => ({
+      schoolName: visibleColumns.schoolName ?? visibleColumns.school,
+      academicYear: visibleColumns.academicYear,
+      className: visibleColumns.className,
+      subjectName: visibleColumns.subjectName,
+      lesson: visibleColumns.lesson,
+      note: visibleColumns.note,
+    }),
+    [visibleColumns],
+  );
+
   const roleUpper = String(role || "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
   const isHeadOfficeAdmin = roleUpper === "HEAD_OFFICE_ADMIN";
@@ -153,6 +179,23 @@ const Lesson = ({ onNavigate }) => {
     }
     return "";
   }, [isSuperAdmin, pendingFilters.schoolId, resolvedSchoolId]);
+
+  const initialSchoolId = useMemo(() => {
+    if (activeSchoolId) return String(activeSchoolId);
+    if (authSchoolId) return String(authSchoolId);
+    return "";
+  }, [activeSchoolId, authSchoolId]);
+
+  const savedScopeSchoolId = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(LESSON_LIST_SCOPE_KEY);
+      if (!raw) return "";
+      const parsed = JSON.parse(raw);
+      return parsed?.schoolId ? String(parsed.schoolId) : "";
+    } catch {
+      return "";
+    }
+  }, []);
 
   // --- LOOKUP LOADING ---
   useEffect(() => {
@@ -244,9 +287,16 @@ const Lesson = ({ onNavigate }) => {
   };
 
   // --- ACTIONS ---
-  const handleApplyFilters = async (e) => {
+  const handleApplyFilters = async (e, options = {}) => {
     if (e) e.preventDefault();
+    const { silent = false } = options;
     if (pendingFilters.schoolId === "Select") {
+      if (silent) {
+        setData([]);
+        setFilters(pendingFilters);
+        setHasSearched(false);
+        return;
+      }
       window.alert("Please select a school.");
       return;
     }
@@ -313,10 +363,33 @@ const Lesson = ({ onNavigate }) => {
   };
 
   useEffect(() => {
-    void handleApplyFilters();
+    const scopeSchoolId = savedScopeSchoolId || initialSchoolId;
+
+    if (!scopeSchoolId) {
+      return;
+    }
+
+    const nextFilters = {
+      ...emptyFilters,
+      schoolId: scopeSchoolId,
+    };
+
+    setPendingFilters(nextFilters);
+    setFilters(nextFilters);
+    setHasSearched(true);
+    setLoading(true);
+
+    fetchLessons(nextFilters)
+      .then((result) => setData(result))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+    try {
+      sessionStorage.removeItem(LESSON_LIST_SCOPE_KEY);
+    } catch {
+      // ignore
+    }
     // Load the table once on entry so newly saved lessons show up immediately.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialSchoolId, savedScopeSchoolId]);
 
   const renderCell = (row, column) => {
     const value = row[column.key];
@@ -344,13 +417,18 @@ const Lesson = ({ onNavigate }) => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              {/* Export Dropdown */}
-              <ExportDropdown onExportExcel={()=>{}} />
+              <ExportDropdown
+                rows={filtered}
+                columns={exportColumns}
+                visibleColumns={exportVisibleColumns}
+                fileName="Lesson"
+                pdfTitle="Lesson Report"
+              />
 
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className={`px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white${hasSearched ? " btn-tbl-active" : ""}`}
                   data-bs-toggle="dropdown"
                 >
                   <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
@@ -377,7 +455,7 @@ const Lesson = ({ onNavigate }) => {
 
               <button
                 type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className={`px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white${visibleColumnCount < columnOptions.length ? " btn-tbl-active" : ""}`}
                 onClick={() => setIsFindSidebarOpen(true)}
               >
                 <span className="text-secondary-light text-sm">Filter</span>
@@ -441,6 +519,8 @@ const Lesson = ({ onNavigate }) => {
                     >
                       <FindEmptyState
                         title="Lesson"
+                        description="Use the Find button to select School, Academic Year, Class and Subject to load lessons."
+                        buttonLabel="Find Lessons"
                         onFind={() => setIsFindSidebarOpen(true)}
                       />
                     </td>
