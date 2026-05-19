@@ -13,6 +13,7 @@ import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 
 const EDIT_STORAGE_KEY = 'edit-topic-row'
+const TOPIC_LIST_SCOPE_KEY = 'sm_topic_list_scope'
 
 const emptyForm = {
   schoolId: 'Select',
@@ -112,6 +113,13 @@ const AddTopic = ({ onNavigate }) => {
       ...emptyForm,
       schoolId: fixedSchoolId ? String(fixedSchoolId) : 'Select',
     }
+  })
+
+  const [topicRows, setTopicRows] = useState(() => {
+    if (initialEditRow) {
+      return [{ topic: initialEditRow.topic || '', note: initialEditRow.note || '' }]
+    }
+    return [{ topic: '', note: '' }]
   })
 
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -231,13 +239,32 @@ const AddTopic = ({ onNavigate }) => {
     })
   }
 
+  const handleTopicRowChange = (index, field, value) => {
+    setTopicRows((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }
+
+  const addMoreTopic = () => {
+    setTopicRows((prev) => [...prev, { topic: '', note: '' }])
+  }
+
+  const removeTopicRow = (index) => {
+    setTopicRows((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((_, i) => i !== index)
+    })
+  }
+
   const validate = () => {
     if (form.schoolId === 'Select') return 'School is required.'
     if (form.academicYear === 'Select') return 'Academic Year is required.'
     if (form.classId === 'Select') return 'Class is required.'
     if (form.subjectId === 'Select') return 'Subject is required.'
     if (form.lessonId === 'Select') return 'Lesson is required.'
-    if (!String(form.topic || '').trim()) return 'Topic is required.'
+    if (topicRows.some((row) => !String(row.topic || '').trim())) return 'Topic is required.'
     return ''
   }
 
@@ -250,19 +277,33 @@ const AddTopic = ({ onNavigate }) => {
     setSaving(true)
     setError('')
     try {
-      const payload = {
+      const topicPayloads = topicRows.map((row) => ({
         schoolId: Number(form.schoolId),
         academicYear: form.academicYear,
         classId: Number(form.classId),
         subjectId: Number(form.subjectId),
         lessonId: Number(form.lessonId),
-        topic: form.topic,
-        note: form.note || null,
-      }
+        topic: row.topic,
+        note: row.note || null,
+      }))
       if (editingId) {
-        await updateTopic(editingId, payload)
+        await updateTopic(editingId, topicPayloads[0])
       } else {
-        await createTopic(payload)
+        await Promise.all(topicPayloads.map((payload) => createTopic(payload)))
+      }
+      try {
+        sessionStorage.setItem(
+          TOPIC_LIST_SCOPE_KEY,
+          JSON.stringify({
+            schoolId: String(form.schoolId || ''),
+            academicYear: form.academicYear,
+            classId: String(form.classId || 'Select'),
+            subjectId: String(form.subjectId || 'Select'),
+            lessonId: String(form.lessonId || 'Select'),
+          }),
+        )
+      } catch {
+        // ignore
       }
       setSuccess(true)
       setTimeout(() => onNavigate?.('topic'), 900)
@@ -428,24 +469,68 @@ const AddTopic = ({ onNavigate }) => {
                 </select>
               </FormField>
 
-              <FormField label="Topic" required full>
-                <input
-                  className="form-control avm-input ps-44"
-                  value={form.topic}
-                  onChange={(e) => handleChange('topic', e.target.value)}
-                  placeholder="Enter topic name"
-                />
-              </FormField>
+              <div className="mt-32 pt-24 border-top w-100 full">
+                <div className="d-flex justify-content-between align-items-center mb-16">
+                  <p className="avm-section-title mb-0">Topic Details</p>
+                  {!editingId && (
+                    <button
+                      type="button"
+                      className="btn btn-primary-600 btn-sm d-flex align-items-center gap-8"
+                      onClick={addMoreTopic}
+                    >
+                      <i className="ri-add-line"></i> Add More
+                    </button>
+                  )}
+                </div>
 
-              <FormField label="Note" full>
-                <textarea
-                  className="form-control avm-input ps-44"
-                  value={form.note}
-                  onChange={(e) => handleChange('note', e.target.value)}
-                  rows={3}
-                  placeholder="Optional note"
-                />
-              </FormField>
+                <div className="lessons-container">
+                  {topicRows.map((row, index) => (
+                    <div
+                      key={index}
+                      className="lesson-row p-20 border rounded-3 mb-20 position-relative bg-light-50"
+                    >
+                      <div className="d-flex justify-content-between align-items-center mb-16">
+                        <h6 className="mb-0 text-sm fw-bold text-primary-light">
+                          Topic #{index + 1}
+                        </h6>
+                        {!editingId && topicRows.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger border-0 d-flex align-items-center gap-4"
+                            onClick={() => removeTopicRow(index)}
+                          >
+                            <i className="ri-delete-bin-line"></i> Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="row g-20">
+                        <div className="col-12 avm-grid">
+                          <FormField label="Topic" required full>
+                            <input
+                              className="form-control avm-input ps-44"
+                              value={row.topic}
+                              onChange={(e) => handleTopicRowChange(index, 'topic', e.target.value)}
+                              placeholder="Enter topic name"
+                              required
+                            />
+                          </FormField>
+
+                          <FormField label="Note" full>
+                            <textarea
+                              className="form-control avm-input ps-44"
+                              value={row.note}
+                              onChange={(e) => handleTopicRowChange(index, 'note', e.target.value)}
+                              rows={3}
+                              placeholder="Optional note"
+                            />
+                          </FormField>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

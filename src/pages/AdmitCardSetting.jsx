@@ -1,70 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
-import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
-  createAdmitCardSetting,
   deleteAdmitCardSetting,
   fetchAdmitCardSettingsPage,
-  updateAdmitCardSetting,
 } from '../apis/admitCardSettingsApi'
 import '../assets/css/addModalShared.css'
 
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  borderColor: '#e01ab5',
-  topBackground: '#3b82f6',
-  cardSchoolName: '',
-  schoolNameFontSize: '',
-  schoolNameColor: '#1f2937',
-  schoolAddress: '',
-  schoolAddressColor: '#374151',
-  admitTitleFontSize: '',
-  admitTitleColor: '#e01ab5',
-  admitTitleBackground: '#3b82f6',
-  titleFontSize: '',
-  titleColor: '#e01ab5',
-  valueFontSize: '',
-  valueColor: '#e01ab5',
-  examTitleFontSize: '',
-  examTitleColor: '#e01ab5',
-  subjectFontSize: '',
-  subjectColor: '#e01ab5',
-  bottomSignature: '',
-  signatureBackground: '#1e3a5f',
-  signatureColor: '#ffffff',
-  signatureAlign: '',
-  cardLogoUrl: '',
-}
+const EDIT_STORAGE_KEY = 'edit-admit-card-setting-row'
 
 const emptyFilters = {
   headOfficeId: '',
   schoolId: '',
-}
-
-const STEPS = ['Card Style', 'Text & Title Style', 'Signature & Logo']
-
-const FIELD_ICONS = {
-  'Head Office': 'ri-building-4-line',
-  'School Name': 'ri-school-line',
-  'Card School Name': 'ri-font-size',
-  'School Name Font Size': 'ri-text-spacing',
-  'School Address': 'ri-map-pin-2-line',
-  'Admit Title Font Size': 'ri-article-line',
-  'Title Font Size': 'ri-heading',
-  'Value Font Size': 'ri-list-check',
-  'Exam Title Font Size': 'ri-file-list-3-line',
-  'Subject Font Size': 'ri-book-open-line',
-  'Bottom Signature': 'ri-pen-nib-line',
 }
 
 const columnOptions = [
@@ -115,7 +69,6 @@ const AdmitCardPreview = ({ row, schoolName, headOfficeName }) => {
   const signatureBackground = row?.signatureBackground || borderColor
   const signatureColor = row?.signatureColor || '#ffffff'
   const align = row?.signatureAlign || 'center'
-
   const admitTitleBackground = row?.admitTitleBackground || topBackground
   const admitTitleColor = row?.admitTitleColor || '#ffffff'
 
@@ -197,7 +150,7 @@ const AdmitCardPreview = ({ row, schoolName, headOfficeName }) => {
 
           <div className="d-flex align-items-start justify-content-between gap-12 mb-14">
             <div>
-              <div className="text-secondary-light" style={{ fontSize: 12, letterSpacing: '0.08em' }}>School</div>
+              <div className="text-secondary-light" style={{ fontSize: 12 }}>School</div>
               <div className="fw-semibold text-primary-light" style={{ fontSize: 18, lineHeight: 1.2 }}>
                 {getSafeText(row?.cardSchoolName || schoolName, schoolName || 'School Name')}
               </div>
@@ -256,83 +209,11 @@ const AdmitCardPreview = ({ row, schoolName, headOfficeName }) => {
   )
 }
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required ? <span className="req"> *</span> : null}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
-const ColorField = ({ label, required, id, value, onChange, full = false }) => (
-  <div className={`avm-field${full ? ' full' : ''}`}>
-    <label className="avm-label">
-      {label}
-      {required ? <span className="req"> *</span> : null}
-    </label>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-      <input
-        type="color"
-        id={id}
-        value={value}
-        onChange={onChange}
-        style={{
-          width: 38,
-          height: 38,
-          border: '1px solid #d0d5dd',
-          borderRadius: '0.5rem',
-          padding: 2,
-          cursor: 'pointer',
-          background: '#fff',
-          flexShrink: 0,
-        }}
-      />
-      <input
-        type="text"
-        className="avm-input"
-        value={value}
-        onChange={onChange}
-        id={id}
-        placeholder="#000000"
-        style={{ flex: 1 }}
-      />
-    </div>
-  </div>
-)
-
 const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
-const AdmitCardSetting = () => {
+const AdmitCardSetting = ({ onNavigate }) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
-  const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
@@ -351,23 +232,12 @@ const AdmitCardSetting = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
   const [previewRow, setPreviewRow] = useState(null)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [addLogoPreview, setAddLogoPreview] = useState('')
-  const [editLogoPreview, setEditLogoPreview] = useState('')
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-
-  const addLogoRef = useRef(null)
-  const editLogoRef = useRef(null)
 
   const resolveSchoolById = useCallback((schoolId) => getSchoolById(allSchools, schoolId), [allSchools])
 
@@ -384,38 +254,6 @@ const AdmitCardSetting = () => {
     (schoolId) => resolveSchoolById(schoolId)?.schoolName || (String(schoolId ?? '') === String(authSchoolId ?? '') ? authSchoolName || '' : ''),
     [authSchoolId, authSchoolName, resolveSchoolById],
   )
-
-  const schoolOptions = useMemo(() => {
-    const rowsList = Array.isArray(allSchools) ? allSchools : []
-    if (isSuperAdmin) {
-      const headOfficeId = String(addForm.headOfficeId || '').trim()
-      if (!headOfficeId) return []
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === headOfficeId)
-    }
-    if (isHeadOfficeAdmin) {
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    }
-    if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
-    }
-    return rowsList
-  }, [allSchools, addForm.headOfficeId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
-
-  const editSchoolOptions = useMemo(() => {
-    const rowsList = Array.isArray(allSchools) ? allSchools : []
-    if (isSuperAdmin) {
-      const headOfficeId = String(editForm.headOfficeId || '').trim()
-      if (!headOfficeId) return []
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === headOfficeId)
-    }
-    if (isHeadOfficeAdmin) {
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    }
-    if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
-    }
-    return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, editForm.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
 
   const filterSchoolOptions = useMemo(() => {
     const rowsList = Array.isArray(allSchools) ? allSchools : []
@@ -489,184 +327,27 @@ const AdmitCardSetting = () => {
   }, [loadAdmitCardSettings, status, token])
 
   useEffect(() => {
-    if (!isSuperAdmin) return
-    if (!activeSchoolId) return
-    const school = getSchoolById(allSchools, activeSchoolId)
-    if (school?.headOfficeId == null) return
-    setAddForm((prev) => ({
-      ...prev,
-      headOfficeId: String(school.headOfficeId),
-      schoolId: String(activeSchoolId),
-    }))
-  }, [activeSchoolId, allSchools, isSuperAdmin])
-
-  useEffect(() => {
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
-      setAddForm((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
-      setEditForm((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
-    }
-  }, [authHeadOfficeId, isHeadOfficeAdmin])
-
-  useEffect(() => {
-    if (!isSchoolAdmin || authSchoolId == null) return
-    const school = getSchoolById(allSchools, authSchoolId)
-    setAddForm((prev) => ({
-      ...prev,
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
-      schoolId: String(authSchoolId),
-    }))
-    setEditForm((prev) => ({
-      ...prev,
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
-      schoolId: String(authSchoolId),
-    }))
-  }, [allSchools, authSchoolId, isSchoolAdmin])
-
-  useEffect(() => {
     if (currentPage > 1 && totalPages > 0 && currentPage > totalPages) {
       setCurrentPage(totalPages)
     }
   }, [currentPage, totalPages])
 
-  const buildPayload = (form) => ({
-    headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    borderColor: String(form.borderColor || '').trim(),
-    topBackground: String(form.topBackground || '').trim(),
-    cardSchoolName: String(form.cardSchoolName || '').trim(),
-    schoolNameFontSize: String(form.schoolNameFontSize || '').trim(),
-    schoolNameColor: String(form.schoolNameColor || '').trim(),
-    schoolAddress: String(form.schoolAddress || '').trim(),
-    schoolAddressColor: String(form.schoolAddressColor || '').trim(),
-    admitTitleFontSize: String(form.admitTitleFontSize || '').trim(),
-    admitTitleColor: String(form.admitTitleColor || '').trim(),
-    admitTitleBackground: String(form.admitTitleBackground || '').trim(),
-    titleFontSize: String(form.titleFontSize || '').trim(),
-    titleColor: String(form.titleColor || '').trim(),
-    valueFontSize: String(form.valueFontSize || '').trim(),
-    valueColor: String(form.valueColor || '').trim(),
-    examTitleFontSize: String(form.examTitleFontSize || '').trim(),
-    examTitleColor: String(form.examTitleColor || '').trim(),
-    subjectFontSize: String(form.subjectFontSize || '').trim(),
-    subjectColor: String(form.subjectColor || '').trim(),
-    bottomSignature: String(form.bottomSignature || '').trim(),
-    signatureBackground: String(form.signatureBackground || '').trim(),
-    signatureColor: String(form.signatureColor || '').trim(),
-    signatureAlign: String(form.signatureAlign || '').trim(),
-    cardLogoUrl: String(form.cardLogoUrl || '').trim(),
-  })
-
-  const syncScopeSelection = (headOfficeId, schoolId) => {
-    manualScope.setSelectedScope(headOfficeId, schoolId)
-  }
-
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
-      base.headOfficeId = String(authHeadOfficeId)
-    }
-    if (isSchoolAdmin && authSchoolId != null) {
-      const school = getSchoolById(allSchools, authSchoolId)
-      base.schoolId = String(authSchoolId)
-      base.headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
-    }
-    if (isSuperAdmin && manualScope.selectedHeadOfficeId) {
-      base.headOfficeId = String(manualScope.selectedHeadOfficeId)
-      base.schoolId = String(manualScope.selectedSchoolId || '')
-    }
-    setAddForm(base)
-    setAddLogoPreview(base.cardLogoUrl || '')
-    setAddStep(0)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    onNavigate('admit-card-setting-create')
   }
 
   const openEdit = (row) => {
-    const school = getSchoolById(allSchools, row?.schoolId)
-    const headOfficeId = row?.headOfficeId != null ? String(row.headOfficeId) : school?.headOfficeId != null ? String(school.headOfficeId) : ''
-    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
-    const nextForm = {
-      id: row?.id != null ? String(row.id) : '',
-      headOfficeId,
-      schoolId,
-      borderColor: row?.borderColor || '#e01ab5',
-      topBackground: row?.topBackground || '#3b82f6',
-      cardSchoolName: row?.cardSchoolName || '',
-      schoolNameFontSize: row?.schoolNameFontSize || '',
-      schoolNameColor: row?.schoolNameColor || '#1f2937',
-      schoolAddress: row?.schoolAddress || '',
-      schoolAddressColor: row?.schoolAddressColor || '#374151',
-      admitTitleFontSize: row?.admitTitleFontSize || '',
-      admitTitleColor: row?.admitTitleColor || '#e01ab5',
-      admitTitleBackground: row?.admitTitleBackground || row?.topBackground || '#3b82f6',
-      titleFontSize: row?.titleFontSize || '',
-      titleColor: row?.titleColor || '#e01ab5',
-      valueFontSize: row?.valueFontSize || '',
-      valueColor: row?.valueColor || '#e01ab5',
-      examTitleFontSize: row?.examTitleFontSize || '',
-      examTitleColor: row?.examTitleColor || '#e01ab5',
-      subjectFontSize: row?.subjectFontSize || '',
-      subjectColor: row?.subjectColor || '#e01ab5',
-      bottomSignature: row?.bottomSignature || '',
-      signatureBackground: row?.signatureBackground || '#1e3a5f',
-      signatureColor: row?.signatureColor || '#ffffff',
-      signatureAlign: row?.signatureAlign || '',
-      cardLogoUrl: row?.cardLogoUrl || '',
-    }
-    setEditForm(nextForm)
-    setEditLogoPreview(nextForm.cardLogoUrl || '')
-    setEditStep(0)
-    setIsEditOpen(true)
-    if (isSuperAdmin) {
-      syncScopeSelection(nextForm.headOfficeId, nextForm.schoolId)
-    }
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    } catch {}
+    onNavigate('admit-card-setting-create')
   }
 
   const openPreview = (row) => {
     setPreviewRow(row)
-  }
-
-  const handleSaveAdd = async () => {
-    const payload = buildPayload(addForm)
-    if (!payload.headOfficeId || !payload.schoolId || !payload.borderColor || !payload.topBackground || !payload.bottomSignature || !payload.signatureBackground) {
-      setError('Head office, school, border color, top background, bottom signature, and signature background are required.')
-      return
-    }
-
-    setSaving(true)
-    setError('')
-    try {
-      await createAdmitCardSetting(payload)
-      setIsAddOpen(false)
-      setAddForm(emptyForm)
-      setAddLogoPreview('')
-      await loadAdmitCardSettings()
-    } catch (err) {
-      console.error('Failed to create admit card setting:', err)
-      setError(err?.message || 'Failed to create admit card setting')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSaveEdit = async () => {
-    const payload = buildPayload(editForm)
-    if (!payload.headOfficeId || !payload.schoolId || !payload.borderColor || !payload.topBackground || !payload.bottomSignature || !payload.signatureBackground) {
-      setError('Head office, school, border color, top background, bottom signature, and signature background are required.')
-      return
-    }
-
-    setSaving(true)
-    setError('')
-    try {
-      await updateAdmitCardSetting(editForm.id, payload)
-      setIsEditOpen(false)
-      await loadAdmitCardSettings()
-    } catch (err) {
-      console.error('Failed to update admit card setting:', err)
-      setError(err?.message || 'Failed to update admit card setting')
-    } finally {
-      setSaving(false)
-    }
   }
 
   const handleDelete = async (row) => {
@@ -719,29 +400,6 @@ const AdmitCardSetting = () => {
     [resolveHeadOfficeName, resolveSchoolName],
   )
 
-  const handleLogoChange = (setter, setPreview) => (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const value = String(event.target?.result || '')
-      setter((prev) => ({ ...prev, cardLogoUrl: value }))
-      setPreview(value)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const clearLogo = (setter, setPreview, ref) => {
-    setter((prev) => ({ ...prev, cardLogoUrl: '' }))
-    setPreview('')
-    if (ref.current) ref.current.value = ''
-  }
-
-  const handleFieldChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
   const pageCount = Math.max(1, totalPages)
@@ -754,284 +412,13 @@ const AdmitCardSetting = () => {
     return pages
   }
 
-  const renderForm = (form, setter, logoPreview, setLogoPreview, logoRef, step, schoolList) => (
-    <>
-      <p className="avm-section-title">{STEPS[step]}</p>
-      <div className="avm-grid">
-        {step === 0 ? (
-          <>
-            {isSuperAdmin ? (
-              <ManualScopeSelectors
-                enabled
-                headOffices={manualScope.headOffices}
-                schoolOptions={schoolOptions}
-                selectedHeadOfficeId={form.headOfficeId}
-                onHeadOfficeChange={(value) => {
-                  setter((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
-                  syncScopeSelection(value, '')
-                }}
-                selectedSchoolId={form.schoolId}
-                onSchoolChange={(value) => {
-                  const selectedSchool = getSchoolById(allSchools, value)
-                  setter((prev) => ({
-                    ...prev,
-                    schoolId: value,
-                    headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
-                  }))
-                  syncScopeSelection(selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : form.headOfficeId, value)
-                }}
-                schoolLabel="School"
-              />
-            ) : (
-              <>
-                {isHeadOfficeAdmin ? (
-                  <FormField label="Head Office" full>
-                    <input className="avm-input" value={authHeadOfficeName || String(authHeadOfficeId || '')} disabled />
-                  </FormField>
-                ) : null}
-
-                <FormField label="School Name" required full>
-                  <select
-                    className="avm-select"
-                    id="schoolId"
-                    value={form.schoolId}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      const selectedSchool = getSchoolById(schoolList, value)
-                      setter((prev) => ({
-                        ...prev,
-                        schoolId: value,
-                        headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
-                      }))
-                    }}
-                  >
-                    <option value="">--Select School--</option>
-                    {schoolList.map((school) => (
-                      <option key={String(school.id)} value={String(school.id)}>
-                        {school.schoolName}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-              </>
-            )}
-
-            <ColorField label="Border Color" id="borderColor" value={form.borderColor} onChange={handleFieldChange(setter)} />
-            <ColorField label="Top Background" id="topBackground" value={form.topBackground} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Card School Name" full>
-              <input
-                type="text"
-                className="avm-input"
-                id="cardSchoolName"
-                placeholder="Card School Name"
-                value={form.cardSchoolName}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="School Name Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="schoolNameFontSize"
-                placeholder="e.g. 14"
-                value={form.schoolNameFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="School Name Color" id="schoolNameColor" value={form.schoolNameColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="School Address" full>
-              <input
-                type="text"
-                className="avm-input"
-                id="schoolAddress"
-                placeholder="School Address"
-                value={form.schoolAddress}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="School Address Color" id="schoolAddressColor" value={form.schoolAddressColor} onChange={handleFieldChange(setter)} />
-          </>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <FormField label="Admit Title Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="admitTitleFontSize"
-                placeholder="e.g. 16"
-                value={form.admitTitleFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="Admit Title Color" id="admitTitleColor" value={form.admitTitleColor} onChange={handleFieldChange(setter)} />
-            <ColorField label="Admit Title Background" id="admitTitleBackground" value={form.admitTitleBackground} onChange={handleFieldChange(setter)} full />
-
-            <FormField label="Title Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="titleFontSize"
-                placeholder="e.g. 13"
-                value={form.titleFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="Title Color" id="titleColor" value={form.titleColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Value Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="valueFontSize"
-                placeholder="e.g. 13"
-                value={form.valueFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="Value Color" id="valueColor" value={form.valueColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Exam Title Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="examTitleFontSize"
-                placeholder="e.g. 14"
-                value={form.examTitleFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="Exam Title Color" id="examTitleColor" value={form.examTitleColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Subject Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="subjectFontSize"
-                placeholder="e.g. 12"
-                value={form.subjectFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-            <ColorField label="Subject Color" id="subjectColor" value={form.subjectColor} onChange={handleFieldChange(setter)} />
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <>
-            <FormField label="Bottom Signature" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="bottomSignature"
-                placeholder="Bottom Signature"
-                value={form.bottomSignature}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="Signature Background" id="signatureBackground" value={form.signatureBackground} onChange={handleFieldChange(setter)} />
-            <ColorField label="Signature Color" id="signatureColor" value={form.signatureColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Signature Align" noIcon>
-              <select className="avm-select" id="signatureAlign" value={form.signatureAlign} onChange={handleFieldChange(setter)}>
-                <option value="">--Select--</option>
-                <option value="left">Left</option>
-                <option value="center">Center</option>
-                <option value="right">Right</option>
-              </select>
-            </FormField>
-
-            <div className="avm-field full">
-              <label className="avm-label">Card Logo</label>
-              <div
-                style={{
-                  border: '2px dashed #d0d5dd',
-                  borderRadius: '0.75rem',
-                  padding: '1.25rem',
-                  background: '#f8fafc',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  cursor: 'pointer',
-                }}
-                onClick={() => logoRef.current?.click()}
-              >
-                {logoPreview ? (
-                  <img
-                    src={logoPreview}
-                    alt="Card Logo Preview"
-                    style={{
-                      maxWidth: 100,
-                      maxHeight: 110,
-                      objectFit: 'contain',
-                      borderRadius: 6,
-                      border: '1px solid #e0e0e0',
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: '50%',
-                      background: '#e8edf4',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <i className="ri-image-add-line" style={{ fontSize: '1.6rem', color: '#45597a' }}></i>
-                  </div>
-                )}
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#45597a' }}>
-                    {logoPreview ? 'Change Logo' : 'Upload Card Logo'}
-                  </p>
-                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                    Dimension:- Max-W: 100px, Max-H: 110px
-                  </p>
-                  <p style={{ margin: '0.1rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                    Image file format: .jpg, .jpeg, .png or .gif
-                  </p>
-                </div>
-                <input
-                  ref={logoRef}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.gif"
-                  style={{ display: 'none' }}
-                  onChange={handleLogoChange(setter, setLogoPreview)}
-                />
-              </div>
-              {logoPreview ? (
-                <button
-                  type="button"
-                  className="avm-btn light sm"
-                  style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}
-                  onClick={() => clearLogo(setter, setLogoPreview, logoRef)}
-                >
-                  <i className="ri-delete-bin-line"></i> Remove
-                </button>
-              ) : null}
-            </div>
-          </>
-        ) : null}
-      </div>
-    </>
-  )
-
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Admit Card Setting</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0" onClick={() => onNavigate('dashboard')}>
               Dashboard
             </button>
             <span className="text-secondary-light"> / Admit Card Setting</span>
@@ -1102,7 +489,7 @@ const AdmitCardSetting = () => {
                   setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light bg-white"
               />
             </div>
 
@@ -1164,7 +551,7 @@ const AdmitCardSetting = () => {
                         <div className="d-flex align-items-center gap-10">
                           <button
                             type="button"
-                            className="bg-primary-focus bg-hover-primary-200 text-primary-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-primary-focus bg-hover-primary-200 text-primary-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             onClick={() => openPreview(row)}
                             title="Preview"
                             aria-label="Preview admit card"
@@ -1173,7 +560,7 @@ const AdmitCardSetting = () => {
                           </button>
                           <button
                             type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             onClick={() => openEdit(row)}
                             title="Edit"
                           >
@@ -1181,9 +568,10 @@ const AdmitCardSetting = () => {
                           </button>
                           <button
                             type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             title="Delete"
                             onClick={() => handleDelete(row)}
+                            disabled={saving}
                           >
                             <i className="ri-delete-bin-line"></i>
                           </button>
@@ -1256,38 +644,6 @@ const AdmitCardSetting = () => {
           </div>
         </div>
       ) : null}
-
-      <WizardPopup
-        modalWidth="760px"
-        open={isAddOpen}
-        title="Add Admit Card Setting"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleSaveAdd}
-        submitLabel="Save"
-        saving={saving}
-      >
-        {renderForm(addForm, setAddForm, addLogoPreview, setAddLogoPreview, addLogoRef, addStep, schoolOptions)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="760px"
-        open={isEditOpen}
-        title="Edit Admit Card Setting"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleSaveEdit}
-        submitLabel="Update"
-        saving={saving}
-      >
-        {renderForm(editForm, setEditForm, editLogoPreview, setEditLogoPreview, editLogoRef, editStep, editSchoolOptions)}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}

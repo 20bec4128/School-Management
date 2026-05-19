@@ -18,6 +18,7 @@ const STEPS = ['Grade Information']
 
 const emptyForm = {
   id: null,
+  headOfficeId: '',
   schoolId: '',
   gradeName: '',
   gradePoint: '',
@@ -33,6 +34,7 @@ const emptyFilters = {
 }
 
 const FIELD_ICONS = {
+  'Head Office': 'ri-building-4-line',
   'School Name': 'ri-school-line',
   'Grade Name': 'ri-award-line',
   'Grade Point': 'ri-star-line',
@@ -144,12 +146,12 @@ const ExamGrade = () => {
 
   const schoolOptions = useMemo(() => {
     const list = Array.isArray(schools) ? schools : []
-    if (isSuperAdmin) return list
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
     if (isHeadOfficeAdmin) {
       return list.filter((s) => String(s?.headOfficeId ?? '') === String(authHeadOfficeId))
     }
     return []
-  }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
+  }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId, manualScope.selectedHeadOfficeId, manualScope.schoolOptions])
 
   const filterSchoolOptions = useMemo(() => {
     const list = Array.isArray(schools) ? schools : []
@@ -242,6 +244,9 @@ const ExamGrade = () => {
   }
 
   const openAdd = () => {
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope('', '')
+    }
     setAddForm({
       ...emptyForm,
       schoolId: isSchoolAdmin ? (authSchoolId != null ? String(authSchoolId) : '') : '',
@@ -251,8 +256,14 @@ const ExamGrade = () => {
   }
 
   const openEdit = (row) => {
+    const school = getSchoolById(row.schoolId)
+    const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope(headOfficeId, row.schoolId != null ? String(row.schoolId) : '')
+    }
     setEditForm({
       id: row.id,
+      headOfficeId,
       schoolId: row.schoolId != null ? String(row.schoolId) : '',
       gradeName: row.gradeName ?? '',
       gradePoint: row.gradePoint != null ? String(row.gradePoint) : '',
@@ -347,7 +358,32 @@ const ExamGrade = () => {
 
   const renderForm = (form, setter) => (
     <div className="avm-grid">
-      {!isSchoolAdmin ? (
+      {isSuperAdmin ? (
+        <div className="full">
+          <ManualScopeSelectors
+            enabled
+            headOffices={manualScope.headOffices}
+            schoolOptions={schoolOptions}
+            selectedHeadOfficeId={form.headOfficeId}
+            onHeadOfficeChange={(value) => {
+              setter((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
+              manualScope.setSelectedScope(value, '')
+            }}
+            selectedSchoolId={form.schoolId}
+            onSchoolChange={(value) => {
+              const school = getSchoolById(value)
+              const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : form.headOfficeId
+              setter((prev) => ({
+                ...prev,
+                headOfficeId: nextHeadOfficeId,
+                schoolId: value,
+              }))
+              manualScope.setSelectedScope(nextHeadOfficeId, value)
+            }}
+            compact
+          />
+        </div>
+      ) : !isSchoolAdmin ? (
         <FormField label="School Name" required full>
           <select
             className="avm-select"

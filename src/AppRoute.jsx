@@ -53,12 +53,15 @@ import AbsentSMS from "./pages/AbsentSMS";
 import Promotion from "./pages/Promotion";
 import IdCardSetting from "./pages/IdCardSetting";
 import AdmitCardSetting from "./pages/AdmitCardSetting";
+import AdmitCardSettingCreate from "./pages/AdmitCardSettingCreate";
 import CertificateType from "./pages/CertificateType";
+import CertificateTypeCreate from "./pages/CertificateTypeCreate";
 import GenerateCertificate from "./pages/GenerateCertificate";
 import Candidate from "./pages/Candidate";
 import Donar from "./pages/Donar";
 import Scholarship from "./pages/Scholarship";
 import Guardian from "./pages/Guardian";
+import AddGuardian from "./pages/AddGuardian";
 import Class from "./pages/Class";
 import Section from "./pages/Section";
 import Subject from "./pages/Subject";
@@ -286,6 +289,7 @@ const routeEntries = [
   { pageKey: "student-list", component: StudentList },
   { pageKey: "add-student", component: AddStudent },
   { pageKey: "admit-card-setting", component: AdmitCardSetting },
+  { pageKey: "admit-card-setting-create", component: AdmitCardSettingCreate },
   { pageKey: "bulk-admission", component: BulkAdmission },
   { pageKey: "manage-teacher", component: ManageTeacher },
   { pageKey: "add-teacher", component: AddTeacher },
@@ -327,11 +331,13 @@ const routeEntries = [
   { pageKey: "promotion", component: Promotion },
   { pageKey: "id-card-setting", component: IdCardSetting },
   { pageKey: "certificate-type", component: CertificateType },
+  { pageKey: "certificate-type-create", component: CertificateTypeCreate },
   { pageKey: "generate-certificate", component: GenerateCertificate },
   { pageKey: "candidate", component: Candidate },
   { pageKey: "donar", component: Donar },
   { pageKey: "scholarship", component: Scholarship },
   { pageKey: "guardian", component: Guardian },
+  { pageKey: "add-guardian", component: AddGuardian },
   { pageKey: "class", component: Class },
   { pageKey: "section", component: Section },
   { pageKey: "subject", component: Subject },
@@ -570,6 +576,7 @@ const routeEntries = [
   { pageKey: "promotion", component: Promotion },
   { pageKey: "id-card-setting", component: IdCardSetting },
   { pageKey: "certificate-type", component: CertificateType },
+  { pageKey: "certificate-type-create", component: CertificateTypeCreate },
   { pageKey: "generate-certificate", component: GenerateCertificate },
   { pageKey: "candidate", component: Candidate },
   { pageKey: "donar", component: Donar },

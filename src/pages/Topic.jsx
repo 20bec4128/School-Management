@@ -18,6 +18,7 @@ import "../assets/css/addModalShared.css";
 import FindEmptyState from "../components/FindEmptyState";
 
 const EDIT_STORAGE_KEY = "edit-topic-row";
+const TOPIC_LIST_SCOPE_KEY = "sm_topic_list_scope";
 const emptyFilters = {
   headOfficeId: "Select",
   schoolId: "Select",
@@ -117,6 +118,17 @@ const Topic = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters);
   const [findErrors, setFindErrors] = useState({});
   const [hasSearched, setHasSearched] = useState(false);
+
+  const savedTopicScope = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(TOPIC_LIST_SCOPE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.schoolId ? parsed : null;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const { visibleColumns, visibleColumnCount, toggleColumn } =
     useColumnVisibility(columnOptions);
@@ -379,6 +391,38 @@ const Topic = ({ onNavigate }) => {
     setCurrentPage(1);
     setSelectedRows([]);
   };
+
+  useEffect(() => {
+    if (!savedTopicScope) return;
+
+    const nextFilters = {
+      ...emptyFilters,
+      schoolId: String(savedTopicScope.schoolId || "Select"),
+      academicYear: savedTopicScope.academicYear || "Select",
+      classId: savedTopicScope.classId || "Select",
+      subjectId: savedTopicScope.subjectId || "Select",
+      lessonId: savedTopicScope.lessonId || "Select",
+    };
+
+    setPendingFilters(nextFilters);
+    setFilters(nextFilters);
+    setHasSearched(true);
+    setLoading(true);
+
+    loadTopics(nextFilters)
+      .catch(() => {
+        setTopics([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+
+    try {
+      sessionStorage.removeItem(TOPIC_LIST_SCOPE_KEY);
+    } catch {
+      // ignore
+    }
+  }, [loadTopics, savedTopicScope]);
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target;

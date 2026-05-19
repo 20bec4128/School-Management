@@ -5,7 +5,10 @@ import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
 import { findSchoolById } from '../utils/schoolScope'
 import { fetchAcademicYears } from '../apis/academicYearsApi'
+import { fetchClasses } from '../apis/classesApi'
 import { fetchComplainTypes } from '../apis/complainTypeApi'
+import { fetchStudentsByClassSection } from '../apis/studentsApi'
+import { fetchTeachers } from '../apis/teachersApi'
 import { createComplain, updateComplain } from '../apis/complainApi'
 import '../assets/css/addModalShared.css'
 
@@ -13,9 +16,12 @@ const EDIT_STORAGE_KEY = 'manage-complain-edit-row'
 
 const emptyForm = {
   schoolId: '',
+  classId: '',
   academicYear: '',
   userType: '',
   complainBy: '',
+  studentId: '',
+  teacherId: '',
   complainTypeId: '',
   complainDate: '',
   actionDate: '',
@@ -63,12 +69,24 @@ const AddComplain = ({ onNavigate }) => {
           ...emptyForm,
           ...initialEditRow,
           schoolId: initialEditRow.schoolId != null ? String(initialEditRow.schoolId) : '',
+          classId: initialEditRow.studentClassId != null
+            ? String(initialEditRow.studentClassId)
+            : initialEditRow.classId != null
+              ? String(initialEditRow.classId)
+              : '',
+          studentId: initialEditRow.studentId != null ? String(initialEditRow.studentId) : '',
+          teacherId: initialEditRow.teacherId != null ? String(initialEditRow.teacherId) : '',
           complainTypeId: initialEditRow.complainTypeId != null ? String(initialEditRow.complainTypeId) : '',
         }
       : { ...emptyForm, schoolId: !isSuperAdmin ? listSchoolId : '' }
   ))
+  const [classes, setClasses] = useState([])
   const [academicYears, setAcademicYears] = useState([])
   const [complainTypes, setComplainTypes] = useState([])
+  const [students, setStudents] = useState([])
+  const [teachers, setTeachers] = useState([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
+  const [loadingTeachers, setLoadingTeachers] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -86,31 +104,90 @@ const AddComplain = ({ onNavigate }) => {
   useEffect(() => {
     const loadLookups = async () => {
       if (!form.schoolId) {
+        setClasses([])
         setAcademicYears([])
         setComplainTypes([])
+        setStudents([])
+        setTeachers([])
+        setLoadingStudents(false)
+        setLoadingTeachers(false)
         return
       }
       try {
-        const [yearList, typeList] = await Promise.all([
+        setLoadingStudents(true)
+        setLoadingTeachers(true)
+        const [classList, yearList, typeList, teacherList] = await Promise.all([
+          fetchClasses({ schoolId: form.schoolId }),
           fetchAcademicYears({ schoolId: form.schoolId }),
           fetchComplainTypes(form.schoolId),
+          fetchTeachers(),
         ])
+        setClasses(Array.isArray(classList) ? classList : [])
         setAcademicYears(Array.isArray(yearList) ? yearList : [])
         setComplainTypes(Array.isArray(typeList) ? typeList : [])
+        setTeachers(
+          Array.isArray(teacherList)
+            ? teacherList.filter((teacher) => String(teacher?.schoolId ?? '') === String(form.schoolId))
+            : [],
+        )
       } catch (err) {
         console.error('Failed to load complain lookups:', err)
+        setClasses([])
         setAcademicYears([])
         setComplainTypes([])
+        setStudents([])
+        setTeachers([])
+      } finally {
+        setLoadingStudents(false)
+        setLoadingTeachers(false)
       }
     }
     void loadLookups()
   }, [form.schoolId])
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      if (!form.schoolId || form.userType !== 'Student' || !form.classId) {
+        setStudents([])
+        return
+      }
+
+      try {
+        setLoadingStudents(true)
+        const rows = await fetchStudentsByClassSection({
+          schoolId: form.schoolId,
+          classId: form.classId,
+        })
+        setStudents(Array.isArray(rows) ? rows : [])
+      } catch (err) {
+        console.error('Failed to load students:', err)
+        setStudents([])
+      } finally {
+        setLoadingStudents(false)
+      }
+    }
+
+    void loadStudents()
+  }, [form.classId, form.schoolId, form.userType])
 
   const schoolOptions = isSuperAdmin ? manualScope.schoolOptions : contextSchoolOptions
 
   const academicYearSuggestions = useMemo(
     () => Array.from(new Set(academicYears.map((year) => String(year?.academicYear || '').trim()).filter(Boolean))),
     [academicYears],
+  )
+
+  const classOptions = useMemo(
+    () =>
+      (Array.isArray(classes) ? classes : [])
+        .map((row) => {
+          const id = row?.id != null ? String(row.id) : ''
+          const label = row?.className || row?.numericName || row?.name || ''
+          if (!id || !label) return null
+          return { id, label }
+        })
+        .filter(Boolean),
+    [classes],
   )
 
   const complainTypeOptions = useMemo(
@@ -125,17 +202,68 @@ const AddComplain = ({ onNavigate }) => {
     [complainTypes],
   )
 
+  const studentOptions = useMemo(
+    () =>
+      (Array.isArray(students) ? students : [])
+        .map((student) => {
+          const id = student?.id != null ? String(student.id) : ''
+          const name = student?.name || student?.studentName || student?.fullName || ''
+          if (!id || !name) return null
+          const className = student?.className || student?.schoolClass?.className || student?.schoolClassName || ''
+          const rollNo = student?.rollNo ? ` - Roll No: ${student.rollNo}` : ''
+          const section = student?.section ? ` - Section: ${student.section}` : ''
+          const classSuffix = className ? ` - Class: ${className}` : ''
+          return { id, name, label: `${name}${rollNo}${classSuffix}${section}` }
+        })
+        .filter(Boolean),
+    [students],
+  )
+
+  const teacherOptions = useMemo(
+    () =>
+      (Array.isArray(teachers) ? teachers : [])
+        .map((teacher) => {
+          const id = teacher?.id != null ? String(teacher.id) : ''
+          const name = teacher?.name || teacher?.teacherName || teacher?.fullName || ''
+          if (!id || !name) return null
+          const designation = teacher?.designationName ? ` - ${teacher.designationName}` : ''
+          return { id, name, label: `${name}${designation}` }
+        })
+        .filter(Boolean),
+    [teachers],
+  )
+
   const availableComplainBy = form.userType ? (complainByOptions[form.userType] || []) : []
 
   const handleChange = (e) => {
     const { id, value } = e.target
     setForm((prev) => {
       const next = { ...prev, [id]: value }
-      if (id === 'userType') next.complainBy = ''
+      if (id === 'userType') {
+        next.complainBy = ''
+        next.classId = ''
+        next.studentId = ''
+        next.teacherId = ''
+      }
       if (id === 'schoolId') {
         next.academicYear = ''
         next.complainTypeId = ''
         next.complainBy = ''
+        next.classId = ''
+        next.studentId = ''
+        next.teacherId = ''
+      }
+      if (id === 'classId') {
+        next.studentId = ''
+        next.complainBy = ''
+      }
+      if (id === 'studentId') {
+        const selectedStudent = studentOptions.find((option) => option.id === value)
+        next.complainBy = selectedStudent?.name || ''
+      }
+      if (id === 'teacherId') {
+        const selectedTeacher = teacherOptions.find((option) => option.id === value)
+        next.complainBy = selectedTeacher?.name || ''
       }
       return next
     })
@@ -147,7 +275,22 @@ const AddComplain = ({ onNavigate }) => {
     setError('')
     setSuccess(false)
 
-    if (!form.schoolId || !form.academicYear || !form.userType || !form.complainBy || !form.complainTypeId || !form.complainDate || !form.complain) {
+    const complainByValue = String(form.complainBy || '').trim()
+    const requiresStudent = form.userType === 'Student'
+    const requiresTeacher = form.userType === 'Teacher'
+
+    if (
+      !form.schoolId ||
+      !form.academicYear ||
+      !form.userType ||
+      (requiresStudent && !form.classId) ||
+      (requiresStudent && !form.studentId) ||
+      (requiresTeacher && !form.teacherId) ||
+      !complainByValue ||
+      !form.complainTypeId ||
+      !form.complainDate ||
+      !form.complain
+    ) {
       setError('Please fill all required fields')
       return
     }
@@ -156,9 +299,12 @@ const AddComplain = ({ onNavigate }) => {
     try {
       const payload = {
         schoolId: Number(form.schoolId),
+        studentClassId: form.classId ? Number(form.classId) : null,
         academicYear: form.academicYear || '',
         userType: form.userType || '',
-        complainBy: form.complainBy || '',
+        complainBy: complainByValue,
+        studentId: form.studentId ? Number(form.studentId) : null,
+        teacherId: form.teacherId ? Number(form.teacherId) : null,
         complainTypeId: form.complainTypeId ? Number(form.complainTypeId) : null,
         complainDate: form.complainDate || null,
         actionDate: form.actionDate || null,
@@ -216,12 +362,12 @@ const AddComplain = ({ onNavigate }) => {
                     onHeadOfficeChange={(value) => {
                       manualScope.setSelectedHeadOfficeId(value)
                       manualScope.setSelectedSchoolId('')
-                      setForm((prev) => ({ ...prev, schoolId: '', academicYear: '', complainTypeId: '', complainBy: '' }))
+                      setForm((prev) => ({ ...prev, schoolId: '', academicYear: '', complainTypeId: '', complainBy: '', studentId: '', teacherId: '' }))
                     }}
                     selectedSchoolId={form.schoolId}
                     onSchoolChange={(value) => {
                       manualScope.setSelectedSchoolId(value)
-                      setForm((prev) => ({ ...prev, schoolId: value }))
+                      setForm((prev) => ({ ...prev, schoolId: value, academicYear: '', complainTypeId: '', complainBy: '', studentId: '', teacherId: '' }))
                     }}
                     compact
                   />
@@ -247,19 +393,21 @@ const AddComplain = ({ onNavigate }) => {
               )}
 
               <FormField label="Academic Year" required>
-                <input
-                  type="text"
+                <select
                   id="academicYear"
-                  className="form-control"
-                  list="complain-academic-years"
-                  placeholder="Enter academic year"
+                  className="form-control form-select"
                   value={form.academicYear}
                   onChange={handleChange}
+                  disabled={!form.schoolId}
                   style={{ paddingLeft: '2.5rem' }}
-                />
-                <datalist id="complain-academic-years">
-                  {academicYearSuggestions.map((year) => <option key={year} value={year} />)}
-                </datalist>
+                >
+                  <option value="">{form.schoolId ? '--Select Academic Year--' : 'Select School First'}</option>
+                  {academicYearSuggestions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
               </FormField>
 
               <FormField label="User Type" required>
@@ -271,13 +419,73 @@ const AddComplain = ({ onNavigate }) => {
                 </select>
               </FormField>
 
+              {form.userType === 'Student' ? (
+                <FormField label="Class" required>
+                  <select
+                    id="classId"
+                    className="form-control form-select"
+                    value={form.classId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId}
+                    style={{ paddingLeft: '2.5rem' }}
+                  >
+                    <option value="">{form.schoolId ? '--Select Class--' : 'Select School First'}</option>
+                    {classOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : null}
+
               <FormField label="Complain By" required>
-                <select id="complainBy" className="form-control form-select" value={form.complainBy} onChange={handleChange} disabled={!form.userType} style={{ paddingLeft: '2.5rem' }}>
-                  <option value="">--Select--</option>
-                  {availableComplainBy.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
+                {form.userType === 'Student' ? (
+                  <select
+                    id="studentId"
+                    className="form-control form-select"
+                    value={form.studentId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId || !form.classId || loadingStudents}
+                    style={{ paddingLeft: '2.5rem' }}
+                  >
+                    <option value="">
+                      {!form.classId
+                        ? 'Select Class First'
+                        : loadingStudents
+                          ? 'Loading students...'
+                          : '--Select Student--'}
+                    </option>
+                    {studentOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : form.userType === 'Teacher' ? (
+                  <select
+                    id="teacherId"
+                    className="form-control form-select"
+                    value={form.teacherId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId || loadingTeachers}
+                    style={{ paddingLeft: '2.5rem' }}
+                  >
+                    <option value="">{loadingTeachers ? 'Loading teachers...' : '--Select Teacher--'}</option>
+                    {teacherOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <select id="complainBy" className="form-control form-select" value={form.complainBy} onChange={handleChange} disabled={!form.userType} style={{ paddingLeft: '2.5rem' }}>
+                    <option value="">--Select--</option>
+                    {availableComplainBy.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                )}
               </FormField>
 
               <FormField label="Complain Type" required>

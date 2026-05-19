@@ -27,6 +27,8 @@ const columnOptions = [
   { key: 'academicYear', label: 'Academic Year' },
   { key: 'userType', label: 'User Type' },
   { key: 'complainBy', label: 'Complain By' },
+  { key: 'studentName', label: 'Student' },
+  { key: 'teacherName', label: 'Teacher' },
   { key: 'complainTypeName', label: 'Complain Type' },
   { key: 'complainDate', label: 'Complain Date' },
   { key: 'actionDate', label: 'Action Date' },
@@ -151,7 +153,7 @@ const ManageComplain = ({ onNavigate }) => {
           if (filters.complainTypeId !== 'Select' && String(row?.complainTypeId ?? '') !== String(filters.complainTypeId)) return false
           if (filters.userType !== 'Select' && String(row?.userType ?? '') !== String(filters.userType)) return false
           if (!query) return true
-          const haystack = [row?.schoolName, row?.complainType, row?.academicYear, row?.userType, row?.title, row?.description]
+          const haystack = [row?.schoolName, row?.complainType, row?.academicYear, row?.userType, row?.complainBy, row?.studentName, row?.teacherName, row?.title, row?.description]
             .map((value) => String(value ?? '').toLowerCase())
             .join(' ')
           return haystack.includes(query)
@@ -360,6 +362,8 @@ const ManageComplain = ({ onNavigate }) => {
                   {visibleColumns.academicYear ? <th scope="col">Academic Year</th> : null}
                   {visibleColumns.userType ? <th scope="col">User Type</th> : null}
                   {visibleColumns.complainBy ? <th scope="col">Complain By</th> : null}
+                  {visibleColumns.studentName ? <th scope="col">Student</th> : null}
+                  {visibleColumns.teacherName ? <th scope="col">Teacher</th> : null}
                   {visibleColumns.complainTypeName ? <th scope="col">Complain Type</th> : null}
                   {visibleColumns.complainDate ? <th scope="col">Complain Date</th> : null}
                   {visibleColumns.actionDate ? <th scope="col">Action Date</th> : null}
@@ -397,6 +401,8 @@ const ManageComplain = ({ onNavigate }) => {
                       {visibleColumns.academicYear ? <td>{row.academicYear}</td> : null}
                       {visibleColumns.userType ? <td>{row.userType}</td> : null}
                       {visibleColumns.complainBy ? <td className="fw-medium text-primary-light">{row.complainBy}</td> : null}
+                      {visibleColumns.studentName ? <td>{row.studentName || '-'}</td> : null}
+                      {visibleColumns.teacherName ? <td>{row.teacherName || '-'}</td> : null}
                       {visibleColumns.complainTypeName ? <td>{row.complainTypeName || '-'}</td> : null}
                       {visibleColumns.complainDate ? <td>{row.complainDate}</td> : null}
                       {visibleColumns.actionDate ? <td>{row.actionDate || '-'}</td> : null}

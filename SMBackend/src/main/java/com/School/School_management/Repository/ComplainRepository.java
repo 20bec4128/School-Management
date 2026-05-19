@@ -16,6 +16,8 @@ public interface ComplainRepository extends JpaRepository<Complain, Long> {
     @Query(value = """
             select c from Complain c
               left join c.complainType t
+              left join c.student st
+              left join c.teacher te
             where c.schoolId = :schoolId
               and c.isDeleted = false
               and (:academicYear is null or c.academicYear = :academicYear)
@@ -24,6 +26,8 @@ public interface ComplainRepository extends JpaRepository<Complain, Long> {
               and (
                 :search is null
                 or lower(c.complainBy) like lower(concat('%', :search, '%'))
+                or lower(coalesce(st.name, '')) like lower(concat('%', :search, '%'))
+                or lower(coalesce(te.name, '')) like lower(concat('%', :search, '%'))
                 or lower(c.academicYear) like lower(concat('%', :search, '%'))
                 or lower(c.userType) like lower(concat('%', :search, '%'))
                 or lower(coalesce(t.complainType, '')) like lower(concat('%', :search, '%'))
@@ -33,6 +37,8 @@ public interface ComplainRepository extends JpaRepository<Complain, Long> {
             countQuery = """
             select count(c) from Complain c
               left join c.complainType t
+              left join c.student st
+              left join c.teacher te
             where c.schoolId = :schoolId
               and c.isDeleted = false
               and (:academicYear is null or c.academicYear = :academicYear)
@@ -41,6 +47,8 @@ public interface ComplainRepository extends JpaRepository<Complain, Long> {
               and (
                 :search is null
                 or lower(c.complainBy) like lower(concat('%', :search, '%'))
+                or lower(coalesce(st.name, '')) like lower(concat('%', :search, '%'))
+                or lower(coalesce(te.name, '')) like lower(concat('%', :search, '%'))
                 or lower(c.academicYear) like lower(concat('%', :search, '%'))
                 or lower(c.userType) like lower(concat('%', :search, '%'))
                 or lower(coalesce(t.complainType, '')) like lower(concat('%', :search, '%'))

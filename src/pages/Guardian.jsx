@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
-import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import ExportDropdown from '../components/ExportDropdown'
@@ -10,45 +8,12 @@ import TablePagination from '../components/table/TablePagination'
 import '../assets/css/addModalShared.css'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { createGuardian, deleteGuardian, fetchGuardiansPage, updateGuardian } from '../apis/guardiansApi'
-
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  name: '',
-  phone: '',
-  profession: '',
-  religion: '',
-  presentAddress: '',
-  permanentAddress: '',
-  nationalId: '',
-  email: '',
-  username: '',
-  password: '',
-  otherInfo: '',
-  photo: null,
-}
+import { deleteGuardian, fetchGuardiansPage } from '../apis/guardiansApi'
 
 const emptyFilters = {
   headOfficeId: 'Select',
   schoolId: 'Select',
   profession: 'Select',
-}
-
-const STEPS = ['Basic Info', 'Academic Info', 'Other Info']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  Name: 'ri-user-3-line',
-  Profession: 'ri-briefcase-4-line',
-  Religion: 'ri-bookmark-3-line',
-  'Present Address': 'ri-map-pin-2-line',
-  'Permanent Address': 'ri-home-4-line',
-  'National ID': 'ri-fingerprint-line',
-  Email: 'ri-mail-line',
-  Username: 'ri-at-line',
-  Password: 'ri-lock-2-line',
-  'Other Info': 'ri-information-line',
 }
 
 const columnOptions = [
@@ -73,40 +38,6 @@ const professionOptions = [
   'Other',
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
 const unwrapCollection = (value) => {
   if (Array.isArray(value)) return value
   if (Array.isArray(value?.content)) return value.content
@@ -114,10 +45,8 @@ const unwrapCollection = (value) => {
 }
 
 const schoolLabel = (row) => row?.schoolName || row?.name || ''
-const getSchoolById = (rows, schoolId) =>
-  (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
-const Guardian = () => {
+const Guardian = ({ onNavigate }) => {
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -126,7 +55,6 @@ const Guardian = () => {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
-  const [editingId, setEditingId] = useState(null)
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -135,23 +63,11 @@ const Guardian = () => {
   const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
 
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [addPhotoPreview, setAddPhotoPreview] = useState(null)
-  const [editPhotoPreview, setEditPhotoPreview] = useState(null)
-  const [addPasswordVisible, setAddPasswordVisible] = useState(false)
-  const [editPasswordVisible, setEditPasswordVisible] = useState(false)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const addPhotoRef = useRef(null)
-  const editPhotoRef = useRef(null)
 
   const schoolOptionsFor = useCallback(
     (headOfficeId) =>
@@ -222,23 +138,6 @@ const Guardian = () => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handlePhotoChange = (setter, setPreview) => (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const dataUrl = String(ev.target?.result || '')
-      setter((prev) => ({ ...prev, photo: dataUrl }))
-      setPreview(dataUrl)
-    }
-    reader.readAsDataURL(file)
-  }
-
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
@@ -259,94 +158,17 @@ const Guardian = () => {
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddPhotoPreview(null)
-    setAddPasswordVisible(false)
-    setAddStep(0)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem('edit-guardian-row')
+    } catch {}
+    onNavigate('add-guardian')
   }
 
   const openEdit = (row) => {
-    const school = getSchoolById(schoolsLookup, row?.schoolId)
-    setEditingId(row?.id ?? null)
-    setEditForm({
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : '',
-      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-      name: row?.name || '',
-      phone: row?.phone || '',
-      profession: row?.profession || '',
-      religion: row?.religion || '',
-      presentAddress: row?.presentAddress || '',
-      permanentAddress: row?.permanentAddress || '',
-      nationalId: row?.nationalId || '',
-      email: row?.email || '',
-      username: row?.username || '',
-      password: '',
-      otherInfo: row?.otherInfo || '',
-      photo: row?.photoUrl || null,
-    })
-    setEditPhotoPreview(row?.photoUrl || null)
-    setEditPasswordVisible(false)
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const handleCreate = async () => {
-    setSaving(true)
-    setError('')
     try {
-      await createGuardian({
-        schoolId: addForm.schoolId ? Number(addForm.schoolId) : null,
-        name: addForm.name || null,
-        phone: addForm.phone || null,
-        profession: addForm.profession || null,
-        religion: addForm.religion || null,
-        presentAddress: addForm.presentAddress || null,
-        permanentAddress: addForm.permanentAddress || null,
-        nationalId: addForm.nationalId || null,
-        email: addForm.email || null,
-        username: addForm.username || null,
-        password: addForm.password || null,
-        otherInfo: addForm.otherInfo || null,
-        photoUrl: addForm.photo || null,
-      })
-      setIsAddOpen(false)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to create guardian')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdate = async () => {
-    if (editingId == null) return
-    setSaving(true)
-    setError('')
-    try {
-      await updateGuardian(editingId, {
-        schoolId: editForm.schoolId ? Number(editForm.schoolId) : null,
-        name: editForm.name || null,
-        phone: editForm.phone || null,
-        profession: editForm.profession || null,
-        religion: editForm.religion || null,
-        presentAddress: editForm.presentAddress || null,
-        permanentAddress: editForm.permanentAddress || null,
-        nationalId: editForm.nationalId || null,
-        email: editForm.email || null,
-        username: editForm.username || null,
-        password: editForm.password || null,
-        otherInfo: editForm.otherInfo || null,
-        photoUrl: editForm.photo || null,
-      })
-      setIsEditOpen(false)
-      setEditingId(null)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to update guardian')
-    } finally {
-      setSaving(false)
-    }
+      sessionStorage.setItem('edit-guardian-row', JSON.stringify(row))
+    } catch {}
+    onNavigate('add-guardian')
   }
 
   const handleDelete = async (id) => {
@@ -374,218 +196,13 @@ const Guardian = () => {
     return `Showing ${start} - ${end} of ${total} entries`
   }, [currentPage, rowsPerPage, totalElements])
 
-  const renderForm = (
-    form,
-    setter,
-    photoPreview,
-    setPhotoPreview,
-    photoRef,
-    passwordVisible,
-    setPasswordVisible,
-    requirePassword,
-  ) => (
-    <>
-      <p className="avm-section-title">{STEPS[0]}</p>
-      <div className="avm-grid">
-        <ManualScopeSelectors
-          enabled
-          headOffices={headOffices}
-          schoolOptions={schoolOptionsFor(form.headOfficeId)}
-          selectedHeadOfficeId={form.headOfficeId}
-          onHeadOfficeChange={(value) =>
-            setter((prev) => ({
-              ...prev,
-              headOfficeId: value || '',
-              schoolId: '',
-            }))
-          }
-          selectedSchoolId={form.schoolId}
-          onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value || '' }))}
-          schoolLabel="School"
-        />
-
-        <FormField label="Name" required full>
-          <input type="text" className="avm-input" id="name" placeholder="Name" value={form.name} onChange={handleChange(setter)} />
-        </FormField>
-
-        <PhoneField
-          id="phone"
-          label="Phone"
-          required
-          value={form.phone}
-          onChange={(fullValue) => setter((prev) => ({ ...prev, phone: fullValue }))}
-        />
-
-        <FormField label="Profession" required>
-          <select className="avm-select" id="profession" value={form.profession} onChange={handleChange(setter)}>
-            <option value="">--Select--</option>
-            {professionOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
-        <FormField label="Religion">
-          <input type="text" className="avm-input" id="religion" placeholder="Religion" value={form.religion} onChange={handleChange(setter)} />
-        </FormField>
-
-        <FormField label="Present Address" full>
-          <textarea rows={3} className="avm-input avm-textarea" id="presentAddress" placeholder="Present Address" value={form.presentAddress} onChange={handleChange(setter)} />
-        </FormField>
-
-        <FormField label="Permanent Address" full>
-          <textarea rows={3} className="avm-input avm-textarea" id="permanentAddress" placeholder="Permanent Address" value={form.permanentAddress} onChange={handleChange(setter)} />
-        </FormField>
-      </div>
-
-      <p className="avm-section-title mt-20">Academic Info</p>
-      <div className="avm-grid">
-        <FormField label="National ID" full>
-          <input type="text" className="avm-input" id="nationalId" placeholder="National ID" value={form.nationalId} onChange={handleChange(setter)} />
-        </FormField>
-
-        <FormField label="Email" full>
-          <input type="email" className="avm-input" id="email" placeholder="Email" value={form.email} onChange={handleChange(setter)} />
-        </FormField>
-
-        <FormField label="Username" required full>
-          <input type="text" className="avm-input" id="username" placeholder="Username" value={form.username} onChange={handleChange(setter)} />
-        </FormField>
-
-        <div className="avm-field full">
-          <label className="avm-label">
-            Password {requirePassword ? <span className="req"> *</span> : null}
-          </label>
-          <div className="avm-password-wrap">
-            <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-              <span
-                style={{
-                  position: 'absolute',
-                  left: '0.85rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: '#667085',
-                  fontSize: '0.95rem',
-                  lineHeight: 1,
-                  pointerEvents: 'none',
-                  zIndex: 1,
-                }}
-              >
-                <i className="ri-lock-2-line"></i>
-              </span>
-              <input
-                type={passwordVisible ? 'text' : 'password'}
-                className="avm-input"
-                id="password"
-                placeholder={requirePassword ? 'Password' : 'Leave blank to keep current password'}
-                value={form.password}
-                onChange={handleChange(setter)}
-                style={{ paddingRight: '2.75rem' }}
-              />
-            </div>
-            <button type="button" className="avm-password-toggle" onClick={() => setPasswordVisible((v) => !v)} tabIndex={-1}>
-              <i className={passwordVisible ? 'ri-eye-off-line' : 'ri-eye-line'}></i>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <p className="avm-section-title mt-20">Other Info</p>
-      <div className="avm-grid">
-        <FormField label="Other Info" full>
-          <textarea rows={4} className="avm-input avm-textarea" id="otherInfo" placeholder="Other Info" value={form.otherInfo} onChange={handleChange(setter)} />
-        </FormField>
-
-        <div className="avm-field full">
-          <label className="avm-label">Photo</label>
-          <div
-            style={{
-              border: '2px dashed #d0d5dd',
-              borderRadius: '0.75rem',
-              padding: '1.25rem',
-              background: '#f8fafc',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '0.75rem',
-              cursor: 'pointer',
-            }}
-            onClick={() => photoRef.current?.click()}
-          >
-            {photoPreview ? (
-              <img
-                src={photoPreview}
-                alt="Photo Preview"
-                style={{
-                  maxWidth: 120,
-                  maxHeight: 130,
-                  objectFit: 'cover',
-                  borderRadius: 8,
-                  border: '1px solid #e0e0e0',
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: '50%',
-                  background: '#e8edf4',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <i className="ri-user-add-line" style={{ fontSize: '1.8rem', color: '#45597a' }}></i>
-              </div>
-            )}
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#45597a' }}>
-                {photoPreview ? 'Change Photo' : 'Upload Photo'}
-              </p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                Dimension:- Max-W: 120px, Max-H: 130px
-              </p>
-              <p style={{ margin: '0.1rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                Image file format: .jpg, .jpeg, .png or .gif
-              </p>
-            </div>
-            <input
-              ref={photoRef}
-              type="file"
-              accept=".jpg,.jpeg,.png,.gif"
-              style={{ display: 'none' }}
-              onChange={handlePhotoChange(setter, setPhotoPreview)}
-            />
-          </div>
-          {photoPreview ? (
-            <button
-              type="button"
-              className="avm-btn light sm"
-              style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}
-              onClick={() => {
-                setter((prev) => ({ ...prev, photo: null }))
-                setPhotoPreview(null)
-                if (photoRef.current) photoRef.current.value = ''
-              }}
-            >
-              <i className="ri-delete-bin-line"></i> Remove
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </>
-  )
-
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Guardian</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0" onClick={() => onNavigate('dashboard')}>
               Dashboard
             </button>
             <span className="text-secondary-light"> / Guardian</span>
@@ -605,7 +222,7 @@ const Guardian = () => {
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
 
-              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20" onClick={() => setIsFilterSidebarOpen(true)}>
+              <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterSidebarOpen(true)}>
                 <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span>
                   <i className="ri-arrow-right-line"></i>
@@ -615,7 +232,7 @@ const Guardian = () => {
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
@@ -637,7 +254,7 @@ const Guardian = () => {
               </div>
 
               <RowsPerPageSelect
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light bg-white"
                 value={rowsPerPage}
                 onChange={(next) => {
                   setRowsPerPage(next)
@@ -685,19 +302,19 @@ const Guardian = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       Loading...
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-danger-600">
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-danger-600">
                       {error}
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No guardians found.
                     </td>
                   </tr>
@@ -733,7 +350,7 @@ const Guardian = () => {
                         <div className="d-flex align-items-center gap-10">
                           <button
                             type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             onClick={() => openEdit(row)}
                             title="Edit"
                           >
@@ -741,7 +358,7 @@ const Guardian = () => {
                           </button>
                           <button
                             type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             title="Delete"
                             onClick={() => handleDelete(row.id)}
                             disabled={saving}
@@ -767,36 +384,6 @@ const Guardian = () => {
           />
         </div>
       </div>
-
-      <WizardPopup
-        modalWidth="580px"
-        open={isAddOpen}
-        title="Add Guardian"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleCreate}
-        submitLabel={saving ? 'Saving...' : 'Save'}
-      >
-        {renderForm(addForm, setAddForm, addPhotoPreview, setAddPhotoPreview, addPhotoRef, addPasswordVisible, setAddPasswordVisible, true)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="580px"
-        open={isEditOpen}
-        title="Edit Guardian"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel={saving ? 'Saving...' : 'Update'}
-      >
-        {renderForm(editForm, setEditForm, editPhotoPreview, setEditPhotoPreview, editPhotoRef, editPasswordVisible, setEditPasswordVisible, false)}
-      </WizardPopup>
 
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Guardians" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>

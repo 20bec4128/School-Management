@@ -243,6 +243,7 @@ const AddSchool = ({ onNavigate }) => {
   const [success, setSuccess] = useState(false);
   const [editingSchoolId, setEditingSchoolId] = useState(null);
   const [phoneCode, setPhoneCode] = useState(DEFAULT_PHONE_CODE);
+  const redirectTimerRef = useRef(null);
 
   const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
   const isHeadOfficeScoped = String(role || "").toUpperCase() === "HEAD_OFFICE_ADMIN";
@@ -290,6 +291,14 @@ const AddSchool = ({ onNavigate }) => {
     void loadHeadOffices();
   }, [currentHeadOfficeId, currentHeadOfficeName, isHeadOfficeScoped, isSuperAdmin]);
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleChange = (e) => {
     const { id, value } = e.target;
     setForm((prev) => ({ ...prev, [id]: value }));
@@ -333,6 +342,11 @@ const AddSchool = ({ onNavigate }) => {
     setError("");
     setSuccess(false);
 
+    if (redirectTimerRef.current) {
+      clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
+
     const isEditing = Boolean(editingSchoolId);
     const err = validateCurrentTab();
     if (err) {
@@ -369,7 +383,7 @@ const AddSchool = ({ onNavigate }) => {
       }
 
       setSuccess(true);
-      setTimeout(() => onNavigate("manage-school"), 1000);
+      redirectTimerRef.current = setTimeout(() => onNavigate("manage-school"), 2000);
     } catch (err) {
       setError(err?.message || (isEditing ? "Failed to update school" : "Failed to create school"));
     } finally {
@@ -401,7 +415,7 @@ const AddSchool = ({ onNavigate }) => {
       )}
 
       {success && (
-        <div className="alert alert-success d-flex align-items-center gap-10 mb-24 radius-8">
+        <div className="alert alert-success d-flex align-items-center gap-10 mb-24 radius-8" role="alert">
           <i className="ri-checkbox-circle-line text-lg" />
           {isEditing ? "School updated successfully! Redirecting..." : "School created successfully! Redirecting..."}
         </div>
