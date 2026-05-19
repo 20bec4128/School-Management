@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchStudentsByClassSection } from '../apis/studentsApi'
 import { useAuth } from '../context/useAuth'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
@@ -16,7 +18,6 @@ const STEPS = ['Basic Information', 'SMS Content']
 
 const DEFAULT_EXAM_TERMS = ['First Term', 'Second Term', 'Final Term']
 const RECEIVER_TYPE_OPTIONS = ['Student', 'Parent', 'Guardian']
-const RECEIVER_OPTIONS = ['All', 'Selected Students', 'Selected Parents']
 const TEMPLATE_OPTIONS = {
   'Default Mark SMS': 'Hello [name], your exam mark is [exam_mark].',
   'Exam Result SMS': 'Dear [name], your exam result is [exam_mark].',
@@ -74,6 +75,7 @@ const emptyForm = {
   id: null,
   headOfficeId: '',
   schoolId: '',
+  classId: '',
   examTerm: '',
   receiverType: '',
   receiver: '',
@@ -105,6 +107,9 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [schools, setSchools] = useState([])
+  const [classes, setClasses] = useState([])
+  const [students, setStudents] = useState([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [step, setStep] = useState(0)
   const [error, setError] = useState('')
@@ -168,6 +173,7 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
             headOfficeId:
               existing.headOfficeId != null ? String(existing.headOfficeId) : '',
             schoolId: existing.schoolId != null ? String(existing.schoolId) : '',
+            classId: existing.classId != null ? String(existing.classId) : '',
             examTerm: existing.examTerm ?? '',
             receiverType: existing.receiverType ?? '',
             receiver: existing.receiver ?? '',
@@ -209,9 +215,52 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
   }, [authSchoolId, isSchoolAdmin])
 
   useEffect(() => {
+    const loadClasses = async () => {
+      if (!form.schoolId) {
+        setClasses([])
+        return
+      }
+
+      try {
+        const data = await fetchClasses({ schoolId: form.schoolId })
+        setClasses(Array.isArray(data) ? data : [])
+      } catch {
+        setClasses([])
+      }
+    }
+
+    void loadClasses()
+  }, [form.schoolId])
+
+  useEffect(() => {
     if (!isSuperAdmin || isEditMode || !manualScope.selectedSchoolId) return
     setForm((prev) => ({ ...prev, schoolId: String(manualScope.selectedSchoolId) }))
   }, [isSuperAdmin, isEditMode, manualScope.selectedSchoolId])
+
+  useEffect(() => {
+    if (!form.schoolId || !form.classId) {
+      setStudents([])
+      return
+    }
+
+    const loadStudents = async () => {
+      setLoadingStudents(true)
+      try {
+        const data = await fetchStudentsByClassSection({
+          schoolId: form.schoolId,
+          classId: form.classId,
+        })
+        setStudents(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error('Failed to load students:', err)
+        setStudents([])
+      } finally {
+        setLoadingStudents(false)
+      }
+    }
+
+    void loadStudents()
+  }, [form.schoolId, form.classId])
 
   const resolveSchoolName = () => {
     const match = schoolOptions.find((school) => String(school.id) === String(form.schoolId))
@@ -229,6 +278,71 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
     return null
   }
 
+  const buildReceiverLabel = (student, receiverType) => {
+    const studentName = student?.name || student?.studentName || student?.fullName || 'Unnamed Student'
+    const rollNo = student?.rollNo ? ` - Roll No: ${student.rollNo}` : ''
+    const className = student?.className ? ` - Class: ${student.className}` : ''
+    const section = student?.section ? ` - Section: ${student.section}` : ''
+
+    if (receiverType === 'Parent') {
+      const parentName =
+        student?.fatherName ||
+        student?.motherName ||
+        student?.parentName ||
+        student?.parentUsername ||
+        studentName
+      return `${parentName}${rollNo}${className}${section}`
+    }
+
+    if (receiverType === 'Guardian') {
+      const guardianName =
+        student?.guardianName ||
+        student?.guardianUsername ||
+        student?.fatherName ||
+        student?.motherName ||
+        student?.parentUsername ||
+        studentName
+      return `${guardianName}${rollNo}${className}${section}`
+    }
+
+    return `${studentName}${rollNo}${className}${section}`
+  }
+
+  const receiverOptions = useMemo(() => {
+    if (!form.receiverType || !form.classId) return []
+
+    return (Array.isArray(students) ? students : [])
+      .map((student) => {
+        const value =
+          form.receiverType === 'Student'
+            ? student?.name || student?.studentName || student?.fullName || ''
+            : form.receiverType === 'Parent'
+              ? student?.fatherName ||
+                student?.motherName ||
+                student?.parentName ||
+                student?.parentUsername ||
+                ''
+              : student?.guardianName ||
+                student?.guardianUsername ||
+                student?.fatherName ||
+                student?.motherName ||
+                student?.parentUsername ||
+                ''
+
+        if (!value) return null
+
+        return {
+          value,
+          label: buildReceiverLabel(student, form.receiverType),
+        }
+      })
+      .filter(Boolean)
+      .filter(
+        (item, index, array) =>
+          index === array.findIndex((candidate) => candidate.value === item.value),
+      )
+  }, [form.receiverType, form.classId, students])
+
   const handleChange = (e) => {
     const { id, value } = e.target
     setForm((prev) => {
@@ -237,6 +351,20 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
           ...prev,
           template: value,
           sms: value && TEMPLATE_OPTIONS[value] ? TEMPLATE_OPTIONS[value] : prev.sms,
+        }
+      }
+      if (id === 'classId') {
+        return {
+          ...prev,
+          classId: value,
+          receiver: '',
+        }
+      }
+      if (id === 'receiverType') {
+        return {
+          ...prev,
+          receiverType: value,
+          receiver: '',
         }
       }
       return { ...prev, [id]: value }
@@ -249,11 +377,13 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
       ...prev,
       headOfficeId: value,
       schoolId: '',
+      classId: '',
+      receiver: '',
     }))
   }
 
   const handleSchoolChange = (value) => {
-    setForm((prev) => ({ ...prev, schoolId: value }))
+    setForm((prev) => ({ ...prev, schoolId: value, classId: '', receiver: '' }))
     if (isSuperAdmin) {
       manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value)
     }
@@ -261,6 +391,7 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
 
   const validate = () => {
     if (!form.schoolId) return 'School is required'
+    if (!form.classId) return 'Class is required'
     if (!form.examTerm) return 'Exam Term is required'
     if (!form.receiverType) return 'Receiver Type is required'
     if (!form.receiver) return 'Receiver is required'
@@ -272,6 +403,7 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
   const validateStep = (targetStep) => {
     if (targetStep === 0) {
       if (!form.schoolId) return 'School is required'
+      if (!form.classId) return 'Class is required'
       if (!form.examTerm) return 'Exam Term is required'
       if (!form.receiverType) return 'Receiver Type is required'
       if (!form.receiver) return 'Receiver is required'
@@ -294,6 +426,7 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
       headOfficeId: resolveHeadOfficeId(),
       schoolId: Number(form.schoolId),
       schoolName: resolveSchoolName(),
+      classId: form.classId ? Number(form.classId) : null,
       examTerm: form.examTerm,
       receiverType: form.receiverType,
       receiver: form.receiver,
@@ -431,6 +564,25 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
                   </FormField>
                 )}
 
+                <FormField label="Class" required full>
+                  <select
+                    className="form-control form-select ps-40"
+                    id="classId"
+                    value={form.classId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId}
+                  >
+                    <option value="">
+                      {form.schoolId ? '--Select Class--' : 'Select School First'}
+                    </option>
+                    {classes.map((option) => (
+                      <option key={String(option.id)} value={String(option.id)}>
+                        {option.className || option.name || String(option.id)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
                 <FormField label="Exam Term" required>
                   <select
                     className="form-control form-select ps-40"
@@ -469,11 +621,18 @@ const MarkSendBySMSCreate = ({ onNavigate }) => {
                     id="receiver"
                     value={form.receiver}
                     onChange={handleChange}
+                    disabled={!form.receiverType || !form.classId || loadingStudents}
                   >
-                    <option value="">--Select--</option>
-                    {RECEIVER_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
+                    <option value="">
+                      {loadingStudents
+                        ? 'Loading...'
+                        : form.classId
+                          ? '--Select--'
+                          : 'Select Class First'}
+                    </option>
+                    {receiverOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
                       </option>
                     ))}
                   </select>

@@ -2,8 +2,12 @@ package com.School.School_management.ServiceImpl;
 
 import com.School.School_management.Dto.MarkSendEmailDto;
 
+import com.School.School_management.Entity.EmailSetting;
 import com.School.School_management.Entity.MarkSendEmail;
+import com.School.School_management.Entity.Student;
+import com.School.School_management.Repository.EmailSettingRepository;
 import com.School.School_management.Repository.MarkSendEmailRepository;
+import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Service.MarkSendEmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -12,8 +16,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
+import jakarta.mail.internet.MimeMessage;
+import org.springframework.mail.javamail.MimeMessageHelper;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,6 +30,15 @@ public class MarkSendEmailServiceImpl implements MarkSendEmailService {
 
     @Autowired
     private MarkSendEmailRepository repository;
+
+    @Autowired
+    private EmailSettingRepository emailSettingRepository;
+
+    @Autowired
+    private StudentRepository studentRepository;
+
+    @Autowired
+    private MarkSendEmailDispatchService dispatchService;
 
     @Override
     public List<MarkSendEmailDto> list(Long headOfficeId, Long schoolId) {
@@ -57,13 +75,23 @@ public class MarkSendEmailServiceImpl implements MarkSendEmailService {
         if (dto.getEmailBody() == null || dto.getEmailBody().trim().isEmpty()) {
             throw new IllegalArgumentException("Email text content block body is required.");
         }
+        List<String> receivers = resolveReceivers(dto);
+        if (receivers.isEmpty()) {
+            throw new IllegalArgumentException("Receiver email is required.");
+        }
 
-        MarkSendEmail entity = convertToEntity(dto);
-        MarkSendEmail saved = repository.save(entity);
+        MarkSendEmailDto lastSavedDto = null;
+        for (String receiver : receivers) {
+            MarkSendEmailDto perReceiverDto = copyForReceiver(dto, receiver);
+            MarkSendEmail entity = convertToEntity(perReceiverDto);
+            MarkSendEmail saved = repository.save(entity);
+            dispatchService.sendAsync(saved);
+            lastSavedDto = convertToDto(saved);
+        }
         
         // Note: Real-world asynchronous outbound SMTP engine dispatch hooks can safely handle `saved` variables downstream here.
         
-        return convertToDto(saved);
+        return lastSavedDto;
     }
 
     @Override
@@ -77,8 +105,12 @@ public class MarkSendEmailServiceImpl implements MarkSendEmailService {
         if (dto.getSchoolName() != null) {
             existing.setSchoolName(dto.getSchoolName());
         }
+        if (dto.getClassName() != null) {
+            existing.setClassName(dto.getClassName());
+        }
         existing.setExamTerm(dto.getExamTerm());
         existing.setReceiverType(dto.getReceiverType());
+        existing.setReceiver(dto.getReceiver());
         existing.setStudentMark(dto.getStudentMark());
         existing.setTemplate(dto.getTemplate());
         existing.setSubject(dto.getSubject());
@@ -107,8 +139,10 @@ public class MarkSendEmailServiceImpl implements MarkSendEmailService {
                 .headOfficeId(entity.getHeadOfficeId())
                 .schoolId(entity.getSchoolId())
                 .schoolName(entity.getSchoolName())
+                .className(entity.getClassName())
                 .examTerm(entity.getExamTerm())
                 .receiverType(entity.getReceiverType())
+                .receiver(entity.getReceiver())
                 .studentMark(entity.getStudentMark())
                 .template(entity.getTemplate())
                 .subject(entity.getSubject())
@@ -122,8 +156,45 @@ public class MarkSendEmailServiceImpl implements MarkSendEmailService {
                 .headOfficeId(dto.getHeadOfficeId())
                 .schoolId(dto.getSchoolId())
                 .schoolName(dto.getSchoolName())
+                .className(dto.getClassName())
                 .examTerm(dto.getExamTerm())
                 .receiverType(dto.getReceiverType())
+                .receiver(dto.getReceiver())
+                .studentMark(dto.getStudentMark())
+                .template(dto.getTemplate())
+                .subject(dto.getSubject())
+                .emailBody(dto.getEmailBody())
+                .sendDate(dto.getSendDate())
+                .build();
+    }
+
+    private List<String> resolveReceivers(MarkSendEmailDto dto) {
+        if (dto.getReceivers() != null && !dto.getReceivers().isEmpty()) {
+            return dto.getReceivers().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty())
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
+
+        if (dto.getReceiver() != null && !dto.getReceiver().trim().isEmpty()) {
+            return List.of(dto.getReceiver().trim());
+        }
+
+        return List.of();
+    }
+
+    private MarkSendEmailDto copyForReceiver(MarkSendEmailDto dto, String receiver) {
+        return MarkSendEmailDto.builder()
+                .id(dto.getId())
+                .headOfficeId(dto.getHeadOfficeId())
+                .schoolId(dto.getSchoolId())
+                .schoolName(dto.getSchoolName())
+                .className(dto.getClassName())
+                .examTerm(dto.getExamTerm())
+                .receiverType(dto.getReceiverType())
+                .receiver(receiver)
                 .studentMark(dto.getStudentMark())
                 .template(dto.getTemplate())
                 .subject(dto.getSubject())

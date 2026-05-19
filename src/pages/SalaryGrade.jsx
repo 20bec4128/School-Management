@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
@@ -88,20 +88,22 @@ const SalaryGrade = ({ onNavigate }) => {
     return row?.name || ''
   }
 
-  const loadLookups = async () => {
+  const loadLookups = useCallback(async () => {
     if (isSchoolAdmin) return
     const tasks = []
     if (isSuperAdmin || isHeadOfficeAdmin) {
       tasks.push(
-        fetchHeadOfficesPage(0, 500).then((page) => {
-          const content = Array.isArray(page?.content) ? page.content : []
-          setHeadOffices(content)
-        }).catch(() => {}),
+        fetchHeadOfficesPage(0, 500)
+          .then((page) => {
+            const content = Array.isArray(page?.content) ? page.content : []
+            setHeadOffices(content)
+          })
+          .catch(() => {}),
       )
     }
     tasks.push(fetchSchoolsLookup().then((list) => setSchools(Array.isArray(list) ? list : [])))
     await Promise.all(tasks)
-  }
+  }, [isSchoolAdmin, isSuperAdmin, isHeadOfficeAdmin])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500)
@@ -142,6 +144,26 @@ const SalaryGrade = ({ onNavigate }) => {
     setTotalPages(data?.totalPages ?? 0)
   }
 
+  const resolvedSchoolHeadOfficeId = useMemo(() => {
+    if (isSchoolAdmin) {
+      const school = schoolsById.get(String(authSchoolId ?? ''))
+      return school?.headOfficeId ?? authHeadOfficeId ?? null
+    }
+    if (isHeadOfficeAdmin) return authHeadOfficeId ?? null
+    return null
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, schoolsById])
+
+  const initialSchoolId = useMemo(() => {
+    if (isSchoolAdmin) return authSchoolId ?? null
+    return scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId !== 'Select' ? Number(filters.schoolId) : null)
+  }, [authSchoolId, filters.schoolId, isSchoolAdmin, scopeSchoolId])
+
+  const initialHeadOfficeId = useMemo(() => {
+    if (isSuperAdmin && filters.headOfficeId !== 'Select') return Number(filters.headOfficeId)
+    if (isHeadOfficeAdmin) return authHeadOfficeId ?? null
+    return null
+  }, [authHeadOfficeId, filters.headOfficeId, isHeadOfficeAdmin, isSuperAdmin])
+
   useEffect(() => {
     if (status !== 'ready' || !token) return
     setLoadError('')
@@ -149,15 +171,8 @@ const SalaryGrade = ({ onNavigate }) => {
     Promise.resolve()
       .then(loadLookups)
       .then(() => {
-        const initialSchoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId !== 'Select' ? Number(filters.schoolId) : null))
-        const initialHeadOfficeId =
-          isSuperAdmin && filters.headOfficeId !== 'Select'
-            ? Number(filters.headOfficeId)
-            : isHeadOfficeAdmin
-              ? authHeadOfficeId
-              : null
         return loadSalaryGrades({ 
-          headOfficeId: initialHeadOfficeId,
+          headOfficeId: isSchoolAdmin ? resolvedSchoolHeadOfficeId : initialHeadOfficeId,
           schoolId: initialSchoolId,
           page: currentPage - 1,
           size: rowsPerPage,
@@ -166,7 +181,19 @@ const SalaryGrade = ({ onNavigate }) => {
       })
       .catch((e) => setLoadError(e?.message || 'Failed to load salary grades'))
       .finally(() => setBusy(false))
-  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, schoolsById, scopeSchoolId])
+  }, [
+    status,
+    token,
+    currentPage,
+    rowsPerPage,
+    debouncedSearch,
+    filters.headOfficeId,
+    filters.schoolId,
+    initialHeadOfficeId,
+    initialSchoolId,
+    loadLookups,
+    resolvedSchoolHeadOfficeId,
+  ])
 
   const openAdd = () => {
     onNavigate?.('add-salary-grade')

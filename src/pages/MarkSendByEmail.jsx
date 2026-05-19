@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import SlideSidebar from "../components/SlideSidebar";
+import RowsPerPageSelect from "../components/RowsPerPageSelect";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import ExportDropdown from "../components/ExportDropdown";
 import "../assets/css/addModalShared.css";
 import { useAuth } from "../context/useAuth";
+import { fetchHeadOfficesLookup } from "../apis/headOfficesApi";
+import { normalizeRole } from "../utils/roles";
 import {
   fetchMarkSendEmailsPage,
   deleteMarkSendEmail,
@@ -11,6 +14,7 @@ import {
 import { RECEIVER_TYPE_OPTIONS } from "../constants/markSendEmail";
 
 const emptyFilters = {
+  headOfficeId: "Select",
   school: "Select",
   exam: "Select",
   receiverType: "Select",
@@ -32,13 +36,18 @@ const uniqueStrings = (items) =>
   ).sort();
 
 const MarkSendByEmail = ({ onNavigate }) => {
-  const { schoolId, headOfficeId } = useAuth();
+  const { role: authRole, user, schoolId, headOfficeId } = useAuth();
+  const isSuperAdmin = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === "SUPER_ADMIN",
+    [authRole, user],
+  );
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRows, setSelectedRows] = useState([]);
 
   const [rows, setRows] = useState([]);
+  const [headOffices, setHeadOffices] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -74,9 +83,54 @@ const MarkSendByEmail = ({ onNavigate }) => {
     loadData();
   }, [currentPage, rowsPerPage, search, schoolId, headOfficeId]);
 
-  const schoolOptions = useMemo(
-    () => uniqueStrings(rows.map((item) => item.schoolName)),
-    [rows],
+  useEffect(() => {
+    let cancelled = false;
+    fetchHeadOfficesLookup()
+      .then((data) => {
+        if (!cancelled) setHeadOffices(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setHeadOffices([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const schoolOptions = useMemo(() => {
+    const filtered = rows.filter(
+      (row) =>
+        !isSuperAdmin ||
+        pendingFilters.headOfficeId === "Select" ||
+        String(row.headOfficeId ?? "") === String(pendingFilters.headOfficeId),
+    );
+
+    return Array.from(
+      new Map(
+        filtered
+          .map((item) => ({
+            headOfficeId: item.headOfficeId != null ? String(item.headOfficeId) : "",
+            schoolName: item.schoolName,
+          }))
+          .filter((item) => item.schoolName)
+          .map((item) => [item.schoolName, item]),
+      ).values(),
+    ).sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
+  }, [rows, pendingFilters.headOfficeId, isSuperAdmin]);
+  const headOfficeOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          headOffices
+            .map((item) => ({
+              id: item?.id != null ? String(item.id) : "",
+              name: item?.name || "",
+            }))
+            .filter((item) => item.id && item.name)
+            .map((item) => [item.id, item]),
+        ).values(),
+      ).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [headOffices],
   );
   const examOptions = useMemo(
     () => uniqueStrings(rows.map((item) => item.examTerm)),
@@ -93,6 +147,13 @@ const MarkSendByEmail = ({ onNavigate }) => {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
+      if (
+        isSuperAdmin &&
+        filters.headOfficeId !== "Select" &&
+        String(row.headOfficeId ?? "") !== String(filters.headOfficeId)
+      ) {
+        return false;
+      }
       if (filters.school !== "Select" && row.schoolName !== filters.school)
         return false;
       if (filters.exam !== "Select" && row.examTerm !== filters.exam)
@@ -111,7 +172,7 @@ const MarkSendByEmail = ({ onNavigate }) => {
         return false;
       return true;
     });
-  }, [rows, filters]);
+  }, [rows, filters, isSuperAdmin]);
 
   const totalPages = Math.max(1, Math.ceil(totalElements / rowsPerPage));
 
@@ -139,7 +200,16 @@ const MarkSendByEmail = ({ onNavigate }) => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target;
-    setPendingFilters((prev) => ({ ...prev, [id]: value }));
+    setPendingFilters((prev) => {
+      if (id === "headOfficeId") {
+        return {
+          ...prev,
+          headOfficeId: value,
+          school: "Select",
+        };
+      }
+      return { ...prev, [id]: value };
+    });
   };
 
   const handleApplyFilters = (e) => {
@@ -270,20 +340,14 @@ const MarkSendByEmail = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
+                onChange={(value) => {
+                  setRowsPerPage(Number(value));
                   setCurrentPage(1);
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -469,6 +533,30 @@ const MarkSendByEmail = ({ onNavigate }) => {
           className="p-20 d-grid grid-cols-2 gap-16"
           onSubmit={handleApplyFilters}
         >
+          {isSuperAdmin ? (
+            <div>
+              <label
+                htmlFor="headOfficeId"
+                className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
+              >
+                Head Office
+              </label>
+              <select
+                id="headOfficeId"
+                className="form-control form-select"
+                value={pendingFilters.headOfficeId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select Head Office</option>
+                {headOfficeOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           <div style={{ gridColumn: "1 / -1" }}>
             <label
               htmlFor="school"
@@ -481,11 +569,12 @@ const MarkSendByEmail = ({ onNavigate }) => {
               className="form-control form-select"
               value={pendingFilters.school}
               onChange={handlePendingFilterChange}
+              disabled={isSuperAdmin && pendingFilters.headOfficeId === "Select"}
             >
               <option value="Select">Select School</option>
               {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+                <option key={option.schoolName} value={option.schoolName}>
+                  {option.schoolName}
                 </option>
               ))}
             </select>

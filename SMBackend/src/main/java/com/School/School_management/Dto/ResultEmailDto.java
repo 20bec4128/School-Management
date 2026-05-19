@@ -2,6 +2,7 @@ package com.School.School_management.Dto;
 
 import lombok.*;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -14,6 +15,7 @@ public class ResultEmailDto {
     private String examTerm;
     private String receiverType;
     private String receiver;
+    private List<String> receivers;
     private String template;
     private String subject;
     private String emailBody;
@@ -33,6 +35,8 @@ public class ResultEmailDto {
     public void setReceiverType(String receiverType) { this.receiverType = receiverType; }
     public String getReceiver() { return receiver; }
     public void setReceiver(String receiver) { this.receiver = receiver; }
+    public List<String> getReceivers() { return receivers; }
+    public void setReceivers(List<String> receivers) { this.receivers = receivers; }
     public String getTemplate() { return template; }
     public void setTemplate(String template) { this.template = template; }
     public String getSubject() { return subject; }
@@ -54,6 +58,7 @@ public class ResultEmailDto {
         private String examTerm;
         private String receiverType;
         private String receiver;
+        private List<String> receivers;
         private String template;
         private String subject;
         private String emailBody;
@@ -66,6 +71,7 @@ public class ResultEmailDto {
         public Builder examTerm(String examTerm) { this.examTerm = examTerm; return this; }
         public Builder receiverType(String receiverType) { this.receiverType = receiverType; return this; }
         public Builder receiver(String receiver) { this.receiver = receiver; return this; }
+        public Builder receivers(List<String> receivers) { this.receivers = receivers; return this; }
         public Builder template(String template) { this.template = template; return this; }
         public Builder subject(String subject) { this.subject = subject; return this; }
         public Builder emailBody(String emailBody) { this.emailBody = emailBody; return this; }
@@ -80,6 +86,7 @@ public class ResultEmailDto {
             dto.setExamTerm(examTerm);
             dto.setReceiverType(receiverType);
             dto.setReceiver(receiver);
+            dto.setReceivers(receivers);
             dto.setTemplate(template);
             dto.setSubject(subject);
             dto.setEmailBody(emailBody);

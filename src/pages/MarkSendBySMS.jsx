@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import ExportDropdown from '../components/ExportDropdown'
 import '../assets/css/addModalShared.css'
 import { useAuth } from '../context/useAuth'
+import { fetchHeadOfficesLookup } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import { normalizeRole } from '../utils/roles'
 import {
   deleteMarkSendSms,
   fetchMarkSendSmsPage,
@@ -17,6 +20,7 @@ const TEMPLATE_OPTIONS = ['Default Mark SMS', 'Exam Result SMS', 'Parent Notific
 const GATEWAY_OPTIONS = ['Twilio', 'Fast2SMS', 'TextLocal']
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   schoolId: 'Select',
   examTerm: 'Select',
   receiverType: 'Select',
@@ -37,7 +41,11 @@ const columnOptions = [
 ]
 
 const MarkSendBySMS = ({ onNavigate }) => {
-  const { schoolId, headOfficeId } = useAuth()
+  const { role: authRole, user, schoolId, headOfficeId } = useAuth()
+  const isSuperAdmin = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === 'SUPER_ADMIN',
+    [authRole, user],
+  )
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -47,6 +55,7 @@ const MarkSendBySMS = ({ onNavigate }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [schools, setSchools] = useState([])
+  const [headOffices, setHeadOffices] = useState([])
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -68,6 +77,20 @@ const MarkSendBySMS = ({ onNavigate }) => {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    fetchHeadOfficesLookup()
+      .then((data) => {
+        if (!cancelled) setHeadOffices(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        if (!cancelled) setHeadOffices([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const schoolOptions = useMemo(() => {
     return Array.isArray(schools)
       ? schools
@@ -76,17 +99,33 @@ const MarkSendBySMS = ({ onNavigate }) => {
             schoolName: school?.schoolName || '',
             headOfficeId: school?.headOfficeId ?? null,
           }))
-          .filter((school) => school.id != null && school.schoolName)
+          .filter((school) => {
+            if (school.id == null || !school.schoolName) return false
+            if (!isSuperAdmin || pendingFilters.headOfficeId === 'Select') return true
+            return String(school.headOfficeId ?? '') === String(pendingFilters.headOfficeId)
+          })
           .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)))
       : []
-  }, [schools])
+  }, [schools, isSuperAdmin, pendingFilters.headOfficeId])
+
+  const headOfficeOptions = useMemo(() => {
+    return Array.isArray(headOffices)
+      ? headOffices
+          .map((headOffice) => ({
+            id: headOffice?.id != null ? String(headOffice.id) : '',
+            name: headOffice?.name || '',
+          }))
+          .filter((headOffice) => headOffice.id && headOffice.name)
+          .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      : []
+  }, [headOffices])
 
   const loadData = async () => {
     setLoading(true)
     setError('')
     try {
       const data = await fetchMarkSendSmsPage({
-        headOfficeId,
+        headOfficeId: isSuperAdmin && filters.headOfficeId !== 'Select' ? filters.headOfficeId : headOfficeId,
         schoolId,
         examTerm: filters.examTerm,
         receiverType: filters.receiverType,
@@ -108,7 +147,7 @@ const MarkSendBySMS = ({ onNavigate }) => {
 
   useEffect(() => {
     loadData()
-  }, [currentPage, rowsPerPage, search, filters, schoolId, headOfficeId])
+  }, [currentPage, rowsPerPage, search, filters, schoolId, headOfficeId, isSuperAdmin])
 
   const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(row.id))
 
@@ -128,7 +167,12 @@ const MarkSendBySMS = ({ onNavigate }) => {
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
+    setPendingFilters((prev) => {
+      if (id === 'headOfficeId') {
+        return { ...prev, headOfficeId: value, schoolId: 'Select' }
+      }
+      return { ...prev, [id]: value }
+    })
   }
 
   const handleApplyFilters = (e) => {
@@ -254,20 +298,14 @@ const MarkSendBySMS = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(Number(value))
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -431,6 +469,27 @@ const MarkSendBySMS = ({ onNavigate }) => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <div>
+              <label htmlFor="headOfficeId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                Head Office
+              </label>
+              <select
+                id="headOfficeId"
+                className="form-control form-select"
+                value={pendingFilters.headOfficeId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">Select Head Office</option>
+                {headOfficeOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           <div style={{ gridColumn: '1 / -1' }}>
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School
@@ -440,6 +499,7 @@ const MarkSendBySMS = ({ onNavigate }) => {
               className="form-control form-select"
               value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
+              disabled={isSuperAdmin && pendingFilters.headOfficeId === 'Select'}
             >
               <option value="Select">Select School</option>
               {schoolOptions.map((option) => (

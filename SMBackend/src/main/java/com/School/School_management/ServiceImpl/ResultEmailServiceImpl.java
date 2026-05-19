@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,6 +21,9 @@ public class ResultEmailServiceImpl implements ResultEmailService {
 
     @Autowired
     private ResultEmailRepository repository;
+
+    @Autowired
+    private ResultEmailDispatchService dispatchService;
 
     @Override
     public List<ResultEmailDto> list(Long headOfficeId, Long schoolId) {
@@ -56,9 +60,6 @@ public class ResultEmailServiceImpl implements ResultEmailService {
         if (dto.getReceiverType() == null || dto.getReceiverType().trim().isEmpty()) {
             throw new IllegalArgumentException("Receiver type is required.");
         }
-        if (dto.getReceiver() == null || dto.getReceiver().trim().isEmpty()) {
-            throw new IllegalArgumentException("Receiver is required.");
-        }
         if (dto.getSubject() == null || dto.getSubject().trim().isEmpty()) {
             throw new IllegalArgumentException("Subject is required.");
         }
@@ -66,9 +67,20 @@ public class ResultEmailServiceImpl implements ResultEmailService {
             throw new IllegalArgumentException("Email body is required.");
         }
 
-        ResultEmail entity = convertToEntity(dto);
-        ResultEmail saved = repository.save(entity);
-        return convertToDto(saved);
+        List<String> receivers = resolveReceivers(dto);
+        if (receivers.isEmpty()) {
+            throw new IllegalArgumentException("Receiver is required.");
+        }
+
+        ResultEmailDto lastSaved = null;
+        for (String receiver : receivers) {
+            ResultEmailDto perReceiverDto = copyForReceiver(dto, receiver);
+            ResultEmail entity = convertToEntity(perReceiverDto);
+            ResultEmail saved = repository.save(entity);
+            dispatchService.sendAsync(saved);
+            lastSaved = convertToDto(saved);
+        }
+        return lastSaved;
     }
 
     @Override
@@ -85,9 +97,6 @@ public class ResultEmailServiceImpl implements ResultEmailService {
         }
         if (dto.getReceiverType() == null || dto.getReceiverType().trim().isEmpty()) {
             throw new IllegalArgumentException("Receiver type is required.");
-        }
-        if (dto.getReceiver() == null || dto.getReceiver().trim().isEmpty()) {
-            throw new IllegalArgumentException("Receiver is required.");
         }
         if (dto.getSubject() == null || dto.getSubject().trim().isEmpty()) {
             throw new IllegalArgumentException("Subject is required.");
@@ -132,6 +141,7 @@ public class ResultEmailServiceImpl implements ResultEmailService {
                 .examTerm(entity.getExamTerm())
                 .receiverType(entity.getReceiverType())
                 .receiver(entity.getReceiver())
+                .receivers(null)
                 .template(entity.getTemplate())
                 .subject(entity.getSubject())
                 .emailBody(entity.getEmailBody())
@@ -147,6 +157,39 @@ public class ResultEmailServiceImpl implements ResultEmailService {
                 .examTerm(dto.getExamTerm())
                 .receiverType(dto.getReceiverType())
                 .receiver(dto.getReceiver())
+                .template(dto.getTemplate())
+                .subject(dto.getSubject())
+                .emailBody(dto.getEmailBody())
+                .sendDate(dto.getSendDate())
+                .build();
+    }
+
+    private List<String> resolveReceivers(ResultEmailDto dto) {
+        if (dto.getReceivers() != null && !dto.getReceivers().isEmpty()) {
+            return dto.getReceivers().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty())
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
+
+        if (dto.getReceiver() != null && !dto.getReceiver().trim().isEmpty()) {
+            return List.of(dto.getReceiver().trim());
+        }
+
+        return List.of();
+    }
+
+    private ResultEmailDto copyForReceiver(ResultEmailDto dto, String receiver) {
+        return ResultEmailDto.builder()
+                .id(dto.getId())
+                .headOfficeId(dto.getHeadOfficeId())
+                .schoolId(dto.getSchoolId())
+                .schoolName(dto.getSchoolName())
+                .examTerm(dto.getExamTerm())
+                .receiverType(dto.getReceiverType())
+                .receiver(receiver)
                 .template(dto.getTemplate())
                 .subject(dto.getSubject())
                 .emailBody(dto.getEmailBody())

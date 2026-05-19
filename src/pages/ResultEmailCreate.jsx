@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import { fetchClasses } from "../apis/classesApi";
 import { fetchStudentsByClassSection } from "../apis/studentsApi";
 import { useAuth } from "../context/useAuth";
 import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
@@ -24,36 +25,36 @@ const FIELD_ICONS = {
 };
 
 const TEMPLATE_OPTIONS = {
-  'Result Template': {
-    subject: 'Exam Result - {exam_name}',
+  "Result Template": {
+    subject: "Exam Result - {exam_name}",
     emailBody:
-      'Dear {receiver_name},\n\nYour exam result for {exam_name} has been published.\n\nTotal Marks: {total_marks}\nObtained Marks: {obtained_marks}\nPercentage: {percentage}%\nGrade: {grade}\n\nRegards,\n{school_name}',
+      "Dear {receiver_name},\n\nYour exam result for {exam_name} has been published.\n\nTotal Marks: {total_marks}\nObtained Marks: {obtained_marks}\nPercentage: {percentage}%\nGrade: {grade}\n\nRegards,\n{school_name}",
   },
-  'Parent Notification Template': {
-    subject: 'Your Child Result - {student_name}',
+  "Parent Notification Template": {
+    subject: "Your Child Result - {student_name}",
     emailBody:
-      'Dear Parent/Guardian,\n\nThe result of {student_name} for {exam_name} is as follows:\n\nTotal Marks: {total_marks}\nObtained Marks: {obtained_marks}\nPercentage: {percentage}%\nGrade: {grade}\n\nRegards,\n{school_name}',
+      "Dear Parent/Guardian,\n\nThe result of {student_name} for {exam_name} is as follows:\n\nTotal Marks: {total_marks}\nObtained Marks: {obtained_marks}\nPercentage: {percentage}%\nGrade: {grade}\n\nRegards,\n{school_name}",
   },
-  'Grade Alert Template': {
-    subject: 'Grade Published - {exam_name}',
+  "Grade Alert Template": {
+    subject: "Grade Published - {exam_name}",
     emailBody:
-      'Hello {receiver_name},\n\nThe grades for {exam_name} examination have been published.\n\nYour Grade: {grade}\nPercentage: {percentage}%\n\nThank you,\n{school_name}',
+      "Hello {receiver_name},\n\nThe grades for {exam_name} examination have been published.\n\nYour Grade: {grade}\nPercentage: {percentage}%\n\nThank you,\n{school_name}",
   },
 };
 
 const DYNAMIC_TAGS = [
-  '{school_name}',
-  '{receiver_name}',
-  '{student_name}',
-  '{exam_name}',
-  '{total_marks}',
-  '{obtained_marks}',
-  '{percentage}',
-  '{grade}',
+  "{school_name}",
+  "{receiver_name}",
+  "{student_name}",
+  "{exam_name}",
+  "{total_marks}",
+  "{obtained_marks}",
+  "{percentage}",
+  "{grade}",
 ];
 
-const DEFAULT_EXAM_TERMS = ['First Term', 'Second Term', 'Final Term'];
-const RECEIVER_TYPE_OPTIONS = ['Student', 'Parent', 'Guardian'];
+const DEFAULT_EXAM_TERMS = ["First Term", "Second Term", "Final Term"];
+const RECEIVER_TYPE_OPTIONS = ["Student", "Parent", "Guardian"];
 
 const FormField = ({
   label,
@@ -123,13 +124,16 @@ const ResultEmailCreate = ({ onNavigate }) => {
   const isEditMode = Boolean(editId);
 
   const [schools, setSchools] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [form, setForm] = useState({
     headOfficeId: "",
     schoolId: "",
+    classId: "",
     examTerm: "",
     receiverType: "",
-    receiver: "",
+    receivers: [],
     template: "",
     subject: "",
     emailBody: "",
@@ -194,9 +198,10 @@ const ResultEmailCreate = ({ onNavigate }) => {
                   : "",
               schoolId:
                 existing.schoolId != null ? String(existing.schoolId) : "",
+              classId: existing.classId != null ? String(existing.classId) : "",
               examTerm: existing.examTerm || "",
               receiverType: existing.receiverType || "",
-              receiver: existing.receiver || "",
+              receivers: existing.receiver ? [existing.receiver] : [],
               template: existing.template || "",
               subject: existing.subject || "",
               emailBody: existing.emailBody || "",
@@ -221,28 +226,50 @@ const ResultEmailCreate = ({ onNavigate }) => {
 
   useEffect(() => {
     const loadStudents = async () => {
-      if (!form.schoolId) {
+      if (!form.schoolId || !form.classId) {
         setStudents([]);
         return;
       }
 
+      setLoadingStudents(true);
       try {
         const data = await fetchStudentsByClassSection({
           schoolId: form.schoolId,
+          classId: form.classId,
         });
         setStudents(Array.isArray(data) ? data : []);
       } catch {
         setStudents([]);
+      } finally {
+        setLoadingStudents(false);
       }
     };
 
     void loadStudents();
-  }, [form.schoolId]);
+  }, [form.schoolId, form.classId]);
 
   useEffect(() => {
     if (!isSchoolAdmin || authSchoolId == null) return;
     setForm((prev) => ({ ...prev, schoolId: String(authSchoolId) }));
   }, [authSchoolId, isSchoolAdmin]);
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      if (!form.schoolId) {
+        setClasses([]);
+        return;
+      }
+
+      try {
+        const data = await fetchClasses({ schoolId: form.schoolId });
+        setClasses(Array.isArray(data) ? data : []);
+      } catch {
+        setClasses([]);
+      }
+    };
+
+    void loadClasses();
+  }, [form.schoolId]);
 
   useEffect(() => {
     if (!isSuperAdmin || isEditMode || !manualScope.selectedSchoolId) return;
@@ -259,7 +286,14 @@ const ResultEmailCreate = ({ onNavigate }) => {
         return {
           ...prev,
           receiverType: value,
-          receiver: "",
+          receivers: [],
+        };
+      }
+      if (id === "classId") {
+        return {
+          ...prev,
+          classId: value,
+          receivers: [],
         };
       }
       if (id === "template") {
@@ -276,42 +310,47 @@ const ResultEmailCreate = ({ onNavigate }) => {
   };
 
   const buildReceiverLabel = (student, receiverType) => {
-    const name = student?.name || student?.studentName || student?.fullName || "Unnamed Student";
+    const name =
+      student?.name ||
+      student?.studentName ||
+      student?.fullName ||
+      "Unnamed Student";
     const rollNo = student?.rollNo ? ` • Roll No: ${student.rollNo}` : "";
-    const className = student?.className ? ` • Class: ${student.className}` : "";
+    const className = student?.className
+      ? ` • Class: ${student.className}`
+      : "";
     const section = student?.section ? ` • Section: ${student.section}` : "";
+    const email = student?.email ? ` • ${student.email}` : "";
 
     if (receiverType === "Parent") {
-      const parentName =
-        student?.fatherName ||
-        student?.motherName ||
-        student?.parentName ||
-        student?.parentUsername ||
-        name;
-      return `${parentName}${rollNo}${className}${section}`;
+      return `${name}${rollNo}${className}${section}${email}`;
     }
 
     if (receiverType === "Guardian") {
-      const guardianName =
-        student?.guardianName ||
-        student?.guardianUsername ||
-        student?.fatherName ||
-        student?.motherName ||
-        student?.parentUsername ||
-        name;
-      return `${guardianName}${rollNo}${className}${section}`;
+      return `${name}${rollNo}${className}${section}${email}`;
     }
 
-    return `${name}${rollNo}${className}${section}`;
+    return `${name}${rollNo}${className}${section}${email}`;
   };
 
   const handleHeadOfficeChange = (value) => {
     manualScope.setSelectedScope(value, "");
-    setForm((prev) => ({ ...prev, headOfficeId: value, schoolId: "" }));
+    setForm((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: "",
+      classId: "",
+      receivers: [],
+    }));
   };
 
   const handleSchoolChange = (value) => {
-    setForm((prev) => ({ ...prev, schoolId: value, receiver: "" }));
+    setForm((prev) => ({
+      ...prev,
+      schoolId: value,
+      classId: "",
+      receivers: [],
+    }));
     if (isSuperAdmin) {
       manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value);
     }
@@ -319,9 +358,10 @@ const ResultEmailCreate = ({ onNavigate }) => {
 
   const validate = () => {
     if (!form.schoolId) return "School is required";
+    if (!form.classId) return "Class is required";
     if (!form.examTerm) return "Exam Term is required";
     if (!form.receiverType) return "Receiver Type is required";
-    if (!form.receiver) return "Receiver is required";
+    if (!form.receivers.length) return "At least one student must be selected";
     if (!form.subject.trim()) return "Subject is required";
     if (!form.emailBody.trim()) return "Email Body is required";
     return "";
@@ -330,9 +370,11 @@ const ResultEmailCreate = ({ onNavigate }) => {
   const validateStep = (targetStep) => {
     if (targetStep === 0) {
       if (!form.schoolId) return "School is required";
+      if (!form.classId) return "Class is required";
       if (!form.examTerm) return "Exam Term is required";
       if (!form.receiverType) return "Receiver Type is required";
-      if (!form.receiver) return "Receiver is required";
+      if (!form.receivers.length)
+        return "At least one student must be selected";
     }
     return "";
   };
@@ -371,9 +413,11 @@ const ResultEmailCreate = ({ onNavigate }) => {
       headOfficeId: resolvedHeadOfficeId,
       schoolId: Number(form.schoolId),
       schoolName: resolveSchoolName(),
+      classId: form.classId ? Number(form.classId) : null,
       examTerm: form.examTerm,
       receiverType: form.receiverType,
-      receiver: form.receiver,
+      receiver: form.receivers[0] || "",
+      receivers: form.receivers,
       template: form.template,
       subject: form.subject.trim(),
       emailBody: form.emailBody.trim(),
@@ -400,26 +444,12 @@ const ResultEmailCreate = ({ onNavigate }) => {
   };
 
   const receiverOptions = useMemo(() => {
-    if (!form.receiverType || !form.schoolId) return [];
+    if (!form.receiverType || !form.schoolId || !form.classId) return [];
     const studentList = Array.isArray(students) ? students : [];
 
     return studentList
       .map((student) => {
-        const value =
-          form.receiverType === "Student"
-            ? student?.name || student?.studentName || student?.fullName || ""
-            : form.receiverType === "Parent"
-              ? student?.fatherName ||
-                student?.motherName ||
-                student?.parentName ||
-                student?.parentUsername ||
-                ""
-              : student?.guardianName ||
-                student?.guardianUsername ||
-                student?.fatherName ||
-                student?.motherName ||
-                student?.parentUsername ||
-                "";
+        const value = student?.email?.trim() || "";
 
         if (!value) return null;
 
@@ -428,13 +458,31 @@ const ResultEmailCreate = ({ onNavigate }) => {
           label: buildReceiverLabel(student, form.receiverType),
         };
       })
-      .filter(Boolean)
-      .filter(
-        (item, index, array) =>
-          index === array.findIndex((candidate) => candidate.value === item.value),
-      );
-  }, [form.receiverType, form.schoolId, students]);
+      .filter(Boolean);
+  }, [form.receiverType, form.schoolId, form.classId, students]);
 
+  const handleReceiverToggle = (value) => {
+    setForm((prev) => {
+      const exists = prev.receivers.includes(value);
+      return {
+        ...prev,
+        receivers: exists
+          ? prev.receivers.filter((item) => item !== value)
+          : [...prev.receivers, value],
+      };
+    });
+  };
+
+  const selectAllReceivers = () => {
+    setForm((prev) => ({
+      ...prev,
+      receivers: receiverOptions.map((item) => item.value),
+    }));
+  };
+
+  const clearReceivers = () => {
+    setForm((prev) => ({ ...prev, receivers: [] }));
+  };
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -531,7 +579,7 @@ const ResultEmailCreate = ({ onNavigate }) => {
                     />
                   </div>
                 ) : (
-                  <FormField label="School Name" required full>
+                  <FormField label="School Name" required>
                     <select
                       className="form-control form-select ps-40"
                       id="schoolId"
@@ -552,7 +600,28 @@ const ResultEmailCreate = ({ onNavigate }) => {
                   </FormField>
                 )}
 
-                <FormField label="Exam" required full>
+                <FormField label="Class" required>
+                  <select
+                    className="form-control form-select ps-40"
+                    id="classId"
+                    value={form.classId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId}
+                  >
+                    <option value="">
+                      {form.schoolId
+                        ? "--Select Class--"
+                        : "Select School First"}
+                    </option>
+                    {classes.map((option) => (
+                      <option key={String(option.id)} value={String(option.id)}>
+                        {option.className || option.name || String(option.id)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Exam" required>
                   <select
                     className="form-control form-select ps-40"
                     id="examTerm"
@@ -584,22 +653,102 @@ const ResultEmailCreate = ({ onNavigate }) => {
                   </select>
                 </FormField>
 
-                <FormField label="Receiver" required>
-                  <select
-                    className="form-control form-select ps-40"
-                    id="receiver"
-                    value={form.receiver}
-                    onChange={handleChange}
-                    disabled={!form.receiverType}
+                <div className="avm-field full">
+                  <label className="avm-label">
+                    Students
+                    <span className="req"> *</span>
+                  </label>
+                  <div
+                    style={{
+                      border: "1px solid #d0d5dd",
+                      borderRadius: "0.9rem",
+                      padding: "0.9rem",
+                      background: !form.classId ? "#f8fafc" : "#fff",
+                    }}
                   >
-                    <option value="">--Select--</option>
-                    {receiverOptions.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-12">
+                      <div
+                        className="text-secondary-light"
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        {loadingStudents
+                          ? "Loading students..."
+                          : form.classId
+                            ? `${form.receivers.length} selected`
+                            : "Select a school and class to load students"}
+                      </div>
+                      <div className="d-flex gap-8">
+                        <button
+                          type="button"
+                          className="btn btn-light border btn-sm"
+                          onClick={selectAllReceivers}
+                          disabled={!receiverOptions.length}
+                        >
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-light border btn-sm"
+                          onClick={clearReceivers}
+                          disabled={!form.receivers.length}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {form.classId ? (
+                      <div
+                        style={{
+                          maxHeight: "280px",
+                          overflowY: "auto",
+                          display: "grid",
+                          gap: "0.6rem",
+                        }}
+                      >
+                        {receiverOptions.length ? (
+                          receiverOptions.map((item) => (
+                            <label
+                              key={item.value}
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: "0.75rem",
+                                padding: "0.75rem 0.85rem",
+                                border: "1px solid #eaecf0",
+                                borderRadius: "0.75rem",
+                                cursor: "pointer",
+                                background: form.receivers.includes(item.value)
+                                  ? "#f5f3ff"
+                                  : "#fff",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={form.receivers.includes(item.value)}
+                                onChange={() =>
+                                  handleReceiverToggle(item.value)
+                                }
+                                style={{ marginTop: "0.2rem" }}
+                              />
+                              <span style={{ lineHeight: 1.45 }}>
+                                {item.label}
+                              </span>
+                            </label>
+                          ))
+                        ) : (
+                          <div className="text-secondary-light">
+                            No student emails found in this class.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-secondary-light">
+                        Select a school and class first.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="avm-grid">
@@ -660,12 +809,12 @@ const ResultEmailCreate = ({ onNavigate }) => {
                           className="avm-chip"
                           style={{ border: "none", cursor: "pointer" }}
                           onClick={() =>
-                              setForm((prev) => ({
-                                ...prev,
-                                emailBody: prev.emailBody
-                                  ? `${prev.emailBody} ${tag}`
-                                  : tag,
-                              }))
+                            setForm((prev) => ({
+                              ...prev,
+                              emailBody: prev.emailBody
+                                ? `${prev.emailBody} ${tag}`
+                                : tag,
+                            }))
                           }
                         >
                           {tag}

@@ -25,8 +25,10 @@ public interface MarkSendEmailRepository extends JpaRepository<MarkSendEmail, Lo
            "(:schoolId IS NULL OR m.schoolId = :schoolId) AND " +
            "(:search IS NULL OR :search = '' OR " +
            " LOWER(m.schoolName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           " LOWER(COALESCE(m.className, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            " LOWER(m.examTerm) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            " LOWER(m.receiverType) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           " LOWER(COALESCE(m.receiver, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            " LOWER(m.studentMark) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            " LOWER(m.subject) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<MarkSendEmail> findByScopeWithSearch(@Param("headOfficeId") Long headOfficeId, 

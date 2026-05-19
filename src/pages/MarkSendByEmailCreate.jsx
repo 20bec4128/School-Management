@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import { fetchClasses } from "../apis/classesApi";
+import { fetchStudentsByClassSection } from "../apis/studentsApi";
 import { useAuth } from "../context/useAuth";
 import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
 import { normalizeRole } from "../utils/roles";
@@ -97,11 +99,16 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
   const isEditMode = Boolean(editId);
 
   const [schools, setSchools] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [form, setForm] = useState({
     headOfficeId: "",
     schoolId: "",
+    classId: "",
     examTerm: "",
     receiverType: "",
+    receivers: [],
     studentMark: "",
     template: "",
     subject: "",
@@ -167,8 +174,10 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
                   : "",
               schoolId:
                 existing.schoolId != null ? String(existing.schoolId) : "",
+              classId: existing.classId != null ? String(existing.classId) : "",
               examTerm: existing.examTerm || "",
               receiverType: existing.receiverType || "",
+              receivers: existing.receiver ? [existing.receiver] : [],
               studentMark: existing.studentMark || "",
               template: existing.template || "",
               subject: existing.subject || "",
@@ -198,6 +207,48 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
   }, [authSchoolId, isSchoolAdmin]);
 
   useEffect(() => {
+    const loadClasses = async () => {
+      if (!form.schoolId) {
+        setClasses([]);
+        return;
+      }
+
+      try {
+        const data = await fetchClasses({ schoolId: form.schoolId });
+        setClasses(Array.isArray(data) ? data : []);
+      } catch {
+        setClasses([]);
+      }
+    };
+
+    void loadClasses();
+  }, [form.schoolId]);
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      if (!form.schoolId || !form.classId) {
+        setStudents([]);
+        return;
+      }
+
+      setLoadingStudents(true);
+      try {
+        const data = await fetchStudentsByClassSection({
+          schoolId: form.schoolId,
+          classId: form.classId,
+        });
+        setStudents(Array.isArray(data) ? data : []);
+      } catch {
+        setStudents([]);
+      } finally {
+        setLoadingStudents(false);
+      }
+    };
+
+    void loadStudents();
+  }, [form.schoolId, form.classId]);
+
+  useEffect(() => {
     if (!isSuperAdmin || isEditMode || !manualScope.selectedSchoolId) return;
     setForm((prev) => ({
       ...prev,
@@ -208,6 +259,20 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
   const handleChange = (e) => {
     const { id, value } = e.target;
     setForm((prev) => {
+      if (id === "classId") {
+        return {
+          ...prev,
+          classId: value,
+          receivers: [],
+        };
+      }
+      if (id === "receiverType") {
+        return {
+          ...prev,
+          receiverType: value,
+          receivers: [],
+        };
+      }
       if (id === "template") {
         const selected = TEMPLATE_OPTIONS[value];
         return {
@@ -223,11 +288,17 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
 
   const handleHeadOfficeChange = (value) => {
     manualScope.setSelectedScope(value, "");
-    setForm((prev) => ({ ...prev, headOfficeId: value, schoolId: "" }));
+    setForm((prev) => ({
+      ...prev,
+      headOfficeId: value,
+      schoolId: "",
+      classId: "",
+      receivers: [],
+    }));
   };
 
   const handleSchoolChange = (value) => {
-    setForm((prev) => ({ ...prev, schoolId: value }));
+    setForm((prev) => ({ ...prev, schoolId: value, classId: "", receivers: [] }));
     if (isSuperAdmin) {
       manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value);
     }
@@ -235,8 +306,10 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
 
   const validate = () => {
     if (!form.schoolId) return "School is required";
+    if (!form.classId) return "Class is required";
     if (!form.examTerm) return "Exam is required";
     if (!form.receiverType) return "Receiver Type is required";
+    if (!form.receivers.length) return "At least one student must be selected";
     if (!form.studentMark) return "Student Mark is required";
     if (!form.subject.trim()) return "Subject is required";
     if (!form.emailBody.trim()) return "Email Body is required";
@@ -246,8 +319,10 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
   const validateStep = (targetStep) => {
     if (targetStep === 0) {
       if (!form.schoolId) return "School is required";
+      if (!form.classId) return "Class is required";
       if (!form.examTerm) return "Exam is required";
       if (!form.receiverType) return "Receiver Type is required";
+      if (!form.receivers.length) return "At least one student must be selected";
       if (!form.studentMark) return "Student Mark is required";
     }
     return "";
@@ -274,6 +349,9 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
     const selectedSchool = schoolOptions.find(
       (s) => String(s.id) === String(form.schoolId),
     );
+    const selectedClass = classes.find(
+      (item) => String(item.id) === String(form.classId),
+    );
     const resolvedHeadOfficeId =
       selectedSchool?.headOfficeId != null
         ? Number(selectedSchool.headOfficeId)
@@ -287,8 +365,12 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
       headOfficeId: resolvedHeadOfficeId,
       schoolId: Number(form.schoolId),
       schoolName: resolveSchoolName(),
+      classId: form.classId ? Number(form.classId) : null,
+      className: selectedClass?.className || selectedClass?.name || null,
       examTerm: form.examTerm,
       receiverType: form.receiverType,
+      receiver: form.receivers[0] || "",
+      receivers: form.receivers,
       studentMark: form.studentMark,
       template: form.template,
       subject: form.subject.trim(),
@@ -313,6 +395,53 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const receiverOptions = useMemo(() => {
+    if (!form.receiverType || !form.classId) return [];
+
+    return (Array.isArray(students) ? students : [])
+      .map((student) => {
+        const email = student?.email?.trim();
+        if (!email) return null;
+
+        const name = student?.name || student?.studentName || student?.fullName || "Unnamed Student";
+        const rollNo = student?.rollNo ? ` - Roll No: ${student.rollNo}` : "";
+        const className = student?.className ? ` - Class: ${student.className}` : "";
+
+        return {
+          value: email,
+          label: `${name}${rollNo}${className} - ${email}`,
+        };
+      })
+      .filter(Boolean)
+      .filter(
+        (item, index, array) =>
+          index === array.findIndex((candidate) => candidate.value === item.value),
+      );
+  }, [form.receiverType, form.classId, students]);
+
+  const handleReceiverToggle = (value) => {
+    setForm((prev) => {
+      const exists = prev.receivers.includes(value);
+      return {
+        ...prev,
+        receivers: exists
+          ? prev.receivers.filter((item) => item !== value)
+          : [...prev.receivers, value],
+      };
+    });
+  };
+
+  const selectAllReceivers = () => {
+    setForm((prev) => ({
+      ...prev,
+      receivers: receiverOptions.map((item) => item.value),
+    }));
+  };
+
+  const clearReceivers = () => {
+    setForm((prev) => ({ ...prev, receivers: [] }));
   };
 
   return (
@@ -411,7 +540,7 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
                     />
                   </div>
                 ) : (
-                  <FormField label="School Name" required full>
+                  <FormField label="School Name" required>
                     <select
                       className="form-control form-select ps-40"
                       id="schoolId"
@@ -432,7 +561,28 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
                   </FormField>
                 )}
 
-                <FormField label="Exam" required full>
+                <FormField label="Class" required>
+                  <select
+                    className="form-control form-select ps-40"
+                    id="classId"
+                    value={form.classId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId}
+                  >
+                    <option value="">
+                      {form.schoolId
+                        ? "--Select Class--"
+                        : "Select School First"}
+                    </option>
+                    {classes.map((option) => (
+                      <option key={String(option.id)} value={String(option.id)}>
+                        {option.className || option.name || String(option.id)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Exam" required>
                   <select
                     className="form-control form-select ps-40"
                     id="examTerm"
@@ -463,6 +613,96 @@ const MarkSendByEmailCreate = ({ onNavigate }) => {
                     ))}
                   </select>
                 </FormField>
+
+                <div className="avm-field full">
+                  <label className="avm-label">
+                    Students
+                    <span className="req"> *</span>
+                  </label>
+                  <div
+                    style={{
+                      border: "1px solid #d0d5dd",
+                      borderRadius: "0.9rem",
+                      padding: "0.9rem",
+                      background: !form.classId ? "#f8fafc" : "#fff",
+                    }}
+                  >
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-12">
+                      <div className="text-secondary-light" style={{ fontSize: "0.85rem" }}>
+                        {loadingStudents
+                          ? "Loading students..."
+                          : form.classId
+                            ? `${form.receivers.length} selected`
+                            : "Select a school and class to load students"}
+                      </div>
+                      <div className="d-flex gap-8">
+                        <button
+                          type="button"
+                          className="btn btn-light border btn-sm"
+                          onClick={selectAllReceivers}
+                          disabled={!receiverOptions.length}
+                        >
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-light border btn-sm"
+                          onClick={clearReceivers}
+                          disabled={!form.receivers.length}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {form.classId ? (
+                      <div
+                        style={{
+                          maxHeight: "280px",
+                          overflowY: "auto",
+                          display: "grid",
+                          gap: "0.6rem",
+                        }}
+                      >
+                        {receiverOptions.length ? (
+                          receiverOptions.map((item) => (
+                            <label
+                              key={item.value}
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: "0.75rem",
+                                padding: "0.75rem 0.85rem",
+                                border: "1px solid #eaecf0",
+                                borderRadius: "0.75rem",
+                                cursor: "pointer",
+                                background: form.receivers.includes(item.value)
+                                  ? "#f5f3ff"
+                                  : "#fff",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={form.receivers.includes(item.value)}
+                                onChange={() => handleReceiverToggle(item.value)}
+                                style={{ marginTop: "0.2rem" }}
+                              />
+                              <span style={{ lineHeight: 1.45 }}>{item.label}</span>
+                            </label>
+                          ))
+                        ) : (
+                          <div className="text-secondary-light">
+                            No student emails found in this class.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-secondary-light">
+                        Select a school and class first.
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 <FormField label="Student Mark" required>
                   <select
