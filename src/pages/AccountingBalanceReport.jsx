@@ -417,7 +417,7 @@ const AccountingBalanceReport = () => {
 
           <div className="px-20 py-12 border-bottom border-neutral-200 d-flex flex-wrap gap-16 justify-content-between">
             <div className="text-sm text-secondary-light">
-              Showing {showingStart} - {showingEnd} of {filteredData.length} records
+            
             </div>
             <div className="d-flex flex-wrap gap-24 text-sm text-secondary-light">
               <span>
