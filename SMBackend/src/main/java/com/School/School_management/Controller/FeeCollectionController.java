@@ -38,11 +38,12 @@ public class FeeCollectionController {
             @RequestParam(required = false) Long feeTypeId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String month,
+            @RequestParam(required = false) Boolean dueOnly,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(service.getFeeCollectionsPage(schoolId, classId, feeTypeId, status, month, search, page, size));
+        return ResponseEntity.ok(service.getFeeCollectionsPage(schoolId, classId, feeTypeId, status, month, dueOnly, search, page, size));
     }
 
     @GetMapping("/{id}")

@@ -13,6 +13,7 @@ import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Service.ExpenditureService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -51,17 +52,26 @@ public class ExpenditureServiceImpl implements ExpenditureService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExpenditureDto> listPaginated(Long schoolId, Long expenditureHeadId, String expenditureMethod, int page, int size, String search) {
+    public Page<ExpenditureDto> listPaginated(
+            Long schoolId,
+            Long expenditureHeadId,
+            String expenditureMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            int page,
+            int size,
+            String search
+    ) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         String normalizedSearch = normalizeOptional(search);
         String normalizedMethod = normalizeOptional(expenditureMethod);
         if (user.isSuperAdmin() && schoolId == null) {
-            return repository.findPageWithDetails(null, expenditureHeadId, normalizedMethod, normalizedSearch, pageable).map(this::toDto);
+            return repository.findPageWithDetails(null, expenditureHeadId, normalizedMethod, startDate, endDate, normalizedSearch, pageable).map(this::toDto);
         }
         Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return repository.findPageWithDetails(effectiveSchoolId, expenditureHeadId, normalizedMethod, normalizedSearch, pageable).map(this::toDto);
+        return repository.findPageWithDetails(effectiveSchoolId, expenditureHeadId, normalizedMethod, startDate, endDate, normalizedSearch, pageable).map(this::toDto);
     }
 
     @Override

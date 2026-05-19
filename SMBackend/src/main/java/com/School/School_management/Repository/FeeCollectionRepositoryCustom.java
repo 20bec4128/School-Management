@@ -10,6 +10,15 @@ import java.util.Optional;
 public interface FeeCollectionRepositoryCustom {
     List<FeeCollection> findAllActiveWithDetailsOrderByIdDesc();
     List<FeeCollection> findBySchoolIdActiveWithDetailsOrderByIdDesc(Long schoolId);
-    Page<FeeCollection> findPageWithDetails(Long schoolId, Long classId, Long feeTypeId, String status, String month, String search, Pageable pageable);
+    Page<FeeCollection> findPageWithDetails(
+            Long schoolId,
+            Long classId,
+            Long feeTypeId,
+            String status,
+            String month,
+            Boolean dueOnly,
+            String search,
+            Pageable pageable
+    );
     Optional<FeeCollection> findByIdWithDetails(Long id);
 }

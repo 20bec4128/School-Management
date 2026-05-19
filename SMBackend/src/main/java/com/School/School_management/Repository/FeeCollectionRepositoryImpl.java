@@ -26,17 +26,26 @@ public class FeeCollectionRepositoryImpl implements FeeCollectionRepositoryCusto
 
     @Override
     public List<FeeCollection> findAllActiveWithDetailsOrderByIdDesc() {
-        return runListQuery(null, null, null, null, null, null);
+        return runListQuery(null, null, null, null, null, null, null);
     }
 
     @Override
     public List<FeeCollection> findBySchoolIdActiveWithDetailsOrderByIdDesc(Long schoolId) {
-        return runListQuery(schoolId, null, null, null, null, null);
+        return runListQuery(schoolId, null, null, null, null, null, null);
     }
 
     @Override
-    public Page<FeeCollection> findPageWithDetails(Long schoolId, Long classId, Long feeTypeId, String status, String month, String search, Pageable pageable) {
-        CriteriaQuery<FeeCollection> dataQuery = buildDataQuery(schoolId, classId, feeTypeId, status, month, search);
+    public Page<FeeCollection> findPageWithDetails(
+            Long schoolId,
+            Long classId,
+            Long feeTypeId,
+            String status,
+            String month,
+            Boolean dueOnly,
+            String search,
+            Pageable pageable
+    ) {
+        CriteriaQuery<FeeCollection> dataQuery = buildDataQuery(schoolId, classId, feeTypeId, status, month, dueOnly, search);
         TypedQuery<FeeCollection> typedQuery = entityManager.createQuery(dataQuery);
         typedQuery.setFirstResult((int) pageable.getOffset());
         typedQuery.setMaxResults(pageable.getPageSize());
@@ -46,7 +55,7 @@ public class FeeCollectionRepositoryImpl implements FeeCollectionRepositoryCusto
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<FeeCollection> countRoot = countQuery.from(FeeCollection.class);
         countQuery.select(cb.countDistinct(countRoot));
-        countQuery.where(buildPredicates(cb, countRoot, schoolId, classId, feeTypeId, status, month, search));
+        countQuery.where(buildPredicates(cb, countRoot, schoolId, classId, feeTypeId, status, month, dueOnly, search));
         Long total = entityManager.createQuery(countQuery).getSingleResult();
 
         return new PageImpl<>(content, pageable, total == null ? 0L : total);
@@ -62,21 +71,21 @@ public class FeeCollectionRepositoryImpl implements FeeCollectionRepositoryCusto
         return entityManager.createQuery(query).getResultList().stream().findFirst();
     }
 
-    private List<FeeCollection> runListQuery(Long schoolId, Long classId, Long feeTypeId, String status, String month, String search) {
-        return entityManager.createQuery(buildDataQuery(schoolId, classId, feeTypeId, status, month, search)).getResultList();
+    private List<FeeCollection> runListQuery(Long schoolId, Long classId, Long feeTypeId, String status, String month, Boolean dueOnly, String search) {
+        return entityManager.createQuery(buildDataQuery(schoolId, classId, feeTypeId, status, month, dueOnly, search)).getResultList();
     }
 
-    private CriteriaQuery<FeeCollection> buildDataQuery(Long schoolId, Long classId, Long feeTypeId, String status, String month, String search) {
+    private CriteriaQuery<FeeCollection> buildDataQuery(Long schoolId, Long classId, Long feeTypeId, String status, String month, Boolean dueOnly, String search) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<FeeCollection> query = cb.createQuery(FeeCollection.class);
         Root<FeeCollection> root = query.from(FeeCollection.class);
         query.select(root).distinct(true);
-        query.where(buildPredicates(cb, root, schoolId, classId, feeTypeId, status, month, search));
+        query.where(buildPredicates(cb, root, schoolId, classId, feeTypeId, status, month, dueOnly, search));
         query.orderBy(cb.desc(root.get("id")));
         return query;
     }
 
-    private Predicate[] buildPredicates(CriteriaBuilder cb, Root<FeeCollection> root, Long schoolId, Long classId, Long feeTypeId, String status, String month, String search) {
+    private Predicate[] buildPredicates(CriteriaBuilder cb, Root<FeeCollection> root, Long schoolId, Long classId, Long feeTypeId, String status, String month, Boolean dueOnly, String search) {
         List<Predicate> predicates = new ArrayList<>();
         predicates.add(cb.isFalse(root.get("deleted")));
 
@@ -99,6 +108,9 @@ public class FeeCollectionRepositoryImpl implements FeeCollectionRepositoryCusto
         }
         if (month != null) {
             predicates.add(cb.equal(cb.lower(root.get("month")), month.toLowerCase()));
+        }
+        if (Boolean.TRUE.equals(dueOnly)) {
+            predicates.add(cb.greaterThan(root.get("dueAmount"), 0.0));
         }
         if (search != null) {
             Expression<String> searchExpr = buildSearchExpression(cb, root, schoolJoin, classJoin, studentJoin, feeTypeJoin);

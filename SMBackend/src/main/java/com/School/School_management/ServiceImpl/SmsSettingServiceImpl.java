@@ -121,40 +121,40 @@ public class SmsSettingServiceImpl implements SmsSettingService {
     }
 
     private SmsSettingDto convertToDto(SmsSetting entity) {
-        return SmsSettingDto.builder()
-                .id(entity.getId())
-                .headOfficeId(entity.getHeadOfficeId())
-                .schoolId(entity.getSchoolId())
-                .schoolName(entity.getSchoolName())
-                .school(entity.getSchoolName())
-                .gateway(entity.getGateway())
-                .accountSid(entity.getAccountSid())
-                .twilio(entity.getAccountSid())
-                .authToken(entity.getAuthToken())
-                .fromNumber(entity.getFromNumber())
-                .username(entity.getUsername())
-                .bulk(entity.getUsername())
-                .msg91(entity.getUsername())
-                .textLocal(entity.getUsername())
-                .smsCountry(entity.getUsername())
-                .betaSms(entity.getUsername())
-                .bulkPk(entity.getUsername())
-                .alphaNet(entity.getUsername())
-                .password(entity.getPassword())
-                .apiKey(entity.getApiKey())
-                .mimSms(entity.getApiKey())
-                .moNumber(entity.getMoNumber())
-                .authId(entity.getAuthId())
-                .hashKey(entity.getHashKey())
-                .bdBulk(entity.getHashKey())
-                .senderId(entity.getSenderId())
-                .authKey(entity.getAuthKey())
-                .router(entity.getRouter())
-                .smsType(entity.getSmsType())
-                .isActive(entity.getIsActive())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
+        SmsSettingDto dto = new SmsSettingDto();
+        dto.setId(entity.getId());
+        dto.setHeadOfficeId(entity.getHeadOfficeId());
+        dto.setSchoolId(entity.getSchoolId());
+        dto.setSchoolName(entity.getSchoolName());
+        dto.setSchool(entity.getSchoolName());
+        dto.setGateway(entity.getGateway());
+        dto.setAccountSid(entity.getAccountSid());
+        dto.setTwilio(entity.getAccountSid());
+        dto.setAuthToken(entity.getAuthToken());
+        dto.setFromNumber(entity.getFromNumber());
+        dto.setUsername(entity.getUsername());
+        dto.setBulk(entity.getUsername());
+        dto.setMsg91(entity.getUsername());
+        dto.setTextLocal(entity.getUsername());
+        dto.setSmsCountry(entity.getUsername());
+        dto.setBetaSms(entity.getUsername());
+        dto.setBulkPk(entity.getUsername());
+        dto.setAlphaNet(entity.getUsername());
+        dto.setPassword(entity.getPassword());
+        dto.setApiKey(entity.getApiKey());
+        dto.setMimSms(entity.getApiKey());
+        dto.setMoNumber(entity.getMoNumber());
+        dto.setAuthId(entity.getAuthId());
+        dto.setHashKey(entity.getHashKey());
+        dto.setBdBulk(entity.getHashKey());
+        dto.setSenderId(entity.getSenderId());
+        dto.setAuthKey(entity.getAuthKey());
+        dto.setRouter(entity.getRouter());
+        dto.setSmsType(entity.getSmsType());
+        dto.setIsActive(entity.getIsActive());
+        dto.setCreatedAt(entity.getCreatedAt());
+        dto.setUpdatedAt(entity.getUpdatedAt());
+        return dto;
     }
 
     private SmsSetting convertToEntity(SmsSettingDto dto) {

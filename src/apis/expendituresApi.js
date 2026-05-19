@@ -8,11 +8,22 @@ export const fetchExpenditures = async ({ schoolId } = {}) => {
   return response.data
 }
 
-export const fetchExpendituresPage = async ({ schoolId, expenditureHeadId, expenditureMethod, page = 0, size = 10, search = '' } = {}) => {
+export const fetchExpendituresPage = async ({
+  schoolId,
+  expenditureHeadId,
+  expenditureMethod,
+  startDate,
+  endDate,
+  page = 0,
+  size = 10,
+  search = '',
+} = {}) => {
   const qs = new URLSearchParams()
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   if (expenditureHeadId != null && String(expenditureHeadId).trim() !== '') qs.set('expenditureHeadId', String(expenditureHeadId))
   if (expenditureMethod != null && String(expenditureMethod).trim() !== '' && String(expenditureMethod) !== 'Select') qs.set('expenditureMethod', String(expenditureMethod))
+  if (startDate) qs.set('startDate', String(startDate))
+  if (endDate) qs.set('endDate', String(endDate))
   if (search) qs.set('search', search)
   qs.set('page', String(page))
   qs.set('size', String(size))

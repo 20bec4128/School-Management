@@ -3,6 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.ExpenditureDto;
 import com.School.School_management.Service.ExpenditureService;
 import com.School.School_management.auth.RequirePermission;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
@@ -28,11 +29,13 @@ public class ExpenditureController {
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) Long expenditureHeadId,
             @RequestParam(required = false) String expenditureMethod,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search
     ) {
-        return service.listPaginated(schoolId, expenditureHeadId, expenditureMethod, page, size, search);
+        return service.listPaginated(schoolId, expenditureHeadId, expenditureMethod, startDate, endDate, page, size, search);
     }
 
     @PostMapping

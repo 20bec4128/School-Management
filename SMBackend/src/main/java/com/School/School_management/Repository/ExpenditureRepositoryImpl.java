@@ -1,6 +1,7 @@
 package com.School.School_management.Repository;
 
 import com.School.School_management.Entity.Expenditure;
+import java.time.LocalDate;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
@@ -34,8 +35,16 @@ public class ExpenditureRepositoryImpl implements ExpenditureRepositoryCustom {
     }
 
     @Override
-    public Page<Expenditure> findPageWithDetails(Long schoolId, Long expenditureHeadId, String expenditureMethod, String search, Pageable pageable) {
-        CriteriaQuery<Expenditure> dataQuery = buildDataQuery(schoolId, expenditureHeadId, expenditureMethod, search);
+    public Page<Expenditure> findPageWithDetails(
+            Long schoolId,
+            Long expenditureHeadId,
+            String expenditureMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            String search,
+            Pageable pageable
+    ) {
+        CriteriaQuery<Expenditure> dataQuery = buildDataQuery(schoolId, expenditureHeadId, expenditureMethod, startDate, endDate, search);
         TypedQuery<Expenditure> typedQuery = entityManager.createQuery(dataQuery);
         typedQuery.setFirstResult((int) pageable.getOffset());
         typedQuery.setMaxResults(pageable.getPageSize());
@@ -45,7 +54,7 @@ public class ExpenditureRepositoryImpl implements ExpenditureRepositoryCustom {
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<Expenditure> countRoot = countQuery.from(Expenditure.class);
         countQuery.select(cb.countDistinct(countRoot));
-        countQuery.where(buildPredicates(cb, countRoot, schoolId, expenditureHeadId, expenditureMethod, search));
+        countQuery.where(buildPredicates(cb, countRoot, schoolId, expenditureHeadId, expenditureMethod, startDate, endDate, search));
         Long total = entityManager.createQuery(countQuery).getSingleResult();
         return new PageImpl<>(content, pageable, total == null ? 0L : total);
     }
@@ -63,17 +72,24 @@ public class ExpenditureRepositoryImpl implements ExpenditureRepositoryCustom {
     }
 
     private List<Expenditure> runListQuery(Long schoolId, Long expenditureHeadId, String expenditureMethod, String search) {
-        return entityManager.createQuery(buildDataQuery(schoolId, expenditureHeadId, expenditureMethod, search)).getResultList();
+        return entityManager.createQuery(buildDataQuery(schoolId, expenditureHeadId, expenditureMethod, null, null, search)).getResultList();
     }
 
-    private CriteriaQuery<Expenditure> buildDataQuery(Long schoolId, Long expenditureHeadId, String expenditureMethod, String search) {
+    private CriteriaQuery<Expenditure> buildDataQuery(
+            Long schoolId,
+            Long expenditureHeadId,
+            String expenditureMethod,
+            LocalDate startDate,
+            LocalDate endDate,
+            String search
+    ) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Expenditure> query = cb.createQuery(Expenditure.class);
         Root<Expenditure> root = query.from(Expenditure.class);
         root.fetch("school", JoinType.LEFT);
         root.fetch("expenditureHead", JoinType.LEFT);
         query.select(root).distinct(true);
-        query.where(buildPredicates(cb, root, schoolId, expenditureHeadId, expenditureMethod, search));
+        query.where(buildPredicates(cb, root, schoolId, expenditureHeadId, expenditureMethod, startDate, endDate, search));
         query.orderBy(cb.desc(root.get("id")));
         return query;
     }
@@ -84,6 +100,8 @@ public class ExpenditureRepositoryImpl implements ExpenditureRepositoryCustom {
             Long schoolId,
             Long expenditureHeadId,
             String expenditureMethod,
+            LocalDate startDate,
+            LocalDate endDate,
             String search
     ) {
         List<Predicate> predicates = new ArrayList<>();
@@ -98,6 +116,12 @@ public class ExpenditureRepositoryImpl implements ExpenditureRepositoryCustom {
         }
         if (expenditureMethod != null) {
             predicates.add(cb.equal(cb.lower(root.get("expenditureMethod")), expenditureMethod.toLowerCase()));
+        }
+        if (startDate != null) {
+            predicates.add(cb.greaterThanOrEqualTo(root.get("expenditureDate"), startDate));
+        }
+        if (endDate != null) {
+            predicates.add(cb.lessThanOrEqualTo(root.get("expenditureDate"), endDate));
         }
         if (search != null) {
             Expression<String> expr = cb.concat(

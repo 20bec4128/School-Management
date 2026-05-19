@@ -10,13 +10,24 @@ export const fetchFeeCollectionsBySchool = async (schoolId) => {
   return response.data
 }
 
-export const fetchFeeCollectionsPage = async ({ schoolId, classId, feeTypeId, status, month, search = '', page = 0, size = 10 } = {}) => {
+export const fetchFeeCollectionsPage = async ({
+  schoolId,
+  classId,
+  feeTypeId,
+  status,
+  month,
+  dueOnly,
+  search = '',
+  page = 0,
+  size = 10,
+} = {}) => {
   const qs = new URLSearchParams()
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   if (classId != null && String(classId).trim() !== '') qs.set('classId', String(classId))
   if (feeTypeId != null && String(feeTypeId).trim() !== '') qs.set('feeTypeId', String(feeTypeId))
   if (status != null && String(status).trim() !== '' && String(status) !== 'Select') qs.set('status', String(status))
   if (month != null && String(month).trim() !== '' && String(month) !== 'Select') qs.set('month', String(month))
+  if (dueOnly != null) qs.set('dueOnly', String(Boolean(dueOnly)))
   if (search) qs.set('search', search)
   qs.set('page', String(page))
   qs.set('size', String(size))

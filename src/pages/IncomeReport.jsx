@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { normalizeRole } from '../utils/roles'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchIncomeHeads } from '../apis/incomeHeadsApi'
 import { fetchIncomesPage } from '../apis/incomesApi'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
 import '../assets/css/addModalShared.css'
 
 const INCOME_METHOD_OPTIONS = ['Cash', 'Bank', 'Online', 'Cheque', 'Mobile Banking', 'Other']
 
-const makeDefaultFilters = (schoolId = 'Select') => ({
+const makeDefaultFilters = (headOfficeId = 'Select', schoolId = 'Select') => ({
+  headOfficeId,
   schoolId,
   incomeHeadId: 'Select',
   incomeMethod: 'Select',
@@ -54,7 +56,7 @@ const formatDateTime = (value) => {
 }
 
 const IncomeReport = () => {
-  const { status, token, user, role: authRole, schoolId: authSchoolId } = useAuth()
+  const { status, token, user, role: authRole, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -63,8 +65,10 @@ const IncomeReport = () => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
+  const initialHeadOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : 'Select'
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
@@ -80,36 +84,32 @@ const IncomeReport = () => {
   const [currentPage, setCurrentPage] = useState(1)
 
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(() => makeDefaultFilters(initialSchoolId))
-  const [filters, setFilters] = useState(() => makeDefaultFilters(initialSchoolId))
+  const [pendingFilters, setPendingFilters] = useState(() => makeDefaultFilters(initialHeadOfficeId, initialSchoolId))
+  const [filters, setFilters] = useState(() => makeDefaultFilters(initialHeadOfficeId, initialSchoolId))
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const selectedSchoolId = useMemo(() => {
     if (filters.schoolId && filters.schoolId !== 'Select') return String(filters.schoolId)
-    if (isSchoolAdmin || isHeadOfficeAdmin) return authSchoolId != null ? String(authSchoolId) : ''
+    if (isSchoolAdmin) return authSchoolId != null ? String(authSchoolId) : ''
     return ''
-  }, [filters.schoolId, isSchoolAdmin, isHeadOfficeAdmin, authSchoolId])
+  }, [filters.schoolId, isSchoolAdmin, authSchoolId])
 
   const canLoadRows = isSuperAdmin || Boolean(selectedSchoolId)
 
   const schoolOptions = useMemo(() => {
-    return Array.isArray(schools) ? schools : []
-  }, [schools])
-
-  const exportRows = useMemo(
-    () =>
-      rows.map((row) => ({
-        School: row.schoolName || '--',
-        'Income Head': row.incomeHeadName || '--',
-        'Income Method': row.incomeMethod || '--',
-        Amount: row.amount != null ? Number(row.amount).toFixed(2) : '--',
-        'Income Date': row.incomeDate || '--',
-        Note: row.note || '--',
-        'Created At': row.createdAt || '--',
-      })),
-    [rows],
-  )
+    const rows = isSuperAdmin
+      ? (Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : [])
+      : (Array.isArray(schools) ? schools : [])
+    if (isSuperAdmin) return rows
+    if (isHeadOfficeAdmin) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      return rows.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    }
+    return rows
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -226,13 +226,13 @@ const IncomeReport = () => {
   useEffect(() => {
     setPendingFilters((prev) => {
       if (prev.schoolId !== 'Select' || initialSchoolId === 'Select') return prev
-      return { ...prev, schoolId: initialSchoolId }
+      return { ...prev, headOfficeId: initialHeadOfficeId, schoolId: initialSchoolId }
     })
     setFilters((prev) => {
       if (prev.schoolId !== 'Select' || initialSchoolId === 'Select') return prev
-      return { ...prev, schoolId: initialSchoolId }
+      return { ...prev, headOfficeId: initialHeadOfficeId, schoolId: initialSchoolId }
     })
-  }, [initialSchoolId])
+  }, [initialHeadOfficeId, initialSchoolId])
 
   useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
@@ -248,36 +248,26 @@ const IncomeReport = () => {
   }
 
   const handleResetFilters = () => {
-    const nextFilters = makeDefaultFilters(initialSchoolId)
+    const nextFilters = makeDefaultFilters(initialHeadOfficeId, initialSchoolId)
     setPendingFilters(nextFilters)
     setFilters(nextFilters)
     setCurrentPage(1)
   }
 
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(exportRows)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Income Report')
-    XLSX.writeFile(workbook, 'Income_Report.xlsx')
-  }
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape' })
-    doc.text('Income Report', 14, 12)
-    doc.autoTable({
-      startY: 18,
-      head: [columnOptions.map((column) => column.label)],
-      body: rows.map((row) =>
-        columnOptions.map((column) => {
-          if (column.key === 'amount') return row.amount != null ? Number(row.amount).toFixed(2) : '--'
-          if (column.key === 'incomeDate') return formatDate(row.incomeDate)
-          if (column.key === 'createdAt') return formatDateTime(row.createdAt)
-          return row[column.key] || '--'
-        }),
-      ),
+  const loadExportRows = useCallback(async () => {
+    const size = Math.max(totalElements, rowsPerPage, 1)
+    const data = await fetchIncomesPage({
+      schoolId: selectedSchoolId || null,
+      incomeHeadId: filters.incomeHeadId && filters.incomeHeadId !== 'Select' ? filters.incomeHeadId : null,
+      incomeMethod: filters.incomeMethod && filters.incomeMethod !== 'Select' ? filters.incomeMethod : null,
+      startDate: filters.startDate || null,
+      endDate: filters.endDate || null,
+      page: 0,
+      size,
+      search: debouncedSearch,
     })
-    doc.save('Income_Report.pdf')
-  }
+    return Array.isArray(data?.content) ? data.content : []
+  }, [debouncedSearch, filters.endDate, filters.incomeHeadId, filters.incomeMethod, filters.startDate, rowsPerPage, selectedSchoolId, totalElements])
 
   const renderCell = (row, column) => {
     const value = row[column.key]
@@ -306,9 +296,8 @@ const IncomeReport = () => {
     [rows],
   )
 
-  const pageCount = Math.max(1, totalPages)
   const showingStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
-  const showingEnd = Math.min(currentPage * rowsPerPage, totalElements)
+  const showingEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   return (
     <div className="dashboard-main-body">
@@ -323,7 +312,15 @@ const IncomeReport = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <ExportDropdown onExportExcel={handleExportExcel} onExportPDF={handleExportPDF} />
+              <ExportDropdown
+                rows={rows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={loadExportRows}
+                fileName="Income_Report"
+                sheetName="Income Report"
+                pdfTitle="Income Report"
+              />
 
               <button
                 type="button"
@@ -362,20 +359,14 @@ const IncomeReport = () => {
                 </ul>
               </div>
 
-              <select
+              <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="position-relative">
@@ -453,40 +444,15 @@ const IncomeReport = () => {
 
           {loadError ? <div className="px-20 py-12 text-danger">{loadError}</div> : null}
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {showingStart} - {showingEnd} of {totalElements} entries
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              {Array.from({ length: pageCount }, (_, i) => i + 1)
-                .slice(Math.max(0, currentPage - 2), currentPage + 1)
-                .map((page) => (
-                  <button
-                    key={page}
-                    type="button"
-                    className={page === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                    onClick={() => setCurrentPage(page)}
-                  >
-                    {page}
-                  </button>
-                ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
-                disabled={currentPage === pageCount}
-              >
-                Next
-              </button>
-            </div>
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages: Math.max(1, totalPages),
+                pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), Math.max(1, totalPages))),
+              }}
+            />
           </div>
         </div>
       </div>
@@ -497,28 +463,55 @@ const IncomeReport = () => {
         onClose={() => setIsFilterSidebarOpen(false)}
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select
-              className="form-control form-select"
-              value={pendingFilters.schoolId}
-              onChange={(e) =>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={pendingFilters.headOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedScope(value, '')
+                setPendingFilters((prev) => ({ ...prev, headOfficeId: value || 'Select', schoolId: 'Select', incomeHeadId: 'Select' }))
+              }}
+              selectedSchoolId={pendingFilters.schoolId}
+              onSchoolChange={(value) => {
+                const selectedSchool = Array.isArray(manualScope.schoolOptions)
+                  ? manualScope.schoolOptions.find((school) => String(school?.id ?? '') === String(value ?? ''))
+                  : null
+                manualScope.setSelectedScope(pendingFilters.headOfficeId, value)
                 setPendingFilters((prev) => ({
                   ...prev,
-                  schoolId: e.target.value,
+                  schoolId: value || 'Select',
+                  headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
                   incomeHeadId: 'Select',
                 }))
-              }
-              disabled={isSchoolAdmin}
-            >
-              <option value="Select">All Schools</option>
-              {schoolOptions.map((school) => (
-                <option key={school.id} value={String(school.id)}>
-                  {school.schoolName}
-                </option>
-              ))}
-            </select>
-          </div>
+              }}
+              schoolLabel="School"
+            />
+          ) : (
+            <div>
+              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
+              <select
+                className="form-control form-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: e.target.value,
+                    incomeHeadId: 'Select',
+                  }))
+                }
+                disabled={isSchoolAdmin}
+              >
+                <option value="Select">All Schools</option>
+                {schoolOptions.map((school) => (
+                  <option key={school.id} value={String(school.id)}>
+                    {school.schoolName || school.name || `School ${school.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Income Head</label>
