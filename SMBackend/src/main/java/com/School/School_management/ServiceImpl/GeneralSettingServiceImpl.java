@@ -138,29 +138,29 @@ public class GeneralSettingServiceImpl implements GeneralSettingService {
     }
 
     private GeneralSettingDto convertToDto(GeneralSetting entity) {
-        return GeneralSettingDto.builder()
-                .id(entity.getId())
-                .headOfficeId(entity.getHeadOfficeId())
-                .schoolId(entity.getSchoolId())
-                .schoolName(entity.getSchoolName())
-                .school(entity.getSchoolName())
-                .brandName(entity.getBrandName())
-                .brandTitle(entity.getBrandTitle())
-                .language(entity.getLanguage())
-                .currency(entity.getCurrency())
-                .currencySymbol(entity.getCurrencySymbol())
-                .enableRtl(entity.getEnableRtl())
-                .enableFrontend(entity.getEnableFrontend())
-                .theme(entity.getTheme())
-                .timeZone(entity.getTimeZone())
-                .dateFormat(entity.getDateFormat())
-                .brandLogo(entity.getBrandLogo())
-                .faviconIcon(entity.getFaviconIcon())
-                .brandFooter(entity.getBrandFooter())
-                .googleAnalytics(entity.getGoogleAnalytics())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
+        GeneralSettingDto dto = new GeneralSettingDto();
+        dto.setId(entity.getId());
+        dto.setHeadOfficeId(entity.getHeadOfficeId());
+        dto.setSchoolId(entity.getSchoolId());
+        dto.setSchoolName(entity.getSchoolName());
+        dto.setSchool(entity.getSchoolName());
+        dto.setBrandName(entity.getBrandName());
+        dto.setBrandTitle(entity.getBrandTitle());
+        dto.setLanguage(entity.getLanguage());
+        dto.setCurrency(entity.getCurrency());
+        dto.setCurrencySymbol(entity.getCurrencySymbol());
+        dto.setEnableRtl(entity.getEnableRtl());
+        dto.setEnableFrontend(entity.getEnableFrontend());
+        dto.setTheme(entity.getTheme());
+        dto.setTimeZone(entity.getTimeZone());
+        dto.setDateFormat(entity.getDateFormat());
+        dto.setBrandLogo(entity.getBrandLogo());
+        dto.setFaviconIcon(entity.getFaviconIcon());
+        dto.setBrandFooter(entity.getBrandFooter());
+        dto.setGoogleAnalytics(entity.getGoogleAnalytics());
+        dto.setCreatedAt(entity.getCreatedAt());
+        dto.setUpdatedAt(entity.getUpdatedAt());
+        return dto;
     }
 
     private GeneralSetting convertToEntity(GeneralSettingDto dto) {

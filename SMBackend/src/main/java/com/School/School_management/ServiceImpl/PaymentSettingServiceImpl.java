@@ -121,49 +121,49 @@ public class PaymentSettingServiceImpl implements PaymentSettingService {
     }
 
     private PaymentSettingDto convertToDto(PaymentSetting entity) {
-        return PaymentSettingDto.builder()
-                .id(entity.getId())
-                .headOfficeId(entity.getHeadOfficeId())
-                .schoolId(entity.getSchoolId())
-                .schoolName(entity.getSchoolName())
-                .school(entity.getSchoolName())
-                .gateway(entity.getGateway())
-                .paypalEmail(entity.getPaypalEmail())
-                .paypal(entity.getPaypalEmail())
-                .secretKey(entity.getSecretKey())
-                .publishableKey(entity.getPublishableKey())
-                .payumoneyKey(entity.getPayumoneyKey())
-                .payUMoney(entity.getPayumoneyKey())
-                .keySalt(entity.getKeySalt())
-                .merchantId(entity.getMerchantId())
-                .ccaVenue(entity.getMerchantId())
-                .workingKey(entity.getWorkingKey())
-                .accessCode(entity.getAccessCode())
-                .merchantKey(entity.getMerchantKey())
-                .merchantMid(entity.getMerchantMid())
-                .payTM(entity.getMerchantMid())
-                .website(entity.getWebsite())
-                .industryType(entity.getIndustryType())
-                .publicKey(entity.getPublicKey())
-                .payStack(entity.getSecretKey()) // payStack uses secretKey in PayPal/Stripe forms
-                .password(entity.getPassword())
-                .storeId(entity.getStoreId())
-                .userId(entity.getUserId())
-                .submerName(entity.getSubmerName())
-                .submerId(entity.getSubmerId())
-                .terminalId(entity.getTerminalId())
-                .clientKey(entity.getClientKey())
-                .serverKey(entity.getServerKey())
-                .apiKey(entity.getApiKey())
-                .authToken(entity.getAuthToken())
-                .vendorId(entity.getVendorId())
-                .hashKey(entity.getHashKey())
-                .isDemo(entity.getIsDemo())
-                .extraCharge(entity.getExtraCharge())
-                .isActive(entity.getIsActive())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
+        PaymentSettingDto dto = new PaymentSettingDto();
+        dto.setId(entity.getId());
+        dto.setHeadOfficeId(entity.getHeadOfficeId());
+        dto.setSchoolId(entity.getSchoolId());
+        dto.setSchoolName(entity.getSchoolName());
+        dto.setSchool(entity.getSchoolName());
+        dto.setGateway(entity.getGateway());
+        dto.setPaypalEmail(entity.getPaypalEmail());
+        dto.setPaypal(entity.getPaypalEmail());
+        dto.setSecretKey(entity.getSecretKey());
+        dto.setPublishableKey(entity.getPublishableKey());
+        dto.setPayumoneyKey(entity.getPayumoneyKey());
+        dto.setPayUMoney(entity.getPayumoneyKey());
+        dto.setKeySalt(entity.getKeySalt());
+        dto.setMerchantId(entity.getMerchantId());
+        dto.setCcaVenue(entity.getMerchantId());
+        dto.setWorkingKey(entity.getWorkingKey());
+        dto.setAccessCode(entity.getAccessCode());
+        dto.setMerchantKey(entity.getMerchantKey());
+        dto.setMerchantMid(entity.getMerchantMid());
+        dto.setPayTM(entity.getMerchantMid());
+        dto.setWebsite(entity.getWebsite());
+        dto.setIndustryType(entity.getIndustryType());
+        dto.setPublicKey(entity.getPublicKey());
+        dto.setPayStack(entity.getSecretKey()); // payStack uses secretKey in PayPal/Stripe forms
+        dto.setPassword(entity.getPassword());
+        dto.setStoreId(entity.getStoreId());
+        dto.setUserId(entity.getUserId());
+        dto.setSubmerName(entity.getSubmerName());
+        dto.setSubmerId(entity.getSubmerId());
+        dto.setTerminalId(entity.getTerminalId());
+        dto.setClientKey(entity.getClientKey());
+        dto.setServerKey(entity.getServerKey());
+        dto.setApiKey(entity.getApiKey());
+        dto.setAuthToken(entity.getAuthToken());
+        dto.setVendorId(entity.getVendorId());
+        dto.setHashKey(entity.getHashKey());
+        dto.setIsDemo(entity.getIsDemo());
+        dto.setExtraCharge(entity.getExtraCharge());
+        dto.setIsActive(entity.getIsActive());
+        dto.setCreatedAt(entity.getCreatedAt());
+        dto.setUpdatedAt(entity.getUpdatedAt());
+        return dto;
     }
 
     private PaymentSetting convertToEntity(PaymentSettingDto dto) {
