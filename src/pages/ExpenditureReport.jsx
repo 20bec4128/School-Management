@@ -388,7 +388,7 @@ const ExpenditureReport = () => {
 
           <div className="px-20 py-12 border-bottom border-neutral-200 d-flex flex-wrap gap-16 justify-content-between">
             <div className="text-sm text-secondary-light">
-              Showing {showingStart} - {showingEnd} of {totalElements} records
+            
             </div>
             <div className="text-sm text-secondary-light">
               Current page total: <span className="fw-semibold text-primary-light">{formatMoney(totalAmount)}</span>
