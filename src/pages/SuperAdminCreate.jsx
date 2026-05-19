@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createSuperAdmin, updateSuperAdmin } from "../apis/superAdminApi";
 import PhoneCodeField from "../components/PhoneCodeField";
 
@@ -38,6 +38,7 @@ const SuperAdminCreate = ({ onNavigate }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const redirectTimerRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -72,6 +73,14 @@ const SuperAdminCreate = ({ onNavigate }) => {
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleChange = (e) => {
     const { id, value } = e.target;
     setForm((prev) => ({ ...prev, [id]: value }));
@@ -102,23 +111,28 @@ const SuperAdminCreate = ({ onNavigate }) => {
     setError("");
     setSuccess("");
 
+    if (redirectTimerRef.current) {
+      clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
+
     try {
       if (editId) {
         await updateSuperAdmin(editId, form, { photo: photoFile, resume: resumeFile });
-        setSuccess("Super Admin updated successfully!");
+        setSuccess("Super Admin updated successfully! Redirecting...");
       } else {
         await createSuperAdmin(form, { photo: photoFile, resume: resumeFile });
-        setSuccess("Super Admin created successfully!");
+        setSuccess("Super Admin created successfully! Redirecting...");
       }
 
-      setTimeout(() => {
+      redirectTimerRef.current = setTimeout(() => {
         try {
           sessionStorage.removeItem(EDIT_STORAGE_KEY);
         } catch {
           // ignore
         }
         navigateTo("manage-super-admin");
-      }, 1500);
+      }, 2000);
     } catch (err) {
       setError(err?.message || "Failed to save super admin");
     } finally {
@@ -198,7 +212,7 @@ const SuperAdminCreate = ({ onNavigate }) => {
       )}
 
       {success && (
-        <div className="alert alert-success d-flex align-items-center gap-8 mb-20">
+        <div className="alert alert-success d-flex align-items-center gap-8 mb-20" role="alert">
           <i className="ri-checkbox-circle-line"></i>
           <span>{success}</span>
         </div>

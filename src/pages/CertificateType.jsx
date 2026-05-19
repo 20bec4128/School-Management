@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import ExportDropdown from '../components/ExportDropdown'
@@ -11,42 +10,16 @@ import { normalizeRole } from '../utils/roles'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
-  createCertificateType,
   deleteCertificateType,
   fetchCertificateTypesPage,
-  updateCertificateType,
 } from '../apis/certificateTypesApi'
 import '../assets/css/addModalShared.css'
 
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  certificateName: '',
-  schoolNameOnCard: '',
-  certificateText: '',
-  footerLeftText: '',
-  footerMiddleText: '',
-  footerRightText: '',
-  backgroundUrl: '',
-}
+const EDIT_STORAGE_KEY = 'edit-certificate-type-row'
 
 const emptyFilters = {
   headOfficeId: '',
   schoolId: '',
-}
-
-const STEPS = ['Scope & Name', 'Template Content']
-
-const FIELD_ICONS = {
-  'Head Office': 'ri-building-4-line',
-  'School Name': 'ri-school-line',
-  'Certificate Name': 'ri-award-line',
-  'School Name on Card': 'ri-building-2-line',
-  'Certificate Text': 'ri-file-text-line',
-  'Footer Left Text': 'ri-align-left',
-  'Footer Middle Text': 'ri-align-center',
-  'Footer Right Text': 'ri-align-right',
-  'Background URL': 'ri-image-line',
 }
 
 const columnOptions = [
@@ -75,44 +48,13 @@ const fetchAllPages = async (fetchPage, pageSize = 500) => {
   }, [...firstContent])
 }
 
-const FormField = ({ label, required, children, full = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: '0.85rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#667085',
-            fontSize: '0.95rem',
-            lineHeight: 1,
-            pointerEvents: 'none',
-            zIndex: 1,
-          }}
-        >
-          <i className={icon}></i>
-        </span>
-        {children}
-      </div>
-    </div>
-  )
-}
-
 const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const joinFooter = (row) =>
   [row?.footerLeftText, row?.footerMiddleText, row?.footerRightText].filter(Boolean).join(' | ') || '-'
 
-const CertificateType = () => {
+const CertificateType = ({ onNavigate }) => {
   const {
     status,
     token,
@@ -144,12 +86,6 @@ const CertificateType = () => {
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -175,8 +111,6 @@ const CertificateType = () => {
     [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
   )
 
-  const addSchoolOptions = useMemo(() => schoolOptionsFor(addForm.headOfficeId), [addForm.headOfficeId, schoolOptionsFor])
-  const editSchoolOptions = useMemo(() => schoolOptionsFor(editForm.headOfficeId), [editForm.headOfficeId, schoolOptionsFor])
   const filterSchoolOptions = useMemo(() => {
     if (isSuperAdmin) return schoolOptionsFor(filters.headOfficeId)
     if (isHeadOfficeAdmin) return schoolOptionsFor(authHeadOfficeId)
@@ -258,8 +192,6 @@ const CertificateType = () => {
   useEffect(() => {
     if (isHeadOfficeAdmin && authHeadOfficeId != null) {
       const value = String(authHeadOfficeId)
-      setAddForm((prev) => ({ ...prev, headOfficeId: value }))
-      setEditForm((prev) => ({ ...prev, headOfficeId: value }))
       setPendingFilters((prev) => ({ ...prev, headOfficeId: value }))
       setFilters((prev) => ({ ...prev, headOfficeId: value }))
     }
@@ -270,8 +202,6 @@ const CertificateType = () => {
     const school = getSchoolById(allSchools, authSchoolId)
     const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
     const schoolId = String(authSchoolId)
-    setAddForm((prev) => ({ ...prev, headOfficeId, schoolId }))
-    setEditForm((prev) => ({ ...prev, headOfficeId, schoolId }))
     setPendingFilters((prev) => ({ ...prev, headOfficeId, schoolId }))
     setFilters((prev) => ({ ...prev, headOfficeId, schoolId }))
   }, [allSchools, authSchoolId, isSchoolAdmin])
@@ -283,37 +213,17 @@ const CertificateType = () => {
   }, [currentPage, totalPages])
 
   const openAdd = () => {
-    const school = isSchoolAdmin ? getSchoolById(allSchools, authSchoolId) : null
-    setAddForm({
-      ...emptyForm,
-      headOfficeId:
-        isHeadOfficeAdmin && authHeadOfficeId != null
-          ? String(authHeadOfficeId)
-          : school?.headOfficeId != null
-            ? String(school.headOfficeId)
-            : '',
-      schoolId: isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : '',
-    })
-    setAddStep(0)
-    setIsAddOpen(true)
-    setError('')
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    onNavigate('certificate-type-create')
   }
 
   const openEdit = (row) => {
-    setEditForm({
-      headOfficeId: row?.headOfficeId != null ? String(row.headOfficeId) : '',
-      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-      certificateName: row?.certificateName || '',
-      schoolNameOnCard: row?.schoolNameOnCard || '',
-      certificateText: row?.certificateText || '',
-      footerLeftText: row?.footerLeftText || '',
-      footerMiddleText: row?.footerMiddleText || '',
-      footerRightText: row?.footerRightText || '',
-      backgroundUrl: row?.backgroundUrl || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-    setError('')
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    } catch {}
+    onNavigate('certificate-type-create')
   }
 
   const handleSelectAll = (event) => {
@@ -326,71 +236,6 @@ const CertificateType = () => {
 
   const handleSelectRow = (id) => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
-  }
-
-  const validateForm = (form) => {
-    if (isSuperAdmin) {
-      if (!form.headOfficeId) return 'Head Office is required.'
-      if (!form.schoolId) return 'School is required.'
-    } else if (isHeadOfficeAdmin) {
-      if (!form.schoolId) return 'School is required.'
-    }
-    if (!form.certificateName.trim()) return 'Certificate name is required.'
-    return ''
-  }
-
-  const normalizePayload = (form) => ({
-    headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    certificateName: form.certificateName.trim(),
-    schoolNameOnCard: form.schoolNameOnCard.trim(),
-    certificateText: form.certificateText.trim(),
-    footerLeftText: form.footerLeftText.trim(),
-    footerMiddleText: form.footerMiddleText.trim(),
-    footerRightText: form.footerRightText.trim(),
-    backgroundUrl: form.backgroundUrl.trim(),
-  })
-
-  const handleCreate = async () => {
-    const message = validateForm(addForm)
-    if (message) {
-      setError(message)
-      return
-    }
-    setSaving(true)
-    setError('')
-    try {
-      await createCertificateType(normalizePayload(addForm))
-      setIsAddOpen(false)
-      setAddStep(0)
-      await loadCertificateTypes()
-    } catch (err) {
-      console.error('Failed to create certificate type:', err)
-      setError(err?.message || 'Failed to create certificate type')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdate = async () => {
-    const message = validateForm(editForm)
-    if (message) {
-      setError(message)
-      return
-    }
-    setSaving(true)
-    setError('')
-    try {
-      await updateCertificateType(editForm.id, normalizePayload(editForm))
-      setIsEditOpen(false)
-      setEditStep(0)
-      await loadCertificateTypes()
-    } catch (err) {
-      console.error('Failed to update certificate type:', err)
-      setError(err?.message || 'Failed to update certificate type')
-    } finally {
-      setSaving(false)
-    }
   }
 
   const handleDelete = async (row) => {
@@ -480,134 +325,6 @@ const CertificateType = () => {
   const safeTotalPages = Math.max(1, totalPages)
   const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(row.id))
 
-  const renderScopeFields = (form, setForm, mode) => {
-    if (isSuperAdmin) {
-      return (
-        <ManualScopeSelectors
-          enabled
-          headOffices={headOffices}
-          schoolOptions={mode === 'add' ? addSchoolOptions : editSchoolOptions}
-          selectedHeadOfficeId={form.headOfficeId}
-          onHeadOfficeChange={(value) =>
-            setForm((prev) => ({
-              ...prev,
-              headOfficeId: value,
-              schoolId: '',
-            }))
-          }
-          selectedSchoolId={form.schoolId}
-          onSchoolChange={(value) => setForm((prev) => ({ ...prev, schoolId: value }))}
-          schoolLabel="School"
-        />
-      )
-    }
-
-    return (
-      <div className="avm-field full">
-        <label className="avm-label" htmlFor={`${mode}-schoolId`}>
-          School Name
-          <span className="req"> *</span>
-        </label>
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className="ri-school-line"></i>
-          </span>
-          <select
-            id={`${mode}-schoolId`}
-            className="form-control form-select avm-select avm-input"
-            value={form.schoolId}
-            onChange={(event) => setForm((prev) => ({ ...prev, schoolId: event.target.value }))}
-          >
-            <option value="">{isHeadOfficeAdmin ? '--Select School--' : 'Select School'}</option>
-            {schoolOptionsFor(form.headOfficeId).map((school) => (
-              <option key={String(school.id)} value={String(school.id)}>
-                {school.schoolName}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-    )
-  }
-
-  const renderContentFields = (form, setForm, mode) => (
-    <div className="avm-grid">
-      <FormField label="Certificate Text" full>
-        <textarea
-          className="form-control avm-input"
-          id={`${mode}-certificateText`}
-          rows="4"
-          placeholder="Certificate text with placeholders like [name] and [class_name]"
-          value={form.certificateText}
-          onChange={(event) => setForm((prev) => ({ ...prev, certificateText: event.target.value }))}
-        />
-      </FormField>
-
-      <FormField label="School Name on Card" full>
-        <input
-          className="form-control avm-input"
-          id={`${mode}-schoolNameOnCard`}
-          placeholder="School Name on Card"
-          value={form.schoolNameOnCard}
-          onChange={(event) => setForm((prev) => ({ ...prev, schoolNameOnCard: event.target.value }))}
-        />
-      </FormField>
-
-      <FormField label="Footer Left Text" full>
-        <input
-          className="form-control avm-input"
-          id={`${mode}-footerLeftText`}
-          placeholder="Footer left text"
-          value={form.footerLeftText}
-          onChange={(event) => setForm((prev) => ({ ...prev, footerLeftText: event.target.value }))}
-        />
-      </FormField>
-
-      <FormField label="Footer Middle Text" full>
-        <input
-          className="form-control avm-input"
-          id={`${mode}-footerMiddleText`}
-          placeholder="Footer middle text"
-          value={form.footerMiddleText}
-          onChange={(event) => setForm((prev) => ({ ...prev, footerMiddleText: event.target.value }))}
-        />
-      </FormField>
-
-      <FormField label="Footer Right Text" full>
-        <input
-          className="form-control avm-input"
-          id={`${mode}-footerRightText`}
-          placeholder="Footer right text"
-          value={form.footerRightText}
-          onChange={(event) => setForm((prev) => ({ ...prev, footerRightText: event.target.value }))}
-        />
-      </FormField>
-
-      <FormField label="Background URL" full>
-        <input
-          className="form-control avm-input"
-          id={`${mode}-backgroundUrl`}
-          placeholder="https://... or uploaded asset path"
-          value={form.backgroundUrl}
-          onChange={(event) => setForm((prev) => ({ ...prev, backgroundUrl: event.target.value }))}
-        />
-      </FormField>
-    </div>
-  )
-
   const tableRows = rows.map((row) => ({
     ...row,
     footerText: joinFooter(row),
@@ -622,7 +339,8 @@ const CertificateType = () => {
           <div>
             <button
               type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
+              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0 text-sm"
+              onClick={() => onNavigate('dashboard')}
             >
               Dashboard
             </button>
@@ -631,7 +349,7 @@ const CertificateType = () => {
         </div>
         <button
           type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
+          className="btn btn-primary-600 d-flex align-items-center gap-6 animate-up"
           onClick={openAdd}
         >
           <span className="d-flex text-md">
@@ -664,7 +382,7 @@ const CertificateType = () => {
 
               <button
                 type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                 onClick={() => {
                   setPendingFilters(filters)
                   setIsFilterSidebarOpen(true)
@@ -681,7 +399,7 @@ const CertificateType = () => {
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
@@ -715,7 +433,7 @@ const CertificateType = () => {
                   setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light bg-white"
               />
             </div>
 
@@ -827,7 +545,7 @@ const CertificateType = () => {
                         <div className="d-flex align-items-center gap-10">
                           <button
                             type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             onClick={() => openEdit(row)}
                             title="Edit"
                             disabled={saving}
@@ -836,7 +554,7 @@ const CertificateType = () => {
                           </button>
                           <button
                             type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
                             title="Delete"
                             onClick={() => handleDelete(row)}
                             disabled={saving}
@@ -852,7 +570,7 @@ const CertificateType = () => {
             </table>
           </div>
 
-          <div className="px-20 py-16 border-top border-neutral-200 ">
+          <div className="px-20 py-16 border-top border-neutral-200 bg-white">
             <TablePagination
               paginationProps={{
                 currentPage,
@@ -869,68 +587,6 @@ const CertificateType = () => {
           </div>
         </div>
       </div>
-
-      <WizardPopup
-        modalWidth="720px"
-        open={isAddOpen}
-        title="Add Certificate Type"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((step) => Math.max(0, step - 1))}
-        onNext={() => setAddStep((step) => Math.min(STEPS.length - 1, step + 1))}
-        onSubmit={handleCreate}
-        submitLabel="Save"
-      >
-        <p className="avm-section-title">{STEPS[addStep]}</p>
-        {addStep === 0 ? (
-          <div className="avm-grid">
-            {renderScopeFields(addForm, setAddForm, 'add')}
-            <FormField label="Certificate Name" required full>
-              <input
-                className="form-control avm-input"
-                id="add-certificateName"
-                placeholder="Certificate Name"
-                value={addForm.certificateName}
-                onChange={(event) => setAddForm((prev) => ({ ...prev, certificateName: event.target.value }))}
-              />
-            </FormField>
-          </div>
-        ) : (
-          renderContentFields(addForm, setAddForm, 'add')
-        )}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="720px"
-        open={isEditOpen}
-        title="Edit Certificate Type"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((step) => Math.max(0, step - 1))}
-        onNext={() => setEditStep((step) => Math.min(STEPS.length - 1, step + 1))}
-        onSubmit={handleUpdate}
-        submitLabel="Update"
-      >
-        <p className="avm-section-title">{STEPS[editStep]}</p>
-        {editStep === 0 ? (
-          <div className="avm-grid">
-            {renderScopeFields(editForm, setEditForm, 'edit')}
-            <FormField label="Certificate Name" required full>
-              <input
-                className="form-control avm-input"
-                id="edit-certificateName"
-                placeholder="Certificate Name"
-                value={editForm.certificateName}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, certificateName: event.target.value }))}
-              />
-            </FormField>
-          </div>
-        ) : (
-          renderContentFields(editForm, setEditForm, 'edit')
-        )}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
@@ -974,7 +630,7 @@ const CertificateType = () => {
               </label>
               <select
                 id="schoolId"
-                className="form-control form-select"
+                className="form-control form-select bg-white"
                 value={pendingFilters.schoolId}
                 onChange={handlePendingFilterChange}
               >
