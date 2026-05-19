@@ -17,9 +17,16 @@ const readApiError = async (res) => {
     }
 };
 
-export const fetchStudentActivitiesPage = async (page, size, filters = {}) => {
+export const fetchStudentActivitiesPage = async (pageOrParams = 0, sizeArg = 10, filtersArg = {}) => {
+    const paramsObject = typeof pageOrParams === 'object' && pageOrParams !== null ? pageOrParams : null;
+    const rawPage = paramsObject ? paramsObject.page : pageOrParams;
+    const rawSize = paramsObject ? paramsObject.size : sizeArg;
+    const filters = paramsObject ? paramsObject : filtersArg;
+    const page = Number.isFinite(Number(rawPage)) ? Math.max(Number(rawPage), 0) : 0;
+    const size = Number.isFinite(Number(rawSize)) && Number(rawSize) > 0 ? Number(rawSize) : 10;
+
     const params = new URLSearchParams({
-        page: String(Math.max(page, 0)),
+        page: String(page),
         size: String(size),
     });
     

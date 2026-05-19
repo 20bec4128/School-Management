@@ -1,57 +1,260 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
-import '../assets/css/addModalShared.css'
+import { useAuth } from '../context/useAuth'
+import { normalizeRole } from '../utils/roles'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchFeeCollectionsPage } from '../apis/feeCollectionApi'
+import { fetchClasses } from '../apis/classesApi'
+import { fetchFeeTypes } from '../apis/feeTypesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
+import '../assets/css/addModalShared.css'
 
-const emptyFilters = {
-  school: 'Select',
-  academicYear: 'Select',
-  className: 'Select',
-  status: 'Select',
-}
-
-const columnOptions = [
-  { key: 'academicYear', label: 'Academic Year' },
-  { key: 'groupByData', label: 'Group by Data' },
-  { key: 'discount', label: 'Discount' },
-  { key: 'amount', label: 'Amount' },
+const monthOptions = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
+const paidStatusOptions = ['Paid', 'Unpaid', 'Partial']
+
+const makeDefaultFilters = (schoolId = 'Select') => ({
+  schoolId,
+  classId: 'Select',
+  feeTypeId: 'Select',
+  status: 'Select',
+  month: 'Select',
+})
+
+const columnOptions = [
+  { key: 'schoolName', label: 'School' },
+  { key: 'className', label: 'Class' },
+  { key: 'studentName', label: 'Student / Sale To' },
+  { key: 'feeTypeTitle', label: 'Fee Type' },
+  { key: 'invoiceNumber', label: 'Invoice No.' },
+  { key: 'month', label: 'Month' },
+  { key: 'paidStatus', label: 'Status' },
+  { key: 'grossAmount', label: 'Gross Amount' },
+  { key: 'discount', label: 'Discount' },
+  { key: 'netAmount', label: 'Net Amount' },
+  { key: 'dueAmount', label: 'Due Amount' },
+  { key: 'createdAt', label: 'Created At' },
+]
+
+const formatMoney = (value) => {
+  if (value == null || value === '') return '--'
+  const amount = Number(value)
+  if (Number.isNaN(amount)) return '--'
+  return `Rs. ${amount.toFixed(2)}`
+}
+
+const formatDateTime = (value) => {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('en-IN')
+}
+
+const getStatusBadge = (status) => {
+  if (status === 'Paid') {
+    return <span className="bg-success-100 text-success-600 px-12 py-4 radius-4 fw-medium text-sm">Paid</span>
+  }
+  if (status === 'Partial') {
+    return <span className="bg-warning-100 text-warning-600 px-12 py-4 radius-4 fw-medium text-sm">Partial</span>
+  }
+  return <span className="bg-danger-100 text-danger-600 px-12 py-4 radius-4 fw-medium text-sm">Unpaid</span>
+}
+
 const InvoiceReport = () => {
-  const [data, setData] = useState([])
+  const { status, token, user, role: authRole, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
+  const role = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
+    [authRole, user],
+  )
+
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
+
+  const [rows, setRows] = useState([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+
+  const [classes, setClasses] = useState([])
+  const [feeTypes, setFeeTypes] = useState([])
+  const [schools, setSchools] = useState([])
+
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
+  const [pendingFilters, setPendingFilters] = useState(() => makeDefaultFilters(initialSchoolId))
+  const [filters, setFilters] = useState(() => makeDefaultFilters(initialSchoolId))
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-  const academicYearOptions = useAcademicYearOptions()
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return data.filter((row) => {
-      const matchesSearch =
-        !q || Object.values(row).some((v) => String(v).toLowerCase().includes(q))
-      
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
-      const matchesYear = filters.academicYear === 'Select' || row.academicYear === filters.academicYear
-      const matchesClass = filters.className === 'Select' || row.className === filters.className
-      const matchesStatus = filters.status === 'Select' || row.status === filters.status
+  const selectedSchoolId = useMemo(() => {
+    if (filters.schoolId && filters.schoolId !== 'Select') return String(filters.schoolId)
+    if (isSchoolAdmin) return authSchoolId != null ? String(authSchoolId) : ''
+    return ''
+  }, [filters.schoolId, isSchoolAdmin, authSchoolId])
 
-      return matchesSearch && matchesSchool && matchesYear && matchesClass && matchesStatus
+  const canLoadRows = isSuperAdmin || Boolean(selectedSchoolId)
+
+  const schoolOptions = useMemo(() => {
+    const rows = isSuperAdmin
+      ? (Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : [])
+      : (Array.isArray(schools) ? schools : [])
+    if (isSuperAdmin) return rows
+    if (isHeadOfficeAdmin) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      return rows.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    }
+    return rows
+  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
+
+  const classOptions = useMemo(() => (Array.isArray(classes) ? classes : []), [classes])
+  const feeTypeOptions = useMemo(() => (Array.isArray(feeTypes) ? feeTypes : []), [feeTypes])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    if (isSuperAdmin) return
+
+    let cancelled = false
+    const load = async () => {
+      try {
+        const list = await fetchSchoolsLookup()
+        if (!cancelled) setSchools(Array.isArray(list) ? list : [])
+      } catch {
+        if (!cancelled) setSchools([])
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [status, token, isSuperAdmin])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        const schoolId = pendingFilters.schoolId && pendingFilters.schoolId !== 'Select' ? pendingFilters.schoolId : null
+        const [classData, feeTypeData] = await Promise.all([
+          fetchClasses({ schoolId }),
+          fetchFeeTypes({ schoolId }),
+        ])
+        if (cancelled) return
+        setClasses(Array.isArray(classData) ? classData : [])
+        setFeeTypes(Array.isArray(feeTypeData) ? feeTypeData : [])
+      } catch {
+        if (cancelled) return
+        setClasses([])
+        setFeeTypes([])
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [status, token, pendingFilters.schoolId])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token) return
+
+    if (!canLoadRows) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(0)
+      return
+    }
+
+    let cancelled = false
+
+    const load = async () => {
+      setBusy(true)
+      setLoadError('')
+      try {
+        const data = await fetchFeeCollectionsPage({
+          schoolId: selectedSchoolId || null,
+          classId: filters.classId && filters.classId !== 'Select' ? filters.classId : null,
+          feeTypeId: filters.feeTypeId && filters.feeTypeId !== 'Select' ? filters.feeTypeId : null,
+          status: filters.status && filters.status !== 'Select' ? filters.status : null,
+          month: filters.month && filters.month !== 'Select' ? filters.month : null,
+          search: debouncedSearch,
+          page: currentPage - 1,
+          size: rowsPerPage,
+        })
+
+        if (cancelled) return
+        setRows(Array.isArray(data?.content) ? data.content : [])
+        setTotalElements(Number.isFinite(data?.totalElements) ? data.totalElements : 0)
+        setTotalPages(Number.isFinite(data?.totalPages) ? data.totalPages : 0)
+      } catch (error) {
+        if (cancelled) return
+        setRows([])
+        setTotalElements(0)
+        setTotalPages(0)
+        setLoadError(error?.message || 'Failed to load invoice report')
+      } finally {
+        if (!cancelled) setBusy(false)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    status,
+    token,
+    canLoadRows,
+    selectedSchoolId,
+    filters.classId,
+    filters.feeTypeId,
+    filters.status,
+    filters.month,
+    currentPage,
+    rowsPerPage,
+    debouncedSearch,
+  ])
+
+  useEffect(() => {
+    setPendingFilters((prev) => {
+      if (prev.schoolId !== 'Select' || initialSchoolId === 'Select') return prev
+      return { ...prev, schoolId: initialSchoolId }
     })
-  }, [data, search, filters])
+    setFilters((prev) => {
+      if (prev.schoolId !== 'Select' || initialSchoolId === 'Select') return prev
+      return { ...prev, schoolId: initialSchoolId }
+    })
+  }, [initialSchoolId])
 
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [totalPages, currentPage])
 
   const handleApplyFilters = (e) => {
     e.preventDefault()
@@ -59,6 +262,60 @@ const InvoiceReport = () => {
     setIsFilterSidebarOpen(false)
     setCurrentPage(1)
   }
+
+  const handleResetFilters = () => {
+    const nextFilters = makeDefaultFilters(initialSchoolId)
+    setPendingFilters(nextFilters)
+    setFilters(nextFilters)
+    setCurrentPage(1)
+  }
+
+  const loadExportRows = useCallback(async () => {
+    const size = Math.max(totalElements, rowsPerPage, 1)
+    const data = await fetchFeeCollectionsPage({
+      schoolId: selectedSchoolId || null,
+      classId: filters.classId && filters.classId !== 'Select' ? filters.classId : null,
+      feeTypeId: filters.feeTypeId && filters.feeTypeId !== 'Select' ? filters.feeTypeId : null,
+      status: filters.status && filters.status !== 'Select' ? filters.status : null,
+      month: filters.month && filters.month !== 'Select' ? filters.month : null,
+      search: debouncedSearch,
+      page: 0,
+      size,
+    })
+    return Array.isArray(data?.content) ? data.content : []
+  }, [debouncedSearch, filters.classId, filters.feeTypeId, filters.month, filters.status, rowsPerPage, selectedSchoolId, totalElements])
+
+  const renderCell = (row, column) => {
+    const value = row[column.key]
+
+    switch (column.key) {
+      case 'schoolName':
+      case 'className':
+      case 'studentName':
+      case 'feeTypeTitle':
+      case 'invoiceNumber':
+        return <span className="fw-medium text-primary-light">{value || '--'}</span>
+      case 'paidStatus':
+        return getStatusBadge(value)
+      case 'grossAmount':
+      case 'discount':
+      case 'netAmount':
+      case 'dueAmount':
+        return <span className="fw-semibold">{formatMoney(value)}</span>
+      case 'createdAt':
+        return formatDateTime(value)
+      default:
+        return value || '--'
+    }
+  }
+
+  const totalNetAmount = useMemo(
+    () => rows.reduce((sum, row) => sum + (Number(row?.netAmount) || 0), 0),
+    [rows],
+  )
+
+  const showingStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
+  const showingEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   return (
     <div className="dashboard-main-body">
@@ -73,7 +330,15 @@ const InvoiceReport = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
-              <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
+              <ExportDropdown
+                rows={rows}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                loadRows={loadExportRows}
+                fileName="Invoice_Report"
+                sheetName="Invoice Report"
+                pdfTitle="Invoice Report"
+              />
 
               <button
                 type="button"
@@ -110,25 +375,21 @@ const InvoiceReport = () => {
                 </ul>
               </div>
 
-              <select
+              <RowsPerPageSelect
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search report..."
+                placeholder="Search invoices..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value)
@@ -141,8 +402,17 @@ const InvoiceReport = () => {
             </div>
           </div>
 
+          <div className="px-20 py-12 border-bottom border-neutral-200 d-flex flex-wrap gap-16 justify-content-between">
+            <div className="text-sm text-secondary-light">
+              Showing {showingStart} - {showingEnd} of {totalElements} records
+            </div>
+            <div className="text-sm text-secondary-light">
+              Current page total net amount: <span className="fw-semibold text-primary-light">{formatMoney(totalNetAmount)}</span>
+            </div>
+          </div>
+
           <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1000 }}>
+            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1400 }}>
               <thead>
                 <tr>
                   <th scope="col">
@@ -151,26 +421,36 @@ const InvoiceReport = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {columnOptions.map((col) => visibleColumns[col.key] && <th scope="col" key={col.key}>{col.label}</th>)}
+                  {columnOptions.map((col) => visibleColumns[col.key] && (
+                    <th scope="col" key={col.key}>
+                      {col.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {busy && rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
-                      No report data found.
+                      Loading invoice report...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      {canLoadRows ? 'No invoice records found.' : 'Select a school to view the invoice report.'}
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row, idx) => (
-                    <tr key={idx}>
+                  rows.map((row, idx) => (
+                    <tr key={row.id}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
                           <input className="form-check-input" type="checkbox" />
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {columnOptions.map((col) => visibleColumns[col.key] && <td key={col.key}>{row[col.key] || '--'}</td>)}
+                      {columnOptions.map((col) => visibleColumns[col.key] && <td key={col.key}>{renderCell(row, col)}</td>)}
                     </tr>
                   ))
                 )}
@@ -178,41 +458,17 @@ const InvoiceReport = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} –{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .slice(Math.max(0, currentPage - 2), currentPage + 1)
-                .map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                    onClick={() => setCurrentPage(p)}
-                  >
-                    {p}
-                  </button>
-                ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
+          {loadError ? <div className="px-20 py-12 text-danger">{loadError}</div> : null}
+
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages: Math.max(1, totalPages),
+                pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), Math.max(1, totalPages))),
+              }}
+            />
           </div>
         </div>
       </div>
@@ -223,57 +479,111 @@ const InvoiceReport = () => {
         onClose={() => setIsFilterSidebarOpen(false)}
       >
         <form className="p-20 d-grid gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
-            <select
-              className="form-control form-select"
-              value={pendingFilters.school}
-              onChange={(e) => setPendingFilters((p) => ({ ...p, school: e.target.value }))}
-            >
-              <option value="Select">All Schools</option>
-              <option value="Windsor Park High School">Windsor Park High School</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Academic Year</label>
-            <select
-              className="form-control form-select"
-              value={pendingFilters.academicYear}
-              onChange={(e) => setPendingFilters((p) => ({ ...p, academicYear: e.target.value }))}
-            >
-              <option value="Select">Select Year</option>
-              {academicYearOptions.map((year) => (
-                <option key={year}>{year}</option>
-              ))}
-            </select>
-          </div>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedScope(value, '')
+                setPendingFilters((prev) => ({ ...prev, schoolId: 'Select', classId: 'Select', feeTypeId: 'Select' }))
+              }}
+              selectedSchoolId={manualScope.selectedSchoolId}
+              onSchoolChange={(value) => {
+                manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value)
+                setPendingFilters((prev) => ({ ...prev, schoolId: value || 'Select', classId: 'Select', feeTypeId: 'Select' }))
+              }}
+              schoolLabel="School"
+            />
+          ) : (
+            <div>
+              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
+              <select
+                className="form-control form-select"
+                value={pendingFilters.schoolId}
+                onChange={(e) => setPendingFilters((prev) => ({ ...prev, schoolId: e.target.value, classId: 'Select', feeTypeId: 'Select' }))}
+                disabled={isSchoolAdmin}
+              >
+                <option value="Select">All Schools</option>
+                {schoolOptions.map((school) => (
+                  <option key={school.id} value={String(school.id)}>
+                    {school.schoolName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Class</label>
             <select
               className="form-control form-select"
-              value={pendingFilters.className}
-              onChange={(e) => setPendingFilters((p) => ({ ...p, className: e.target.value }))}
+              value={pendingFilters.classId}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, classId: e.target.value }))}
             >
               <option value="Select">All Classes</option>
+              {classOptions.map((classRow) => (
+                <option key={classRow.id} value={String(classRow.id)}>
+                  {classRow.className || classRow.name || `Class ${classRow.id}`}
+                </option>
+              ))}
             </select>
           </div>
+
+          <div>
+            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Fee Type</label>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.feeTypeId}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, feeTypeId: e.target.value }))}
+            >
+              <option value="Select">All Fee Types</option>
+              {feeTypeOptions.map((feeType) => (
+                <option key={feeType.id} value={String(feeType.id)}>
+                  {feeType.title || feeType.feeType || `Fee Type ${feeType.id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Status</label>
             <select
               className="form-control form-select"
               value={pendingFilters.status}
-              onChange={(e) => setPendingFilters((p) => ({ ...p, status: e.target.value }))}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, status: e.target.value }))}
             >
               <option value="Select">All Status</option>
-              <option value="Paid">Paid</option>
-              <option value="Unpaid">Unpaid</option>
+              {paidStatusOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
+
+          <div>
+            <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Month</label>
+            <select
+              className="form-control form-select"
+              value={pendingFilters.month}
+              onChange={(e) => setPendingFilters((prev) => ({ ...prev, month: e.target.value }))}
+            >
+              <option value="Select">All Months</option>
+              {monthOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="d-flex gap-8 mt-12">
             <button
               type="button"
               className="btn btn-danger-200 text-danger-600 w-100"
-              onClick={() => setPendingFilters(emptyFilters)}
+              onClick={handleResetFilters}
             >
               Reset
             </button>

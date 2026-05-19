@@ -29,6 +29,8 @@ public interface SalaryGradeRepository extends JpaRepository<SalaryGrade, Long> 
            "AND (:search IS NULL OR LOWER(s.gradeName) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<SalaryGrade> searchSalaryGradesIn(@Param("schoolIds") Collection<Long> schoolIds, @Param("search") String search, Pageable pageable);
 
+    java.util.Optional<SalaryGrade> findBySchoolIdAndGradeNameIgnoreCase(Long schoolId, String gradeName);
+
     List<SalaryGrade> findAllByOrderByIdDesc();
 
     boolean existsBySchoolIdAndGradeNameIgnoreCase(Long schoolId, String gradeName);

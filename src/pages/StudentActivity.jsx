@@ -69,6 +69,22 @@ const StudentActivity = ({ onNavigate }) => {
   const isSchoolScoped = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const selectedSchoolIdForLookups = useMemo(() => {
+    if (isSchoolScoped && scopedSchoolId) return scopedSchoolId
+    if (pendingFilters.schoolId && pendingFilters.schoolId !== 'All') return pendingFilters.schoolId
+    return ''
+  }, [isSchoolScoped, scopedSchoolId, pendingFilters.schoolId])
+
+  const selectedClassLookup = useMemo(() => {
+    const target = String(pendingFilters.className || '')
+    if (!target || target === 'Select') return null
+    return Array.isArray(classOptions)
+      ? classOptions.find((item) =>
+          String(item?.className || item?.numericName || item?.name || '') === target,
+        ) || null
+      : null
+  }, [classOptions, pendingFilters.className])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -199,22 +215,6 @@ const StudentActivity = ({ onNavigate }) => {
     }
     return normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)))
   }, [authHeadOfficeId, authHeadOfficeName, headOffices, isHeadOfficeScoped])
-
-  const selectedSchoolIdForLookups = useMemo(() => {
-    if (isSchoolScoped && scopedSchoolId) return scopedSchoolId
-    if (pendingFilters.schoolId && pendingFilters.schoolId !== 'All') return pendingFilters.schoolId
-    return ''
-  }, [isSchoolScoped, scopedSchoolId, pendingFilters.schoolId])
-
-  const selectedClassLookup = useMemo(() => {
-    const target = String(pendingFilters.className || '')
-    if (!target || target === 'Select') return null
-    return Array.isArray(classOptions)
-      ? classOptions.find((item) =>
-          String(item?.className || item?.numericName || item?.name || '') === target,
-        ) || null
-      : null
-  }, [classOptions, pendingFilters.className])
 
   const displayed = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -562,7 +562,7 @@ const StudentActivity = ({ onNavigate }) => {
               id="section"
               className="form-control form-select"
               value={pendingFilters.section}
-              onChange={handlePendingFilterChange}
+              onChange={(e) => setPendingFilters((p) => ({ ...p, section: e.target.value }))}
               disabled={!selectedSchoolIdForLookups || pendingFilters.className === 'Select'}
             >
               <option value="Select">Select</option>

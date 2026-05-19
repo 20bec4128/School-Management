@@ -66,13 +66,13 @@ public class FeeCollectionServiceImpl implements FeeCollectionService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<FeeCollectionDto> getFeeCollectionsPage(Long schoolId, Long classId, Long feeTypeId, String status, String month, String search, int page, int size) {
+    public Page<FeeCollectionDto> getFeeCollectionsPage(Long schoolId, Long classId, Long feeTypeId, String status, String month, Boolean dueOnly, String search, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         String normalizedStatus = normalizeOptional(status);
         String normalizedMonth = normalizeOptional(month);
         String normalizedSearch = normalizeOptional(search);
 
-        return repository.findPageWithDetails(schoolId, classId, feeTypeId, normalizedStatus, normalizedMonth, normalizedSearch, pageable)
+        return repository.findPageWithDetails(schoolId, classId, feeTypeId, normalizedStatus, normalizedMonth, dueOnly, normalizedSearch, pageable)
                 .map(this::mapEntityToDto);
     }
 

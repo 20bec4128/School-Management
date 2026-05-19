@@ -1,152 +1,338 @@
-import React, { useState, useMemo } from "react";
-import * as XLSX from "xlsx";
-import WizardPopup from "../components/WizardPopup";
-import SlideSidebar from "../components/SlideSidebar";
-import useColumnVisibility from "../hooks/useColumnVisibility";
-import "../assets/css/addModalShared.css";
+import React, { useEffect, useMemo, useState } from 'react'
+import * as XLSX from 'xlsx'
+import WizardPopup from '../components/WizardPopup'
+import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import { TablePagination } from '../components/table'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
+import {
+  createSchoolSubscription,
+  deleteSchoolSubscription,
+  fetchSchoolSubscriptionsPage,
+  updateSchoolSubscription,
+} from '../apis/schoolSubscriptionsApi'
+import { fetchSubscriptionPlans } from '../apis/subscriptionPlansApi'
+import { useAuth } from '../context/useAuth'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { normalizeRole } from '../utils/roles'
+import '../assets/css/addModalShared.css'
 
-const STEPS = ["Subscription Details"];
+const EDIT_STORAGE_KEY = 'edit-school-subscription-row'
+
+const STEPS = ['Subscription Details']
 
 const emptyForm = {
-  planName: "",
-  name: "",
-  email: "",
-  phone: "",
-  address: "",
-  schoolName: "",
-  startDate: "",
-  endDate: "",
-  status: "Active",
-};
+  headOfficeId: '',
+  schoolId: '',
+  planId: '',
+  planName: '',
+  price: '',
+  name: '',
+  email: '',
+  phone: '',
+  address: '',
+  startDate: '',
+  endDate: '',
+  status: 'Active',
+}
+
+const emptyFilters = {
+  headOfficeId: '',
+  schoolId: 'Select',
+  status: 'Select',
+}
 
 const FIELD_ICONS = {
-  "Plan Name": "ri-medal-line",
-  Name: "ri-user-line",
-  Email: "ri-mail-line",
-  Phone: "ri-phone-line",
-  Address: "ri-map-pin-line",
-  "School Name": "ri-school-line",
-  "Start Date": "ri-calendar-line",
-  "End Date": "ri-calendar-todo-line",
-  Status: "ri-toggle-line",
-};
+  'Head Office': 'ri-government-line',
+  'School Name': 'ri-school-line',
+  'Plan': 'ri-medal-line',
+  'Plan Name': 'ri-medal-line',
+  Price: 'ri-money-dollar-circle-line',
+  Name: 'ri-user-line',
+  Email: 'ri-mail-line',
+  Phone: 'ri-phone-line',
+  Address: 'ri-map-pin-line',
+  'Start Date': 'ri-calendar-line',
+  'End Date': 'ri-calendar-check-line',
+  Status: 'ri-toggle-line',
+}
 
 const columnOptions = [
-  { key: "schoolName", label: "School Name" },
-  { key: "planName", label: "Plan Name" },
-  { key: "price", label: "Price" },
-  { key: "name", label: "Name" },
-  { key: "email", label: "Email" },
-  { key: "phone", label: "Phone" },
-  { key: "status", label: "Status" },
-];
+  { key: 'schoolName', label: 'School Name' },
+  { key: 'planName', label: 'Plan Name' },
+  { key: 'price', label: 'Price' },
+  { key: 'name', label: 'Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'startDate', label: 'Start Date' },
+  { key: 'endDate', label: 'End Date' },
+  { key: 'status', label: 'Status' },
+]
 
 const FormField = ({ label, required, children, full = false }) => {
-  const icon = FIELD_ICONS[label] || "ri-edit-line";
+  const icon = FIELD_ICONS[label] || 'ri-edit-line'
   return (
-    <div className={`avm-field${full ? " full" : ""}`}>
+    <div className={`avm-field${full ? ' full' : ''}`}>
       <label className="avm-label">
         {label} {required && <span className="text-danger-600">*</span>}
       </label>
-      <div className="avm-input-with-icon" style={{ position: "relative" }}>
+      <div className="avm-input-with-icon" style={{ position: 'relative' }}>
         <span
           style={{
-            position: "absolute",
-            left: "0.85rem",
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "#667085",
+            position: 'absolute',
+            left: '0.85rem',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#667085',
             zIndex: 1,
           }}
         >
-          <i className={icon}></i>
+          <i className={icon} />
         </span>
         {children}
       </div>
     </div>
-  );
-};
+  )
+}
 
 const SchoolSubscription = () => {
-  const [data, setData] = useState([
-    {
-      id: 1,
-      schoolName: "Windsor Park High School",
-      planName: "Premium",
-      price: "5000",
-      name: "John Doe",
-      email: "john@windsor.edu",
-      phone: "0123456789",
-      status: "Active",
-    },
-    {
-      id: 2,
-      schoolName: "Green Valley School",
-      planName: "Standard",
-      price: "2500",
-      name: "Jane Smith",
-      email: "jane@greenvalley.edu",
-      phone: "9876543210",
-      status: "Active",
-    },
-  ]);
-  const [search, setSearch] = useState("");
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [formData, setFormData] = useState(emptyForm);
-  const [selectedRows, setSelectedRows] = useState([]);
-  const [editingId, setEditingId] = useState(null);
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const normalizedRole = normalizeRole(role)
+  const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
 
-  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
+  const [allSchools, setAllSchools] = useState([])
+  const [plans, setPlans] = useState([])
+  const [rows, setRows] = useState([])
+  const [search, setSearch] = useState('')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [formData, setFormData] = useState(emptyForm)
+  const [filters, setFilters] = useState(emptyFilters)
+  const [selectedRows, setSelectedRows] = useState([])
+  const [editingId, setEditingId] = useState(null)
+  const [loading, setLoading] = useState(false)
 
-  const filteredData = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data.filter((row) => {
-      const matchesSearch =
-        !q ||
-        row.schoolName?.toLowerCase().includes(q) ||
-        row.planName?.toLowerCase().includes(q) ||
-        row.name?.toLowerCase().includes(q) ||
-        row.email?.toLowerCase().includes(q);
-      return matchesSearch;
-    });
-  }, [data, search]);
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(start, start + rowsPerPage);
-  }, [currentPage, filteredData, rowsPerPage]);
+  useEffect(() => {
+    let cancelled = false
+    const loadLookups = async () => {
+      try {
+        const [schoolList, planList] = await Promise.all([fetchSchoolsLookup(), fetchSubscriptionPlans()])
+        if (cancelled) return
+        setAllSchools(Array.isArray(schoolList) ? schoolList : [])
+        setPlans(Array.isArray(planList) ? planList : [])
+      } catch {
+        if (cancelled) return
+        setAllSchools([])
+        setPlans([])
+      }
+    }
+    void loadLookups()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
+  const selectedHeadOfficeId = useMemo(() => {
+    if (filters.headOfficeId && filters.headOfficeId !== 'Select') return String(filters.headOfficeId)
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? String(manualScope.selectedHeadOfficeId) : ''
+    if (isHeadOfficeAdmin) return authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+    if (isSchoolAdmin) {
+      const school = allSchools.find((item) => String(item?.id ?? '') === String(authSchoolId ?? ''))
+      return school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    }
+    return ''
+  }, [allSchools, authHeadOfficeId, authSchoolId, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.selectedHeadOfficeId])
+
+  const selectedSchoolId = useMemo(() => {
+    if (filters.schoolId && filters.schoolId !== 'Select') return String(filters.schoolId)
+    if (isSuperAdmin) return manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : ''
+    if (isSchoolAdmin) return authSchoolId != null ? String(authSchoolId) : ''
+    return ''
+  }, [authSchoolId, filters.schoolId, isSchoolAdmin, isSuperAdmin, manualScope.selectedSchoolId])
+
+  const schoolOptions = useMemo(() => {
+    const rowsList = Array.isArray(allSchools) ? allSchools : []
+    if (isSuperAdmin && selectedHeadOfficeId) {
+      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(selectedHeadOfficeId))
+    }
+    if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : rowsList
+    if (isHeadOfficeAdmin) {
+      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
+    if (isSchoolAdmin) {
+      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    }
+    return rowsList
+  }, [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, selectedHeadOfficeId])
+
+  const loadRows = async () => {
+    setLoading(true)
+    try {
+      const result = await fetchSchoolSubscriptionsPage({
+        headOfficeId: selectedHeadOfficeId || undefined,
+        schoolId: selectedSchoolId || undefined,
+        status: filters.status !== 'Select' ? filters.status : undefined,
+        search,
+        page: currentPage - 1,
+        size: rowsPerPage,
+      })
+      setRows(Array.isArray(result?.content) ? result.content : [])
+      setTotalElements(Number(result?.totalElements ?? 0))
+      setTotalPages(Math.max(1, Number(result?.totalPages ?? 1) || 1))
+    } catch {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, rowsPerPage, search, filters.status, selectedHeadOfficeId, selectedSchoolId])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const filteredData = rows
+  const paginatedData = useMemo(() => filteredData, [filteredData])
+
+  const getPlanById = (planId) => plans.find((plan) => String(plan?.id ?? '') === String(planId ?? ''))
+  const getSchoolById = (schoolId) => allSchools.find((school) => String(school?.id ?? '') === String(schoolId ?? ''))
 
   const handleInputChange = (e) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
+    const { id, value } = e.target
+    if (id === 'planId') {
+      const plan = getPlanById(value)
+      setFormData((prev) => ({
+        ...prev,
+        planId: value,
+        planName: plan?.planName || '',
+        price: plan?.price != null ? String(plan.price) : '',
+      }))
+      return
+    }
+    if (id === 'schoolId' && !isSuperAdmin) {
+      const school = getSchoolById(value)
+      setFormData((prev) => ({ ...prev, schoolId: value, headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : '' }))
+      return
+    }
+    setFormData((prev) => ({ ...prev, [id]: value }))
+  }
 
   const openAdd = () => {
-    setEditingId(null);
-    setFormData(emptyForm);
-    setIsModalOpen(true);
-  };
+    setEditingId(null)
+    setFormData({
+      ...emptyForm,
+      headOfficeId: isSuperAdmin ? manualScope.selectedHeadOfficeId : authHeadOfficeId != null ? String(authHeadOfficeId) : '',
+      schoolId: isSuperAdmin ? manualScope.selectedSchoolId : isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : '',
+    })
+    setIsModalOpen(true)
+  }
 
   const handleExportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "SchoolSubscriptions");
-    XLSX.writeFile(wb, "School_Subscription_List.xlsx");
-  };
+    const ws = XLSX.utils.json_to_sheet(filteredData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'SchoolSubscriptions')
+    XLSX.writeFile(wb, 'School_Subscription_List.xlsx')
+  }
 
-  const getVisiblePages = () => {
-    const pages = [];
-    const start = Math.max(1, currentPage - 1);
-    const end = Math.min(totalPages, start + 2);
-    for (let p = start; p <= end; p++) pages.push(p);
-    return pages;
-  };
+  const handleSave = async () => {
+    const schoolId = isSuperAdmin
+      ? manualScope.selectedSchoolId
+        ? Number(manualScope.selectedSchoolId)
+        : formData.schoolId
+          ? Number(formData.schoolId)
+          : null
+      : formData.schoolId
+        ? Number(formData.schoolId)
+        : null
+    const planId = formData.planId ? Number(formData.planId) : null
+    if (!schoolId) return window.alert('School is required')
+    if (!planId && !formData.planName.trim()) return window.alert('Plan is required')
+
+    const school = getSchoolById(schoolId)
+    const plan = getPlanById(planId)
+    const payload = {
+      headOfficeId: isSuperAdmin
+        ? manualScope.selectedHeadOfficeId
+          ? Number(manualScope.selectedHeadOfficeId)
+          : school?.headOfficeId != null
+            ? Number(school.headOfficeId)
+            : null
+        : formData.headOfficeId
+          ? Number(formData.headOfficeId)
+          : school?.headOfficeId != null
+            ? Number(school.headOfficeId)
+            : null,
+      schoolId,
+      planId,
+      planName: plan?.planName || formData.planName.trim(),
+      price: formData.price === '' ? null : Number(formData.price),
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      address: formData.address.trim(),
+      startDate: formData.startDate || null,
+      endDate: formData.endDate || null,
+      status: formData.status,
+    }
+
+    if (editingId) {
+      await updateSchoolSubscription(editingId, payload)
+    } else {
+      await createSchoolSubscription(payload)
+    }
+
+    setIsModalOpen(false)
+    await loadRows()
+  }
+
+  const handleEdit = (row) => {
+    sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    setEditingId(row.id)
+    setFormData({
+      headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : '',
+      schoolId: row.schoolId != null ? String(row.schoolId) : '',
+      planId: row.planId != null ? String(row.planId) : '',
+      planName: row.planName || '',
+      price: row.price != null ? String(row.price) : '',
+      name: row.name || '',
+      email: row.email || '',
+      phone: row.phone || '',
+      address: row.address || '',
+      startDate: row.startDate || '',
+      endDate: row.endDate || '',
+      status: row.status || 'Active',
+    })
+    if (isSuperAdmin && row.headOfficeId != null && row.schoolId != null) {
+      manualScope.setSelectedScope(String(row.headOfficeId), String(row.schoolId))
+    }
+    setIsModalOpen(true)
+  }
+
+  const handleDelete = async (row) => {
+    if (!window.confirm(`Delete subscription "${row.planName || row.name || row.id}"?`)) return
+    await deleteSchoolSubscription(row.id)
+    await loadRows()
+  }
 
   return (
     <div className="dashboard-main-body">
@@ -156,7 +342,7 @@ const SchoolSubscription = () => {
           <span className="text-secondary-light">Subscription / School Management</span>
         </div>
         <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-          <i className="ri-add-large-line"></i> Add Subscription
+          <i className="ri-add-large-line" /> Add Subscription
         </button>
       </div>
 
@@ -165,38 +351,61 @@ const SchoolSubscription = () => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown onExportExcel={handleExportExcel} />
-
-              <button className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" onClick={() => setIsFilterOpen(true)}>
+              <button
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                onClick={() => setIsFilterOpen(true)}
+              >
                 <span className="text-secondary-light text-sm">Find</span>
-                <i className="ri-arrow-right-line"></i>
+                <i className="ri-arrow-right-line" />
               </button>
-
               <div className="dropdown">
-                <button type="button" className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white" data-bs-toggle="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                >
                   <span className="text-secondary-light text-sm">Columns</span>
-                  <i className="ri-arrow-down-s-line"></i>
+                  <i className="ri-arrow-down-s-line" />
                 </button>
                 <ul className="dropdown-menu p-12 border shadow">
                   {columnOptions.map((col) => (
                     <li key={col.key}>
                       <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
-                        <input type="checkbox" className="form-check-input mt-0" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)} />
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[col.key]}
+                          onChange={() => toggleColumn(col.key)}
+                        />
                         {col.label}
                       </label>
                     </li>
                   ))}
                 </ul>
               </div>
-
-              <select className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light" value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
-                {[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <RowsPerPageSelect
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                value={rowsPerPage}
+                onChange={(next) => {
+                  setRowsPerPage(next)
+                  setCurrentPage(1)
+                }}
+              />
             </div>
 
             <div className="position-relative">
-              <input type="text" className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light" placeholder="Search..." value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
+              <input
+                type="text"
+                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
+              />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
-                <i className="ri-search-line"></i>
+                <i className="ri-search-line" />
               </span>
             </div>
           </div>
@@ -216,32 +425,74 @@ const SchoolSubscription = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
+                {loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : paginatedData.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
+                      No records found.
+                    </td>
+                  </tr>
                 ) : (
                   paginatedData.map((row, idx) => (
-                    <tr key={idx}>
+                    <tr key={row.id ?? idx}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
-                          <input type="checkbox" className="form-check-input" checked={selectedRows.includes(row.id)} onChange={() => setSelectedRows(prev => prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id])} />
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() =>
+                              setSelectedRows((prev) =>
+                                prev.includes(row.id) ? prev.filter((id) => id !== row.id) : [...prev, row.id],
+                              )
+                            }
+                          />
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {columnOptions.map((col) => visibleColumns[col.key] && (
-                        <td key={col.key}>
-                          {col.key === "status" ? (
-                            <span className={`px-12 py-4 radius-4 fw-medium text-sm ${row[col.key] === "Active" ? "bg-success-100 text-success-600" : "bg-danger-100 text-danger-600"}`}>
-                              {row[col.key]}
-                            </span>
-                          ) : col.key === "schoolName" ? (
-                            <span className="fw-medium text-primary-light">{row[col.key]}</span>
-                          ) : row[col.key]}
-                        </td>
-                      ))}
+                      {columnOptions.map(
+                        (col) =>
+                          visibleColumns[col.key] && (
+                            <td key={col.key}>
+                              {col.key === 'status' ? (
+                                <span
+                                  className={`px-12 py-4 radius-4 fw-medium text-sm ${
+                                    row[col.key] === 'Active'
+                                      ? 'bg-success-100 text-success-600'
+                                      : 'bg-danger-100 text-danger-600'
+                                  }`}
+                                >
+                                  {row[col.key]}
+                                </span>
+                              ) : col.key === 'schoolName' || col.key === 'planName' ? (
+                                <span className="fw-medium text-primary-light">{row[col.key]}</span>
+                              ) : (
+                                row[col.key]
+                              )}
+                            </td>
+                          ),
+                      )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"><i className="ri-edit-line"></i></button>
-                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"><i className="ri-delete-bin-line"></i></button>
+                          <button
+                            type="button"
+                            className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                            onClick={() => handleEdit(row)}
+                          >
+                            <i className="ri-edit-line" />
+                          </button>
+                          <button
+                            type="button"
+                            className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                            onClick={() => handleDelete(row)}
+                          >
+                            <i className="ri-delete-bin-line" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -251,72 +502,98 @@ const SchoolSubscription = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filteredData.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
-            </span>
-            <div className="d-flex align-items-center gap-8">
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
-              {getVisiblePages().map((p) => (
-                <button key={p} type="button" className={p === currentPage ? "btn btn-sm btn-primary-600" : "btn btn-sm btn-light border"} onClick={() => setCurrentPage(p)}>{p}</button>
-              ))}
-              <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
-            </div>
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                pageInfo: `Showing ${totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
           </div>
         </div>
       </div>
 
       <WizardPopup
-        modalWidth="800px"
+        modalWidth="840px"
         open={isModalOpen}
-        title={editingId ? "Edit Subscription" : "Add Subscription"}
+        title={editingId ? 'Edit Subscription' : 'Add Subscription'}
         steps={STEPS}
         step={0}
         onClose={() => setIsModalOpen(false)}
-        onSubmit={() => setIsModalOpen(false)}
-        submitLabel={editingId ? "Update" : "Save"}
+        onSubmit={handleSave}
+        submitLabel={editingId ? 'Update' : 'Save'}
       >
         <div className="avm-grid">
-          <FormField label="Plan Name" required>
-            <select className="avm-input form-select" id="planName" value={formData.planName} onChange={handleInputChange}>
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={manualScope.setSelectedHeadOfficeId}
+              selectedSchoolId={manualScope.selectedSchoolId}
+              onSchoolChange={manualScope.setSelectedSchoolId}
+            />
+          ) : (
+            <FormField label="School Name" required>
+              <select className="avm-input form-select" id="schoolId" value={formData.schoolId} onChange={handleInputChange}>
+                <option value="">--Select--</option>
+                {schoolOptions.map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.schoolName || school.name || String(school.id)}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          )}
+
+          <FormField label="Plan" required>
+            <select className="avm-input form-select" id="planId" value={formData.planId} onChange={handleInputChange}>
               <option value="">--Select--</option>
-              <option value="Basic">Basic</option>
-              <option value="Standard">Standard</option>
-              <option value="Premium">Premium</option>
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.planName || String(plan.id)}
+                </option>
+              ))}
             </select>
           </FormField>
 
+          <FormField label="Plan Name">
+            <input type="text" className="avm-input" id="planName" value={formData.planName} onChange={handleInputChange} placeholder="Plan name" />
+          </FormField>
+
+          <FormField label="Price">
+            <input type="number" className="avm-input" id="price" value={formData.price} onChange={handleInputChange} placeholder="Price" />
+          </FormField>
+
           <FormField label="Name" required>
-            <input type="text" className="avm-input" id="name" placeholder="Name" value={formData.name} onChange={handleInputChange} />
+            <input type="text" className="avm-input" id="name" value={formData.name} onChange={handleInputChange} placeholder="Name" />
           </FormField>
 
-          <FormField label="Email" required>
-            <input type="email" className="avm-input" id="email" placeholder="Email" value={formData.email} onChange={handleInputChange} />
+          <FormField label="Email">
+            <input type="email" className="avm-input" id="email" value={formData.email} onChange={handleInputChange} placeholder="Email" />
           </FormField>
 
-          <FormField label="Phone" required>
-            <input type="text" className="avm-input" id="phone" placeholder="Phone" value={formData.phone} onChange={handleInputChange} />
+          <FormField label="Phone">
+            <input type="text" className="avm-input" id="phone" value={formData.phone} onChange={handleInputChange} placeholder="Phone" />
           </FormField>
 
-          <FormField label="Address" required full>
-            <input type="text" className="avm-input" id="address" placeholder="Address" value={formData.address} onChange={handleInputChange} />
+          <FormField label="Address" full>
+            <input type="text" className="avm-input" id="address" value={formData.address} onChange={handleInputChange} placeholder="Address" />
           </FormField>
 
-          <FormField label="School Name" required>
-            <input type="text" className="avm-input" id="schoolName" placeholder="School Name" value={formData.schoolName} onChange={handleInputChange} />
-          </FormField>
-
-          <FormField label="Start Date" required>
+          <FormField label="Start Date">
             <input type="date" className="avm-input" id="startDate" value={formData.startDate} onChange={handleInputChange} />
           </FormField>
 
-          <FormField label="End Date" required>
+          <FormField label="End Date">
             <input type="date" className="avm-input" id="endDate" value={formData.endDate} onChange={handleInputChange} />
           </FormField>
 
-          <FormField label="Status" required>
+          <FormField label="Status">
             <select className="avm-input form-select" id="status" value={formData.status} onChange={handleInputChange}>
-              <option value="">--Select--</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
@@ -325,20 +602,68 @@ const SchoolSubscription = () => {
       </WizardPopup>
 
       <SlideSidebar isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} title="Find Subscription">
-        <form className="p-20 d-grid gap-16">
+        <form
+          className="p-20 d-grid gap-16"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setIsFilterOpen(false)
+            setCurrentPage(1)
+            void loadRows()
+          }}
+        >
+          {isSuperAdmin ? (
+            <ManualScopeSelectors
+              enabled
+              headOffices={manualScope.headOffices}
+              schoolOptions={manualScope.schoolOptions}
+              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
+              onHeadOfficeChange={(value) => {
+                manualScope.setSelectedScope(value, '')
+                setFilters((prev) => ({ ...prev, headOfficeId: value, schoolId: 'Select' }))
+              }}
+              selectedSchoolId={manualScope.selectedSchoolId}
+              onSchoolChange={(value) => {
+                manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value)
+                setFilters((prev) => ({ ...prev, schoolId: value || 'Select' }))
+              }}
+              schoolLabel="School"
+            />
+          ) : !isSchoolAdmin ? (
+            <div>
+              <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
+              <select
+                className="form-control form-select"
+                value={filters.schoolId || 'Select'}
+                onChange={(e) => setFilters((prev) => ({ ...prev, schoolId: e.target.value, headOfficeId: '' }))}
+              >
+                <option value="Select">--Select School--</option>
+                {schoolOptions.map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.schoolName || school.name || String(school.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8">Status</label>
-            <select className="form-control form-select">
+            <select
+              className="form-control form-select"
+              value={filters.status}
+              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+            >
               <option value="Select">--Select Status--</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
           </div>
-          <button type="submit" className="btn btn-primary-600 w-100">Apply Filter</button>
+          <button type="submit" className="btn btn-primary-600 w-100">
+            Apply Filter
+          </button>
         </form>
       </SlideSidebar>
     </div>
-  );
-};
+  )
+}
 
-export default SchoolSubscription;
+export default SchoolSubscription

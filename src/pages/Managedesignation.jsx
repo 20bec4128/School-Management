@@ -252,7 +252,7 @@ const ManageDesignation = ({ onNavigate }) => {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const rowHeadOfficeId = schoolById.get(String(row.schoolId ?? ""))?.headOfficeId ?? null;
+      const rowHeadOfficeId = schoolsById.get(String(row.schoolId ?? ""))?.headOfficeId ?? null;
       const matchesHeadOffice =
         filters.headOfficeId === "All" ||
         String(rowHeadOfficeId ?? "") === String(filters.headOfficeId);
@@ -265,7 +265,7 @@ const ManageDesignation = ({ onNavigate }) => {
 
       return matchesHeadOffice && matchesSchool && matchesDesignation;
     });
-  }, [filters, rows, schoolById]);
+  }, [filters, rows, schoolsById]);
 
   const selectedFilterHeadOfficeId =
     isSuperAdmin ? pendingFilters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? "") : "";
