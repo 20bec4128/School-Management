@@ -469,10 +469,7 @@ const SalaryPayment = () => {
 
           <div className="px-20 py-12 border-bottom border-neutral-200 d-flex flex-wrap gap-16 justify-content-between">
             <div className="text-sm text-secondary-light">
-<<<<<<< HEAD
-=======
              
->>>>>>> e190a968d0f51d5eb9637c5797e3e5e3947b9872
             </div>
             <div className="d-flex flex-wrap gap-24 text-sm text-secondary-light">
               <span>

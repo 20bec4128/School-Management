@@ -494,16 +494,10 @@ const IncomeReport = () => {
           <div className="px-20 py-12 border-bottom border-neutral-200 d-flex flex-wrap gap-16 justify-content-between">
             <div className="text-sm text-secondary-light"></div>
             <div className="text-sm text-secondary-light">
-<<<<<<< HEAD
-            </div>
-            <div className="text-sm text-secondary-light">
-              Current page total: <span className="fw-semibold text-primary-light">{formatMoney(totalAmount)}</span>
-=======
               Current page total:{" "}
               <span className="fw-semibold text-primary-light">
                 {formatMoney(totalAmount)}
               </span>
->>>>>>> e190a968d0f51d5eb9637c5797e3e5e3947b9872
             </div>
           </div>
 
