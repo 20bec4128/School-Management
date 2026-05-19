@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
+import { fetchClasses } from "../apis/classesApi";
 import { fetchStudentsByClassSection } from "../apis/studentsApi";
 import { useAuth } from "../context/useAuth";
 import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
@@ -118,12 +119,14 @@ const ResultSmsCreate = ({ onNavigate }) => {
   const isEditMode = Boolean(editId);
 
   const [schools, setSchools] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
 
   const [form, setForm] = useState({
     headOfficeId: "",
     schoolId: "",
+    classId: "",
     examTerm: "",
     receiverType: "",
     receiver: "",
@@ -191,6 +194,7 @@ const ResultSmsCreate = ({ onNavigate }) => {
                   : "",
               schoolId:
                 existing.schoolId != null ? String(existing.schoolId) : "",
+              classId: existing.classId != null ? String(existing.classId) : "",
               examTerm: existing.examTerm || "",
               receiverType: existing.receiverType || "",
               receiver: existing.receiver || "",
@@ -222,6 +226,24 @@ const ResultSmsCreate = ({ onNavigate }) => {
   }, [authSchoolId, isSchoolAdmin]);
 
   useEffect(() => {
+    const loadClasses = async () => {
+      if (!form.schoolId) {
+        setClasses([]);
+        return;
+      }
+
+      try {
+        const data = await fetchClasses({ schoolId: form.schoolId });
+        setClasses(Array.isArray(data) ? data : []);
+      } catch {
+        setClasses([]);
+      }
+    };
+
+    void loadClasses();
+  }, [form.schoolId]);
+
+  useEffect(() => {
     if (!isSuperAdmin || isEditMode || !manualScope.selectedSchoolId) return;
     setForm((prev) => ({
       ...prev,
@@ -230,14 +252,17 @@ const ResultSmsCreate = ({ onNavigate }) => {
   }, [isSuperAdmin, isEditMode, manualScope.selectedSchoolId]);
 
   useEffect(() => {
-    if (!form.schoolId) {
+    if (!form.schoolId || !form.classId) {
       setStudents([]);
       return;
     }
     const loadStudents = async () => {
       setLoadingStudents(true);
       try {
-        const data = await fetchStudentsByClassSection({ schoolId: form.schoolId });
+        const data = await fetchStudentsByClassSection({
+          schoolId: form.schoolId,
+          classId: form.classId,
+        });
         setStudents(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to load students:", err);
@@ -246,7 +271,7 @@ const ResultSmsCreate = ({ onNavigate }) => {
       }
     };
     void loadStudents();
-  }, [form.schoolId]);
+  }, [form.schoolId, form.classId]);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -255,6 +280,13 @@ const ResultSmsCreate = ({ onNavigate }) => {
         return {
           ...prev,
           receiverType: value,
+          receiver: "",
+        };
+      }
+      if (id === "classId") {
+        return {
+          ...prev,
+          classId: value,
           receiver: "",
         };
       }
@@ -272,11 +304,11 @@ const ResultSmsCreate = ({ onNavigate }) => {
 
   const handleHeadOfficeChange = (value) => {
     manualScope.setSelectedScope(value, "");
-    setForm((prev) => ({ ...prev, headOfficeId: value, schoolId: "", receiver: "" }));
+    setForm((prev) => ({ ...prev, headOfficeId: value, schoolId: "", classId: "", receiver: "" }));
   };
 
   const handleSchoolChange = (value) => {
-    setForm((prev) => ({ ...prev, schoolId: value, receiver: "" }));
+    setForm((prev) => ({ ...prev, schoolId: value, classId: "", receiver: "" }));
     if (isSuperAdmin) {
       manualScope.setSelectedScope(manualScope.selectedHeadOfficeId, value);
     }
@@ -284,6 +316,7 @@ const ResultSmsCreate = ({ onNavigate }) => {
 
   const validate = () => {
     if (!form.schoolId) return "School is required";
+    if (!form.classId) return "Class is required";
     if (!form.examTerm) return "Exam Term is required";
     if (!form.receiverType) return "Receiver Type is required";
     if (!form.receiver) return "Receiver is required";
@@ -295,6 +328,7 @@ const ResultSmsCreate = ({ onNavigate }) => {
   const validateStep = (targetStep) => {
     if (targetStep === 0) {
       if (!form.schoolId) return "School is required";
+      if (!form.classId) return "Class is required";
       if (!form.examTerm) return "Exam Term is required";
       if (!form.receiverType) return "Receiver Type is required";
       if (!form.receiver) return "Receiver is required";
@@ -336,6 +370,7 @@ const ResultSmsCreate = ({ onNavigate }) => {
       headOfficeId: resolvedHeadOfficeId,
       schoolId: Number(form.schoolId),
       schoolName: resolveSchoolName(),
+      classId: form.classId ? Number(form.classId) : null,
       examTerm: form.examTerm,
       receiverType: form.receiverType,
       receiver: form.receiver,
@@ -492,6 +527,25 @@ const ResultSmsCreate = ({ onNavigate }) => {
                   </FormField>
                 )}
 
+                <FormField label="Class" required full>
+                  <select
+                    className="form-control form-select ps-40"
+                    id="classId"
+                    value={form.classId}
+                    onChange={handleChange}
+                    disabled={!form.schoolId}
+                  >
+                    <option value="">
+                      {form.schoolId ? "--Select Class--" : "Select School First"}
+                    </option>
+                    {classes.map((option) => (
+                      <option key={String(option.id)} value={String(option.id)}>
+                        {option.className || option.name || String(option.id)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
                 <FormField label="Exam Term" required full>
                   <select
                     className="form-control form-select ps-40"
@@ -530,10 +584,10 @@ const ResultSmsCreate = ({ onNavigate }) => {
                     id="receiver"
                     value={form.receiver}
                     onChange={handleChange}
-                    disabled={!form.receiverType || loadingStudents}
+                    disabled={!form.receiverType || !form.classId || loadingStudents}
                   >
                     <option value="">
-                      {loadingStudents ? "Loading..." : "--Select--"}
+                      {loadingStudents ? "Loading..." : form.classId ? "--Select--" : "Select Class First"}
                     </option>
                     {receiverOptions.map((item) => (
                       <option key={item} value={item}>

@@ -6,11 +6,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "mark_send_email")
+@Table(name = "email_message")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class MarkSendEmail {
+public class EmailMessage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,20 +28,11 @@ public class MarkSendEmail {
     @Column(name = "class_name")
     private String className;
 
-    @Column(name = "exam_term", nullable = false)
-    private String examTerm;
-
     @Column(name = "receiver_type", nullable = false)
     private String receiverType;
 
-    @Column(name = "receiver")
+    @Column(name = "receiver", nullable = false)
     private String receiver;
-
-    @Column(name = "student_mark", nullable = false)
-    private String studentMark;
-
-    @Column(name = "template")
-    private String template;
 
     @Column(name = "subject", nullable = false)
     private String subject;
@@ -82,16 +73,10 @@ public class MarkSendEmail {
     public void setSchoolName(String schoolName) { this.schoolName = schoolName; }
     public String getClassName() { return className; }
     public void setClassName(String className) { this.className = className; }
-    public String getExamTerm() { return examTerm; }
-    public void setExamTerm(String examTerm) { this.examTerm = examTerm; }
     public String getReceiverType() { return receiverType; }
     public void setReceiverType(String receiverType) { this.receiverType = receiverType; }
     public String getReceiver() { return receiver; }
     public void setReceiver(String receiver) { this.receiver = receiver; }
-    public String getStudentMark() { return studentMark; }
-    public void setStudentMark(String studentMark) { this.studentMark = studentMark; }
-    public String getTemplate() { return template; }
-    public void setTemplate(String template) { this.template = template; }
     public String getSubject() { return subject; }
     public void setSubject(String subject) { this.subject = subject; }
     public String getEmailBody() { return emailBody; }
@@ -103,9 +88,7 @@ public class MarkSendEmail {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
-    public static Builder builder() {
-        return new Builder();
-    }
+    public static Builder builder() { return new Builder(); }
 
     public static class Builder {
         private Long id;
@@ -113,11 +96,8 @@ public class MarkSendEmail {
         private Long schoolId;
         private String schoolName;
         private String className;
-        private String examTerm;
         private String receiverType;
         private String receiver;
-        private String studentMark;
-        private String template;
         private String subject;
         private String emailBody;
         private LocalDate sendDate;
@@ -129,29 +109,23 @@ public class MarkSendEmail {
         public Builder schoolId(Long schoolId) { this.schoolId = schoolId; return this; }
         public Builder schoolName(String schoolName) { this.schoolName = schoolName; return this; }
         public Builder className(String className) { this.className = className; return this; }
-        public Builder examTerm(String examTerm) { this.examTerm = examTerm; return this; }
         public Builder receiverType(String receiverType) { this.receiverType = receiverType; return this; }
         public Builder receiver(String receiver) { this.receiver = receiver; return this; }
-        public Builder studentMark(String studentMark) { this.studentMark = studentMark; return this; }
-        public Builder template(String template) { this.template = template; return this; }
         public Builder subject(String subject) { this.subject = subject; return this; }
         public Builder emailBody(String emailBody) { this.emailBody = emailBody; return this; }
         public Builder sendDate(LocalDate sendDate) { this.sendDate = sendDate; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
         public Builder updatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; return this; }
 
-        public MarkSendEmail build() {
-            MarkSendEmail entity = new MarkSendEmail();
+        public EmailMessage build() {
+            EmailMessage entity = new EmailMessage();
             entity.setId(id);
             entity.setHeadOfficeId(headOfficeId);
             entity.setSchoolId(schoolId);
             entity.setSchoolName(schoolName);
             entity.setClassName(className);
-            entity.setExamTerm(examTerm);
             entity.setReceiverType(receiverType);
             entity.setReceiver(receiver);
-            entity.setStudentMark(studentMark);
-            entity.setTemplate(template);
             entity.setSubject(subject);
             entity.setEmailBody(emailBody);
             entity.setSendDate(sendDate);

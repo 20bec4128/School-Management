@@ -126,6 +126,8 @@ import ManageSchool from "./pages/ManageSchool";
 import AcademicYear from "./pages/AcademicYear";
 import PaymentSetting from "./pages/PaymentSetting";
 import PaymentSettingCreate from "./pages/PaymentSettingCreate";
+import EmailSetting from "./pages/EmailSetting";
+import EmailSettingCreate from "./pages/EmailSettingCreate";
 import SmsSetting from "./pages/SmsSetting";
 import SmsSettingCreate from "./pages/SmsSettingCreate";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -416,6 +418,16 @@ const routeEntries = [
   {
     pageKey: "payment-setting-create",
     component: PaymentSettingCreate,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "email-setting",
+    component: EmailSetting,
+    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+  },
+  {
+    pageKey: "email-setting-create",
+    component: EmailSettingCreate,
     permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {

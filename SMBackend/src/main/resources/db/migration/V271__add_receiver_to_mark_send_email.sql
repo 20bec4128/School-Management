@@ -1,0 +1,2 @@
+ALTER TABLE mark_send_email ADD COLUMN IF NOT EXISTS class_name VARCHAR(255);
+ALTER TABLE mark_send_email ADD COLUMN IF NOT EXISTS receiver VARCHAR(255);

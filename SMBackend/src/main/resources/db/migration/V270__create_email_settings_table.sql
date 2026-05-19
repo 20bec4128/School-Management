@@ -1,0 +1,20 @@
+CREATE TABLE email_settings (
+    id BIGSERIAL PRIMARY KEY,
+    head_office_id BIGINT,
+    school_id BIGINT NOT NULL,
+    school_name VARCHAR(255),
+    email_protocol VARCHAR(100) NOT NULL,
+    email_type VARCHAR(100) NOT NULL,
+    char_set VARCHAR(100) NOT NULL,
+    smtp_host VARCHAR(255) NOT NULL,
+    smtp_port INT NOT NULL,
+    smtp_username VARCHAR(255) NOT NULL,
+    smtp_password VARCHAR(500) NOT NULL,
+    smtp_security VARCHAR(50),
+    smtp_timeout INT,
+    priority VARCHAR(50),
+    from_name VARCHAR(255) NOT NULL,
+    from_email VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
