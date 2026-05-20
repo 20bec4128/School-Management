@@ -108,6 +108,9 @@ public class Student {
     @Column(name = "father_photo_url")
     private String fatherPhotoUrl;
 
+    @Column(name = "father_email")
+    private String fatherEmail;
+
     // Mother Information
     @Column(name = "mother_name")
     private String motherName;
@@ -126,6 +129,12 @@ public class Student {
 
     @Column(name = "mother_photo_url")
     private String motherPhotoUrl;
+
+    @Column(name = "mother_email")
+    private String motherEmail;
+
+    @Column(name = "guardian_email")
+    private String guardianEmail;
 
     // Address Information
     @Column(name = "present_address", columnDefinition = "TEXT")
@@ -280,6 +289,8 @@ public class Student {
 
     public String getFatherPhotoUrl() { return fatherPhotoUrl; }
     public void setFatherPhotoUrl(String fatherPhotoUrl) { this.fatherPhotoUrl = fatherPhotoUrl; }
+    public String getFatherEmail() { return fatherEmail; }
+    public void setFatherEmail(String fatherEmail) { this.fatherEmail = fatherEmail; }
 
     public String getMotherName() { return motherName; }
     public void setMotherName(String motherName) { this.motherName = motherName; }
@@ -298,6 +309,10 @@ public class Student {
 
     public String getMotherPhotoUrl() { return motherPhotoUrl; }
     public void setMotherPhotoUrl(String motherPhotoUrl) { this.motherPhotoUrl = motherPhotoUrl; }
+    public String getMotherEmail() { return motherEmail; }
+    public void setMotherEmail(String motherEmail) { this.motherEmail = motherEmail; }
+    public String getGuardianEmail() { return guardianEmail; }
+    public void setGuardianEmail(String guardianEmail) { this.guardianEmail = guardianEmail; }
 
     public String getPresentAddress() { return presentAddress; }
     public void setPresentAddress(String presentAddress) { this.presentAddress = presentAddress; }
@@ -380,12 +395,15 @@ public class Student {
         public StudentBuilder fatherProfession(String fatherProfession) { student.setFatherProfession(fatherProfession); return this; }
         public StudentBuilder fatherDesignation(String fatherDesignation) { student.setFatherDesignation(fatherDesignation); return this; }
         public StudentBuilder fatherPhotoUrl(String fatherPhotoUrl) { student.setFatherPhotoUrl(fatherPhotoUrl); return this; }
+        public StudentBuilder fatherEmail(String fatherEmail) { student.setFatherEmail(fatherEmail); return this; }
         public StudentBuilder motherName(String motherName) { student.setMotherName(motherName); return this; }
         public StudentBuilder motherPhone(String motherPhone) { student.setMotherPhone(motherPhone); return this; }
         public StudentBuilder motherEducation(String motherEducation) { student.setMotherEducation(motherEducation); return this; }
         public StudentBuilder motherProfession(String motherProfession) { student.setMotherProfession(motherProfession); return this; }
         public StudentBuilder motherDesignation(String motherDesignation) { student.setMotherDesignation(motherDesignation); return this; }
         public StudentBuilder motherPhotoUrl(String motherPhotoUrl) { student.setMotherPhotoUrl(motherPhotoUrl); return this; }
+        public StudentBuilder motherEmail(String motherEmail) { student.setMotherEmail(motherEmail); return this; }
+        public StudentBuilder guardianEmail(String guardianEmail) { student.setGuardianEmail(guardianEmail); return this; }
         public StudentBuilder presentAddress(String presentAddress) { student.setPresentAddress(presentAddress); return this; }
         public StudentBuilder permanentAddress(String permanentAddress) { student.setPermanentAddress(permanentAddress); return this; }
         public StudentBuilder sameAsGuardianAddress(Boolean sameAsGuardianAddress) { student.setSameAsGuardianAddress(sameAsGuardianAddress); return this; }

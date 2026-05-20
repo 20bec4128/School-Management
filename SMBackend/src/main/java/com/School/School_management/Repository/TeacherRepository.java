@@ -8,4 +8,6 @@ public interface TeacherRepository extends JpaRepository<ManageTeacher, Long> {
     Optional<ManageTeacher> findByUsername(String username);
 
     boolean existsByIdAndSchoolId(Long id, Long schoolId);
+
+    Optional<ManageTeacher> findByIdAndSchoolId(Long id, Long schoolId);
 }

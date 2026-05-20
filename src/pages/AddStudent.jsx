@@ -45,13 +45,16 @@ const emptyForm = {
   fatherEducation: '',
   fatherProfession: '',
   fatherDesignation: '',
+  fatherEmail: '',
   fatherPhoto: null,
   motherName: '',
   motherPhone: '',
   motherEducation: '',
   motherProfession: '',
   motherDesignation: '',
+  motherEmail: '',
   motherPhoto: null,
+  guardianEmail: '',
   isGuardian: '',
   relationWithGuardian: '',
   presentAddress: '',
@@ -115,11 +118,14 @@ const buildPayload = (form, phoneCodes) => ({
   fatherEducation: form.fatherEducation || null,
   fatherProfession: form.fatherProfession || null,
   fatherDesignation: form.fatherDesignation || null,
+  fatherEmail: form.fatherEmail || null,
   motherName: form.motherName || null,
   motherPhone: combinePhoneValue(phoneCodes.motherPhone, form.motherPhone),
   motherEducation: form.motherEducation || null,
   motherProfession: form.motherProfession || null,
   motherDesignation: form.motherDesignation || null,
+  motherEmail: form.motherEmail || null,
+  guardianEmail: form.guardianEmail || null,
   presentAddress: form.presentAddress || null,
   permanentAddress: form.permanentAddress || null,
   sameAsGuardianAddress: form.sameAsGuardianAddress || false,
@@ -195,9 +201,12 @@ const FIELD_ICONS = {
   Discount: 'ri-percent-line',
   'Second Language': 'ri-translate-2',
   'Father Name': 'ri-user-line',
+  'Father Email': 'ri-mail-line',
   'Mother Name': 'ri-user-line',
+  'Mother Email': 'ri-mail-line',
   'Is Guardian?': 'ri-shield-user-line',
   'Relation With Guardian': 'ri-links-line',
+  'Guardian Email': 'ri-mail-line',
   'Present Address': 'ri-map-pin-2-line',
   'Permanent Address': 'ri-home-4-line',
   Username: 'ri-at-line',
@@ -729,6 +738,9 @@ const AddStudent = ({ onNavigate }) => {
                     onValueChange={(val) => setForm(p => ({ ...p, fatherPhone: val }))}
                   />
                 </div>
+                <FormField label="Father Email">
+                  <input type="email" id="fatherEmail" className="form-control ps-40" placeholder="Father Email" value={form.fatherEmail} onChange={handleChange} />
+                </FormField>
                 <FormField label="Father Education">
                   <input type="text" id="fatherEducation" className="form-control ps-40" placeholder="Father Education" value={form.fatherEducation} onChange={handleChange} />
                 </FormField>
@@ -760,6 +772,9 @@ const AddStudent = ({ onNavigate }) => {
                     onValueChange={(val) => setForm(p => ({ ...p, motherPhone: val }))}
                   />
                 </div>
+                <FormField label="Mother Email">
+                  <input type="email" id="motherEmail" className="form-control ps-40" placeholder="Mother Email" value={form.motherEmail} onChange={handleChange} />
+                </FormField>
                 <FormField label="Mother Education">
                   <input type="text" id="motherEducation" className="form-control ps-40" placeholder="Mother Education" value={form.motherEducation} onChange={handleChange} />
                 </FormField>
@@ -787,6 +802,9 @@ const AddStudent = ({ onNavigate }) => {
 
                 <FormField label="Relation With Guardian">
                   <input type="text" id="relationWithGuardian" className="form-control ps-40" placeholder="Relation" value={form.relationWithGuardian} onChange={handleChange} />
+                </FormField>
+                <FormField label="Guardian Email">
+                  <input type="email" id="guardianEmail" className="form-control ps-40" placeholder="Guardian Email" value={form.guardianEmail} onChange={handleChange} />
                 </FormField>
                 <h6 className="col-12 text-primary-light mt-12 mb-16 border-bottom pb-8">Parent Login Details</h6>
                 <div className="col-md-6 mb-20">

@@ -37,6 +37,25 @@ export const fetchLeaveApplications = async ({ schoolId, status } = {}) => {
   return Array.isArray(data) ? data : []
 }
 
+export const fetchLeaveCoverage = async ({ schoolId, applicantType, date, applicantIds } = {}) => {
+  const qs = new URLSearchParams()
+  if (schoolId == null || String(schoolId).trim() === '') throw new Error('schoolId is required')
+  if (!applicantType || String(applicantType).trim() === '') throw new Error('applicantType is required')
+  if (!date || String(date).trim() === '') throw new Error('date is required')
+  const ids = Array.isArray(applicantIds) ? applicantIds : []
+  if (ids.length === 0) return []
+
+  qs.set('schoolId', String(schoolId))
+  qs.set('applicantType', String(applicantType).trim().toUpperCase())
+  qs.set('date', String(date))
+  qs.set('applicantIds', ids.map((v) => String(v)).join(','))
+
+  const res = await apiFetch(`${BASE}/coverage?${qs.toString()}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(await readApiError(res))
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
 export const fetchLeaveApplication = async (id) => {
   const res = await apiFetch(`${BASE}/${encodeURIComponent(String(id))}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(await readApiError(res))

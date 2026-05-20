@@ -9,6 +9,7 @@ import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchEmployees } from '../apis/employeesApi'
 import { createAttendance, fetchAttendances } from '../apis/attendanceApi'
+import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
 import '../assets/css/addModalShared.css'
 
 const EMPLOYEE_EXAM_TERM = 'Employee Attendance'
@@ -41,6 +42,7 @@ const normalizeStatus = (value) => {
   if (text === 'present') return 'Present'
   if (text === 'absent') return 'Absent'
   if (text === 'late') return 'Late'
+  if (text === 'leave' || text === 'on leave' || text === 'onleave') return 'Leave'
   return ''
 }
 
@@ -92,6 +94,7 @@ const EmployeeAttendance = () => {
   const [filters, setFilters] = useState(() => buildDefaultFilters())
   const [drafts, setDrafts] = useState({})
   const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
+  const [leaveByEmployeeId, setLeaveByEmployeeId] = useState(() => new Map())
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -232,10 +235,58 @@ const EmployeeAttendance = () => {
     return displayedEmployees.slice(start, start + rowsPerPage)
   }, [currentPage, displayedEmployees, rowsPerPage])
 
-  const dirtyDraftEntries = useMemo(
-    () => Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId),
-    [drafts],
-  )
+  // Load approved leave coverage for the visible roster (current page).
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.date) {
+      setLeaveByEmployeeId(new Map())
+      return
+    }
+
+    const ids = paginatedEmployees
+      .map((e) => e?.employeeId)
+      .filter((v) => v != null)
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v))
+
+    if (ids.length === 0) {
+      setLeaveByEmployeeId(new Map())
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchLeaveCoverage({
+          schoolId: selectedSchoolId,
+          applicantType: 'EMPLOYEE',
+          date: filters.date,
+          applicantIds: ids,
+        })
+        if (cancelled) return
+        const map = new Map()
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row?.applicantId == null) continue
+          map.set(String(row.applicantId), row)
+        }
+        setLeaveByEmployeeId(map)
+      } catch {
+        if (!cancelled) setLeaveByEmployeeId(new Map())
+      }
+    }
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [filters.date, paginatedEmployees, selectedSchoolId])
+
+  const dirtyDraftEntries = useMemo(() => {
+    const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId)
+    const leaveEntries = paginatedEmployees
+      .filter((e) => e?.recordId == null && e?.employeeId != null && leaveByEmployeeId.has(String(e.employeeId)))
+      .map((e) => ({ employee: e, status: 'Leave', recordId: null }))
+    return [...entries, ...leaveEntries]
+  }, [drafts, leaveByEmployeeId, paginatedEmployees])
 
   const loadPageData = useCallback(async () => {
     if (!selectedSchoolId) {
@@ -310,15 +361,52 @@ const EmployeeAttendance = () => {
 
     let cancelled = false
     const handle = setTimeout(() => {
-      const rows = displayedEmployees
-      let uniform = ''
-      if (rows.length > 0) {
-        const first = normalizeStatus(rows[0]?.status)
-        if (first) {
-          uniform = rows.every((r) => normalizeStatus(r?.status) === first) ? first : ''
+      const run = async () => {
+        try {
+          const rows = displayedEmployees
+
+          // Any approved leave in the filtered set => keep bulk header buttons neutral.
+          {
+            const ids = rows
+              .map((r) => r?.employeeId)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v))
+
+            let anyLeave = false
+            const batchSize = 200
+            for (let i = 0; i < ids.length && !anyLeave; i += batchSize) {
+              const batch = ids.slice(i, i + batchSize)
+              if (batch.length === 0) continue
+              const coverage = await fetchLeaveCoverage({
+                schoolId: selectedSchoolId,
+                applicantType: 'EMPLOYEE',
+                date: filters.date,
+                applicantIds: batch,
+              })
+              if (Array.isArray(coverage) && coverage.length > 0) anyLeave = true
+            }
+
+            if (anyLeave) {
+              if (!cancelled) setAllFilteredUniformStatus('')
+              return
+            }
+          }
+
+          let uniform = ''
+          if (rows.length > 0) {
+            const first = normalizeStatus(rows[0]?.status)
+            if (first) {
+              uniform = rows.every((r) => normalizeStatus(r?.status) === first) ? first : ''
+            }
+          }
+          if (!cancelled) setAllFilteredUniformStatus(uniform)
+        } catch {
+          if (!cancelled) setAllFilteredUniformStatus('')
         }
       }
-      if (!cancelled) setAllFilteredUniformStatus(uniform)
+
+      void run()
     }, 350)
 
     return () => {
@@ -361,6 +449,7 @@ const EmployeeAttendance = () => {
 
   const setEmployeeStatus = useCallback((employee, status) => {
     if (employee?.recordId != null) return
+    if (employee?.employeeId != null && leaveByEmployeeId.has(String(employee.employeeId))) return
     const key = employee.key
     setDrafts((prev) => ({
       ...prev,
@@ -371,13 +460,14 @@ const EmployeeAttendance = () => {
         recordId: employee.recordId || prev[key]?.recordId || null,
       },
     }))
-  }, [])
+  }, [leaveByEmployeeId])
 
   const applyBulkStatus = (status) => {
     setDrafts((prev) => {
       const next = { ...prev }
       paginatedEmployees.forEach((employee) => {
         if (employee?.recordId != null) return
+        if (employee?.employeeId != null && leaveByEmployeeId.has(String(employee.employeeId))) return
         next[employee.key] = {
           ...(next[employee.key] || {}),
           employee,
@@ -667,29 +757,39 @@ const EmployeeAttendance = () => {
                       {visibleColumns.status ? (
                         <td>
                           <div className="d-flex align-items-center gap-12 flex-wrap w-100">
-                            {STATUS_OPTIONS.map((option) => {
-                              const checked = row.status === option.value
-                              const disabled = row.isSaved
-                              return (
-                                <label
-                                  key={option.value}
-                                  className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
-                                    disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
-                                  } ${checked ? option.className : 'bg-white text-secondary-light'}
-                                  }`}
-                                  style={{ flex: '1 1 0', justifyContent: 'center' }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="form-check-input mt-0"
-                                    checked={checked}
-                                    disabled={disabled}
-                                    onChange={() => setEmployeeStatus(row, option.value)}
-                                  />
-                                  <span className="fw-medium">{option.label}</span>
-                                </label>
-                              )
-                            })}
+                            {row?.employeeId != null && leaveByEmployeeId.has(String(row.employeeId)) ? (
+                              <span
+                                className="d-flex align-items-center justify-content-center px-10 py-6 radius-8 border bg-info-100 text-info-600 fw-semibold"
+                                style={{ flex: '1 1 0' }}
+                                title="Approved Leave"
+                              >
+                                On Leave
+                              </span>
+                            ) : (
+                              STATUS_OPTIONS.map((option) => {
+                                const checked = row.status === option.value
+                                const disabled = row.isSaved
+                                return (
+                                  <label
+                                    key={option.value}
+                                    className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
+                                      disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
+                                    } ${checked ? option.className : 'bg-white text-secondary-light'}
+                                    }`}
+                                    style={{ flex: '1 1 0', justifyContent: 'center' }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input mt-0"
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={() => setEmployeeStatus(row, option.value)}
+                                    />
+                                    <span className="fw-medium">{option.label}</span>
+                                  </label>
+                                )
+                              })
+                            )}
                           </div>
                         </td>
                       ) : null}
@@ -822,4 +922,3 @@ const EmployeeAttendance = () => {
 }
 
 export default EmployeeAttendance
-

@@ -169,29 +169,7 @@ const menuSections = [
         ],
       },
 
-      {
-        title: "Attendance",
-        icon: "ri:calendar-check-line",
-        submenu: [
-          {
-            label: "Student Attendance",
-            href: "#",
-            page: "student-attendance",
-          },
-          {
-            label: "Teacher Attendance",
-            href: "#",
-            page: "teacher-attendance",
-          },
-          {
-            label: "Employee Attendance",
-            href: "#",
-            page: "employee-attendance",
-          },
-          { label: "Absent Email", href: "#", page: "absent-email" },
-          { label: "Absent SMS", href: "#", page: "absent-sms" },
-        ],
-      },
+     
       {
         title: "Promotion",
         icon: "ri:arrow-up-circle-line",
@@ -330,7 +308,7 @@ const menuSections = [
   },
 
   {
-    title: "Human Resource (HR)",
+    title: "Human Resource",
     items: [
       {
         title: "Human Resource",
@@ -344,12 +322,30 @@ const menuSections = [
           { label: "Manage Employees", href: "#", page: "manage-employee" },
         ],
       },
-    ],
-  },
-  {
-    title: "Manage Leave",
-    items: [
-      {
+       {
+        title: "Attendance",
+        icon: "ri:calendar-check-line",
+        submenu: [
+          {
+            label: "Student Attendance",
+            href: "#",
+            page: "student-attendance",
+          },
+          {
+            label: "Teacher Attendance",
+            href: "#",
+            page: "teacher-attendance",
+          },
+          {
+            label: "Employee Attendance",
+            href: "#",
+            page: "employee-attendance",
+          },
+          { label: "Absent Email", href: "#", page: "absent-email" },
+          { label: "Absent SMS", href: "#", page: "absent-sms" },
+        ],
+      },
+       {
         title: "Manage Leave",
         icon: "ri:calendar-todo-line",
         submenu: [
@@ -374,8 +370,10 @@ const menuSections = [
       },
     ],
   },
+  
+  
   {
-    title: "Payroll",
+    title: "Finance & Accounts",
     items: [
       {
         title: "Payroll",
@@ -386,11 +384,6 @@ const menuSections = [
           { label: "Salary History", href: "#", page: "salary-history" },
         ],
       },
-    ],
-  },
-  {
-    title: "Finance & Accounts",
-    items: [
       {
         title: "Accounting",
         icon: "ri:calculator-line",

@@ -22,9 +22,13 @@ export const fetchStudentsPage = async (page, size, filters = {}) => {
         page: String(Math.max(page, 0)),
         size: String(size),
     });
-    
+
+    const searchValue = String(filters.search ?? filters.q ?? '').trim()
+    if (searchValue) params.append('search', searchValue)
     if (filters.headOfficeId) params.append('headOfficeId', filters.headOfficeId);
     if (filters.schoolId && filters.schoolId !== 'Select' && filters.schoolId !== 'All') params.append('schoolId', filters.schoolId);
+    if (filters.classId && filters.classId !== 'Select') params.append('classId', filters.classId);
+    if (filters.sectionId && filters.sectionId !== 'Select') params.append('sectionId', filters.sectionId);
     if (filters.className && filters.className !== 'Select') params.append('className', filters.className);
     if (filters.section && filters.section !== 'Select') params.append('section', filters.section);
     if (filters.group && filters.group !== 'Select') params.append('group', filters.group);

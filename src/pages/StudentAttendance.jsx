@@ -11,6 +11,7 @@ import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsPage } from '../apis/studentsApi'
+import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
 import {
   createAttendance,
   fetchAttendances,
@@ -54,6 +55,7 @@ const normalizeStatus = (value) => {
   if (text === 'present') return 'Present'
   if (text === 'absent') return 'Absent'
   if (text === 'late') return 'Late'
+  if (text === 'leave' || text === 'on leave' || text === 'onleave') return 'Leave'
   return ''
 }
 
@@ -97,6 +99,7 @@ const StudentAttendance = () => {
   const [filters, setFilters] = useState(() => buildDefaultFilters())
   const [drafts, setDrafts] = useState({})
   const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
+  const [leaveByStudentId, setLeaveByStudentId] = useState(() => new Map())
   const [studentTotalElements, setStudentTotalElements] = useState(0)
   const [studentTotalPages, setStudentTotalPages] = useState(1)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
@@ -246,10 +249,54 @@ const StudentAttendance = () => {
       })
   }, [resolveStudentRow, search, students])
 
-  const paginatedStudents = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return displayedStudents.slice(start, start + rowsPerPage)
-  }, [currentPage, displayedStudents, rowsPerPage])
+  // Server-side pagination: `students` already contains only the current page.
+  // Do not slice again client-side, otherwise later pages will appear empty.
+  const paginatedStudents = useMemo(() => displayedStudents, [displayedStudents])
+
+  // Load approved leave coverage for the visible roster (current page).
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.date) {
+      setLeaveByStudentId(new Map())
+      return
+    }
+
+    const ids = paginatedStudents
+      .map((s) => s?.id)
+      .filter((v) => v != null)
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v))
+
+    if (ids.length === 0) {
+      setLeaveByStudentId(new Map())
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchLeaveCoverage({
+          schoolId: selectedSchoolId,
+          applicantType: 'STUDENT',
+          date: filters.date,
+          applicantIds: ids,
+        })
+        if (cancelled) return
+        const map = new Map()
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row?.applicantId == null) continue
+          map.set(String(row.applicantId), row)
+        }
+        setLeaveByStudentId(map)
+      } catch {
+        if (!cancelled) setLeaveByStudentId(new Map())
+      }
+    }
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [filters.date, paginatedStudents, selectedSchoolId])
 
   // Compute whether ALL students across the entire filtered dataset (all pages, including search)
   // share the same non-empty attendance status. Used to conditionally color the bulk header buttons.
@@ -290,7 +337,24 @@ const StudentAttendance = () => {
 
           const q = search.trim().toLowerCase()
           const resolved = allStudents
-            .map((row) => resolveStudentRow(row))
+            // Resolve without using page-level leave map; uniform highlight needs to be based on DB/drafts only.
+            .map((row) => {
+              const key = pickStudentKey(row)
+              const rollNo = pickStudentRollNo(row)
+              const attendance = rollNo ? attendanceByRollNo.get(rollNo) || null : null
+              const draft = drafts[key] || null
+              const status = normalizeStatus(draft?.status || attendance?.status || '')
+              return {
+                id: row?.id ?? null,
+                key,
+                name: row?.name || '',
+                rollNo,
+                className: row?.className || row?.schoolClass?.className || row?.schoolClass?.name || '',
+                sectionName: row?.section || row?.sectionName || row?.schoolSection?.sectionName || row?.schoolSection?.name || '',
+                schoolName: row?.schoolName || row?.school?.schoolName || row?.school?.name || authSchoolName || '',
+                status,
+              }
+            })
             .filter((row) => {
               if (!q) return true
               return [row.name, row.rollNo, row.className, row.sectionName, row.schoolName, row.status]
@@ -298,6 +362,33 @@ const StudentAttendance = () => {
                 .toLowerCase()
                 .includes(q)
             })
+
+          // If any Leave exists in the filtered set for this date, keep all header bulk buttons neutral.
+          {
+            const ids = resolved
+              .map((r) => r?.id)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v))
+
+            let anyLeave = false
+            const batchSize = 200
+            for (let i = 0; i < ids.length && !anyLeave; i += batchSize) {
+              const batch = ids.slice(i, i + batchSize)
+              if (batch.length === 0) continue
+              const rows = await fetchLeaveCoverage({
+                schoolId: selectedSchoolId,
+                applicantType: 'STUDENT',
+                date: filters.date,
+                applicantIds: batch,
+              })
+              if (Array.isArray(rows) && rows.length > 0) anyLeave = true
+            }
+            if (anyLeave) {
+              if (!cancelled) setAllFilteredUniformStatus('')
+              return
+            }
+          }
 
           let uniform = ''
           if (resolved.length > 0) {
@@ -543,6 +634,7 @@ const StudentAttendance = () => {
 
   const setStudentStatus = useCallback((student, status) => {
     if (student?.recordId != null) return
+    if (student?.id != null && leaveByStudentId.has(String(student.id))) return
     const key = student.key
     setDrafts((prev) => ({
       ...prev,
@@ -553,13 +645,14 @@ const StudentAttendance = () => {
         recordId: student.recordId || prev[key]?.recordId || null,
       },
     }))
-  }, [])
+  }, [leaveByStudentId])
 
   const applyBulkStatus = (status) => {
     setDrafts((prev) => {
       const next = { ...prev }
       paginatedStudents.forEach((student) => {
         if (student?.recordId != null) return
+        if (student?.id != null && leaveByStudentId.has(String(student.id))) return
         next[student.key] = {
           ...(next[student.key] || {}),
           student,
@@ -571,10 +664,13 @@ const StudentAttendance = () => {
     })
   }
 
-  const dirtyDraftEntries = useMemo(
-    () => Object.values(drafts).filter((entry) => normalizeStatus(entry?.status)),
-    [drafts],
-  )
+  const dirtyDraftEntries = useMemo(() => {
+    const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status))
+    const leaveEntries = paginatedStudents
+      .filter((s) => s?.recordId == null && s?.id != null && leaveByStudentId.has(String(s.id)))
+      .map((s) => ({ student: s, status: 'Leave', recordId: null, note: '' }))
+    return [...entries, ...leaveEntries]
+  }, [drafts, leaveByStudentId, paginatedStudents])
 
   const saveAttendance = async () => {
     if (dirtyDraftEntries.length === 0) return
@@ -930,29 +1026,39 @@ const StudentAttendance = () => {
                       {visibleColumns.status ? (
                         <td>
                           <div className="d-flex align-items-center gap-12 flex-wrap w-100">
-                            {STATUS_OPTIONS.map((option) => {
-                              const checked = row.status === option.value
-                              const disabled = row.isSaved
-                              return (
-                                <label
-                                  key={option.value}
-                                  className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
-                                    disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
-                                  } ${checked ? option.className : 'bg-white text-secondary-light'}
-                                  }`}
-                                  style={{ flex: '1 1 0', justifyContent: 'center' }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="form-check-input mt-0"
-                                    checked={checked}
-                                    disabled={disabled}
-                                    onChange={() => setStudentStatus(row, option.value)}
-                                  />
-                                  <span className="fw-medium">{option.label}</span>
-                                </label>
-                              )
-                            })}
+                            {row?.id != null && leaveByStudentId.has(String(row.id)) ? (
+                              <span
+                                className="d-flex align-items-center justify-content-center px-10 py-6 radius-8 border bg-info-100 text-info-600 fw-semibold"
+                                style={{ flex: '1 1 0' }}
+                                title="Approved Leave"
+                              >
+                                On Leave
+                              </span>
+                            ) : (
+                              STATUS_OPTIONS.map((option) => {
+                                const checked = row.status === option.value
+                                const disabled = row.isSaved
+                                return (
+                                  <label
+                                    key={option.value}
+                                    className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
+                                      disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
+                                    } ${checked ? option.className : 'bg-white text-secondary-light'}
+                                    }`}
+                                    style={{ flex: '1 1 0', justifyContent: 'center' }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input mt-0"
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={() => setStudentStatus(row, option.value)}
+                                    />
+                                    <span className="fw-medium">{option.label}</span>
+                                  </label>
+                                )
+                              })
+                            )}
                           </div>
                         </td>
                       ) : null}

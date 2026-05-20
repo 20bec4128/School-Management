@@ -9,6 +9,7 @@ import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchTeachers } from '../apis/teachersApi'
 import { createAttendance, fetchAttendances } from '../apis/attendanceApi'
+import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
 import '../assets/css/addModalShared.css'
 
 const TEACHER_EXAM_TERM = 'Teacher Attendance'
@@ -41,6 +42,7 @@ const normalizeStatus = (value) => {
   if (text === 'present') return 'Present'
   if (text === 'absent') return 'Absent'
   if (text === 'late') return 'Late'
+  if (text === 'leave' || text === 'on leave' || text === 'onleave') return 'Leave'
   return ''
 }
 
@@ -92,6 +94,7 @@ const TeacherAttendance = () => {
   const [filters, setFilters] = useState(() => buildDefaultFilters())
   const [drafts, setDrafts] = useState({})
   const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
+  const [leaveByTeacherId, setLeaveByTeacherId] = useState(() => new Map())
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -229,10 +232,58 @@ const TeacherAttendance = () => {
     return displayedTeachers.slice(start, start + rowsPerPage)
   }, [currentPage, displayedTeachers, rowsPerPage])
 
-  const dirtyDraftEntries = useMemo(
-    () => Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId),
-    [drafts],
-  )
+  // Load approved leave coverage for the visible roster (current page).
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.date) {
+      setLeaveByTeacherId(new Map())
+      return
+    }
+
+    const ids = paginatedTeachers
+      .map((t) => t?.teacherId)
+      .filter((v) => v != null)
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v))
+
+    if (ids.length === 0) {
+      setLeaveByTeacherId(new Map())
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchLeaveCoverage({
+          schoolId: selectedSchoolId,
+          applicantType: 'TEACHER',
+          date: filters.date,
+          applicantIds: ids,
+        })
+        if (cancelled) return
+        const map = new Map()
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row?.applicantId == null) continue
+          map.set(String(row.applicantId), row)
+        }
+        setLeaveByTeacherId(map)
+      } catch {
+        if (!cancelled) setLeaveByTeacherId(new Map())
+      }
+    }
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [filters.date, paginatedTeachers, selectedSchoolId])
+
+  const dirtyDraftEntries = useMemo(() => {
+    const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId)
+    const leaveEntries = paginatedTeachers
+      .filter((t) => t?.recordId == null && t?.teacherId != null && leaveByTeacherId.has(String(t.teacherId)))
+      .map((t) => ({ teacher: t, status: 'Leave', recordId: null }))
+    return [...entries, ...leaveEntries]
+  }, [drafts, leaveByTeacherId, paginatedTeachers])
 
   const loadPageData = useCallback(async () => {
     if (!selectedSchoolId) {
@@ -307,15 +358,52 @@ const TeacherAttendance = () => {
 
     let cancelled = false
     const handle = setTimeout(() => {
-      const rows = displayedTeachers
-      let uniform = ''
-      if (rows.length > 0) {
-        const first = normalizeStatus(rows[0]?.status)
-        if (first) {
-          uniform = rows.every((r) => normalizeStatus(r?.status) === first) ? first : ''
+      const run = async () => {
+        try {
+          const rows = displayedTeachers
+
+          // Any approved leave in the filtered set => keep bulk header buttons neutral.
+          {
+            const ids = rows
+              .map((r) => r?.teacherId)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v))
+
+            let anyLeave = false
+            const batchSize = 200
+            for (let i = 0; i < ids.length && !anyLeave; i += batchSize) {
+              const batch = ids.slice(i, i + batchSize)
+              if (batch.length === 0) continue
+              const coverage = await fetchLeaveCoverage({
+                schoolId: selectedSchoolId,
+                applicantType: 'TEACHER',
+                date: filters.date,
+                applicantIds: batch,
+              })
+              if (Array.isArray(coverage) && coverage.length > 0) anyLeave = true
+            }
+
+            if (anyLeave) {
+              if (!cancelled) setAllFilteredUniformStatus('')
+              return
+            }
+          }
+
+          let uniform = ''
+          if (rows.length > 0) {
+            const first = normalizeStatus(rows[0]?.status)
+            if (first) {
+              uniform = rows.every((r) => normalizeStatus(r?.status) === first) ? first : ''
+            }
+          }
+          if (!cancelled) setAllFilteredUniformStatus(uniform)
+        } catch {
+          if (!cancelled) setAllFilteredUniformStatus('')
         }
       }
-      if (!cancelled) setAllFilteredUniformStatus(uniform)
+
+      void run()
     }, 350)
 
     return () => {
@@ -358,6 +446,7 @@ const TeacherAttendance = () => {
 
   const setTeacherStatus = useCallback((teacher, status) => {
     if (teacher?.recordId != null) return
+    if (teacher?.teacherId != null && leaveByTeacherId.has(String(teacher.teacherId))) return
     const key = teacher.key
     setDrafts((prev) => ({
       ...prev,
@@ -368,13 +457,14 @@ const TeacherAttendance = () => {
         recordId: teacher.recordId || prev[key]?.recordId || null,
       },
     }))
-  }, [])
+  }, [leaveByTeacherId])
 
   const applyBulkStatus = (status) => {
     setDrafts((prev) => {
       const next = { ...prev }
       paginatedTeachers.forEach((teacher) => {
         if (teacher?.recordId != null) return
+        if (teacher?.teacherId != null && leaveByTeacherId.has(String(teacher.teacherId))) return
         next[teacher.key] = {
           ...(next[teacher.key] || {}),
           teacher,
@@ -664,29 +754,39 @@ const TeacherAttendance = () => {
                       {visibleColumns.status ? (
                         <td>
                           <div className="d-flex align-items-center gap-12 flex-wrap w-100">
-                            {STATUS_OPTIONS.map((option) => {
-                              const checked = row.status === option.value
-                              const disabled = row.isSaved
-                              return (
-                                <label
-                                  key={option.value}
-                                  className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
-                                    disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
-                                  } ${checked ? option.className : 'bg-white text-secondary-light'}
-                                  }`}
-                                  style={{ flex: '1 1 0', justifyContent: 'center' }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="form-check-input mt-0"
-                                    checked={checked}
-                                    disabled={disabled}
-                                    onChange={() => setTeacherStatus(row, option.value)}
-                                  />
-                                  <span className="fw-medium">{option.label}</span>
-                                </label>
-                              )
-                            })}
+                            {row?.teacherId != null && leaveByTeacherId.has(String(row.teacherId)) ? (
+                              <span
+                                className="d-flex align-items-center justify-content-center px-10 py-6 radius-8 border bg-info-100 text-info-600 fw-semibold"
+                                style={{ flex: '1 1 0' }}
+                                title="Approved Leave"
+                              >
+                                On Leave
+                              </span>
+                            ) : (
+                              STATUS_OPTIONS.map((option) => {
+                                const checked = row.status === option.value
+                                const disabled = row.isSaved
+                                return (
+                                  <label
+                                    key={option.value}
+                                    className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
+                                      disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
+                                    } ${checked ? option.className : 'bg-white text-secondary-light'}
+                                    }`}
+                                    style={{ flex: '1 1 0', justifyContent: 'center' }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input mt-0"
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={() => setTeacherStatus(row, option.value)}
+                                    />
+                                    <span className="fw-medium">{option.label}</span>
+                                  </label>
+                                )
+                              })
+                            )}
                           </div>
                         </td>
                       ) : null}

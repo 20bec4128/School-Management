@@ -58,12 +58,17 @@ public class StudentService {
                                                            Long sectionId,
                                                            String className, 
                                                            String section, 
-                                                           String groupName) {
+                                                           String groupName,
+                                                           String search) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        String normalizedClassName = normalizeOptionalText(className);
+        String normalizedSection = normalizeOptionalText(section);
+        String normalizedGroup = normalizeOptionalText(groupName);
+        String normalizedSearch = normalizeOptionalText(search);
         Page<Student> studentPage;
         
-        if (headOfficeId != null || schoolId != null || classId != null || sectionId != null || className != null || section != null || groupName != null) {
-            studentPage = studentRepository.searchStudents(headOfficeId, schoolId, classId, sectionId, className, section, groupName, pageable);
+        if (headOfficeId != null || schoolId != null || classId != null || sectionId != null || normalizedClassName != null || normalizedSection != null || normalizedGroup != null || normalizedSearch != null) {
+            studentPage = studentRepository.searchStudents(headOfficeId, schoolId, classId, sectionId, normalizedClassName, normalizedSection, normalizedGroup, normalizedSearch, pageable);
         } else {
             studentPage = studentRepository.findByDeletedFalse(pageable);
         }
@@ -128,11 +133,14 @@ public class StudentService {
         student.setFatherEducation(request.getFatherEducation());
         student.setFatherProfession(request.getFatherProfession());
         student.setFatherDesignation(request.getFatherDesignation());
+        student.setFatherEmail(request.getFatherEmail());
         student.setMotherName(request.getMotherName());
         student.setMotherPhone(request.getMotherPhone());
         student.setMotherEducation(request.getMotherEducation());
         student.setMotherProfession(request.getMotherProfession());
         student.setMotherDesignation(request.getMotherDesignation());
+        student.setMotherEmail(request.getMotherEmail());
+        student.setGuardianEmail(request.getGuardianEmail());
         student.setPresentAddress(request.getPresentAddress());
         student.setPermanentAddress(request.getPermanentAddress());
         student.setSameAsGuardianAddress(request.getSameAsGuardianAddress());
@@ -194,11 +202,14 @@ public class StudentService {
         student.setFatherEducation(request.getFatherEducation());
         student.setFatherProfession(request.getFatherProfession());
         student.setFatherDesignation(request.getFatherDesignation());
+        student.setFatherEmail(request.getFatherEmail());
         student.setMotherName(request.getMotherName());
         student.setMotherPhone(request.getMotherPhone());
         student.setMotherEducation(request.getMotherEducation());
         student.setMotherProfession(request.getMotherProfession());
         student.setMotherDesignation(request.getMotherDesignation());
+        student.setMotherEmail(request.getMotherEmail());
+        student.setGuardianEmail(request.getGuardianEmail());
         student.setPresentAddress(request.getPresentAddress());
         student.setPermanentAddress(request.getPermanentAddress());
         student.setSameAsGuardianAddress(request.getSameAsGuardianAddress());
@@ -258,12 +269,15 @@ public class StudentService {
         response.setFatherProfession(entity.getFatherProfession());
         response.setFatherDesignation(entity.getFatherDesignation());
         response.setFatherPhotoUrl(entity.getFatherPhotoUrl());
+        response.setFatherEmail(entity.getFatherEmail());
         response.setMotherName(entity.getMotherName());
         response.setMotherPhone(entity.getMotherPhone());
         response.setMotherEducation(entity.getMotherEducation());
         response.setMotherProfession(entity.getMotherProfession());
         response.setMotherDesignation(entity.getMotherDesignation());
         response.setMotherPhotoUrl(entity.getMotherPhotoUrl());
+        response.setMotherEmail(entity.getMotherEmail());
+        response.setGuardianEmail(entity.getGuardianEmail());
         response.setPresentAddress(entity.getPresentAddress());
         response.setPermanentAddress(entity.getPermanentAddress());
         response.setSameAsGuardianAddress(entity.getSameAsGuardianAddress());
@@ -392,6 +406,15 @@ public class StudentService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeOptionalText(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) return null;
+        if ("Select".equalsIgnoreCase(normalized) || "All".equalsIgnoreCase(normalized)) {
+            return null;
+        }
+        return normalized;
     }
 
     private String normalizePhoneUsername(String value) {

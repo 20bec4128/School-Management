@@ -4,10 +4,14 @@ import com.School.School_management.Dto.AttendanceDto;
 import com.School.School_management.Entity.Attendance;
 import com.School.School_management.Entity.EmailMessage;
 import com.School.School_management.Entity.ManageSchool;
+import com.School.School_management.Entity.ManageTeacher;
+import com.School.School_management.Entity.Employee;
 import com.School.School_management.Entity.Student;
 import com.School.School_management.Repository.AbsentEmailSettingRepository;
 import com.School.School_management.Repository.AttendanceRepository;
 import com.School.School_management.Repository.EmailMessageRepository;
+import com.School.School_management.Repository.TeacherRepository;
+import com.School.School_management.Repository.EmployeeRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Repository.StudentRepository;
 import com.School.School_management.Service.AttendanceService;
@@ -37,6 +41,12 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Autowired
     private StudentRepository studentRepository;
+
+    @Autowired
+    private TeacherRepository teacherRepository;
+
+    @Autowired
+    private EmployeeRepository employeeRepository;
 
     @Autowired
     private SchoolRepository schoolRepository;
@@ -98,9 +108,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         Attendance entity = convertToEntity(dto);
         Attendance saved = attendanceRepository.save(entity);
 
-        // Auto-send absent email for student daily attendance only.
+        // Auto-send absent email for supported attendance modes.
         try {
-            maybeSendAbsentStudentEmail(dto);
+            maybeSendAbsentEmail(dto);
         } catch (Exception ex) {
             // Never fail attendance save because email sending failed.
             log.warn("Absent email auto-send failed for schoolId={}, rollNo={}, date={}: {}",
@@ -182,11 +192,17 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .build();
     }
 
-    private void maybeSendAbsentStudentEmail(AttendanceDto dto) {
+    private void maybeSendAbsentEmail(AttendanceDto dto) {
         if (dto.getSchoolId() == null) return;
         if (dto.getAttendanceDate() == null) return;
-        if (dto.getExamTerm() == null || !dto.getExamTerm().trim().equalsIgnoreCase("Daily Attendance")) return;
+        if (dto.getExamTerm() == null) return;
         if (dto.getAttendAll() == null || !dto.getAttendAll().trim().equalsIgnoreCase("Absent")) return;
+
+        String examTerm = dto.getExamTerm().trim();
+        boolean isStudentDaily = examTerm.equalsIgnoreCase("Daily Attendance");
+        boolean isTeacher = examTerm.equalsIgnoreCase("Teacher Attendance");
+        boolean isEmployee = examTerm.equalsIgnoreCase("Employee Attendance");
+        if (!isStudentDaily && !isTeacher && !isEmployee) return;
 
         var settingOpt = absentEmailSettingRepository.findBySchoolId(dto.getSchoolId());
         var setting = settingOpt.orElseGet(() -> {
@@ -205,51 +221,175 @@ public class AttendanceServiceImpl implements AttendanceService {
         String rollNo = dto.getRollNo() != null ? dto.getRollNo().trim() : "";
         if (rollNo.isEmpty()) return;
 
-        Student student = studentRepository.findBySchool_IdAndRollNoAndDeletedFalse(dto.getSchoolId(), rollNo).orElse(null);
-        if (student == null) return;
-        String email = student.getEmail() != null ? student.getEmail().trim() : "";
-        if (email.isEmpty()) return;
-
         ManageSchool school = schoolRepository.findByIdAndIsDeletedFalse(dto.getSchoolId()).orElse(null);
         String schoolName = school != null ? safe(school.getSchoolName()) : "";
 
-        String studentName = safe(student.getName());
         String className = safe(dto.getClassName());
         String sectionName = safe(dto.getSectionName());
         String absentDate = dto.getAttendanceDate().toString();
 
-        String subject = render(setting.getSubjectTemplate(), schoolName, studentName, className, sectionName, absentDate);
-        String body = render(setting.getEmailBodyTemplate(), schoolName, studentName, className, sectionName, absentDate);
+        if (isStudentDaily) {
+            Student student = studentRepository.findBySchool_IdAndRollNoAndDeletedFalse(dto.getSchoolId(), rollNo).orElse(null);
+            if (student == null) return;
+            String studentEmail = student.getEmail() != null ? student.getEmail().trim() : "";
+            if (studentEmail.isEmpty()) return;
 
-        EmailMessage msg = EmailMessage.builder()
-                .headOfficeId(dto.getHeadOfficeId())
-                .schoolId(dto.getSchoolId())
-                .schoolName(schoolName)
-                .className(className)
-                .receiverType("Student")
-                .receiver(email)
-                .subject(subject)
-                .emailBody(body)
-                .sendDate(dto.getAttendanceDate())
-                .category("ABSENT_ATTENDANCE")
-                .build();
+            String studentName = safe(student.getName());
 
-        EmailMessage saved = emailMessageRepository.save(msg);
-        emailMessageDispatchService.sendAsync(saved);
+            // 1) Send to student email
+            {
+                String subject = render(setting.getSubjectTemplate(), schoolName, studentName, studentName, className, sectionName, absentDate);
+                String body = render(setting.getEmailBodyTemplate(), schoolName, studentName, studentName, className, sectionName, absentDate);
+
+                EmailMessage msg = EmailMessage.builder()
+                        .headOfficeId(dto.getHeadOfficeId())
+                        .schoolId(dto.getSchoolId())
+                        .schoolName(schoolName)
+                        .className(className)
+                        .receiverType("Student")
+                        .receiver(studentEmail)
+                        .subject(subject)
+                        .emailBody(body)
+                        .sendDate(dto.getAttendanceDate())
+                        .category("ABSENT_ATTENDANCE")
+                        .build();
+
+                EmailMessage saved = emailMessageRepository.save(msg);
+                emailMessageDispatchService.sendAsync(saved);
+            }
+
+            // 2) Send to parent email using fallback chain: father -> mother -> guardian
+            String parentEmail = firstNonBlank(student.getFatherEmail(), student.getMotherEmail(), student.getGuardianEmail());
+            if (parentEmail == null) return;
+
+            String receiverName;
+            if (isSameEmail(parentEmail, student.getFatherEmail())) {
+                receiverName = safe(student.getFatherName());
+            } else if (isSameEmail(parentEmail, student.getMotherEmail())) {
+                receiverName = safe(student.getMotherName());
+            } else {
+                receiverName = safe(student.getRelationWithGuardian());
+                if (receiverName.isBlank()) receiverName = "Guardian";
+            }
+
+            String subjectP = render(setting.getSubjectTemplate(), schoolName, receiverName, studentName, className, sectionName, absentDate);
+            String bodyP = render(setting.getEmailBodyTemplate(), schoolName, receiverName, studentName, className, sectionName, absentDate);
+
+            EmailMessage msgP = EmailMessage.builder()
+                    .headOfficeId(dto.getHeadOfficeId())
+                    .schoolId(dto.getSchoolId())
+                    .schoolName(schoolName)
+                    .className(className)
+                    .receiverType("Parent")
+                    .receiver(parentEmail)
+                    .subject(subjectP)
+                    .emailBody(bodyP)
+                    .sendDate(dto.getAttendanceDate())
+                    .category("ABSENT_ATTENDANCE")
+                    .build();
+
+            EmailMessage savedP = emailMessageRepository.save(msgP);
+            emailMessageDispatchService.sendAsync(savedP);
+            return;
+        }
+
+        Long staffId = parseLongOrNull(rollNo);
+        if (staffId == null) return;
+
+        if (isTeacher) {
+            ManageTeacher teacher = teacherRepository.findByIdAndSchoolId(staffId, dto.getSchoolId()).orElse(null);
+            if (teacher == null) return;
+            String email = teacher.getEmail() != null ? teacher.getEmail().trim() : "";
+            if (email.isEmpty()) return;
+
+            String staffName = safe(teacher.getName());
+            String subject = render(setting.getSubjectTemplate(), schoolName, staffName, staffName, className, sectionName, absentDate);
+            String body = render(setting.getEmailBodyTemplate(), schoolName, staffName, staffName, className, sectionName, absentDate);
+
+            EmailMessage msg = EmailMessage.builder()
+                    .headOfficeId(dto.getHeadOfficeId())
+                    .schoolId(dto.getSchoolId())
+                    .schoolName(schoolName)
+                    .className(className)
+                    .receiverType("Teacher")
+                    .receiver(email)
+                    .subject(subject)
+                    .emailBody(body)
+                    .sendDate(dto.getAttendanceDate())
+                    .category("ABSENT_TEACHER_ATTENDANCE")
+                    .build();
+
+            EmailMessage saved = emailMessageRepository.save(msg);
+            emailMessageDispatchService.sendAsync(saved);
+            return;
+        }
+
+        if (isEmployee) {
+            Employee employee = employeeRepository.findByIdAndSchoolId(staffId, dto.getSchoolId()).orElse(null);
+            if (employee == null) return;
+            String email = employee.getEmail() != null ? employee.getEmail().trim() : "";
+            if (email.isEmpty()) return;
+
+            String staffName = safe(employee.getName());
+            String subject = render(setting.getSubjectTemplate(), schoolName, staffName, staffName, className, sectionName, absentDate);
+            String body = render(setting.getEmailBodyTemplate(), schoolName, staffName, staffName, className, sectionName, absentDate);
+
+            EmailMessage msg = EmailMessage.builder()
+                    .headOfficeId(dto.getHeadOfficeId())
+                    .schoolId(dto.getSchoolId())
+                    .schoolName(schoolName)
+                    .className(className)
+                    .receiverType("Employee")
+                    .receiver(email)
+                    .subject(subject)
+                    .emailBody(body)
+                    .sendDate(dto.getAttendanceDate())
+                    .category("ABSENT_EMPLOYEE_ATTENDANCE")
+                    .build();
+
+            EmailMessage saved = emailMessageRepository.save(msg);
+            emailMessageDispatchService.sendAsync(saved);
+        }
     }
 
     private String safe(String value) {
         return value == null ? "" : value;
     }
 
-    private String render(String template, String schoolName, String studentName, String className, String sectionName, String absentDate) {
+    private String render(String template, String schoolName, String receiverName, String studentName, String className, String sectionName, String absentDate) {
         String t = template == null ? "" : template;
         return t
                 .replace("{school_name}", schoolName)
-                .replace("{receiver_name}", studentName)
+                .replace("{receiver_name}", receiverName)
                 .replace("{student_name}", studentName)
                 .replace("{class_name}", className)
                 .replace("{section_name}", sectionName)
                 .replace("{absent_date}", absentDate);
+    }
+
+    private String firstNonBlank(String... candidates) {
+        if (candidates == null) return null;
+        for (String c : candidates) {
+            if (c == null) continue;
+            String t = c.trim();
+            if (!t.isEmpty()) return t;
+        }
+        return null;
+    }
+
+    private boolean isSameEmail(String a, String b) {
+        if (a == null || b == null) return false;
+        return a.trim().equalsIgnoreCase(b.trim());
+    }
+
+    private Long parseLongOrNull(String value) {
+        if (value == null) return null;
+        String t = value.trim();
+        if (t.isEmpty()) return null;
+        try {
+            return Long.parseLong(t);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }
