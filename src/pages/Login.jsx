@@ -2,7 +2,6 @@ import { useState } from 'react'
 import '../css/login.css'
 
 import { useAuth } from '../context/useAuth'
-import loginPageImg from '../assets/login_page.png'
 
 const IconUser = (props) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
+import LoadingSpinner from './components/LoadingSpinner'
 import MobileBottomNav from './components/MobileBottomNav'
 import { useSidebar } from './context/SidebarContext'
 import { SidebarProvider } from './context/SidebarContext'
@@ -135,14 +136,16 @@ function AppLayout({
 
       <main className={`dashboard-main ${isCollapsed ? 'active' : ''}`}>
         <Topbar user={user} />
-        <AppRoute
-          currentPage={currentPage}
-          user={user}
-          role={role}
-          parentChildren={parentChildren}
-          selectedChildId={selectedChildId}
-          onNavigate={onNavigate}
-        />
+        <Suspense fallback={<LoadingSpinner isLoading />}>
+          <AppRoute
+            currentPage={currentPage}
+            user={user}
+            role={role}
+            parentChildren={parentChildren}
+            selectedChildId={selectedChildId}
+            onNavigate={onNavigate}
+          />
+        </Suspense>
       </main>
 
       <MobileBottomNav currentPage={currentPage} onNavigate={onNavigate} onLogout={logout} />
