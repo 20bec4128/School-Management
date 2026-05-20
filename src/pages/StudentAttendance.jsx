@@ -11,10 +11,10 @@ import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsPage } from '../apis/studentsApi'
+import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
 import {
   createAttendance,
   fetchAttendances,
-  updateAttendance,
 } from '../apis/attendanceApi'
 import '../assets/css/addModalShared.css'
 
@@ -30,19 +30,21 @@ const STATUS_OPTIONS = [
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
 const emptyPendingFilters = {
+  headOfficeId: '',
+  schoolId: '',
   classId: 'Select',
   sectionId: 'Select',
   date: todayIso(),
 }
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
-  { key: 'photo', label: 'Photo' },
+  { key: 'school', label: 'School', defaultVisible: false },
+  { key: 'photo', label: 'Photo', defaultVisible: false },
   { key: 'name', label: 'Name' },
   { key: 'rollNo', label: 'Roll No' },
   { key: 'className', label: 'Class' },
   { key: 'sectionName', label: 'Section' },
-  { key: 'date', label: 'Date' },
+  { key: 'date', label: 'Date', defaultVisible: false },
   { key: 'status', label: 'Status' },
 ]
 
@@ -53,6 +55,7 @@ const normalizeStatus = (value) => {
   if (text === 'present') return 'Present'
   if (text === 'absent') return 'Absent'
   if (text === 'late') return 'Late'
+  if (text === 'leave' || text === 'on leave' || text === 'onleave') return 'Leave'
   return ''
 }
 
@@ -67,6 +70,20 @@ const StudentAttendance = () => {
   const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
+  const buildDefaultFilters = useCallback(() => {
+    const schoolId = !isSuperAdmin && !isHeadOfficeAdmin ? String(activeSchoolId || authSchoolId || '') : ''
+    const headOfficeId = (isHeadOfficeAdmin || (!isSuperAdmin && authHeadOfficeId != null))
+      ? String(authHeadOfficeId ?? '')
+      : ''
+    return {
+      headOfficeId,
+      schoolId,
+      classId: 'Select',
+      sectionId: 'Select',
+      date: todayIso(),
+    }
+  }, [activeSchoolId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSuperAdmin])
+
   const [students, setStudents] = useState([])
   const [attendanceRows, setAttendanceRows] = useState([])
   const [classRows, setClassRows] = useState([])
@@ -78,24 +95,21 @@ const StudentAttendance = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyPendingFilters)
-  const [filters, setFilters] = useState(emptyPendingFilters)
+  const [pendingFilters, setPendingFilters] = useState(() => buildDefaultFilters())
+  const [filters, setFilters] = useState(() => buildDefaultFilters())
   const [drafts, setDrafts] = useState({})
+  const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
+  const [leaveByStudentId, setLeaveByStudentId] = useState(() => new Map())
   const [studentTotalElements, setStudentTotalElements] = useState(0)
   const [studentTotalPages, setStudentTotalPages] = useState(1)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const selectedHeadOfficeId = isSuperAdmin
-    ? manualScope.selectedHeadOfficeId || ''
-    : authHeadOfficeId != null
-      ? String(authHeadOfficeId)
-      : ''
+  const selectedHeadOfficeId =
+    normalizeText(filters.headOfficeId) || (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
 
-  const selectedSchoolId = isSuperAdmin
-    ? manualScope.selectedSchoolId || ''
-    : isHeadOfficeAdmin
-      ? (activeSchoolId || authSchoolId || '')
-      : (activeSchoolId || authSchoolId || '')
+  const selectedSchoolId = isSuperAdmin || isHeadOfficeAdmin
+    ? normalizeText(filters.schoolId)
+    : normalizeText(filters.schoolId) || String(activeSchoolId || authSchoolId || '')
 
   const scopeSchoolOptions = useMemo(() => {
     const rows = Array.isArray(contextSchoolOptions) ? contextSchoolOptions : []
@@ -200,6 +214,7 @@ const StudentAttendance = () => {
       const attendance = rollNo ? attendanceByRollNo.get(rollNo) || null : null
       const draft = drafts[key] || null
       const status = normalizeStatus(draft?.status || attendance?.status || '')
+      const recordId = draft?.recordId ?? attendance?.id ?? null
       return {
         key,
         id: row?.id ?? null,
@@ -211,7 +226,8 @@ const StudentAttendance = () => {
         className: row?.className || row?.schoolClass?.className || row?.schoolClass?.name || '',
         sectionName: row?.section || row?.sectionName || row?.schoolSection?.sectionName || row?.schoolSection?.name || '',
         status,
-        recordId: draft?.recordId ?? attendance?.id ?? null,
+        recordId,
+        isSaved: recordId != null,
         attendanceDate: filters.date,
         note: draft?.note ?? attendance?.note ?? '',
         phone: row?.phone || '',
@@ -233,12 +249,181 @@ const StudentAttendance = () => {
       })
   }, [resolveStudentRow, search, students])
 
-  const paginatedStudents = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return displayedStudents.slice(start, start + rowsPerPage)
-  }, [currentPage, displayedStudents, rowsPerPage])
+  // Server-side pagination: `students` already contains only the current page.
+  // Do not slice again client-side, otherwise later pages will appear empty.
+  const paginatedStudents = useMemo(() => displayedStudents, [displayedStudents])
 
-  const loadScopeLookups = useCallback(async (schoolId) => {
+  // Load approved leave coverage for the visible roster (current page).
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.date) {
+      setLeaveByStudentId(new Map())
+      return
+    }
+
+    const ids = paginatedStudents
+      .map((s) => s?.id)
+      .filter((v) => v != null)
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v))
+
+    if (ids.length === 0) {
+      setLeaveByStudentId(new Map())
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchLeaveCoverage({
+          schoolId: selectedSchoolId,
+          applicantType: 'STUDENT',
+          date: filters.date,
+          applicantIds: ids,
+        })
+        if (cancelled) return
+        const map = new Map()
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row?.applicantId == null) continue
+          map.set(String(row.applicantId), row)
+        }
+        setLeaveByStudentId(map)
+      } catch {
+        if (!cancelled) setLeaveByStudentId(new Map())
+      }
+    }
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [filters.date, paginatedStudents, selectedSchoolId])
+
+  // Compute whether ALL students across the entire filtered dataset (all pages, including search)
+  // share the same non-empty attendance status. Used to conditionally color the bulk header buttons.
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.classId || filters.classId === 'Select' || !filters.date) {
+      setAllFilteredUniformStatus('')
+      return
+    }
+
+    let cancelled = false
+
+    const handle = setTimeout(() => {
+      const run = async () => {
+        try {
+          const pageSize = 100
+          let page = 0
+          let totalPagesFromServer = 1
+          const allStudents = []
+
+          while (page < totalPagesFromServer) {
+            const studentPage = await fetchStudentsPage(page, pageSize, {
+              headOfficeId: selectedHeadOfficeId || undefined,
+              schoolId: selectedSchoolId || undefined,
+              classId: filters.classId !== 'Select' ? filters.classId : undefined,
+              sectionId: filters.sectionId !== 'Select' ? filters.sectionId : undefined,
+            })
+
+            const content = Array.isArray(studentPage?.content)
+              ? studentPage.content
+              : Array.isArray(studentPage)
+                ? studentPage
+                : []
+
+            allStudents.push(...content)
+            totalPagesFromServer = Number(studentPage?.totalPages ?? 1) || 1
+            page += 1
+          }
+
+          const q = search.trim().toLowerCase()
+          const resolved = allStudents
+            // Resolve without using page-level leave map; uniform highlight needs to be based on DB/drafts only.
+            .map((row) => {
+              const key = pickStudentKey(row)
+              const rollNo = pickStudentRollNo(row)
+              const attendance = rollNo ? attendanceByRollNo.get(rollNo) || null : null
+              const draft = drafts[key] || null
+              const status = normalizeStatus(draft?.status || attendance?.status || '')
+              return {
+                id: row?.id ?? null,
+                key,
+                name: row?.name || '',
+                rollNo,
+                className: row?.className || row?.schoolClass?.className || row?.schoolClass?.name || '',
+                sectionName: row?.section || row?.sectionName || row?.schoolSection?.sectionName || row?.schoolSection?.name || '',
+                schoolName: row?.schoolName || row?.school?.schoolName || row?.school?.name || authSchoolName || '',
+                status,
+              }
+            })
+            .filter((row) => {
+              if (!q) return true
+              return [row.name, row.rollNo, row.className, row.sectionName, row.schoolName, row.status]
+                .join(' ')
+                .toLowerCase()
+                .includes(q)
+            })
+
+          // If any Leave exists in the filtered set for this date, keep all header bulk buttons neutral.
+          {
+            const ids = resolved
+              .map((r) => r?.id)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v))
+
+            let anyLeave = false
+            const batchSize = 200
+            for (let i = 0; i < ids.length && !anyLeave; i += batchSize) {
+              const batch = ids.slice(i, i + batchSize)
+              if (batch.length === 0) continue
+              const rows = await fetchLeaveCoverage({
+                schoolId: selectedSchoolId,
+                applicantType: 'STUDENT',
+                date: filters.date,
+                applicantIds: batch,
+              })
+              if (Array.isArray(rows) && rows.length > 0) anyLeave = true
+            }
+            if (anyLeave) {
+              if (!cancelled) setAllFilteredUniformStatus('')
+              return
+            }
+          }
+
+          let uniform = ''
+          if (resolved.length > 0) {
+            const first = normalizeStatus(resolved[0]?.status)
+            if (first) {
+              const allSame = resolved.every((row) => normalizeStatus(row?.status) === first)
+              uniform = allSame ? first : ''
+            }
+          }
+
+          if (!cancelled) setAllFilteredUniformStatus(uniform)
+        } catch {
+          if (!cancelled) setAllFilteredUniformStatus('')
+        }
+      }
+
+      void run()
+    }, 350)
+
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [
+    drafts,
+    filters.classId,
+    filters.date,
+    filters.sectionId,
+    resolveStudentRow,
+    search,
+    selectedHeadOfficeId,
+    selectedSchoolId,
+  ])
+
+  const loadScopeLookups = useCallback(async (schoolId, classId) => {
     if (!schoolId) {
       setClassRows([])
       setSectionRows([])
@@ -249,7 +434,7 @@ const StudentAttendance = () => {
     const classes = Array.isArray(classData) ? classData : []
     setClassRows(classes)
 
-    const selectedClassId = normalizeText(filters.classId)
+    const selectedClassId = normalizeText(classId)
     if (!selectedClassId || selectedClassId === 'Select') {
       setSectionRows([])
       return
@@ -263,7 +448,7 @@ const StudentAttendance = () => {
 
     const sectionData = await fetchSections({ schoolId, classId: selectedClass.id })
     setSectionRows(Array.isArray(sectionData) ? sectionData : [])
-  }, [filters.classId])
+  }, [])
 
   const loadPageData = useCallback(async () => {
     if (!selectedSchoolId) {
@@ -333,14 +518,14 @@ const StudentAttendance = () => {
   ])
 
   useEffect(() => {
-    if (!selectedSchoolId) {
+    if (!pendingFilters.schoolId && !selectedSchoolId) {
       setClassRows([])
       setSectionRows([])
       return
     }
 
     let cancelled = false
-    void loadScopeLookups(selectedSchoolId).catch((err) => {
+    void loadScopeLookups(pendingFilters.schoolId || selectedSchoolId, pendingFilters.classId).catch((err) => {
       if (cancelled) return
       setClassRows([])
       setSectionRows([])
@@ -350,7 +535,7 @@ const StudentAttendance = () => {
     return () => {
       cancelled = true
     }
-  }, [loadScopeLookups, selectedSchoolId])
+  }, [loadScopeLookups, pendingFilters.classId, pendingFilters.schoolId, selectedSchoolId])
 
   useEffect(() => {
     void loadPageData()
@@ -406,6 +591,12 @@ const StudentAttendance = () => {
   const handlePendingFilterChange = (event) => {
     const { id, value } = event.target
     setPendingFilters((prev) => {
+      if (id === 'headOfficeId') {
+        return { ...prev, headOfficeId: value, schoolId: '', classId: 'Select', sectionId: 'Select' }
+      }
+      if (id === 'schoolId') {
+        return { ...prev, schoolId: value, classId: 'Select', sectionId: 'Select' }
+      }
       if (id === 'classId') {
         return { ...prev, classId: value, sectionId: 'Select' }
       }
@@ -415,6 +606,12 @@ const StudentAttendance = () => {
 
   const handleApplyFilters = (event) => {
     event.preventDefault()
+    if ((isSuperAdmin || isHeadOfficeAdmin) && !pendingFilters.headOfficeId) {
+      return
+    }
+    if (!pendingFilters.schoolId) {
+      return
+    }
     if (!pendingFilters.classId || pendingFilters.classId === 'Select') {
       return
     }
@@ -428,11 +625,7 @@ const StudentAttendance = () => {
   }
 
   const handleResetFilters = () => {
-    const reset = {
-      classId: 'Select',
-      sectionId: 'Select',
-      date: todayIso(),
-    }
+    const reset = buildDefaultFilters()
     setPendingFilters(reset)
     setFilters(reset)
     setDrafts({})
@@ -440,6 +633,8 @@ const StudentAttendance = () => {
   }
 
   const setStudentStatus = useCallback((student, status) => {
+    if (student?.recordId != null) return
+    if (student?.id != null && leaveByStudentId.has(String(student.id))) return
     const key = student.key
     setDrafts((prev) => ({
       ...prev,
@@ -450,12 +645,14 @@ const StudentAttendance = () => {
         recordId: student.recordId || prev[key]?.recordId || null,
       },
     }))
-  }, [])
+  }, [leaveByStudentId])
 
   const applyBulkStatus = (status) => {
     setDrafts((prev) => {
       const next = { ...prev }
       paginatedStudents.forEach((student) => {
+        if (student?.recordId != null) return
+        if (student?.id != null && leaveByStudentId.has(String(student.id))) return
         next[student.key] = {
           ...(next[student.key] || {}),
           student,
@@ -467,10 +664,13 @@ const StudentAttendance = () => {
     })
   }
 
-  const dirtyDraftEntries = useMemo(
-    () => Object.values(drafts).filter((entry) => normalizeStatus(entry?.status)),
-    [drafts],
-  )
+  const dirtyDraftEntries = useMemo(() => {
+    const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status))
+    const leaveEntries = paginatedStudents
+      .filter((s) => s?.recordId == null && s?.id != null && leaveByStudentId.has(String(s.id)))
+      .map((s) => ({ student: s, status: 'Leave', recordId: null, note: '' }))
+    return [...entries, ...leaveEntries]
+  }, [drafts, leaveByStudentId, paginatedStudents])
 
   const saveAttendance = async () => {
     if (dirtyDraftEntries.length === 0) return
@@ -480,6 +680,9 @@ const StudentAttendance = () => {
     try {
       for (const entry of dirtyDraftEntries) {
         const student = entry.student || {}
+        const studentLabel = `${student.name || 'Student'}${student.rollNo ? ` (Roll: ${student.rollNo})` : ''}`
+        // Once a record is saved, it is view-only and should never be modified.
+        if (entry.recordId) continue
         const payload = {
           headOfficeId: selectedHeadOfficeId ? Number(selectedHeadOfficeId) : null,
           schoolId: student.schoolId ? Number(student.schoolId) : selectedSchoolId ? Number(selectedSchoolId) : null,
@@ -496,22 +699,23 @@ const StudentAttendance = () => {
           note: entry.note || '',
         }
 
-        if (entry.recordId) {
-          await updateAttendance(entry.recordId, payload)
-        } else {
-          const saved = await createAttendance(payload)
-          const nextId = saved?.id ?? null
-          if (nextId != null) {
-            setDrafts((prev) => ({
-              ...prev,
-              [student.key]: {
-                ...(prev[student.key] || {}),
-                recordId: nextId,
-                student,
-                status: normalizeStatus(entry.status),
-              },
-            }))
-          }
+        let saved
+        try {
+          saved = await createAttendance(payload)
+        } catch (e) {
+          throw new Error(`${studentLabel}: ${e?.message || 'Create failed'}`)
+        }
+        const nextId = saved?.id ?? null
+        if (nextId != null) {
+          setDrafts((prev) => ({
+            ...prev,
+            [student.key]: {
+              ...(prev[student.key] || {}),
+              recordId: nextId,
+              student,
+              status: normalizeStatus(entry.status),
+            },
+          }))
         }
       }
 
@@ -524,8 +728,13 @@ const StudentAttendance = () => {
         subjectName: ATTENDANCE_SUBJECT,
       })
       setAttendanceRows(Array.isArray(refreshedAttendance) ? refreshedAttendance : [])
+      // Clear local drafts after a successful save so the button disables and the UI reflects DB state.
+      setDrafts({})
       await loadPageData()
     } catch (err) {
+      // Surfacing the error in both UI and console makes it easier to diagnose API issues.
+      // eslint-disable-next-line no-console
+      console.error('Failed to save attendance', err)
       setError(err?.message || 'Failed to save attendance')
     } finally {
       setSaving(false)
@@ -626,6 +835,14 @@ const StudentAttendance = () => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Student Attendance</h1>
           <span className="text-secondary-light">Attendance / Student Attendance</span>
         </div>
+         <button
+                type="button"
+                className="btn btn-primary-600 px-16 py-8"
+                onClick={saveAttendance}
+                disabled={saving || dirtyDraftEntries.length === 0}
+              >
+                {saving ? 'Saving...' : `Save Attendance${dirtyDraftEntries.length > 0 ? ` (${dirtyDraftEntries.length})` : ''}`}
+              </button>
       </div>
 
       <div className="card h-100">
@@ -657,6 +874,37 @@ const StudentAttendance = () => {
                 </span>
               </button>
 
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
+                    Columns
+                  </span>
+                  <span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </span>
+                </button>
+                <ul className="dropdown-menu p-12 border bg-base shadow">
+                  {columnOptions.map((column) => (
+                    <li key={column.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[column.key]}
+                          onChange={() => toggleColumn(column.key)}
+                        />
+                        {column.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <RowsPerPageSelect
                 value={rowsPerPage}
                 onChange={(value) => {
@@ -666,66 +914,7 @@ const StudentAttendance = () => {
                 className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
               />
 
-              {isSuperAdmin || isHeadOfficeAdmin ? (
-                <div className="avm-grid" style={{ minWidth: 360 }}>
-                  <ManualScopeSelectors
-                    enabled
-                    headOffices={headOfficeOptions}
-                    schoolOptions={scopeSchoolOptions}
-                    selectedHeadOfficeId={selectedHeadOfficeId}
-                    onHeadOfficeChange={(value) => {
-                      manualScope.setSelectedHeadOfficeId(value)
-                      manualScope.setSelectedSchoolId('')
-                      setPendingFilters(emptyPendingFilters)
-                      setFilters(emptyPendingFilters)
-                      setDrafts({})
-                      setCurrentPage(1)
-                    }}
-                    selectedSchoolId={selectedSchoolId}
-                    onSchoolChange={(value) => {
-                      if (isSuperAdmin) {
-                        manualScope.setSelectedSchoolId(value)
-                      } else {
-                        setActiveSchoolId(value || null)
-                      }
-                      setPendingFilters(emptyPendingFilters)
-                      setFilters(emptyPendingFilters)
-                      setDrafts({})
-                      setCurrentPage(1)
-                    }}
-                    showHeadOfficeSelector={isSuperAdmin}
-                    showSchoolSelector
-                    compact
-                  />
-                </div>
-              ) : (
-                <div className="px-12 py-8 radius-8 border border-neutral-300 bg-white text-sm text-secondary-light">
-                  <strong className="text-primary-light">School:</strong> {scopeSummary.school || 'Current school'}
-                </div>
-              )}
-
-              <div className="d-flex flex-wrap align-items-center gap-8">
-                {STATUS_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`px-12 py-5-px radius-8 border d-flex align-items-center gap-8 bg-white ${option.className}`}
-                    onClick={() => applyBulkStatus(option.value)}
-                  >
-                    <i className="ri-checkbox-circle-line"></i>
-                    {option.label} All
-                  </button>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                className="btn btn-primary-600 px-16 py-8"
-                onClick={saveAttendance}
-                disabled={saving || dirtyDraftEntries.length === 0}
-              >
-                {saving ? 'Saving...' : `Save Attendance${dirtyDraftEntries.length > 0 ? ` (${dirtyDraftEntries.length})` : ''}`}
-              </button>
+             
             </div>
 
             <div className="position-relative">
@@ -754,7 +943,7 @@ const StudentAttendance = () => {
           ) : null}
 
           <div className="table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1250 }}>
+            <table className="table bordered-table mb-0 data-table w-100" style={{ tableLayout: 'auto' }}>
               <thead>
                 <tr>
                   <th scope="col" style={{ width: 80 }}>S.L</th>
@@ -765,7 +954,31 @@ const StudentAttendance = () => {
                   {visibleColumns.className ? <th scope="col">Class</th> : null}
                   {visibleColumns.sectionName ? <th scope="col">Section</th> : null}
                   {visibleColumns.date ? <th scope="col">Date</th> : null}
-                  {visibleColumns.status ? <th scope="col">Attendance</th> : null}
+                  {visibleColumns.status ? (
+                    <th scope="col">
+                      <div
+                        className="d-flex align-items-center gap-8 flex-wrap w-100"
+                      >
+                          {STATUS_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`px-10 py-4 radius-8 border d-flex align-items-center justify-content-center gap-6 ${
+                                allFilteredUniformStatus === option.value
+                                  ? option.className
+                                  : 'bg-white text-secondary-light'
+                              }`}
+                              style={{ flex: '1 1 0' }}
+                              onClick={() => applyBulkStatus(option.value)}
+                              title={`${option.label} All (This Page)`}
+                            >
+                              <i className="ri-checkbox-circle-line"></i>
+                              {option.label} All
+                            </button>
+                          ))}
+                      </div>
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -794,7 +1007,11 @@ const StudentAttendance = () => {
                         <td>
                           <div className="w-40-px h-40-px rounded-circle bg-neutral-100 d-flex align-items-center justify-content-center overflow-hidden">
                             {row.photo ? (
-                              <img src={row.photo} alt={row.name || 'student'} className="w-100 h-100 object-fit-cover" />
+                              <img
+                                src={row.photo}
+                                alt={row.name || 'student'}
+                                className="w-100 h-100 object-fit-cover"
+                              />
                             ) : (
                               <i className="ri-user-line text-secondary-light text-xl"></i>
                             )}
@@ -808,26 +1025,40 @@ const StudentAttendance = () => {
                       {visibleColumns.date ? <td>{row.attendanceDate || '-'}</td> : null}
                       {visibleColumns.status ? (
                         <td>
-                          <div className="d-flex flex-wrap align-items-center gap-12">
-                            {STATUS_OPTIONS.map((option) => {
-                              const checked = row.status === option.value
-                              return (
-                                <label
-                                  key={option.value}
-                                  className={`d-inline-flex align-items-center gap-6 px-10 py-6 radius-8 border cursor-pointer ${
-                                    checked ? option.className : 'bg-white text-secondary-light'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="form-check-input mt-0"
-                                    checked={checked}
-                                    onChange={() => setStudentStatus(row, option.value)}
-                                  />
-                                  <span className="fw-medium">{option.label}</span>
-                                </label>
-                              )
-                            })}
+                          <div className="d-flex align-items-center gap-12 flex-wrap w-100">
+                            {row?.id != null && leaveByStudentId.has(String(row.id)) ? (
+                              <span
+                                className="d-flex align-items-center justify-content-center px-10 py-6 radius-8 border bg-info-100 text-info-600 fw-semibold"
+                                style={{ flex: '1 1 0' }}
+                                title="Approved Leave"
+                              >
+                                On Leave
+                              </span>
+                            ) : (
+                              STATUS_OPTIONS.map((option) => {
+                                const checked = row.status === option.value
+                                const disabled = row.isSaved
+                                return (
+                                  <label
+                                    key={option.value}
+                                    className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
+                                      disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
+                                    } ${checked ? option.className : 'bg-white text-secondary-light'}
+                                    }`}
+                                    style={{ flex: '1 1 0', justifyContent: 'center' }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input mt-0"
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={() => setStudentStatus(row, option.value)}
+                                    />
+                                    <span className="fw-medium">{option.label}</span>
+                                  </label>
+                                )
+                              })
+                            )}
                           </div>
                         </td>
                       ) : null}
@@ -856,6 +1087,79 @@ const StudentAttendance = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+          {isSuperAdmin ? (
+            <div className="full">
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOfficeOptions}
+                schoolOptions={scopeSchoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId}
+                onHeadOfficeChange={(value) => {
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    headOfficeId: value,
+                    schoolId: '',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }}
+                selectedSchoolId={pendingFilters.schoolId}
+                onSchoolChange={(value) => {
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: value,
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }}
+                showHeadOfficeSelector
+                showSchoolSelector
+              />
+            </div>
+          ) : isHeadOfficeAdmin ? (
+            <>
+              <div className="full">
+                <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">Head Office</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={authHeadOfficeName || selectedHeadOfficeId || 'Head Office'}
+                  readOnly
+                />
+              </div>
+              <div className="full">
+                <ManualScopeSelectors
+                  enabled
+                  headOffices={headOfficeOptions}
+                  schoolOptions={scopeSchoolOptions}
+                  selectedHeadOfficeId={selectedHeadOfficeId}
+                  onHeadOfficeChange={() => {}}
+                  selectedSchoolId={pendingFilters.schoolId}
+                  onSchoolChange={(value) => {
+                    setPendingFilters((prev) => ({
+                      ...prev,
+                      schoolId: value,
+                      classId: 'Select',
+                      sectionId: 'Select',
+                    }))
+                  }}
+                  showHeadOfficeSelector={false}
+                  showSchoolSelector
+                />
+              </div>
+            </>
+          ) : (
+            <div className="full">
+              <label className="text-sm fw-semibold text-primary-light d-inline-block mb-8">School</label>
+              <input
+                type="text"
+                className="form-control"
+                value={authSchoolName || selectedSchoolId || 'Current school'}
+                readOnly
+              />
+            </div>
+          )}
+
           <div className="full">
             <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               Class <span className="text-danger-600">*</span>

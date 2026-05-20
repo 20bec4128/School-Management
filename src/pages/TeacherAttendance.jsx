@@ -1,185 +1,563 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
-import useColumnVisibility from '../hooks/useColumnVisibility'
-import '../assets/css/addModalShared.css'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import TablePagination from '../components/table/TablePagination'
 import ExportDropdown from '../components/ExportDropdown'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchTeachers } from '../apis/teachersApi'
+import { createAttendance, fetchAttendances } from '../apis/attendanceApi'
+import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
+import '../assets/css/addModalShared.css'
 
-const teacherAttendanceRows = [
-  {
-    sl: '01',
-    photo: null,
-    name: 'John Smith',
-    department: 'Mathematics',
-    phone: '+1 234 567 8901',
-    email: 'john.smith@school.com',
-    presentAll: 24,
-    lateAll: 1,
-    absentAll: 0,
-    school: 'Windsor Park High School',
-    date: '2024-03-15',
-  },
-  {
-    sl: '02',
-    photo: null,
-    name: 'Sarah Johnson',
-    department: 'Science',
-    phone: '+1 234 567 8902',
-    email: 'sarah.johnson@school.com',
-    presentAll: 22,
-    lateAll: 2,
-    absentAll: 1,
-    school: 'Windsor Park High School',
-    date: '2024-03-15',
-  },
-  {
-    sl: '03',
-    photo: null,
-    name: 'David Lee',
-    department: 'English',
-    phone: '+1 234 567 8903',
-    email: 'david.lee@school.com',
-    presentAll: 23,
-    lateAll: 0,
-    absentAll: 1,
-    school: 'Windsor Park High School',
-    date: '2024-03-15',
-  },
-  {
-    sl: '04',
-    photo: null,
-    name: 'Emily Clark',
-    department: 'History',
-    phone: '+1 234 567 8904',
-    email: 'emily.clark@school.com',
-    presentAll: 21,
-    lateAll: 3,
-    absentAll: 1,
-    school: 'Windsor Park High School',
-    date: '2024-03-15',
-  },
-  {
-    sl: '05',
-    photo: null,
-    name: 'Michael Brown',
-    department: 'Physics',
-    phone: '+1 234 567 8905',
-    email: 'michael.brown@school.com',
-    presentAll: 25,
-    lateAll: 0,
-    absentAll: 0,
-    school: 'Windsor Park High School',
-    date: '2024-03-15',
-  },
+const TEACHER_EXAM_TERM = 'Teacher Attendance'
+const ATTENDANCE_SUBJECT = 'Attendance'
+const TEACHER_CLASS_NAME = 'Teacher'
+
+const STATUS_OPTIONS = [
+  { value: 'Present', label: 'Present', className: 'bg-success-100 text-success-600' },
+  { value: 'Absent', label: 'Absent', className: 'bg-danger-100 text-danger-600' },
+  { value: 'Late', label: 'Late', className: 'bg-warning-100 text-warning-600' },
 ]
 
-const emptyFilters = {
-  school: '',
-  date: '',
-}
+const todayIso = () => new Date().toISOString().slice(0, 10)
 
 const columnOptions = [
-  { key: 'photo', label: 'Photo' },
+  { key: 'school', label: 'School', defaultVisible: false },
+  { key: 'photo', label: 'Photo', defaultVisible: false },
   { key: 'name', label: 'Name' },
   { key: 'department', label: 'Department' },
   { key: 'phone', label: 'Phone' },
   { key: 'email', label: 'Email' },
-  { key: 'presentAll', label: 'Present All' },
-  { key: 'lateAll', label: 'Late All' },
-  { key: 'absentAll', label: 'Absent All' },
+  { key: 'date', label: 'Date', defaultVisible: false },
+  { key: 'status', label: 'Status' },
 ]
 
+const normalizeText = (value) => String(value ?? '').trim()
+
+const normalizeStatus = (value) => {
+  const text = normalizeText(value).toLowerCase()
+  if (text === 'present') return 'Present'
+  if (text === 'absent') return 'Absent'
+  if (text === 'late') return 'Late'
+  if (text === 'leave' || text === 'on leave' || text === 'onleave') return 'Leave'
+  return ''
+}
+
+const pickTeacherKey = (row) => String(row?.id ?? row?.teacherId ?? row?.email ?? row?.name ?? '').trim()
+
+const pickTeacherCode = (row) => normalizeText(row?.id ?? row?.teacherId ?? '')
+
 const TeacherAttendance = () => {
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+  } = useAuth()
+  const {
+    activeSchoolId,
+    schoolOptions: contextSchoolOptions,
+    setActiveSchoolId,
+    isSchoolSelectionEnabled,
+  } = useSchool()
+
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
+  const buildDefaultFilters = useCallback(() => {
+    const schoolId = !isSuperAdmin && !isHeadOfficeAdmin ? String(activeSchoolId || authSchoolId || '') : ''
+    const headOfficeId =
+      isHeadOfficeAdmin || (!isSuperAdmin && authHeadOfficeId != null) ? String(authHeadOfficeId ?? '') : ''
+    return {
+      headOfficeId,
+      schoolId,
+      department: 'Select',
+      date: todayIso(),
+    }
+  }, [activeSchoolId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSuperAdmin])
+
+  const [teachers, setTeachers] = useState([])
+  const [attendanceRows, setAttendanceRows] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRows, setSelectedRows] = useState([])
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
+  const [pendingFilters, setPendingFilters] = useState(() => buildDefaultFilters())
+  const [filters, setFilters] = useState(() => buildDefaultFilters())
+  const [drafts, setDrafts] = useState({})
+  const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
+  const [leaveByTeacherId, setLeaveByTeacherId] = useState(() => new Map())
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(teacherAttendanceRows.map((item) => item.school))),
-    [],
+  const selectedHeadOfficeId =
+    normalizeText(filters.headOfficeId) || (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+
+  const selectedSchoolId =
+    isSuperAdmin || isHeadOfficeAdmin
+      ? normalizeText(filters.schoolId)
+      : normalizeText(filters.schoolId) || String(activeSchoolId || authSchoolId || '')
+
+  const scopeSchoolOptions = useMemo(() => {
+    const rows = Array.isArray(contextSchoolOptions) ? contextSchoolOptions : []
+    if (isSuperAdmin) return manualScope.schoolOptions || []
+    if (authHeadOfficeId != null) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+    return rows
+  }, [authHeadOfficeId, contextSchoolOptions, isSuperAdmin, manualScope.schoolOptions])
+
+  const headOfficeOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.headOffices || []
+    if (authHeadOfficeId != null) {
+      return [{ id: authHeadOfficeId, name: authHeadOfficeName || `Head Office ${authHeadOfficeId}` }]
+    }
+    return []
+  }, [authHeadOfficeId, authHeadOfficeName, isSuperAdmin, manualScope.headOffices])
+
+  const schoolNameById = useMemo(() => {
+    const map = new Map()
+    ;(Array.isArray(scopeSchoolOptions) ? scopeSchoolOptions : []).forEach((row) => {
+      const id = normalizeText(row?.id)
+      if (!id) return
+      map.set(id, row?.schoolName || row?.name || `School ${id}`)
+    })
+    return map
+  }, [scopeSchoolOptions])
+
+  const departmentOptions = useMemo(() => {
+    const schoolId = normalizeText(pendingFilters.schoolId)
+    const scoped = (Array.isArray(teachers) ? teachers : []).filter((t) => {
+      if (!schoolId) return false
+      return String(t?.schoolId ?? '') === schoolId
+    })
+    const uniq = new Map()
+    scoped.forEach((t) => {
+      const dept = normalizeText(t?.department)
+      if (!dept) return
+      uniq.set(dept.toLowerCase(), dept)
+    })
+    return Array.from(uniq.values()).sort((a, b) => a.localeCompare(b))
+  }, [pendingFilters.schoolId, teachers])
+
+  const attendanceByTeacherCode = useMemo(() => {
+    const map = new Map()
+    const sorted = [...(Array.isArray(attendanceRows) ? attendanceRows : [])].sort(
+      (a, b) => Number(b?.id ?? 0) - Number(a?.id ?? 0),
+    )
+
+    sorted.forEach((row) => {
+      const code = normalizeText(row?.rollNo)
+      const date = normalizeText(row?.attendanceDate)
+      if (!code || !date) return
+      if (normalizeText(date) !== normalizeText(filters.date)) return
+      if (!map.has(code)) {
+        map.set(code, {
+          id: row?.id ?? null,
+          status: normalizeStatus(row?.attendAll),
+          attendanceDate: date,
+          schoolId: row?.schoolId ?? null,
+          sectionName: row?.sectionName || '',
+        })
+      }
+    })
+
+    return map
+  }, [attendanceRows, filters.date])
+
+  const resolveTeacherRow = useCallback(
+    (row) => {
+      const key = pickTeacherKey(row)
+      const teacherCode = pickTeacherCode(row)
+      const attendance = teacherCode ? attendanceByTeacherCode.get(teacherCode) || null : null
+      const draft = drafts[key] || null
+      const status = normalizeStatus(draft?.status || attendance?.status || '')
+      const recordId = draft?.recordId ?? attendance?.id ?? null
+      const schoolIdText = normalizeText(row?.schoolId)
+      return {
+        key,
+        teacherId: row?.id ?? null,
+        teacherCode,
+        schoolId: schoolIdText,
+        schoolName: schoolNameById.get(schoolIdText) || authSchoolName || '',
+        photo: row?.photoUrl || row?.photoPath || row?.photo || '',
+        name: row?.name || '',
+        department: row?.department || row?.designationName || '',
+        phone: row?.phone || '',
+        email: row?.email || '',
+        status,
+        recordId,
+        isSaved: recordId != null,
+        attendanceDate: filters.date,
+      }
+    },
+    [attendanceByTeacherCode, authSchoolName, drafts, filters.date, schoolNameById],
   )
 
-  const filtered = useMemo(() => {
+  const displayedTeachers = useMemo(() => {
     const q = search.trim().toLowerCase()
-
-    return teacherAttendanceRows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [
-          row.name,
-          row.department,
-          row.phone,
-          row.email,
-          row.presentAll,
-          row.lateAll,
-          row.absentAll,
-          row.school,
-        ]
+    const selectedDept = normalizeText(filters.department)
+    return (Array.isArray(teachers) ? teachers : [])
+      .filter((t) => {
+        if (!selectedSchoolId) return false
+        if (String(t?.schoolId ?? '') !== String(selectedSchoolId)) return false
+        if (selectedDept && selectedDept !== 'Select') {
+          const dept = normalizeText(t?.department)
+          if (dept !== selectedDept) return false
+        }
+        return true
+      })
+      .map((row) => resolveTeacherRow(row))
+      .filter((row) => {
+        if (!q) return true
+        return [row.name, row.department, row.phone, row.email, row.schoolName, row.status]
           .join(' ')
           .toLowerCase()
           .includes(q)
+      })
+  }, [filters.department, resolveTeacherRow, search, selectedSchoolId, teachers])
 
-      const matchesSchool = !filters.school || row.school === filters.school
-      const matchesDate = !filters.date || row.date === filters.date
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(displayedTeachers.length / rowsPerPage)), [displayedTeachers.length, rowsPerPage])
 
-      return matchesSearch && matchesSchool && matchesDate
-    })
-  }, [search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
+  const paginatedTeachers = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
+    return displayedTeachers.slice(start, start + rowsPerPage)
+  }, [currentPage, displayedTeachers, rowsPerPage])
 
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
-    } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+  // Load approved leave coverage for the visible roster (current page).
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.date) {
+      setLeaveByTeacherId(new Map())
+      return
     }
+
+    const ids = paginatedTeachers
+      .map((t) => t?.teacherId)
+      .filter((v) => v != null)
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v))
+
+    if (ids.length === 0) {
+      setLeaveByTeacherId(new Map())
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchLeaveCoverage({
+          schoolId: selectedSchoolId,
+          applicantType: 'TEACHER',
+          date: filters.date,
+          applicantIds: ids,
+        })
+        if (cancelled) return
+        const map = new Map()
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row?.applicantId == null) continue
+          map.set(String(row.applicantId), row)
+        }
+        setLeaveByTeacherId(map)
+      } catch {
+        if (!cancelled) setLeaveByTeacherId(new Map())
+      }
+    }
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [filters.date, paginatedTeachers, selectedSchoolId])
+
+  const dirtyDraftEntries = useMemo(() => {
+    const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId)
+    const leaveEntries = paginatedTeachers
+      .filter((t) => t?.recordId == null && t?.teacherId != null && leaveByTeacherId.has(String(t.teacherId)))
+      .map((t) => ({ teacher: t, status: 'Leave', recordId: null }))
+    return [...entries, ...leaveEntries]
+  }, [drafts, leaveByTeacherId, paginatedTeachers])
+
+  const loadPageData = useCallback(async () => {
+    if (!selectedSchoolId) {
+      setTeachers([])
+      setAttendanceRows([])
+      setError('')
+      return
+    }
+
+    if (!filters.date) {
+      setTeachers([])
+      setAttendanceRows([])
+      setError('')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      const [teacherList, attendanceList] = await Promise.all([
+        fetchTeachers(),
+        fetchAttendances({
+          headOfficeId: selectedHeadOfficeId || undefined,
+          schoolId: selectedSchoolId || undefined,
+          examTerm: TEACHER_EXAM_TERM,
+          className: TEACHER_CLASS_NAME,
+          sectionName: normalizeText(filters.department) && filters.department !== 'Select' ? filters.department : undefined,
+          subjectName: ATTENDANCE_SUBJECT,
+        }),
+      ])
+
+      setTeachers(Array.isArray(teacherList) ? teacherList : [])
+      setAttendanceRows(Array.isArray(attendanceList) ? attendanceList : [])
+    } catch (err) {
+      setTeachers([])
+      setAttendanceRows([])
+      setError(err?.message || 'Failed to load teacher attendance')
+    } finally {
+      setLoading(false)
+    }
+  }, [filters.date, filters.department, selectedHeadOfficeId, selectedSchoolId])
+
+  useEffect(() => {
+    void loadPageData()
+  }, [loadPageData])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters.date, filters.department, rowsPerPage, selectedSchoolId])
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    if (isHeadOfficeAdmin && selectedSchoolId) {
+      setActiveSchoolId(selectedSchoolId)
+    }
+  }, [isHeadOfficeAdmin, isSuperAdmin, selectedSchoolId, setActiveSchoolId])
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    if (!isSchoolSelectionEnabled && authSchoolId) {
+      setActiveSchoolId(String(authSchoolId))
+    }
+  }, [authSchoolId, isSchoolSelectionEnabled, isSuperAdmin, setActiveSchoolId])
+
+  // Uniform status highlight across all filtered teachers (all pages).
+  useEffect(() => {
+    if (!selectedSchoolId || !filters.date) {
+      setAllFilteredUniformStatus('')
+      return
+    }
+
+    let cancelled = false
+    const handle = setTimeout(() => {
+      const run = async () => {
+        try {
+          const rows = displayedTeachers
+
+          // Any approved leave in the filtered set => keep bulk header buttons neutral.
+          {
+            const ids = rows
+              .map((r) => r?.teacherId)
+              .filter((v) => v != null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isFinite(v))
+
+            let anyLeave = false
+            const batchSize = 200
+            for (let i = 0; i < ids.length && !anyLeave; i += batchSize) {
+              const batch = ids.slice(i, i + batchSize)
+              if (batch.length === 0) continue
+              const coverage = await fetchLeaveCoverage({
+                schoolId: selectedSchoolId,
+                applicantType: 'TEACHER',
+                date: filters.date,
+                applicantIds: batch,
+              })
+              if (Array.isArray(coverage) && coverage.length > 0) anyLeave = true
+            }
+
+            if (anyLeave) {
+              if (!cancelled) setAllFilteredUniformStatus('')
+              return
+            }
+          }
+
+          let uniform = ''
+          if (rows.length > 0) {
+            const first = normalizeStatus(rows[0]?.status)
+            if (first) {
+              uniform = rows.every((r) => normalizeStatus(r?.status) === first) ? first : ''
+            }
+          }
+          if (!cancelled) setAllFilteredUniformStatus(uniform)
+        } catch {
+          if (!cancelled) setAllFilteredUniformStatus('')
+        }
+      }
+
+      void run()
+    }, 350)
+
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [displayedTeachers, filters.date, selectedSchoolId])
+
+  const handlePendingFilterChange = (event) => {
+    const { id, value } = event.target
+    setPendingFilters((prev) => {
+      if (id === 'headOfficeId') {
+        return { ...prev, headOfficeId: value, schoolId: '', department: 'Select' }
+      }
+      if (id === 'schoolId') {
+        return { ...prev, schoolId: value, department: 'Select' }
+      }
+      return { ...prev, [id]: value }
+    })
   }
 
-  const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
+  const handleApplyFilters = (event) => {
+    event.preventDefault()
+    if ((isSuperAdmin || isHeadOfficeAdmin) && !pendingFilters.headOfficeId) return
+    if (!pendingFilters.schoolId) return
+    if (!pendingFilters.date) return
     setFilters(pendingFilters)
+    setDrafts({})
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const reset = buildDefaultFilters()
+    setPendingFilters(reset)
+    setFilters(reset)
+    setDrafts({})
     setCurrentPage(1)
   }
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
+  const setTeacherStatus = useCallback((teacher, status) => {
+    if (teacher?.recordId != null) return
+    if (teacher?.teacherId != null && leaveByTeacherId.has(String(teacher.teacherId))) return
+    const key = teacher.key
+    setDrafts((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || {}),
+        teacher,
+        status,
+        recordId: teacher.recordId || prev[key]?.recordId || null,
+      },
+    }))
+  }, [leaveByTeacherId])
 
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
+  const applyBulkStatus = (status) => {
+    setDrafts((prev) => {
+      const next = { ...prev }
+      paginatedTeachers.forEach((teacher) => {
+        if (teacher?.recordId != null) return
+        if (teacher?.teacherId != null && leaveByTeacherId.has(String(teacher.teacherId))) return
+        next[teacher.key] = {
+          ...(next[teacher.key] || {}),
+          teacher,
+          status,
+          recordId: teacher.recordId || next[teacher.key]?.recordId || null,
+        }
+      })
+      return next
+    })
   }
+
+  const saveAttendance = async () => {
+    if (dirtyDraftEntries.length === 0) return
+    setSaving(true)
+    setError('')
+
+    try {
+      for (const entry of dirtyDraftEntries) {
+        const teacher = entry.teacher || {}
+        const teacherLabel = `${teacher.name || 'Teacher'}${teacher.email ? ` (${teacher.email})` : ''}`
+        if (entry.recordId) continue
+
+        const payload = {
+          headOfficeId: selectedHeadOfficeId ? Number(selectedHeadOfficeId) : null,
+          schoolId: teacher.schoolId ? Number(teacher.schoolId) : selectedSchoolId ? Number(selectedSchoolId) : null,
+          examTerm: TEACHER_EXAM_TERM,
+          className: TEACHER_CLASS_NAME,
+          sectionName: teacher.department || (filters.department !== 'Select' ? filters.department : '') || '',
+          subjectName: ATTENDANCE_SUBJECT,
+          name: teacher.name || '',
+          phone: teacher.phone || '',
+          rollNo: teacher.teacherCode || '',
+          photoPath: teacher.photo || '',
+          attendAll: normalizeStatus(entry.status),
+          attendanceDate: filters.date,
+          note: '',
+        }
+
+        try {
+          await createAttendance(payload)
+        } catch (e) {
+          throw new Error(`${teacherLabel}: ${e?.message || 'Create failed'}`)
+        }
+      }
+
+      const refreshedAttendance = await fetchAttendances({
+        headOfficeId: selectedHeadOfficeId || undefined,
+        schoolId: selectedSchoolId || undefined,
+        examTerm: TEACHER_EXAM_TERM,
+        className: TEACHER_CLASS_NAME,
+        sectionName: normalizeText(filters.department) && filters.department !== 'Select' ? filters.department : undefined,
+        subjectName: ATTENDANCE_SUBJECT,
+      })
+      setAttendanceRows(Array.isArray(refreshedAttendance) ? refreshedAttendance : [])
+      setDrafts({})
+      await loadPageData()
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to save teacher attendance', err)
+      setError(err?.message || 'Failed to save teacher attendance')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const loadExportRows = useCallback(async () => displayedTeachers, [displayedTeachers])
+
+  const exportColumns = useMemo(
+    () => columnOptions.map((column) => ({ key: column.key, label: column.label })),
+    [],
+  )
+
+  const mapExportRow = useCallback(
+    (row) => ({
+      school: row.schoolName || '',
+      photo: row.photo || '',
+      name: row.name || '',
+      department: row.department || '',
+      phone: row.phone || '',
+      email: row.email || '',
+      date: row.attendanceDate || filters.date || '',
+      status: row.status || '',
+    }),
+    [filters.date],
+  )
+
+  const resolvedPageInfo =
+    displayedTeachers.length === 0
+      ? 'Showing 0 - 0 of 0 entries'
+      : `Showing ${(currentPage - 1) * rowsPerPage + 1} - ${Math.min(
+          currentPage * rowsPerPage,
+          displayedTeachers.length,
+        )} of ${displayedTeachers.length} entries`
 
   return (
     <div className="dashboard-main-body">
@@ -196,22 +574,40 @@ const TeacherAttendance = () => {
             <span className="text-secondary-light"> / Teacher Attendance</span>
           </div>
         </div>
+        <button
+          type="button"
+          className="btn btn-primary-600 px-16 py-8"
+          onClick={saveAttendance}
+          disabled={saving || dirtyDraftEntries.length === 0}
+        >
+          {saving
+            ? 'Saving...'
+            : `Save Attendance${dirtyDraftEntries.length > 0 ? ` (${dirtyDraftEntries.length})` : ''}`}
+        </button>
       </div>
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-            <div className="d-flex flex-wrap align-items-center gap-16">
-              <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
+          <div className="d-flex align-items-start justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-start gap-16">
+              <ExportDropdown
+                title="Export"
+                rows={displayedTeachers}
+                loadRows={loadExportRows}
+                columns={exportColumns}
+                visibleColumns={visibleColumns}
+                mapRow={mapExportRow}
+                fileName="Teacher Attendance"
+                sheetName="Teacher Attendance"
+                pdfTitle="Teacher Attendance"
+              />
 
               <button
                 type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Find
-                </span>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span>
                   <i className="ri-arrow-right-line"></i>
                 </span>
@@ -220,13 +616,11 @@ const TeacherAttendance = () => {
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
                   <span>
                     <i className="ri-arrow-down-s-line"></i>
                   </span>
@@ -248,20 +642,14 @@ const TeacherAttendance = () => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
@@ -270,8 +658,8 @@ const TeacherAttendance = () => {
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search teacher attendance..."
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
+                onChange={(event) => {
+                  setSearch(event.target.value)
                   setCurrentPage(1)
                 }}
               />
@@ -281,76 +669,127 @@ const TeacherAttendance = () => {
             </div>
           </div>
 
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1200 }}>
+          {error ? (
+            <div className="px-20 pt-16">
+              <div className="alert alert-danger mb-0" role="alert">
+                {error}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="table-responsive">
+            <table className="table bordered-table mb-0 data-table w-100" style={{ tableLayout: 'auto' }}>
               <thead>
                 <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
-                      <label className="form-check-label">S.L</label>
-                    </div>
+                  <th scope="col" style={{ width: 80 }}>
+                    S.L
                   </th>
+                  {visibleColumns.school ? <th scope="col">School</th> : null}
                   {visibleColumns.photo ? <th scope="col">Photo</th> : null}
                   {visibleColumns.name ? <th scope="col">Name</th> : null}
                   {visibleColumns.department ? <th scope="col">Department</th> : null}
                   {visibleColumns.phone ? <th scope="col">Phone</th> : null}
                   {visibleColumns.email ? <th scope="col">Email</th> : null}
-                  {visibleColumns.presentAll ? <th scope="col">Present All</th> : null}
-                  {visibleColumns.lateAll ? <th scope="col">Late All</th> : null}
-                  {visibleColumns.absentAll ? <th scope="col">Absent All</th> : null}
+                  {visibleColumns.date ? <th scope="col">Date</th> : null}
+                  {visibleColumns.status ? (
+                    <th scope="col">
+                      <div className="d-flex align-items-center gap-8 flex-wrap w-100">
+                        {STATUS_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`px-10 py-4 radius-8 border d-flex align-items-center justify-content-center gap-6 ${
+                              allFilteredUniformStatus === option.value ? option.className : 'bg-white text-secondary-light'
+                            }`}
+                            style={{ flex: '1 1 0' }}
+                            onClick={() => applyBulkStatus(option.value)}
+                            title={`${option.label} All (This Page)`}
+                          >
+                            <i className="ri-checkbox-circle-line"></i>
+                            {option.label} All
+                          </button>
+                        ))}
+                      </div>
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
-
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td
-                      colSpan={visibleColumnCount}
-                      className="text-center py-40 text-secondary-light"
-                    >
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : paginatedTeachers.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
                       No teacher attendance records found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
-                      <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
-                          />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
+                  paginatedTeachers.map((row, index) => (
+                    <tr key={row.key}>
+                      <td className="fw-medium text-secondary-light">{(currentPage - 1) * rowsPerPage + index + 1}</td>
+                      {visibleColumns.school ? <td>{row.schoolName || '-'}</td> : null}
                       {visibleColumns.photo ? (
                         <td>
                           <div
-                            className="w-40-px h-40-px rounded-circle bg-neutral-200 d-flex align-items-center justify-content-center overflow-hidden"
+                            className="w-40-px h-40-px rounded-circle bg-neutral-100 d-flex align-items-center justify-content-center overflow-hidden"
                             style={{ minWidth: 40 }}
                           >
                             {row.photo ? (
-                              <img
-                                src={row.photo}
-                                alt={row.name}
-                                className="w-100 h-100 object-fit-cover"
-                              />
+                              <img src={row.photo} alt={row.name || 'teacher'} className="w-100 h-100 object-fit-cover" />
                             ) : (
                               <i className="ri-user-line text-secondary-light"></i>
                             )}
                           </div>
                         </td>
                       ) : null}
-                      {visibleColumns.name ? <td className="fw-medium text-primary-light">{row.name}</td> : null}
-                      {visibleColumns.department ? <td>{row.department}</td> : null}
-                      {visibleColumns.phone ? <td>{row.phone}</td> : null}
-                      {visibleColumns.email ? <td>{row.email}</td> : null}
-                      {visibleColumns.presentAll ? <td>{row.presentAll}</td> : null}
-                      {visibleColumns.lateAll ? <td>{row.lateAll}</td> : null}
-                      {visibleColumns.absentAll ? <td>{row.absentAll}</td> : null}
+                      {visibleColumns.name ? <td className="fw-medium text-primary-light">{row.name || '-'}</td> : null}
+                      {visibleColumns.department ? <td>{row.department || '-'}</td> : null}
+                      {visibleColumns.phone ? <td>{row.phone || '-'}</td> : null}
+                      {visibleColumns.email ? <td>{row.email || '-'}</td> : null}
+                      {visibleColumns.date ? <td>{row.attendanceDate || '-'}</td> : null}
+                      {visibleColumns.status ? (
+                        <td>
+                          <div className="d-flex align-items-center gap-12 flex-wrap w-100">
+                            {row?.teacherId != null && leaveByTeacherId.has(String(row.teacherId)) ? (
+                              <span
+                                className="d-flex align-items-center justify-content-center px-10 py-6 radius-8 border bg-info-100 text-info-600 fw-semibold"
+                                style={{ flex: '1 1 0' }}
+                                title="Approved Leave"
+                              >
+                                On Leave
+                              </span>
+                            ) : (
+                              STATUS_OPTIONS.map((option) => {
+                                const checked = row.status === option.value
+                                const disabled = row.isSaved
+                                return (
+                                  <label
+                                    key={option.value}
+                                    className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
+                                      disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
+                                    } ${checked ? option.className : 'bg-white text-secondary-light'}
+                                    }`}
+                                    style={{ flex: '1 1 0', justifyContent: 'center' }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input mt-0"
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={() => setTeacherStatus(row, option.value)}
+                                    />
+                                    <span className="fw-medium">{option.label}</span>
+                                  </label>
+                                )
+                              })
+                            )}
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -358,43 +797,14 @@ const TeacherAttendance = () => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
-
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            paginationProps={{
+              currentPage,
+              totalPages,
+              setCurrentPage,
+              pageInfo: resolvedPageInfo,
+            }}
+          />
         </div>
       </div>
 
@@ -405,20 +815,66 @@ const TeacherAttendance = () => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
+          {(isSuperAdmin || isHeadOfficeAdmin) ? (
+            <div className="full">
+              <label htmlFor="headOfficeId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                Head Office <span className="text-danger-600">*</span>
+              </label>
+              <select
+                id="headOfficeId"
+                className="form-control form-select"
+                value={pendingFilters.headOfficeId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="">--Select Head Office--</option>
+                {headOfficeOptions.map((row) => (
+                  <option key={String(row?.id ?? '')} value={String(row?.id ?? '')}>
+                    {row?.name || `Head Office ${row?.id ?? ''}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           <div className="full">
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School Name <span className="text-danger-600">*</span>
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School <span className="text-danger-600">*</span>
             </label>
             <select
-              id="school"
+              id="schoolId"
               className="form-control form-select"
-              value={pendingFilters.school}
+              value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
+              disabled={!isSuperAdmin && !isHeadOfficeAdmin}
             >
               <option value="">--Select School--</option>
-              {schoolOptions.map((school) => (
-                <option key={school} value={school}>
-                  {school}
+              {scopeSchoolOptions.map((school) => {
+                const id = normalizeText(school?.id)
+                if (!id) return null
+                return (
+                  <option key={id} value={id}>
+                    {school?.schoolName || school?.name || `School ${id}`}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
+
+          <div className="full">
+            <label htmlFor="department" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              Department
+            </label>
+            <select
+              id="department"
+              className="form-control form-select"
+              value={pendingFilters.department}
+              onChange={handlePendingFilterChange}
+              disabled={!pendingFilters.schoolId}
+            >
+              <option value="Select">Select</option>
+              {departmentOptions.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
                 </option>
               ))}
             </select>
@@ -438,11 +894,7 @@ const TeacherAttendance = () => {
           </div>
 
           <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
+            <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">
               Reset
             </button>
           </div>
@@ -451,7 +903,7 @@ const TeacherAttendance = () => {
             <button
               type="submit"
               className="btn btn-primary-600 w-100"
-              disabled={!pendingFilters.school || !pendingFilters.date}
+              disabled={(isSuperAdmin || isHeadOfficeAdmin) ? !pendingFilters.headOfficeId || !pendingFilters.schoolId || !pendingFilters.date : !pendingFilters.schoolId || !pendingFilters.date}
             >
               Apply
             </button>

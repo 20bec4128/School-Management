@@ -29,18 +29,20 @@ public class EmailMessageController {
     @GetMapping
     public ResponseEntity<List<EmailMessageDto>> getEmails(
             @RequestParam(required = false) Long headOfficeId,
-            @RequestParam(required = false) Long schoolId) {
-        return ResponseEntity.ok(service.list(headOfficeId, schoolId));
+            @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) String category) {
+        return ResponseEntity.ok(service.list(headOfficeId, schoolId, category));
     }
 
     @GetMapping("/page")
     public ResponseEntity<Page<EmailMessageDto>> getEmailsPaginated(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
+            @RequestParam(required = false) String category,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "") String search) {
-        return ResponseEntity.ok(service.listPaginated(headOfficeId, schoolId, page, size, search));
+        return ResponseEntity.ok(service.listPaginated(headOfficeId, schoolId, category, page, size, search));
     }
 
     @GetMapping("/{id}")

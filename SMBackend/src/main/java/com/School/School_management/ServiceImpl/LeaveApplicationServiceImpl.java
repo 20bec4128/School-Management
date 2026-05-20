@@ -44,6 +44,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
     private static final Set<String> ALLOWED_STATUS = Set.of("PENDING", "APPROVED", "DECLINED");
+    private static final Set<String> ALLOWED_APPLICANT_TYPES = Set.of("STUDENT", "TEACHER", "EMPLOYEE");
 
     private final LeaveApplicationRepository leaveApplicationRepository;
     private final SchoolRepository schoolRepository;
@@ -94,6 +95,31 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
             rows = leaveApplicationRepository.findBySchool_IdAndStatusIgnoreCaseOrderByIdDesc(effectiveSchoolId, normalizedStatus);
         }
         return rows.stream().map(this::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LeaveApplicationDto.Response> coverage(Long schoolId, String applicantType, LocalDate date, List<Long> applicantIds) {
+        CurrentUser user = requireUser();
+        Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+        if (effectiveSchoolId == null) return List.of();
+        if (date == null) throw new BadRequestException("date is required");
+
+        String normalizedType = String.valueOf(applicantType == null ? "" : applicantType).trim().toUpperCase(Locale.ROOT);
+        if (normalizedType.isBlank()) throw new BadRequestException("applicantType is required");
+        if (!ALLOWED_APPLICANT_TYPES.contains(normalizedType)) {
+            throw new BadRequestException("Unsupported applicantType: " + applicantType);
+        }
+
+        if (applicantIds == null || applicantIds.isEmpty()) return List.of();
+        // Guard against accidental huge IN lists.
+        if (applicantIds.size() > 2000) throw new BadRequestException("Too many applicantIds");
+
+        return leaveApplicationRepository
+                .findApprovedCoverage(effectiveSchoolId, normalizedType, date, applicantIds)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override

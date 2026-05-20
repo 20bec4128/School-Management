@@ -1,17 +1,9 @@
-import {
-  absentEmailEmptyForm,
-  absentEmailReceiverOptionsMap,
-  absentEmailTemplateOptions,
-} from '../constants/absentEmail'
-
 const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Receiver Type': 'ri-group-line',
-  Receiver: 'ri-user-3-line',
-  Template: 'ri-file-list-3-line',
-  'Absent Date': 'ri-calendar-2-line',
-  Subject: 'ri-mail-open-line',
-  'Email Body': 'ri-mail-send-line',
+  'Head Office': 'ri-building-2-line',
+  'School': 'ri-school-line',
+  'Enabled': 'ri-toggle-line',
+  'Subject Template': 'ri-mail-open-line',
+  'Email Body Template': 'ri-mail-send-line',
   'Dynamic Tag': 'ri-price-tag-3-line',
 }
 
@@ -58,105 +50,91 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
   )
 }
 
-const AbsentEmailForm = ({ form, setForm }) => {
-  const receiverOptions = form.receiverType ? absentEmailReceiverOptionsMap[form.receiverType] || [] : []
+const normalizeId = (value) => String(value ?? '').trim()
 
+const AbsentEmailForm = ({ form, setForm, isSuperAdmin, isHeadOfficeAdmin, headOfficeOptions, schoolOptions }) => {
   const handleFieldChange = (e) => {
-    const { id, value } = e.target
-
+    const { id, value, type, checked } = e.target
     setForm((prev) => {
-      if (id === 'receiverType') {
-        return {
-          ...prev,
-          receiverType: value,
-          receiver: '',
-        }
-      }
-
-      if (id === 'template') {
-        const selectedTemplate = absentEmailTemplateOptions[value]
-        return {
-          ...prev,
-          template: value,
-          subject: selectedTemplate ? selectedTemplate.subject : prev.subject,
-          emailBody: selectedTemplate ? selectedTemplate.emailBody : prev.emailBody,
-        }
-      }
-
+      if (id === 'enabled') return { ...prev, enabled: Boolean(checked) }
+      if (id === 'headOfficeId') return { ...prev, headOfficeId: value, schoolId: '' }
       return { ...prev, [id]: value }
     })
   }
 
   return (
     <>
-      <p className="avm-section-title">Basic Information</p>
+      <p className="avm-section-title">Absent Email Settings</p>
       <div className="avm-grid">
-        <FormField label="School Name" required full>
-          <select className="avm-select" id="school" value={form.school} onChange={handleFieldChange}>
-            <option value="">--Select School--</option>
-            <option>Windsor Park High School</option>
-          </select>
-        </FormField>
+        {(isSuperAdmin || isHeadOfficeAdmin) ? (
+          <FormField label="Head Office" required full>
+            <select className="avm-select" id="headOfficeId" value={form.headOfficeId || ''} onChange={handleFieldChange}>
+              <option value="">--Select Head Office--</option>
+              {(Array.isArray(headOfficeOptions) ? headOfficeOptions : []).map((row) => {
+                const id = normalizeId(row?.id)
+                if (!id) return null
+                return (
+                  <option key={id} value={id}>
+                    {row?.name || `Head Office ${id}`}
+                  </option>
+                )
+              })}
+            </select>
+          </FormField>
+        ) : null}
 
-        <FormField label="Receiver Type" required>
-          <select className="avm-select" id="receiverType" value={form.receiverType} onChange={handleFieldChange}>
-            <option value="">--Select --</option>
-            <option>Student</option>
-            <option>Parent</option>
-            <option>Guardian</option>
-          </select>
-        </FormField>
-
-        <FormField label="Receiver" required>
+        <FormField label="School" required full>
           <select
             className="avm-select"
-            id="receiver"
-            value={form.receiver}
+            id="schoolId"
+            value={form.schoolId || ''}
             onChange={handleFieldChange}
-            disabled={!form.receiverType}
+            disabled={!isSuperAdmin && !isHeadOfficeAdmin}
           >
-            <option value="">--Select--</option>
-            {receiverOptions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
+            <option value="">--Select School--</option>
+            {(Array.isArray(schoolOptions) ? schoolOptions : []).map((row) => {
+              const id = normalizeId(row?.id)
+              if (!id) return null
+              return (
+                <option key={id} value={id}>
+                  {row?.schoolName || row?.name || `School ${id}`}
+                </option>
+              )
+            })}
           </select>
         </FormField>
 
-        <FormField label="Template">
-          <select className="avm-select" id="template" value={form.template} onChange={handleFieldChange}>
-            <option value="">--Select--</option>
-            {Object.keys(absentEmailTemplateOptions).map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
+        <FormField label="Enabled" full>
+          <div className="d-flex align-items-center gap-10" style={{ paddingLeft: '2.25rem' }}>
+            <input
+              id="enabled"
+              type="checkbox"
+              className="form-check-input mt-0"
+              checked={Boolean(form.enabled)}
+              onChange={handleFieldChange}
+            />
+            <span className="text-secondary-light">Send absent emails automatically on attendance save</span>
+          </div>
         </FormField>
 
-        <FormField label="Absent Date" required>
-          <input type="date" className="avm-input" id="absentDate" value={form.absentDate} onChange={handleFieldChange} />
-        </FormField>
-
-        <FormField label="Subject" required full>
+        <FormField label="Subject Template" required full>
           <input
             type="text"
             className="avm-input"
-            id="subject"
-            placeholder="Enter subject"
-            value={form.subject}
+            id="subjectTemplate"
+            placeholder="Enter subject template"
+            value={form.subjectTemplate || ''}
             onChange={handleFieldChange}
           />
         </FormField>
 
-        <FormField label="Email Body" required full>
+        <FormField label="Email Body Template" required full>
           <textarea
-            rows="5"
+            rows="6"
             className="avm-input avm-textarea"
-            id="emailBody"
-            placeholder="Enter email body"
-            value={form.emailBody}
+            id="emailBodyTemplate"
+            placeholder="Enter email body template"
+            value={form.emailBodyTemplate || ''}
             onChange={handleFieldChange}
           />
         </FormField>
@@ -180,7 +158,7 @@ const AbsentEmailForm = ({ form, setForm }) => {
                   onClick={() =>
                     setForm((prev) => ({
                       ...prev,
-                      emailBody: prev.emailBody ? `${prev.emailBody} ${tag}` : tag,
+                      emailBodyTemplate: prev.emailBodyTemplate ? `${prev.emailBodyTemplate} ${tag}` : tag,
                     }))
                   }
                 >
@@ -196,3 +174,4 @@ const AbsentEmailForm = ({ form, setForm }) => {
 }
 
 export default AbsentEmailForm
+

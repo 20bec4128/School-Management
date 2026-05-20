@@ -34,11 +34,14 @@ public class StudentDto {
         private String fatherEducation;
         private String fatherProfession;
         private String fatherDesignation;
+        private String fatherEmail;
         private String motherName;
         private String motherPhone;
         private String motherEducation;
         private String motherProfession;
         private String motherDesignation;
+        private String motherEmail;
+        private String guardianEmail;
         private String presentAddress;
         private String permanentAddress;
         private Boolean sameAsGuardianAddress;
@@ -138,6 +141,9 @@ public class StudentDto {
         public String getFatherDesignation() { return fatherDesignation; }
         public void setFatherDesignation(String fatherDesignation) { this.fatherDesignation = fatherDesignation; }
 
+        public String getFatherEmail() { return fatherEmail; }
+        public void setFatherEmail(String fatherEmail) { this.fatherEmail = fatherEmail; }
+
         public String getMotherName() { return motherName; }
         public void setMotherName(String motherName) { this.motherName = motherName; }
 
@@ -152,6 +158,12 @@ public class StudentDto {
 
         public String getMotherDesignation() { return motherDesignation; }
         public void setMotherDesignation(String motherDesignation) { this.motherDesignation = motherDesignation; }
+
+        public String getMotherEmail() { return motherEmail; }
+        public void setMotherEmail(String motherEmail) { this.motherEmail = motherEmail; }
+
+        public String getGuardianEmail() { return guardianEmail; }
+        public void setGuardianEmail(String guardianEmail) { this.guardianEmail = guardianEmail; }
 
         public String getPresentAddress() { return presentAddress; }
         public void setPresentAddress(String presentAddress) { this.presentAddress = presentAddress; }
@@ -220,12 +232,15 @@ public class StudentDto {
         private String fatherProfession;
         private String fatherDesignation;
         private String fatherPhotoUrl;
+        private String fatherEmail;
         private String motherName;
         private String motherPhone;
         private String motherEducation;
         private String motherProfession;
         private String motherDesignation;
         private String motherPhotoUrl;
+        private String motherEmail;
+        private String guardianEmail;
         private String presentAddress;
         private String permanentAddress;
         private Boolean sameAsGuardianAddress;
@@ -334,6 +349,9 @@ public class StudentDto {
         public String getFatherPhotoUrl() { return fatherPhotoUrl; }
         public void setFatherPhotoUrl(String fatherPhotoUrl) { this.fatherPhotoUrl = fatherPhotoUrl; }
 
+        public String getFatherEmail() { return fatherEmail; }
+        public void setFatherEmail(String fatherEmail) { this.fatherEmail = fatherEmail; }
+
         public String getMotherName() { return motherName; }
         public void setMotherName(String motherName) { this.motherName = motherName; }
 
@@ -351,6 +369,12 @@ public class StudentDto {
 
         public String getMotherPhotoUrl() { return motherPhotoUrl; }
         public void setMotherPhotoUrl(String motherPhotoUrl) { this.motherPhotoUrl = motherPhotoUrl; }
+
+        public String getMotherEmail() { return motherEmail; }
+        public void setMotherEmail(String motherEmail) { this.motherEmail = motherEmail; }
+
+        public String getGuardianEmail() { return guardianEmail; }
+        public void setGuardianEmail(String guardianEmail) { this.guardianEmail = guardianEmail; }
 
         public String getPresentAddress() { return presentAddress; }
         public void setPresentAddress(String presentAddress) { this.presentAddress = presentAddress; }

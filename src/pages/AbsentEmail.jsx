@@ -1,211 +1,251 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
-import useColumnVisibility from '../hooks/useColumnVisibility'
-import { ABSENT_EMAIL_EDIT_STORAGE_KEY, ABSENT_EMAIL_ROWS_STORAGE_KEY } from '../constants/absentEmail'
-import '../assets/css/addModalShared.css'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import TablePagination from '../components/table/TablePagination'
 import ExportDropdown from '../components/ExportDropdown'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchEmailsPage } from '../apis/emailApi'
+import '../assets/css/addModalShared.css'
 
-const absentEmails = [
-  {
-    sl: '01',
-    school: 'Windsor Park High School',
-    receiverType: 'Student',
-    subject: 'Absent Notification - Alice Brown',
-    sendDate: '2024-03-18',
-  },
-  {
-    sl: '02',
-    school: 'Windsor Park High School',
-    receiverType: 'Parent',
-    subject: 'Absence Alert - Michael Brown',
-    sendDate: '2024-03-19',
-  },
-  {
-    sl: '03',
-    school: 'Windsor Park High School',
-    receiverType: 'Guardian',
-    subject: 'Attendance Concern - Sophia Wilson',
-    sendDate: '2024-03-20',
-  },
-  {
-    sl: '04',
-    school: 'Windsor Park High School',
-    receiverType: 'Student',
-    subject: 'Absence Follow-up - David Johnson',
-    sendDate: '2024-03-21',
-  },
-  {
-    sl: '05',
-    school: 'Windsor Park High School',
-    receiverType: 'Parent',
-    subject: 'Absent Notice - Emma Davis',
-    sendDate: '2024-03-22',
-  },
-]
+const ABSENT_EMAIL_CATEGORY = 'ABSENT_ATTENDANCE'
 
 const columnOptions = [
-  { key: 'school', label: 'School' },
+  { key: 'schoolName', label: 'School' },
   { key: 'receiverType', label: 'Receiver Type' },
+  { key: 'receiver', label: 'Receiver' },
   { key: 'subject', label: 'Subject' },
   { key: 'sendDate', label: 'Send Date' },
 ]
 
-const emptyFilters = {
-  school: 'Select',
-  receiverType: 'Select',
-}
-
-const readRows = () => {
-  try {
-    const raw = sessionStorage.getItem(ABSENT_EMAIL_ROWS_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : absentEmails
-  } catch {
-    return absentEmails
-  }
-}
+const normalizeText = (value) => String(value ?? '').trim()
 
 const AbsentEmail = ({ onNavigate }) => {
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
+    schoolId: authSchoolId,
+  } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions, setActiveSchoolId, isSchoolSelectionEnabled } = useSchool()
+
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
+  const buildDefaultFilters = useCallback(() => {
+    const schoolId = !isSuperAdmin && !isHeadOfficeAdmin
+      ? String(activeSchoolId || authSchoolId || '')
+      : isHeadOfficeAdmin
+        ? String(activeSchoolId || '')
+        : ''
+    const headOfficeId =
+      isHeadOfficeAdmin || (!isSuperAdmin && authHeadOfficeId != null) ? String(authHeadOfficeId ?? '') : ''
+    return {
+      headOfficeId,
+      schoolId,
+    }
+  }, [activeSchoolId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSuperAdmin])
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRows, setSelectedRows] = useState([])
-  const [rows, setRows] = useState(() => readRows())
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
+  const [pendingFilters, setPendingFilters] = useState(() => buildDefaultFilters())
+  const [filters, setFilters] = useState(() => buildDefaultFilters())
+  const [pageRows, setPageRows] = useState([])
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  useEffect(() => {
-    sessionStorage.setItem(ABSENT_EMAIL_ROWS_STORAGE_KEY, JSON.stringify(rows))
-  }, [rows])
+  const selectedHeadOfficeId =
+    normalizeText(filters.headOfficeId) || (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
 
-  const schoolOptions = useMemo(
-    () => Array.from(new Set(rows.map((item) => item.school))),
-    [rows],
-  )
+  const selectedSchoolId = isSuperAdmin || isHeadOfficeAdmin
+    ? normalizeText(filters.schoolId)
+    : normalizeText(filters.schoolId) || String(activeSchoolId || authSchoolId || '')
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-
-    return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        [row.school, row.receiverType, row.subject, row.sendDate].join(' ').toLowerCase().includes(q)
-
-      const matchesSchool = filters.school === 'Select' || row.school === filters.school
-      const matchesReceiverType =
-        filters.receiverType === 'Select' || row.receiverType === filters.receiverType
-
-      return matchesSearch && matchesSchool && matchesReceiverType
-    })
-  }, [rows, search, filters])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-
-  const paginated = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage
-    return filtered.slice(start, start + rowsPerPage)
-  }, [currentPage, filtered, rowsPerPage])
-
-  const allSelected = paginated.length > 0 && paginated.every((row) => selectedRows.includes(row.sl))
-
-  const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedRows((prev) => [...new Set([...prev, ...paginated.map((row) => row.sl)])])
-    } else {
-      setSelectedRows((prev) => prev.filter((id) => !paginated.some((row) => row.sl === id)))
+  const scopeSchoolOptions = useMemo(() => {
+    const rows = Array.isArray(contextSchoolOptions) ? contextSchoolOptions : []
+    if (isSuperAdmin) return manualScope.schoolOptions || []
+    if (authHeadOfficeId != null) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
     }
+    return rows
+  }, [authHeadOfficeId, contextSchoolOptions, isSuperAdmin, manualScope.schoolOptions])
+
+  const headOfficeOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.headOffices || []
+    if (authHeadOfficeId != null) {
+      return [{ id: authHeadOfficeId, name: authHeadOfficeName || `Head Office ${authHeadOfficeId}` }]
+    }
+    return []
+  }, [authHeadOfficeId, authHeadOfficeName, isSuperAdmin, manualScope.headOffices])
+
+  const loadPageData = useCallback(async () => {
+    if (!selectedSchoolId) {
+      setPageRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError('')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      const page = await fetchEmailsPage({
+        headOfficeId: selectedHeadOfficeId || undefined,
+        schoolId: selectedSchoolId || undefined,
+        category: ABSENT_EMAIL_CATEGORY,
+        page: currentPage - 1,
+        size: rowsPerPage,
+        search,
+      })
+
+      const content = Array.isArray(page?.content) ? page.content : []
+      setPageRows(content)
+      setTotalElements(Number(page?.totalElements ?? content.length) || 0)
+      setTotalPages(Math.max(1, Number(page?.totalPages ?? 1) || 1))
+    } catch (err) {
+      setPageRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      setError(err?.message || 'Failed to load absent email history')
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, rowsPerPage, search, selectedHeadOfficeId, selectedSchoolId])
+
+  useEffect(() => {
+    void loadPageData()
+  }, [loadPageData])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [rowsPerPage, selectedSchoolId])
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    if (isHeadOfficeAdmin && selectedSchoolId) {
+      setActiveSchoolId(selectedSchoolId)
+    }
+  }, [isHeadOfficeAdmin, isSuperAdmin, selectedSchoolId, setActiveSchoolId])
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    if (!isSchoolSelectionEnabled && authSchoolId) {
+      setActiveSchoolId(String(authSchoolId))
+    }
+  }, [authSchoolId, isSchoolSelectionEnabled, isSuperAdmin, setActiveSchoolId])
+
+  const handlePendingFilterChange = (event) => {
+    const { id, value } = event.target
+    setPendingFilters((prev) => {
+      if (id === 'headOfficeId') return { ...prev, headOfficeId: value, schoolId: '' }
+      return { ...prev, [id]: value }
+    })
   }
 
-  const handleSelectRow = (id) => {
-    setSelectedRows((prev) =>
-      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id],
-    )
-  }
-
-  const handlePendingFilterChange = (e) => {
-    const { id, value } = e.target
-    setPendingFilters((prev) => ({ ...prev, [id]: value }))
-  }
-
-  const handleApplyFilters = (e) => {
-    e.preventDefault()
+  const handleApplyFilters = (event) => {
+    event.preventDefault()
+    if ((isSuperAdmin || isHeadOfficeAdmin) && !pendingFilters.headOfficeId) return
+    if (!pendingFilters.schoolId) return
     setFilters(pendingFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
   }
 
-  const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
-    setCurrentPage(1)
-  }
+  const exportColumns = useMemo(
+    () => columnOptions.map((column) => ({ key: column.key, label: column.label })),
+    [],
+  )
 
-  const openAdd = () => {
-    sessionStorage.removeItem(ABSENT_EMAIL_EDIT_STORAGE_KEY)
-    onNavigate('add-absent-email')
-  }
+  const mapExportRow = useCallback(
+    (row) => ({
+      schoolName: row.schoolName || '',
+      receiverType: row.receiverType || '',
+      receiver: row.receiver || '',
+      subject: row.subject || '',
+      sendDate: row.sendDate || '',
+    }),
+    [],
+  )
 
-  const openEdit = (row) => {
-    sessionStorage.setItem(ABSENT_EMAIL_EDIT_STORAGE_KEY, JSON.stringify(row))
-    onNavigate('add-absent-email')
-  }
+  const loadExportRows = useCallback(async () => {
+    if (!selectedSchoolId) return []
+    const size = Math.max(rowsPerPage, 50)
+    let pageNo = 0
+    let total = 1
+    const all = []
 
-  const handleDelete = (row) => {
-    setRows((prev) => prev.filter((item) => item.sl !== row.sl))
-    setSelectedRows((prev) => prev.filter((id) => id !== row.sl))
-  }
+    while (pageNo < total) {
+      const page = await fetchEmailsPage({
+        headOfficeId: selectedHeadOfficeId || undefined,
+        schoolId: selectedSchoolId || undefined,
+        category: ABSENT_EMAIL_CATEGORY,
+        page: pageNo,
+        size,
+        search,
+      })
+      const content = Array.isArray(page?.content) ? page.content : []
+      all.push(...content)
+      total = Number(page?.totalPages ?? 1) || 1
+      pageNo += 1
+    }
+    return all
+  }, [rowsPerPage, search, selectedHeadOfficeId, selectedSchoolId])
 
-  const getVisiblePages = () => {
-    const pages = []
-    const start = Math.max(1, currentPage - 1)
-    const end = Math.min(totalPages, start + 2)
-    for (let p = start; p <= end; p++) pages.push(p)
-    return pages
-  }
+  const resolvedPageInfo =
+    totalElements === 0
+      ? 'Showing 0 - 0 of 0 entries'
+      : `Showing ${(currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, totalElements)} of ${totalElements} entries`
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">Absent Email</h1>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Absent Email History</h1>
           <div>
-            <button
-              type="button"
-              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
-            >
+            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
             <span className="text-secondary-light"> / Absent Email</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Send Email
+        <button type="button" className="btn btn-primary-600 px-16 py-8" onClick={() => onNavigate('add-absent-email')}>
+          Settings
         </button>
       </div>
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
-            <div className="d-flex flex-wrap align-items-center gap-16">
-              <ExportDropdown onExportExcel={() => {}} onExportPDF={() => {}} />
+          <div className="d-flex align-items-start justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-start gap-16">
+              <ExportDropdown
+                title="Export"
+                rows={pageRows}
+                loadRows={loadExportRows}
+                columns={exportColumns}
+                visibleColumns={visibleColumns}
+                mapRow={mapExportRow}
+                fileName="Absent Email History"
+                sheetName="Absent Email History"
+                pdfTitle="Absent Email History"
+              />
 
               <button
                 type="button"
-                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                 onClick={() => setIsFilterSidebarOpen(true)}
               >
-                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                  Filter
-                </span>
+                <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Filter</span>
                 <span>
                   <i className="ri-arrow-right-line"></i>
                 </span>
@@ -214,13 +254,11 @@ const AbsentEmail = ({ onNavigate }) => {
               <div className="dropdown">
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   data-bs-toggle="dropdown"
                   aria-expanded="false"
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">
-                    Columns
-                  </span>
+                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Columns</span>
                   <span>
                     <i className="ri-arrow-down-s-line"></i>
                   </span>
@@ -242,30 +280,24 @@ const AbsentEmail = ({ onNavigate }) => {
                 </ul>
               </div>
 
-              <select
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              <RowsPerPageSelect
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value))
+                onChange={(value) => {
+                  setRowsPerPage(value)
                   setCurrentPage(1)
                 }}
-              >
-                {[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+              />
             </div>
 
             <div className="position-relative">
               <input
                 type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
-                placeholder="Search absent email..."
+                placeholder="Search absent email history..."
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value)
+                onChange={(event) => {
+                  setSearch(event.target.value)
                   setCurrentPage(1)
                 }}
               />
@@ -275,71 +307,54 @@ const AbsentEmail = ({ onNavigate }) => {
             </div>
           </div>
 
-          <div className="p-0 table-responsive">
-            <table className="table bordered-table mb-0 data-table" style={{ minWidth: 1000 }}>
+          {error ? (
+            <div className="px-20 pt-16">
+              <div className="alert alert-danger mb-0" role="alert">
+                {error}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="table-responsive">
+            <table className="table bordered-table mb-0 data-table w-100" style={{ tableLayout: 'auto' }}>
               <thead>
                 <tr>
-                  <th scope="col">
-                    <div className="form-check style-check d-flex align-items-center">
-                      <input type="checkbox" className="form-check-input" checked={allSelected} onChange={handleSelectAll} />
-                      <label className="form-check-label">S.L</label>
-                    </div>
-                  </th>
-                  {visibleColumns.school ? <th scope="col">School</th> : null}
+                  <th scope="col" style={{ width: 80 }}>S.L</th>
+                  {visibleColumns.schoolName ? <th scope="col">School</th> : null}
                   {visibleColumns.receiverType ? <th scope="col">Receiver Type</th> : null}
+                  {visibleColumns.receiver ? <th scope="col">Receiver</th> : null}
                   {visibleColumns.subject ? <th scope="col">Subject</th> : null}
                   {visibleColumns.sendDate ? <th scope="col">Send Date</th> : null}
-                  <th scope="col">Action</th>
                 </tr>
               </thead>
-
               <tbody>
-                {paginated.length === 0 ? (
+                {!selectedSchoolId ? (
                   <tr>
-                    <td colSpan={visibleColumnCount} className="text-center py-40 text-secondary-light">
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      Select a school in Filter to view absent email history.
+                    </td>
+                  </tr>
+                ) : loading ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
                       No absent emails found.
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((row) => (
-                    <tr key={row.sl}>
-                      <td>
-                        <div className="form-check style-check d-flex align-items-center">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={selectedRows.includes(row.sl)}
-                            onChange={() => handleSelectRow(row.sl)}
-                          />
-                          <label className="form-check-label">{row.sl}</label>
-                        </div>
-                      </td>
-                      {visibleColumns.school ? <td>{row.school}</td> : null}
-                      {visibleColumns.receiverType ? <td>{row.receiverType}</td> : null}
-                      {visibleColumns.subject ? (
-                        <td className="fw-medium text-primary-light">{row.subject}</td>
-                      ) : null}
-                      {visibleColumns.sendDate ? <td>{row.sendDate}</td> : null}
-                      <td>
-                        <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={() => handleDelete(row)}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      </td>
+                  pageRows.map((row, idx) => (
+                    <tr key={row.id ?? `${idx}`}>
+                      <td className="fw-medium text-secondary-light">{(currentPage - 1) * rowsPerPage + idx + 1}</td>
+                      {visibleColumns.schoolName ? <td>{row.schoolName || '-'}</td> : null}
+                      {visibleColumns.receiverType ? <td>{row.receiverType || '-'}</td> : null}
+                      {visibleColumns.receiver ? <td>{row.receiver || '-'}</td> : null}
+                      {visibleColumns.subject ? <td>{row.subject || '-'}</td> : null}
+                      {visibleColumns.sendDate ? <td>{row.sendDate || '-'}</td> : null}
                     </tr>
                   ))
                 )}
@@ -347,41 +362,14 @@ const AbsentEmail = ({ onNavigate }) => {
             </table>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-16 border-top border-neutral-200">
-            <span className="text-sm text-secondary-light">
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
-              {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
-            </span>
-
-            <div className="d-flex align-items-center gap-8">
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              {getVisiblePages().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === currentPage ? 'btn btn-sm btn-primary-600' : 'btn btn-sm btn-light border'}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="btn btn-sm btn-light border"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            paginationProps={{
+              currentPage,
+              totalPages,
+              setCurrentPage,
+              pageInfo: resolvedPageInfo,
+            }}
+          />
         </div>
       </div>
 
@@ -392,57 +380,63 @@ const AbsentEmail = ({ onNavigate }) => {
         className="filter-sidebar"
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School
+          {(isSuperAdmin || isHeadOfficeAdmin) ? (
+            <div className="full">
+              <label htmlFor="headOfficeId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                Head Office <span className="text-danger-600">*</span>
+              </label>
+              <select
+                id="headOfficeId"
+                className="form-control form-select"
+                value={pendingFilters.headOfficeId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="">--Select Head Office--</option>
+                {headOfficeOptions.map((row) => (
+                  <option key={String(row?.id ?? '')} value={String(row?.id ?? '')}>
+                    {row?.name || `Head Office ${row?.id ?? ''}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div className="full">
+            <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+              School <span className="text-danger-600">*</span>
             </label>
             <select
-              id="school"
+              id="schoolId"
               className="form-control form-select"
-              value={pendingFilters.school}
+              value={pendingFilters.schoolId}
               onChange={handlePendingFilterChange}
+              disabled={!isSuperAdmin && !isHeadOfficeAdmin}
             >
-              <option value="Select">Select School</option>
-              {schoolOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
+              <option value="">--Select School--</option>
+              {scopeSchoolOptions.map((school) => {
+                const id = normalizeText(school?.id)
+                if (!id) return null
+                return (
+                  <option key={id} value={id}>
+                    {school?.schoolName || school?.name || `School ${id}`}
+                  </option>
+                )
+              })}
             </select>
           </div>
 
           <div>
-            <label
-              htmlFor="receiverType"
-              className="text-sm fw-semibold text-primary-light d-inline-block mb-8"
-            >
-              Receiver Type
-            </label>
-            <select
-              id="receiverType"
-              className="form-control form-select"
-              value={pendingFilters.receiverType}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">Select Receiver Type</option>
-              <option value="Student">Student</option>
-              <option value="Parent">Parent</option>
-              <option value="Guardian">Guardian</option>
-            </select>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="btn btn-danger-200 text-danger-600 w-100"
-            >
+            <button type="button" className="btn btn-danger-200 text-danger-600 w-100" onClick={() => setPendingFilters(buildDefaultFilters())}>
               Reset
             </button>
           </div>
 
           <div>
-            <button type="submit" className="btn btn-primary-600 w-100">
+            <button
+              type="submit"
+              className="btn btn-primary-600 w-100"
+              disabled={(isSuperAdmin || isHeadOfficeAdmin) ? !pendingFilters.headOfficeId || !pendingFilters.schoolId : !pendingFilters.schoolId}
+            >
               Apply
             </button>
           </div>

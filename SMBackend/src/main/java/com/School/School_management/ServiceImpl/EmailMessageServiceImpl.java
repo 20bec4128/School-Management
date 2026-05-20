@@ -25,18 +25,18 @@ public class EmailMessageServiceImpl implements EmailMessageService {
     private EmailMessageDispatchService dispatchService;
 
     @Override
-    public List<EmailMessageDto> list(Long headOfficeId, Long schoolId) {
-        return repository.findByScope(headOfficeId, schoolId)
+    public List<EmailMessageDto> list(Long headOfficeId, Long schoolId, String category) {
+        return repository.findByScope(headOfficeId, schoolId, category)
                 .stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public Page<EmailMessageDto> listPaginated(Long headOfficeId, Long schoolId, int page, int size, String search) {
+    public Page<EmailMessageDto> listPaginated(Long headOfficeId, Long schoolId, String category, int page, int size, String search) {
         String cleanSearch = search != null ? search.trim() : "";
         Pageable pageable = PageRequest.of(page, size, Sort.by("sendDate").descending().and(Sort.by("id").descending()));
-        return repository.findByScopeWithSearch(headOfficeId, schoolId, cleanSearch, pageable)
+        return repository.findByScopeWithSearch(headOfficeId, schoolId, category, cleanSearch, pageable)
                 .map(this::convertToDto);
     }
 
@@ -72,6 +72,7 @@ public class EmailMessageServiceImpl implements EmailMessageService {
         existing.setSubject(dto.getSubject());
         existing.setEmailBody(dto.getEmailBody());
         if (dto.getSendDate() != null) existing.setSendDate(dto.getSendDate());
+        existing.setCategory(dto.getCategory());
         EmailMessage updated = repository.save(existing);
         return convertToDto(updated);
     }
@@ -115,6 +116,7 @@ public class EmailMessageServiceImpl implements EmailMessageService {
                 .subject(entity.getSubject())
                 .emailBody(entity.getEmailBody())
                 .sendDate(entity.getSendDate())
+                .category(entity.getCategory())
                 .build();
     }
 
@@ -129,6 +131,7 @@ public class EmailMessageServiceImpl implements EmailMessageService {
                 .subject(dto.getSubject())
                 .emailBody(dto.getEmailBody())
                 .sendDate(dto.getSendDate())
+                .category(dto.getCategory())
                 .build();
     }
 }

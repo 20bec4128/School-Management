@@ -17,6 +17,7 @@ public class EmailMessageDto {
     private String subject;
     private String emailBody;
     private LocalDate sendDate;
+    private String category;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -38,6 +39,8 @@ public class EmailMessageDto {
     public void setEmailBody(String emailBody) { this.emailBody = emailBody; }
     public LocalDate getSendDate() { return sendDate; }
     public void setSendDate(LocalDate sendDate) { this.sendDate = sendDate; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -52,6 +55,7 @@ public class EmailMessageDto {
         private String subject;
         private String emailBody;
         private LocalDate sendDate;
+        private String category;
 
         public Builder id(Long id) { this.id = id; return this; }
         public Builder headOfficeId(Long headOfficeId) { this.headOfficeId = headOfficeId; return this; }
@@ -63,6 +67,7 @@ public class EmailMessageDto {
         public Builder subject(String subject) { this.subject = subject; return this; }
         public Builder emailBody(String emailBody) { this.emailBody = emailBody; return this; }
         public Builder sendDate(LocalDate sendDate) { this.sendDate = sendDate; return this; }
+        public Builder category(String category) { this.category = category; return this; }
 
         public EmailMessageDto build() {
             EmailMessageDto dto = new EmailMessageDto();
@@ -76,6 +81,7 @@ public class EmailMessageDto {
             dto.setSubject(subject);
             dto.setEmailBody(emailBody);
             dto.setSendDate(sendDate);
+            dto.setCategory(category);
             return dto;
         }
     }

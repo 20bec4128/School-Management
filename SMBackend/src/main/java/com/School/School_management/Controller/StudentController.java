@@ -32,7 +32,8 @@ public class StudentController {
             @RequestParam(required = false) Long sectionId,
             @RequestParam(required = false) String className,
             @RequestParam(required = false) String section,
-            @RequestParam(required = false) String group) {
+            @RequestParam(required = false) String group,
+            @RequestParam(required = false) String search) {
         CurrentUser user = CurrentUserHolder.get();
         if (user != null) {
             if (user.isSchoolScoped() && user.schoolId() != null) {
@@ -42,7 +43,7 @@ public class StudentController {
                 headOfficeId = user.headOfficeId();
             }
         }
-        return ResponseEntity.ok(studentService.getAll(page, size, headOfficeId, schoolId, classId, sectionId, className, section, group));
+        return ResponseEntity.ok(studentService.getAll(page, size, headOfficeId, schoolId, classId, sectionId, className, section, group, search));
     }
 
     @PostMapping

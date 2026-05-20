@@ -4,7 +4,10 @@ import com.School.School_management.Dto.LeaveApplicationDto;
 import com.School.School_management.Service.LeaveApplicationService;
 import com.School.School_management.auth.RequirePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,6 +41,30 @@ public class LeaveApplicationController {
             @RequestParam(required = false) String status
     ) {
         return ResponseEntity.ok(leaveApplicationService.list(schoolId, status));
+    }
+
+    @GetMapping("/coverage")
+    public ResponseEntity<List<LeaveApplicationDto.Response>> coverage(
+            @RequestParam Long schoolId,
+            @RequestParam String applicantType,
+            @RequestParam LocalDate date,
+            @RequestParam String applicantIds
+    ) {
+        List<Long> ids = Arrays.stream(String.valueOf(applicantIds).split(","))
+                .map(String::trim)
+                .filter((s) -> !s.isEmpty())
+                .map((s) -> {
+                    try {
+                        return Long.parseLong(s);
+                    } catch (NumberFormatException ex) {
+                        return null;
+                    }
+                })
+                .filter((v) -> v != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(leaveApplicationService.coverage(schoolId, applicantType, date, ids));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

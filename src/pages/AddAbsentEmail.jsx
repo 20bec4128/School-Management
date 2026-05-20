@@ -1,99 +1,166 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import AbsentEmailForm from '../components/AbsentEmailForm'
+import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { absentEmailTemplateOptions } from '../constants/absentEmail'
 import {
-  ABSENT_EMAIL_EDIT_STORAGE_KEY,
-  ABSENT_EMAIL_ROWS_STORAGE_KEY,
-  absentEmailEmptyForm,
-  absentEmailReceiverOptionsMap,
-} from '../constants/absentEmail'
+  createAbsentEmailSetting,
+  fetchAbsentEmailSettings,
+  updateAbsentEmailSetting,
+} from '../apis/absentEmailSettingsApi'
 import '../assets/css/addModalShared.css'
 
-const readEditRow = () => {
-  try {
-    const raw = sessionStorage.getItem(ABSENT_EMAIL_EDIT_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
+const DEFAULT_SUBJECT = absentEmailTemplateOptions['Absent Alert Template']?.subject || 'Absent Notification for {student_name}'
+const DEFAULT_BODY =
+  absentEmailTemplateOptions['Absent Alert Template']?.emailBody ||
+  'Dear {receiver_name},\n\nThis is to inform you that {student_name} was absent on {absent_date} in {class_name} - {section_name}.\n\nRegards,\n{school_name}'
 
-const readSavedRows = () => {
-  try {
-    const raw = sessionStorage.getItem(ABSENT_EMAIL_ROWS_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
+const normalizeText = (value) => String(value ?? '').trim()
 
 const AddAbsentEmail = ({ onNavigate }) => {
-  const [initialEditRow] = useState(() => readEditRow())
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState(() => {
-    if (!initialEditRow) return absentEmailEmptyForm
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
+    schoolId: authSchoolId,
+  } = useAuth()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
 
-    const receiverOptions = absentEmailReceiverOptionsMap[initialEditRow.receiverType] || []
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
+
+  const scopeSchoolOptions = useMemo(() => {
+    const rows = Array.isArray(contextSchoolOptions) ? contextSchoolOptions : []
+    if (isSuperAdmin) return manualScope.schoolOptions || []
+    if (authHeadOfficeId != null) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+    return rows
+  }, [authHeadOfficeId, contextSchoolOptions, isSuperAdmin, manualScope.schoolOptions])
+
+  const headOfficeOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.headOffices || []
+    if (authHeadOfficeId != null) {
+      return [{ id: authHeadOfficeId, name: authHeadOfficeName || `Head Office ${authHeadOfficeId}` }]
+    }
+    return []
+  }, [authHeadOfficeId, authHeadOfficeName, isSuperAdmin, manualScope.headOffices])
+
+  const buildDefaultForm = useCallback(() => {
+    const schoolId = !isSuperAdmin && !isHeadOfficeAdmin ? String(activeSchoolId || authSchoolId || '') : ''
+    const headOfficeId =
+      isHeadOfficeAdmin || (!isSuperAdmin && authHeadOfficeId != null) ? String(authHeadOfficeId ?? '') : ''
 
     return {
-      ...absentEmailEmptyForm,
-      school: initialEditRow.school || '',
-      receiverType: initialEditRow.receiverType || '',
-      receiver: initialEditRow.receiver || receiverOptions[0] || '',
-      template: initialEditRow.template || '',
-      absentDate: initialEditRow.absentDate || initialEditRow.sendDate || '',
-      subject: initialEditRow.subject || '',
-      emailBody: initialEditRow.emailBody || '',
+      id: null,
+      headOfficeId,
+      schoolId,
+      enabled: true,
+      receiverType: 'Student',
+      subjectTemplate: DEFAULT_SUBJECT,
+      emailBodyTemplate: DEFAULT_BODY,
     }
-  })
+  }, [activeSchoolId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSuperAdmin])
 
-  const isEditing = Boolean(initialEditRow)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState(() => buildDefaultForm())
 
-  useEffect(() => () => sessionStorage.removeItem(ABSENT_EMAIL_EDIT_STORAGE_KEY), [])
+  const loadSetting = useCallback(async () => {
+    const schoolId = normalizeText(form.schoolId)
+    if (!schoolId) return
+    setLoading(true)
+    setError('')
+    try {
+      const rows = await fetchAbsentEmailSettings({
+        headOfficeId: normalizeText(form.headOfficeId) || undefined,
+        schoolId,
+      })
+      const existing = Array.isArray(rows) && rows.length > 0 ? rows[0] : null
+      if (existing?.id) {
+        setForm((prev) => ({
+          ...prev,
+          id: existing.id,
+          headOfficeId: existing.headOfficeId != null ? String(existing.headOfficeId) : prev.headOfficeId,
+          schoolId: existing.schoolId != null ? String(existing.schoolId) : prev.schoolId,
+          enabled: existing.enabled !== false,
+          receiverType: existing.receiverType || 'Student',
+          subjectTemplate: existing.subjectTemplate || DEFAULT_SUBJECT,
+          emailBodyTemplate: existing.emailBodyTemplate || DEFAULT_BODY,
+        }))
+      } else {
+        setForm((prev) => ({
+          ...prev,
+          id: null,
+          subjectTemplate: prev.subjectTemplate || DEFAULT_SUBJECT,
+          emailBodyTemplate: prev.emailBodyTemplate || DEFAULT_BODY,
+        }))
+      }
+    } catch (e) {
+      setError(e?.message || 'Failed to load absent email settings')
+    } finally {
+      setLoading(false)
+    }
+  }, [form.headOfficeId, form.schoolId])
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    void loadSetting()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.schoolId])
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setSuccess(false)
 
-    if (!form.school.trim()) return setError('School is required')
-    if (!form.receiverType.trim()) return setError('Receiver Type is required')
-    if (!form.receiver.trim()) return setError('Receiver is required')
-    if (!form.absentDate.trim()) return setError('Absent Date is required')
-    if (!form.subject.trim()) return setError('Subject is required')
-    if (!form.emailBody.trim()) return setError('Email Body is required')
+    if ((isSuperAdmin || isHeadOfficeAdmin) && !normalizeText(form.headOfficeId)) return setError('Head Office is required')
+    if (!normalizeText(form.schoolId)) return setError('School is required')
+    if (!normalizeText(form.subjectTemplate)) return setError('Subject template is required')
+    if (!normalizeText(form.emailBodyTemplate)) return setError('Email body template is required')
 
-    const existingRows = readSavedRows()
-    const nextRow = {
-      sl: isEditing ? initialEditRow.sl : String(existingRows.length + 1).padStart(2, '0'),
-      school: form.school,
-      receiverType: form.receiverType,
-      subject: form.subject,
-      sendDate: form.absentDate,
-      receiver: form.receiver,
-      template: form.template,
-      emailBody: form.emailBody,
-      absentDate: form.absentDate,
+    setSaving(true)
+    try {
+      const payload = {
+        headOfficeId: normalizeText(form.headOfficeId) ? Number(form.headOfficeId) : null,
+        schoolId: Number(form.schoolId),
+        enabled: Boolean(form.enabled),
+        receiverType: 'Student',
+        subjectTemplate: form.subjectTemplate,
+        emailBodyTemplate: form.emailBodyTemplate,
+      }
+
+      if (form.id) {
+        await updateAbsentEmailSetting(form.id, payload)
+      } else {
+        const created = await createAbsentEmailSetting(payload)
+        if (created?.id) {
+          setForm((prev) => ({ ...prev, id: created.id }))
+        }
+      }
+
+      setSuccess(true)
+      setTimeout(() => onNavigate('absent-email'), 700)
+    } catch (err) {
+      setError(err?.message || 'Failed to save absent email settings')
+    } finally {
+      setSaving(false)
     }
-
-    const nextRows = isEditing
-      ? existingRows.map((row) => (row.sl === initialEditRow.sl ? nextRow : row))
-      : [...existingRows, nextRow]
-
-    sessionStorage.setItem(ABSENT_EMAIL_ROWS_STORAGE_KEY, JSON.stringify(nextRows))
-    setSuccess(true)
-    setTimeout(() => onNavigate('absent-email'), 1000)
   }
 
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
-          <h1 className="fw-semibold mb-4 h6 text-primary-light">{isEditing ? 'Edit' : 'Add'} Absent Email</h1>
+          <h1 className="fw-semibold mb-4 h6 text-primary-light">Absent Email Settings</h1>
           <div>
             <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
               Dashboard
             </button>
-            <span className="text-secondary-light"> / {isEditing ? 'Edit' : 'Add'} Absent Email</span>
+            <span className="text-secondary-light"> / Absent Email Settings</span>
           </div>
         </div>
         <button
@@ -101,7 +168,7 @@ const AddAbsentEmail = ({ onNavigate }) => {
           className="btn btn-light border px-20 d-flex align-items-center gap-6"
           onClick={() => onNavigate('absent-email')}
         >
-          <i className="ri-arrow-left-line"></i> Back to List
+          <i className="ri-arrow-left-line"></i> Back to History
         </button>
       </div>
 
@@ -114,20 +181,31 @@ const AddAbsentEmail = ({ onNavigate }) => {
       {success ? (
         <div className="alert alert-success d-flex align-items-center gap-8" role="alert">
           <i className="ri-checkbox-circle-line"></i>
-          <span>Absent email {isEditing ? 'updated' : 'saved'} successfully! Redirecting...</span>
+          <span>Absent email settings saved successfully! Redirecting...</span>
         </div>
       ) : null}
 
       <div className="card h-100">
         <div className="card-body p-24">
-          <form onSubmit={handleSubmit}>
-            <AbsentEmailForm form={form} setForm={setForm} />
-            <div className="d-flex justify-content-end mt-24">
-              <button type="submit" className="btn btn-primary-600">
-                {isEditing ? 'Update' : 'Send'}
-              </button>
-            </div>
-          </form>
+          {loading ? (
+            <div className="text-secondary-light">Loading...</div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <AbsentEmailForm
+                form={form}
+                setForm={setForm}
+                isSuperAdmin={isSuperAdmin}
+                isHeadOfficeAdmin={isHeadOfficeAdmin}
+                headOfficeOptions={headOfficeOptions}
+                schoolOptions={scopeSchoolOptions}
+              />
+              <div className="d-flex justify-content-end mt-24">
+                <button type="submit" className="btn btn-primary-600" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>
@@ -135,3 +213,4 @@ const AddAbsentEmail = ({ onNavigate }) => {
 }
 
 export default AddAbsentEmail
+

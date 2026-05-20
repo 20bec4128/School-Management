@@ -26,6 +26,8 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     Optional<Student> findByUsernameAndDeletedFalse(String username);
 
+    Optional<Student> findBySchool_IdAndRollNoAndDeletedFalse(Long schoolId, String rollNo);
+
     List<Student> findAllBySchoolClass_IdAndSchoolSection_IdAndDeletedFalse(Long classId, Long sectionId);
     
     @Query("SELECT s FROM Student s WHERE s.deleted = false AND " +
@@ -35,7 +37,16 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "(:sectionId IS NULL OR s.schoolSection.id = :sectionId) AND " +
            "(:className IS NULL OR s.className = :className) AND " +
            "(:section IS NULL OR s.section = :section) AND " +
-           "(:groupName IS NULL OR s.groupName = :groupName)")
+           "(:groupName IS NULL OR s.groupName = :groupName) AND " +
+           "(:search IS NULL OR :search = '' OR " +
+           "LOWER(COALESCE(s.name, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.admissionNo, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.rollNo, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.phone, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.email, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.className, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.section, '')) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(COALESCE(s.groupName, '')) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<Student> searchStudents(@Param("headOfficeId") Long headOfficeId,
                                   @Param("schoolId") Long schoolId,
                                   @Param("classId") Long classId,
@@ -43,5 +54,6 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
                                   @Param("className") String className,
                                   @Param("section") String section,
                                   @Param("groupName") String groupName,
+                                  @Param("search") String search,
                                   Pageable pageable);
 }
