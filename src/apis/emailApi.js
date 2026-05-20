@@ -1,9 +1,10 @@
 import apiClient from './apiClient'
 
-export const fetchEmails = async ({ headOfficeId, schoolId } = {}) => {
+export const fetchEmails = async ({ headOfficeId, schoolId, category } = {}) => {
   const params = new URLSearchParams()
   if (headOfficeId != null && String(headOfficeId).trim() !== '') params.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') params.set('schoolId', String(schoolId))
+  if (category != null && String(category).trim() !== '') params.set('category', String(category).trim())
 
   const query = params.toString()
   const url = query ? `/api/emails?${query}` : '/api/emails'
@@ -11,7 +12,7 @@ export const fetchEmails = async ({ headOfficeId, schoolId } = {}) => {
   return data
 }
 
-export const fetchEmailsPage = async ({ headOfficeId, schoolId, page = 0, size = 10, search = '' } = {}) => {
+export const fetchEmailsPage = async ({ headOfficeId, schoolId, category, page = 0, size = 10, search = '' } = {}) => {
   const params = {
     page: String(page),
     size: String(size),
@@ -19,6 +20,7 @@ export const fetchEmailsPage = async ({ headOfficeId, schoolId, page = 0, size =
   if (search != null && String(search).trim() !== '') params.search = String(search).trim()
   if (headOfficeId != null && String(headOfficeId).trim() !== '') params.headOfficeId = String(headOfficeId)
   if (schoolId != null && String(schoolId).trim() !== '') params.schoolId = String(schoolId)
+  if (category != null && String(category).trim() !== '') params.category = String(category).trim()
 
   const { data } = await apiClient.get('/api/emails/page', { params })
   return data

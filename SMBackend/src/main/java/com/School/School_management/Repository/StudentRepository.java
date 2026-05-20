@@ -26,6 +26,8 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     Optional<Student> findByUsernameAndDeletedFalse(String username);
 
+    Optional<Student> findBySchool_IdAndRollNoAndDeletedFalse(Long schoolId, String rollNo);
+
     List<Student> findAllBySchoolClass_IdAndSchoolSection_IdAndDeletedFalse(Long classId, Long sectionId);
     
     @Query("SELECT s FROM Student s WHERE s.deleted = false AND " +

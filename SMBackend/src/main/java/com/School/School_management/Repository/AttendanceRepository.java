@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
@@ -53,4 +54,20 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                                                  @Param("subjectName") String subjectName,
                                                  @Param("search") String search,
                                                  Pageable pageable);
+
+    @Query("SELECT a FROM Attendance a WHERE " +
+            "a.schoolId = :schoolId AND " +
+            "a.examTerm = :examTerm AND " +
+            "a.className = :className AND " +
+            "((:sectionName IS NULL AND a.sectionName IS NULL) OR a.sectionName = :sectionName) AND " +
+            "a.subjectName = :subjectName AND " +
+            "a.rollNo = :rollNo AND " +
+            "a.attendanceDate = :attendanceDate")
+    Optional<Attendance> findExistingAttendance(@Param("schoolId") Long schoolId,
+                                                @Param("examTerm") String examTerm,
+                                                @Param("className") String className,
+                                                @Param("sectionName") String sectionName,
+                                                @Param("subjectName") String subjectName,
+                                                @Param("rollNo") String rollNo,
+                                                @Param("attendanceDate") java.time.LocalDate attendanceDate);
 }

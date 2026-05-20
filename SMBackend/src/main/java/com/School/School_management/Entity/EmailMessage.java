@@ -43,6 +43,9 @@ public class EmailMessage {
     @Column(name = "send_date", nullable = false)
     private LocalDate sendDate;
 
+    @Column(name = "category")
+    private String category;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -83,6 +86,8 @@ public class EmailMessage {
     public void setEmailBody(String emailBody) { this.emailBody = emailBody; }
     public LocalDate getSendDate() { return sendDate; }
     public void setSendDate(LocalDate sendDate) { this.sendDate = sendDate; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
@@ -101,6 +106,7 @@ public class EmailMessage {
         private String subject;
         private String emailBody;
         private LocalDate sendDate;
+        private String category;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
 
@@ -114,6 +120,7 @@ public class EmailMessage {
         public Builder subject(String subject) { this.subject = subject; return this; }
         public Builder emailBody(String emailBody) { this.emailBody = emailBody; return this; }
         public Builder sendDate(LocalDate sendDate) { this.sendDate = sendDate; return this; }
+        public Builder category(String category) { this.category = category; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
         public Builder updatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; return this; }
 
@@ -129,6 +136,7 @@ public class EmailMessage {
             entity.setSubject(subject);
             entity.setEmailBody(emailBody);
             entity.setSendDate(sendDate);
+            entity.setCategory(category);
             entity.setCreatedAt(createdAt);
             entity.setUpdatedAt(updatedAt);
             return entity;
