@@ -1,9 +1,6 @@
-
 import React, { useState, useEffect } from "react";
 import "../css/sidebar.css";
 import { useSidebar } from "../context/SidebarContext";
-import { can } from "../utils/permissions";
-import { canManageUsers } from "../utils/editableRoles";
 import { normalizeRole } from "../utils/roles";
 import { useAuth } from "../context/useAuth";
 
@@ -109,10 +106,10 @@ const menuSections = [
   },
 
   {
-    title: "Front Office",
+    title: "Office Services",
     items: [
       {
-        title: "Front Office",
+        title: "Visitor Management",
         icon: "ri:building-4-line",
         submenu: [
           { label: "Visitor Purpose", href: "#", page: "visitor-purpose" },
@@ -505,7 +502,12 @@ const menuSections = [
         title: "Inventory",
         icon: "ri:box-3-line",
         submenu: [
-          { label: "Supplier", href: "#", page: "supplier", perm: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"] },
+          {
+            label: "Supplier",
+            href: "#",
+            page: "supplier",
+            perm: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
+          },
           { label: "Warehouse", href: "#", page: "warehouse" },
           { label: "Category", href: "#", page: "category" },
           { label: "Product", href: "#", page: "product" },
@@ -595,7 +597,7 @@ const menuSections = [
         icon: "ri:more-2-line",
         submenu: [
           { label: "Manage Award", href: "#", page: "manage-award" },
-          { label: "Todo", href: "#", page: "manage-todo" },  
+          { label: "Todo", href: "#", page: "manage-todo" },
           { label: "FAQ", href: "#", page: "faq" },
         ],
       },
@@ -610,6 +612,7 @@ const menuSections = [
             href: "#",
             page: "subscription-settings",
           },
+          { label: "General Settings", href: "#", page: "general-settings" },
           {
             label: "Subscription Plans",
             href: "#",
@@ -640,145 +643,17 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
 
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
 
-  const isStudent = role === "STUDENT";
-  const isSchoolAdmin = role === "SCHOOL_ADMIN";
-  const isTeacher = role === "TEACHER";
-  const isSuperAdmin = role === "SUPER_ADMIN";
-
-  const studentAllowedPages = new Set([
-    "dashboard",
-    "student-dashboard",
-    "class-routine",
-    "subject",
-    "syllabus",
-    "study-material",
-    "live-class",
-    "assignment",
-    "add-question-bank",
-    "submission",
-    "lesson",
-    "topic",
-    "lesson-timeline",
-    "lesson-status",
-    "lesson-plan",
-  ]);
-
-  const schoolAdminAllowedPages = new Set([
-    "dashboard",
-    "school-admin-dashboard",
-    "teacher-department",
-    "user-role-acl",
-    "academic-year",
-    "class",
-    "section",
-    "subject",
-    "manage-teacher",
-    "student-list",
-    "student-type",
-    "online-admission",
-    "student-activity",
-    "syllabus",
-    "study-material",
-    "live-class",
-    "assignment",
-    "submission",
-    "lesson",
-    "topic",
-    "lesson-timeline",
-    "lesson-status",
-    "lesson-plan",
-    "class-routine",
-    "onlineexam",
-    "add-online-exam",
-    "manage-designation",
-    "manage-employee",
-    "leave-type",
-    "leave-application",
-    "waiting-application",
-    "approved-application",
-    "declined-application",
-    "vendor",
-    "asset-store",
-    "asset-category",
-    "asset-item",
-    "asset-purchase",
-    "asset-issue",
-    "asset-return",
-    "asset-report",
-    "book",
-    "books-list",
-    "book-create",
-    "library-members",
-    "library-issue-return",
-    "issue-return",
-    "ebook",
-    "add-purchase",
-    "add-issue",
-    "add-vendor",
-    "payroll-report",
-    "salary-grade",
-    "add-salary-grade",
-    "expenditure",
-    "add-expenditure",
-    "add-bulk-invoice",
-  ]);
-
-  const teacherVisiblePages = new Set([
-    "teacher-dashboard",
-    "student-type",
-    "student-list",
-    "online-admission",
-    "class",
-    "section",
-    "subject",
-    "syllabus",
-    "study-material",
-    "live-class",
-    "assignment",
-    "submission",
-    "lesson",
-    "topic",
-    "lesson-timeline",
-    "lesson-status",
-    "lesson-plan",
-    "class-routine",
-    "leave-application",
-  ]);
-
-  const parentVisiblePages = new Set([
-    "parent-dashboard",
-    "dashboard",
-    "class-routine",
-    "student-attendance",
-    "exam-result",
-    "mark-sheet",
-    "result-card",
-    "fee-collection",
-    "add-fee-collection",
-    "subject",
-    "syllabus",
-    "study-material",
-    "live-class",
-    "assignment",
-    "submission",
-    "lesson",
-    "topic",
-    "lesson-timeline",
-    "lesson-status",
-    "lesson-plan",
-  ]);
-
-  const canOpenPage = () => true;
-
-  const canOpenUserRoles = () => true;
-
   const filteredSections = menuSections.map((section) => ({
     ...section,
     items: (Array.isArray(section.items) ? section.items : []).map((item) => ({
       ...item,
-      submenu: Array.isArray(item.submenu) ? item.submenu.map((sub) => ({ ...sub })) : item.submenu,
+      submenu: Array.isArray(item.submenu)
+        ? item.submenu.map((sub) => ({ ...sub }))
+        : item.submenu,
     })),
   }));
+
+  const canOpenUserRoles = () => true;
 
   const buildOpenKey = (sectionIndex, itemIndex) =>
     `${sectionIndex}-${itemIndex}`;
@@ -789,11 +664,10 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       for (let ii = 0; ii < section.items.length; ii++) {
         const item = section.items[ii];
         if (Array.isArray(item.submenu)) {
-          if (
-            item.submenu.some((sub) => sub.page && sub.page === currentPage)
-          ) {
-            return buildOpenKey(si, ii);
-          }
+          const isActiveChild = item.submenu.some(
+            (sub) => sub.page && sub.page === currentPage,
+          );
+          if (isActiveChild) return buildOpenKey(si, ii);
         }
       }
     }
@@ -804,9 +678,19 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
 
   useEffect(() => {
     const activeKey = findActiveKey();
-    if (activeKey) setOpenKey(activeKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+    if (!isCollapsed && activeKey) {
+      setOpenKey(activeKey);
+    }
+  }, [currentPage, isCollapsed]);
+
+  useEffect(() => {
+    if (isCollapsed) {
+      setOpenKey(null);
+    } else {
+      const activeKey = findActiveKey();
+      if (activeKey) setOpenKey(activeKey);
+    }
+  }, [isCollapsed]);
 
   const handleDropdownToggle = (key) => {
     setOpenKey((prev) => (prev === key ? null : key));
@@ -817,6 +701,30 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     e.stopPropagation();
     if (onNavigate) onNavigate(page);
     closeSidebar();
+  };
+
+  // IMPROVED: robust top clamping that keeps flyout fully inside viewport
+  const handleMenuItemMouseEnter = (e, subCount = 0) => {
+    if (!isCollapsed) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const flyoutHeight = Math.min(
+      window.innerHeight - 24,
+      Math.max(52, 48 + subCount * 36),
+    );
+    // ideal top = align with menu item's top edge
+    let top = rect.top;
+    // clamp to not go off screen top or bottom
+    top = Math.max(8, top);
+    const maxAllowedTop = window.innerHeight - flyoutHeight - 8;
+    top = Math.min(top, maxAllowedTop);
+    const maxHeight = Math.min(
+      window.innerHeight - top - 12,
+      flyoutHeight + 20,
+    );
+
+    e.currentTarget.style.setProperty("--flyout-top", `${top}px`);
+    e.currentTarget.style.setProperty("--flyout-max-height", `${maxHeight}px`);
   };
 
   const sidebarClass = [
@@ -840,8 +748,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
           <iconify-icon icon="ri:close-line"></iconify-icon>
         </button>
 
-        <div>
-          <div className="sidebar-logo d-flex align-items-center justify-content-between">
+        <div className="sidebar-logo d-flex align-items-center justify-content-between">
             <a href="#" className="sidebar-logo__brand">
               <img
                 src={generalSettings?.brandLogo || "/assets/images/logo.png"}
@@ -850,37 +757,56 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                 style={{ maxHeight: "36px", objectFit: "contain" }}
               />
               <img
-                src={generalSettings?.brandLogo || "/assets/images/logo-light.png"}
+                src={
+                  generalSettings?.brandLogo || "/assets/images/logo-light.png"
+                }
                 alt="site logo"
                 className="dark-logo"
                 style={{ maxHeight: "36px", objectFit: "contain" }}
               />
               <img
-                src={generalSettings?.faviconIcon || generalSettings?.brandLogo || "/assets/images/logo-icon.png"}
+                src={
+                  generalSettings?.faviconIcon ||
+                  generalSettings?.brandLogo ||
+                  "/assets/images/logo-icon.png"
+                }
                 alt="site logo"
                 className="logo-icon"
                 style={{ maxHeight: "36px", objectFit: "contain" }}
               />
             </a>
+
+            {/* ✅ FIX: removed 'd-xl-flex d-none' classes */}
             <button
               type="button"
-              className="sidebar-collapse-btn text-xxl d-xl-flex d-none line-height-1 text-neutral-500"
+              className="sidebar-collapse-btn text-xxl line-height-1"
               aria-label="Collapse Sidebar"
               onClick={toggleSidebar}
-            >
-              <iconify-icon icon="ri:contract-left-line"></iconify-icon>
+              >
+              <iconify-icon
+                icon={
+                  isCollapsed ? "ri:arrow-right-s-line" : "ri:arrow-left-s-line"
+                }
+              ></iconify-icon>
             </button>
-          </div>
         </div>
 
         <div className="mx-16 py-12">
           <div className="dropdown profile-dropdown">
             <button
               type="button"
-              className="profile-dropdown__button d-flex align-items-center justify-content-between p-10 w-100 overflow-hidden bg-neutral-50 radius-12"
+              className="profile-dropdown__button d-flex align-items-center justify-content-between p-10 w-100 overflow-hidden radius-12"
               data-bs-toggle="dropdown"
-              data-bs-display="static"
               aria-expanded="false"
+              onClick={(e) => {
+                if (isCollapsed) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  e.currentTarget
+                    .closest(".profile-dropdown")
+                    .querySelector(".dropdown-menu")
+                    ?.style.setProperty("--profile-top", `${rect.top}px`);
+                }
+              }}
             >
               <span className="d-flex align-items-start gap-10">
                 <img
@@ -889,28 +815,37 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   className="w-40-px h-40-px rounded-circle object-fit-cover flex-shrink-0"
                 />
                 <span className="profile-dropdown__contents">
-                  <span className="h6 mb-0 text-md d-block text-primary-light">
+                  <span
+                    className="h6 mb-0 text-md d-block"
+                    style={{ color: "#e2e8f0" }}
+                  >
                     {username}
                   </span>
                   {role ? (
-                    <span className="text-secondary-light text-sm mb-0 d-block">
+                    <span
+                      className="text-sm mb-0 d-block"
+                      style={{ color: "#8fa3c0" }}
+                    >
                       {role}
                     </span>
                   ) : null}
                 </span>
               </span>
-              <span className="profile-dropdown__icon pe-8 text-xl d-flex line-height-1">
+              <span
+                className="profile-dropdown__icon pe-8 text-xl d-flex line-height-1"
+                style={{ color: "#6b7fa3" }}
+              >
                 <iconify-icon icon="ri:arrow-right-s-line"></iconify-icon>
               </span>
             </button>
-
-            <ul className="dropdown-menu dropdown-menu-lg-end border p-12">
+            <ul className="dropdown-menu border p-12">
               <li>
                 <a
                   href="#"
                   className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
                 >
-                  <iconify-icon icon="ri:user-3-line"></iconify-icon> My Profile
+                  <iconify-icon icon="ri:user-3-line"></iconify-icon>
+                  My Profile
                 </a>
               </li>
               <li>
@@ -918,7 +853,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   href="#"
                   className="dropdown-item rounded text-secondary-light bg-hover-neutral-200 text-hover-neutral-900 d-flex align-items-center gap-2 py-6"
                 >
-                  <iconify-icon icon="ri:settings-3-line"></iconify-icon>{" "}
+                  <iconify-icon icon="ri:settings-3-line"></iconify-icon>
                   Setting
                 </a>
               </li>
@@ -931,7 +866,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                     onLogout?.();
                   }}
                 >
-                  <iconify-icon icon="ri:shut-down-line"></iconify-icon> Log Out
+                  <iconify-icon icon="ri:shut-down-line"></iconify-icon>
+                  Log Out
                 </a>
               </li>
             </ul>
@@ -944,7 +880,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
               <React.Fragment key={sectionIndex}>
                 {section.title ? (
                   <li
-                    className={`sidebar-menu-group-title ${isCollapsed ? "hidden" : ""}`}
+                    className={`sidebar-menu-group-title ${
+                      isCollapsed ? "hidden" : ""
+                    }`}
                   >
                     {section.title}
                   </li>
@@ -957,6 +895,14 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   const isOpenDropdown = hasSubmenu && openKey === key;
                   const isItemActive = item.page && item.page === currentPage;
 
+                  const filteredSubs = hasSubmenu
+                    ? item.submenu.filter((sub) => {
+                        if (sub?.page === "user-role-acl")
+                          return canOpenUserRoles();
+                        return true;
+                      })
+                    : [];
+
                   return (
                     <li
                       key={itemIndex}
@@ -967,6 +913,12 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                       ]
                         .filter(Boolean)
                         .join(" ")}
+                      onMouseEnter={
+                        isCollapsed
+                          ? (e) =>
+                              handleMenuItemMouseEnter(e, filteredSubs.length)
+                          : undefined
+                      }
                     >
                       <a
                         href={item.href || "#"}
@@ -974,8 +926,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                         onClick={(e) => {
                           e.preventDefault();
                           if (hasSubmenu) {
-                            handleDropdownToggle(key);
-                            if (item.page && onNavigate) onNavigate(item.page);
+                            if (!isCollapsed) handleDropdownToggle(key);
                           } else if (item.page) {
                             handleNavClick(e, item.page);
                           }
@@ -996,36 +947,69 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
 
                       {hasSubmenu ? (
                         <ul className="sidebar-submenu">
-                          {item.submenu
-                            .filter((sub) => {
-                              if (sub?.page === "user-role-acl")
-                                return canOpenUserRoles();
-                              return true;
-                            })
-                            .map((sub, subIndex) => (
-                              <li key={subIndex}>
-                                <a
-                                  href={sub.href}
-                                  className={
-                                    sub.page && sub.page === currentPage
-                                      ? "active-page"
-                                      : ""
-                                  }
-                                  onClick={(e) => {
-                                    if (sub.page) handleNavClick(e, sub.page);
-                                  }}
-                                >
-                                  <iconify-icon
-                                    icon="ri:circle-fill"
-                                    className="circle-icon w-auto"
-                                    style={{ fontSize: "6px" }}
-                                  ></iconify-icon>
-                                  <span>{sub.label}</span>
-                                </a>
-                              </li>
-                            ))}
+                          {filteredSubs.map((sub, subIndex) => (
+                            <li key={subIndex}>
+                              <a
+                                href={sub.href || "#"}
+                                className={
+                                  sub.page && sub.page === currentPage
+                                    ? "active-page"
+                                    : ""
+                                }
+                                onClick={(e) => {
+                                  if (sub.page) handleNavClick(e, sub.page);
+                                }}
+                              >
+                                <span>{sub.label}</span>
+                              </a>
+                            </li>
+                          ))}
                         </ul>
                       ) : null}
+
+                      {isCollapsed && (
+                        <div
+                          className={`sidebar-flyout${
+                            !hasSubmenu ? " flyout-leaf" : ""
+                          }`}
+                        >
+                          {hasSubmenu ? (
+                            <span className="flyout-title flyout-title-highlight">
+                              {item.title}
+                            </span>
+                          ) : (
+                            <a
+                              href={item.href || "#"}
+                              className={`flyout-title flyout-title-clickable ${
+                                item.page && item.page === currentPage
+                                  ? "active-page"
+                                  : ""
+                              }`}
+                              onClick={(e) => {
+                                if (item.page) handleNavClick(e, item.page);
+                              }}
+                            >
+                              {item.title}
+                            </a>
+                          )}
+                          {filteredSubs.map((sub, subIndex) => (
+                            <a
+                              key={subIndex}
+                              href={sub.href || "#"}
+                              className={`flyout-link ${
+                                sub.page && sub.page === currentPage
+                                  ? "active-page"
+                                  : ""
+                              }`}
+                              onClick={(e) => {
+                                if (sub.page) handleNavClick(e, sub.page);
+                              }}
+                            >
+                              {sub.label}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </li>
                   );
                 })}
