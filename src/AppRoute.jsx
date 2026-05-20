@@ -58,8 +58,10 @@ import CertificateType from "./pages/CertificateType";
 import CertificateTypeCreate from "./pages/CertificateTypeCreate";
 import GenerateCertificate from "./pages/GenerateCertificate";
 import Candidate from "./pages/Candidate";
+import CandidateCreate from "./pages/CandidateCreate";
 import Donar from "./pages/Donar";
 import Scholarship from "./pages/Scholarship";
+import AddScholarship from "./pages/AddScholarship";
 import Guardian from "./pages/Guardian";
 import AddGuardian from "./pages/AddGuardian";
 import Class from "./pages/Class";
@@ -334,8 +336,10 @@ const routeEntries = [
   { pageKey: "certificate-type-create", component: CertificateTypeCreate },
   { pageKey: "generate-certificate", component: GenerateCertificate },
   { pageKey: "candidate", component: Candidate },
+  { pageKey: "candidate-create", component: CandidateCreate },
   { pageKey: "donar", component: Donar },
   { pageKey: "scholarship", component: Scholarship },
+  { pageKey: "add-scholarship", component: AddScholarship },
   { pageKey: "guardian", component: Guardian },
   { pageKey: "add-guardian", component: AddGuardian },
   { pageKey: "class", component: Class },
@@ -579,8 +583,10 @@ const routeEntries = [
   { pageKey: "certificate-type-create", component: CertificateTypeCreate },
   { pageKey: "generate-certificate", component: GenerateCertificate },
   { pageKey: "candidate", component: Candidate },
+  { pageKey: "candidate-create", component: CandidateCreate },
   { pageKey: "donar", component: Donar },
   { pageKey: "scholarship", component: Scholarship },
+  { pageKey: "add-scholarship", component: AddScholarship },
   { pageKey: "guardian", component: Guardian },
   { pageKey: "class", component: Class },
   { pageKey: "section", component: Section },

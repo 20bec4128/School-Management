@@ -108,7 +108,9 @@ const formatAmount = (value) => {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n)
 }
 
-const Scholarship = () => {
+const EDIT_STORAGE_KEY = 'edit-scholarship-row'
+
+const Scholarship = ({ onNavigate } = {}) => {
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -300,28 +302,17 @@ const Scholarship = () => {
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStudentOptions([])
-    setAddStep(0)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    onNavigate?.('add-scholarship')
   }
 
   const openEdit = (row) => {
-    const school = getSchoolById(schoolsLookup, row?.schoolId)
-    setEditingId(row?.id ?? null)
-    setEditForm({
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : '',
-      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-      classId: row?.classId != null ? String(row.classId) : '',
-      sectionId: row?.sectionId != null ? String(row.sectionId) : '',
-      studentId: row?.studentId != null ? String(row.studentId) : '',
-      amount: row?.amount != null ? String(row.amount) : '',
-      paymentDate: row?.paymentDate ? String(row.paymentDate) : '',
-      note: row?.note || '',
-    })
-    setEditStudentOptions([])
-    setEditStep(0)
-    setIsEditOpen(true)
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    } catch {}
+    onNavigate?.('add-scholarship')
   }
 
   const handleCreate = async () => {

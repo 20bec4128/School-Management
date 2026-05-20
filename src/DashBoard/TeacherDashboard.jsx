@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { DonutChart } from '../components/SimpleCharts'
 
 const TEACHER_STATS = [
   { bg: 'bg-purple-100', border: 'border-purple-300', iconBg: 'bg-purple-200', icon: '/assets/images/icons/teacher-widget-icon1.png', label: 'Total Students', value: '3,500' },
@@ -8,10 +9,10 @@ const TEACHER_STATS = [
 ]
 
 const ATTENDANCE_ITEMS = [
-  { dotClass: 'bg-primary-600', count: '200', label: 'Present' },
-  { dotClass: 'bg-warning-600', count: '300', label: 'Half Day' },
-  { dotClass: 'bg-success', count: '172', label: 'Late' },
-  { dotClass: 'bg-purple', count: '500', label: 'Absent' },
+  { dotClass: 'bg-primary-600', count: '200', label: 'Present', value: 200, color: '#487FFF' },
+  { dotClass: 'bg-warning-600', count: '300', label: 'Half Day', value: 300, color: '#FF9F29' },
+  { dotClass: 'bg-success', count: '172', label: 'Late', value: 172, color: '#45B369' },
+  { dotClass: 'bg-purple', count: '500', label: 'Absent', value: 500, color: '#9935FE' },
 ]
 
 const NOTICE_BOARD = [
@@ -146,34 +147,6 @@ function TeacherProfileCard() {
 }
 
 function AttendanceCard() {
-  const chartRef = useRef(null)
-
-  useEffect(() => {
-    if (!chartRef.current) return undefined
-    const ApexCharts = window.ApexCharts || globalThis.ApexCharts
-    if (!ApexCharts) return undefined
-
-    const chart = new ApexCharts(chartRef.current, {
-      series: [200, 200, 200, 200],
-      colors: ['#487FFF', '#9935FE', '#FF9F29', '#45B369'],
-      labels: ['Total Visitors', 'Registrations', 'Total Page Views', 'Registrations'],
-      legend: { show: false },
-      chart: {
-        type: 'donut',
-        height: 270,
-        sparkline: { enabled: true },
-        margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      },
-      stroke: { width: 0 },
-      dataLabels: { enabled: false },
-      responsive: [{ breakpoint: 480, options: { chart: { width: 200 }, legend: { position: 'bottom' } } }],
-    })
-
-    chart.render()
-    return () => chart.destroy()
-  }, [])
-
   return (
     <div className="col-xxl-5">
       <div className="card radius-12 border-0 h-100">
@@ -204,7 +177,15 @@ function AttendanceCard() {
               ))}
             </div>
             <div className="text-center">
-              <div ref={chartRef} className="apexcharts-tooltip-z-none" />
+              <DonutChart
+                segments={ATTENDANCE_ITEMS}
+                size={270}
+                thickness={42}
+                showLegend={false}
+                tooltip
+                stroke="transparent"
+                strokeWidth={0}
+              />
             </div>
           </div>
         </div>

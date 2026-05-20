@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DonutChart } from '../components/SimpleCharts'
+import { loadApexCharts } from '../utils/loadApexCharts'
 
 const widgetCards = [
   { title: 'Enrolled Courses', value: '500', trend: '43,9%', trendClass: 'text-success-600', trendIcon: 'ri-arrow-left-up-line', iconBg: 'bg-primary-100', icon: '/assets/images/icons/lms-icon-1.png', gradient: '/assets/images/icons/lms-card-gradient-bg1.png', chart: 'area', color: '#487FFF' },
@@ -52,12 +54,22 @@ function useApexChart(optionsFactory, deps = []) {
 
   useEffect(() => {
     if (!ref.current) return undefined
-    const ApexCharts = window.ApexCharts || globalThis.ApexCharts
-    if (!ApexCharts) return undefined
+    let chart
+    let cancelled = false
 
-    const chart = new ApexCharts(ref.current, optionsFactory())
-    chart.render()
-    return () => chart.destroy()
+    const render = async () => {
+      const ApexCharts = await loadApexCharts()
+      if (cancelled || !ref.current || !ApexCharts) return
+
+      chart = new ApexCharts(ref.current, optionsFactory())
+      chart.render()
+    }
+
+    void render()
+    return () => {
+      cancelled = true
+      chart?.destroy()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
@@ -259,16 +271,6 @@ function UpcomingSessionsCard() {
 }
 
 function UserActivityCard() {
-  const chartRef = useApexChart(() => ({
-    series: [875, 350, 320, 340],
-    chart: { type: 'donut', height: 260, sparkline: { enabled: true } },
-    labels: ['Organic Search', 'Referrals', 'Social Media', 'Google Search'],
-    stroke: { width: 0 },
-    dataLabels: { enabled: false },
-    legend: { show: false },
-    plotOptions: { pie: { donut: { size: '70%' } } },
-  }), [])
-
   return (
     <div className="col-xl-6 col-xxl-4 col-lg-6">
       <div className="card radius-12 border-0 h-100">
@@ -286,7 +288,22 @@ function UserActivityCard() {
                 </div>
               ))}
             </div>
-            <div><div ref={chartRef} className="apexcharts-tooltip-z-none" /></div>
+            <div>
+              <DonutChart
+                segments={[
+                  { label: 'Organic Search', value: 875, color: '#487FFF' },
+                  { label: 'Referrals', value: 350, color: '#FF9F29' },
+                  { label: 'Social Media', value: 320, color: '#45B369' },
+                  { label: 'Google Search', value: 340, color: '#9935FE' },
+                ]}
+                size={260}
+                thickness={40}
+                showLegend={false}
+                tooltip
+                stroke="transparent"
+                strokeWidth={0}
+              />
+            </div>
           </div>
         </div>
       </div>

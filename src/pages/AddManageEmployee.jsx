@@ -20,7 +20,7 @@ import "../assets/css/addModalShared.css";
 const EDIT_STORAGE_KEY = "edit-employee-row";
 
 const STEPS = [
-  "School & Basic Information",
+  "School Details",
   "Address Info",
   "Academic Info",
   "Other Info",
@@ -800,8 +800,6 @@ const AddManageEmployee = ({ onNavigate }) => {
     if (activeStep === 0) {
       return (
         <>
-          <p className="avm-section-title">School & Basic Information</p>
-
           <div className="row g-20">
             {isSuperAdmin ? (
               <div className="col-12">
@@ -1051,8 +1049,6 @@ const AddManageEmployee = ({ onNavigate }) => {
     if (activeStep === 1) {
       return (
         <>
-          <p className="avm-section-title">Address Information</p>
-
           <div className="row g-20">
             <div className="col-12 avm-grid">
             <FormField label="Present Address" full>
@@ -1093,8 +1089,6 @@ const AddManageEmployee = ({ onNavigate }) => {
     if (activeStep === 2) {
       return (
         <>
-          <p className="avm-section-title">Academic Information</p>
-
           <div className="row g-20">
             <div className="col-12 avm-grid">
             <FormField label="Email">
@@ -1230,8 +1224,6 @@ const AddManageEmployee = ({ onNavigate }) => {
     if (activeStep === 3) {
       return (
         <>
-          <p className="avm-section-title">Other Information</p>
-
           <div className="row g-20">
             <div className="col-12 avm-grid">
             <FormField label="Is View on Web?">
@@ -1525,7 +1517,7 @@ const AddManageEmployee = ({ onNavigate }) => {
       breadcrumbTrail={` / Manage Employee / ${isEditMode ? "Edit" : "Add"}`}
       onDashboard={() => onNavigate?.("dashboard")}
       onBack={() => onNavigate?.("manage-employee")}
-      stepLabel={STEPS[activeStep]}
+      stepLabel=""
       error={error}
       success={success}
       successMessage={`Employee ${isEditMode ? "updated" : "created"} successfully! Redirecting...`}

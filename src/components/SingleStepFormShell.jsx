@@ -5,6 +5,9 @@ const SingleStepFormShell = ({
   onBack,
   backLabel = 'Back to List',
   stepLabel = 'Basic Information',
+  steps,
+  activeStep = 0,
+  onStepChange,
   error,
   success,
   successMessage,
@@ -40,19 +43,44 @@ const SingleStepFormShell = ({
       </div>
 
       <div className="card h-100">
-        <div className="card-header border-bottom border-neutral-200 px-20 py-0 d-flex gap-0">
-          <div
-            style={{
-              borderBottom: '2px solid var(--primary-600, #4f46e5)',
-              color: 'var(--primary-600, #4f46e5)',
-              fontWeight: 600,
-              padding: '14px 20px',
-              fontSize: '0.875rem',
-            }}
-          >
-            {stepLabel}
+        {Array.isArray(steps) && steps.length > 0 ? (
+          <div className="card-header border-bottom border-neutral-200 px-20 py-0 d-flex gap-0 scroll-x-mobile">
+            {steps.map((step, index) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => onStepChange?.(index)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: activeStep === index ? '2px solid var(--primary-600, #4f46e5)' : '2px solid transparent',
+                  color: activeStep === index ? 'var(--primary-600, #4f46e5)' : 'var(--secondary-light, #667085)',
+                  fontWeight: activeStep === index ? 600 : 400,
+                  padding: '14px 20px',
+                  cursor: onStepChange ? 'pointer' : 'default',
+                  fontSize: '0.875rem',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {step}
+              </button>
+            ))}
           </div>
-        </div>
+        ) : stepLabel ? (
+          <div className="card-header border-bottom border-neutral-200 px-20 py-0 d-flex gap-0">
+            <div
+              style={{
+                borderBottom: '2px solid var(--primary-600, #4f46e5)',
+                color: 'var(--primary-600, #4f46e5)',
+                fontWeight: 600,
+                padding: '14px 20px',
+                fontSize: '0.875rem',
+              }}
+            >
+              {stepLabel}
+            </div>
+          </div>
+        ) : null}
 
         <div className="card-body p-24">
           {error ? (

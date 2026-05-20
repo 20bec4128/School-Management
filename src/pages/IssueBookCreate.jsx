@@ -55,7 +55,7 @@ const FormField = ({ label, required, children, full = false }) => {
   const icon = FIELD_ICONS[label] || 'ri-edit-line'
   return (
     <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
+      <label className="avm-label mb-2">
         {label}
         {required && <span className="req"> *</span>}
       </label>
@@ -457,9 +457,11 @@ const IssueBookCreate = ({ onNavigate }) => {
               void handleSave()
             }}
           >
-            <div className="row g-20 mb-32">
+            {/* Added gy-4 (vertical gap) and gx-3 (horizontal gap) to the main row */}
+            <div className="row g-20 gy-4 gx-3 mb-32">
+              
               {isSuperAdmin ? (
-                <div className="col-12">
+                <div className="avm-field full">
                   <ManualScopeSelectors
                     enabled
                     headOffices={manualScope.headOffices}
@@ -484,20 +486,21 @@ const IssueBookCreate = ({ onNavigate }) => {
                     selectedSchoolId={form.schoolId}
                     onSchoolChange={handleSchoolChange}
                     schoolLabel="School"
+                    compact
                   />
                 </div>
               ) : (
                 <>
                   {isHeadOfficeAdmin ? (
-                    <div className="col-12">
-                      <FormField label="Head Office" full>
+                    <div className="col-12 mb-4">
+                      <FormField label="Head Office" required>
                         <input className="avm-input" value={selectedHeadOfficeName} disabled />
                       </FormField>
                     </div>
                   ) : null}
 
-                  <div className="col-12">
-                    <FormField label="School Name" required full>
+                  <div className="col-12 mb-4">
+                    <FormField label="School Name" required >
                       <select
                         className="avm-select"
                         value={form.schoolId}
@@ -516,7 +519,7 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </>
               )}
 
-              <div className="col-md-6">
+              <div className="col-md-6 mb-4">
                 <FormField label="Borrower Type" required>
                   <select
                     className="avm-select"
@@ -531,7 +534,7 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </FormField>
               </div>
 
-              <div className="col-md-6">
+              <div className="col-md-6 mb-4">
                 <FormField label="Book" required>
                   <select
                     className="avm-select"
@@ -551,7 +554,7 @@ const IssueBookCreate = ({ onNavigate }) => {
 
               {form.borrowerType === 'Employee' ? (
                 <>
-                  <div className="col-md-6">
+                  <div className="col-md-6 mb-4">
                     <FormField label="Borrower Role" required>
                       <select
                         className="avm-select"
@@ -575,7 +578,7 @@ const IssueBookCreate = ({ onNavigate }) => {
                     </FormField>
                   </div>
 
-                  <div className="col-md-6">
+                  <div className="col-md-6 mb-4">
                     <FormField label="Employee" required>
                       <select
                         className="avm-select"
@@ -595,7 +598,7 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </>
               ) : (
                 <>
-                  <div className="col-md-6">
+                  <div className="col-md-6 mb-4">
                     <FormField label="Class" required>
                       <select
                         className="avm-select"
@@ -619,7 +622,7 @@ const IssueBookCreate = ({ onNavigate }) => {
                     </FormField>
                   </div>
 
-                  <div className="col-md-6">
+                  <div className="col-md-6 mb-4">
                     <FormField label="Student" required>
                       <select
                         className="avm-select"
@@ -639,64 +642,8 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </>
               )}
 
-              <div className="col-12">
-                <p
-                  className="fw-semibold text-secondary-light mb-0"
-                  style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-                >
-                  Auto-filled details
-                </p>
-                <hr className="mt-4 mb-0" />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">Book ID</label>
-                <input className="form-control bg-light" readOnly value={selectedBook?.bookId || '—'} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">ISBN No</label>
-                <input className="form-control bg-light" readOnly value={selectedBook?.isbnNo || '—'} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">Language</label>
-                <input className="form-control bg-light" readOnly value={selectedBook?.language || '—'} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">Author</label>
-                <input className="form-control bg-light" readOnly value={selectedBook?.author || '—'} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">Edition</label>
-                <input className="form-control bg-light" readOnly value={selectedBook?.edition || '—'} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">Available Qty</label>
-                <input className="form-control bg-light" readOnly value={selectedBook?.quantity ?? '—'} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">{borrowerLabel} Name</label>
-                <input className="form-control bg-light" readOnly value={borrowerName} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">{borrowerLabel} ID</label>
-                <input className="form-control bg-light" readOnly value={borrowerId} />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label fw-semibold text-primary-light">
-                  {form.borrowerType === 'Employee' ? 'Role' : 'Class'}
-                </label>
-                <input className="form-control bg-light" readOnly value={borrowerContext} />
-              </div>
-
-              <div className="col-md-6">
+              {/* MOVED INPUTS UP FOR BETTER FLOW */}
+              <div className="col-md-6 mb-4">
                 <FormField label="Issue Date" required>
                   <input
                     type="date"
@@ -707,7 +654,7 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </FormField>
               </div>
 
-              <div className="col-md-6">
+              <div className="col-md-6 mb-4">
                 <FormField label="Due Date" required>
                   <input
                     type="date"
@@ -718,11 +665,11 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </FormField>
               </div>
 
-              <div className="col-12">
+              <div className="col-12 mb-4">
                 <FormField label="Note" full>
                   <textarea
                     className="avm-input avm-textarea"
-                    rows="3"
+                    rows="2"
                     placeholder="Note"
                     value={form.note}
                     onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
@@ -730,8 +677,67 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </FormField>
               </div>
 
-              <div className="col-12">
-                <label className="form-label fw-semibold text-primary-light">Book Cover</label>
+              {/* AUTO-FILLED SECTION */}
+              <div className="col-12 mt-4 mb-2">
+                <p
+                  className="fw-semibold text-secondary-light mb-0"
+                  style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                >
+                  Auto-filled details
+                </p>
+                <hr className="mt-2 mb-3" />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">Book ID</label>
+                <input className="form-control bg-light" readOnly value={selectedBook?.bookId || '—'} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">ISBN No</label>
+                <input className="form-control bg-light" readOnly value={selectedBook?.isbnNo || '—'} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">Language</label>
+                <input className="form-control bg-light" readOnly value={selectedBook?.language || '—'} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">Author</label>
+                <input className="form-control bg-light" readOnly value={selectedBook?.author || '—'} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">Edition</label>
+                <input className="form-control bg-light" readOnly value={selectedBook?.edition || '—'} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">Available Qty</label>
+                <input className="form-control bg-light" readOnly value={selectedBook?.quantity ?? '—'} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">{borrowerLabel} Name</label>
+                <input className="form-control bg-light" readOnly value={borrowerName} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">{borrowerLabel} ID</label>
+                <input className="form-control bg-light" readOnly value={borrowerId} />
+              </div>
+
+              <div className="col-md-4 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">
+                  {form.borrowerType === 'Employee' ? 'Role' : 'Class'}
+                </label>
+                <input className="form-control bg-light" readOnly value={borrowerContext} />
+              </div>
+
+              {/* IMAGES CHANGED TO SIDE-BY-SIDE */}
+              <div className="col-md-6 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">Book Cover</label>
                 <div className="d-flex align-items-center justify-content-center p-20 border rounded bg-light" style={{ minHeight: '140px' }}>
                   {selectedBookCover ? (
                     <img
@@ -748,8 +754,8 @@ const IssueBookCreate = ({ onNavigate }) => {
                 </div>
               </div>
 
-              <div className="col-12">
-                <label className="form-label fw-semibold text-primary-light">{borrowerLabel} Photo</label>
+              <div className="col-md-6 mb-3">
+                <label className="form-label fw-semibold text-primary-light mb-2">{borrowerLabel} Photo</label>
                 <div className="d-flex align-items-center justify-content-center p-20 border rounded bg-light" style={{ minHeight: '140px' }}>
                   {selectedBorrowerPhoto ? (
                     <img
@@ -767,7 +773,7 @@ const IssueBookCreate = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="d-flex justify-content-end gap-12">
+            <div className="d-flex justify-content-end gap-12 mt-4">
               <button
                 type="button"
                 className="btn btn-light border px-32"

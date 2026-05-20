@@ -419,9 +419,11 @@ const SuggestionCreate = ({ onNavigate }) => {
         <div className="card-body p-24">
           <form onSubmit={(e) => e.preventDefault()}>
             {step === 0 && (
-              <div className="row g-20">
+              <>
+                <p className="avm-section-title">{STEPS[0]}</p>
+                <div className="avm-grid">
                 {isSuperAdmin ? (
-                  <div className="col-12 mb-20">
+                  <div className="avm-field full">
                     <ManualScopeSelectors
                       enabled={isSuperAdmin}
                       headOffices={manualScope.headOffices}
@@ -456,7 +458,7 @@ const SuggestionCreate = ({ onNavigate }) => {
                 ) : (
                   <FormField label="School Name" required full>
                     <select
-                      className="form-control form-select ps-40"
+                      className="avm-select"
                       id="schoolId"
                       value={form.schoolId}
                       onChange={(e) => setForm((prev) => ({ ...prev, schoolId: e.target.value, className: '', subjectName: '', examTerm: '' }))}
@@ -475,7 +477,7 @@ const SuggestionCreate = ({ onNavigate }) => {
                 <FormField label="Title" required full>
                   <input
                     type="text"
-                    className="form-control ps-40"
+                    className="avm-input"
                     id="title"
                     placeholder="Title"
                     value={form.title}
@@ -484,7 +486,7 @@ const SuggestionCreate = ({ onNavigate }) => {
                 </FormField>
 
                 <FormField label="Exam Term" required>
-                  <select className="form-control form-select ps-40" id="examTerm" value={form.examTerm} onChange={onChange}>
+                  <select className="avm-select" id="examTerm" value={form.examTerm} onChange={onChange}>
                     <option value="">--Select--</option>
                     {examTermOptions.map((option) => (
                       <option key={option} value={option}>
@@ -495,7 +497,7 @@ const SuggestionCreate = ({ onNavigate }) => {
                 </FormField>
 
                 <FormField label="Class" required>
-                  <select className="form-control form-select ps-40" id="className" value={form.className} onChange={onChange}>
+                  <select className="avm-select" id="className" value={form.className} onChange={onChange}>
                     <option value="">--Select--</option>
                     {classOptions.map((option) => (
                       <option key={option} value={option}>
@@ -506,7 +508,7 @@ const SuggestionCreate = ({ onNavigate }) => {
                 </FormField>
 
                 <FormField label="Subject" required>
-                  <select className="form-control form-select ps-40" id="subjectName" value={form.subjectName} onChange={onChange}>
+                  <select className="avm-select" id="subjectName" value={form.subjectName} onChange={onChange}>
                     <option value="">--Select--</option>
                     {subjectOptions.map((option) => (
                       <option key={option} value={option}>
@@ -515,15 +517,18 @@ const SuggestionCreate = ({ onNavigate }) => {
                     ))}
                   </select>
                 </FormField>
-              </div>
+                </div>
+              </>
             )}
 
             {step === 1 && (
-              <div className="row g-20">
+              <>
+                <p className="avm-section-title">{STEPS[1]}</p>
+                <div className="avm-grid">
                 <FormField label="Suggestion" full noIcon>
                   <textarea
                     rows={5}
-                    className="form-control"
+                    className="avm-input avm-textarea"
                     id="suggestionText"
                     placeholder="Enter your suggestion..."
                     value={form.suggestionText}
@@ -538,12 +543,12 @@ const SuggestionCreate = ({ onNavigate }) => {
                     style={{
                       border: '2px dashed #d0d5dd',
                       borderRadius: '0.75rem',
-                      padding: '1.5rem 1.25rem',
+                      padding: '1.25rem 1rem',
                       background: '#f8fafc',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '0.75rem',
+                      gap: '0.7rem',
                       cursor: 'pointer',
                     }}
                   >
@@ -561,10 +566,10 @@ const SuggestionCreate = ({ onNavigate }) => {
                       </div>
                     ) : (
                       <>
-                        <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#e8edf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <i className="ri-upload-cloud-2-line" style={{ fontSize: '1.5rem', color: '#45597a' }}></i>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
+                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#e8edf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i className="ri-upload-cloud-2-line" style={{ fontSize: '1.5rem', color: '#45597a' }}></i>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
                           <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#45597a' }}>
                             Click to upload document
                           </p>
@@ -601,14 +606,15 @@ const SuggestionCreate = ({ onNavigate }) => {
                 <FormField label="Note" full noIcon>
                   <textarea
                     rows={3}
-                    className="form-control"
+                    className="avm-input avm-textarea"
                     id="note"
                     placeholder="Note"
                     value={form.note}
                     onChange={onChange}
                   />
                 </FormField>
-              </div>
+                </div>
+              </>
             )}
 
             <div className="d-flex justify-content-between align-items-center mt-24">

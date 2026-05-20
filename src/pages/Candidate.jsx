@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -11,23 +10,10 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchAcademicYears } from '../apis/academicYearsApi'
-import { fetchStudentsByClassSection } from '../apis/studentsApi'
 import {
-  createCandidate,
   deleteCandidate,
   fetchCandidatesPage,
-  updateCandidate,
 } from '../apis/candidatesApi'
-
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  academicYear: '',
-  classId: '',
-  sectionId: '',
-  studentId: '',
-  note: '',
-}
 
 const emptyFilters = {
   headOfficeId: 'Select',
@@ -35,17 +21,6 @@ const emptyFilters = {
   academicYear: 'Select',
   classId: 'Select',
   sectionId: 'Select',
-}
-
-const STEPS = ['Scope & Selection']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Academic Year': 'ri-calendar-line',
-  Class: 'ri-building-line',
-  Section: 'ri-layout-grid-line',
-  Student: 'ri-user-3-line',
-  Note: 'ri-sticky-note-line',
 }
 
 const columnOptions = [
@@ -56,40 +31,6 @@ const columnOptions = [
   { key: 'studentName', label: 'Student' },
   { key: 'note', label: 'Note' },
 ]
-
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
 
 const unwrapCollection = (value) => {
   if (Array.isArray(value)) return value
@@ -103,21 +44,18 @@ const sectionLabel = (row) => row?.name || row?.sectionName || ''
 const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
-const Candidate = () => {
+const Candidate = ({ onNavigate }) => {
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [sectionsLookup, setSectionsLookup] = useState([])
   const [academicYearsLookup, setAcademicYearsLookup] = useState([])
-  const [addStudentOptions, setAddStudentOptions] = useState([])
-  const [editStudentOptions, setEditStudentOptions] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
-  const [editingId, setEditingId] = useState(null)
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -126,12 +64,6 @@ const Candidate = () => {
   const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
 
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -276,65 +208,7 @@ const Candidate = () => {
     }
   }, [currentPage, totalPages])
 
-  useEffect(() => {
-    if (!isAddOpen) {
-      setAddStudentOptions([])
-      return
-    }
-    if (!addForm.schoolId || !addForm.classId || !addForm.sectionId) {
-      setAddStudentOptions([])
-      return
-    }
 
-    let cancelled = false
-    const run = async () => {
-      try {
-        const data = await fetchStudentsByClassSection({
-          schoolId: addForm.schoolId,
-          classId: addForm.classId,
-          sectionId: addForm.sectionId,
-        })
-        if (!cancelled) setAddStudentOptions(Array.isArray(data) ? data : [])
-      } catch {
-        if (!cancelled) setAddStudentOptions([])
-      }
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [addForm.classId, addForm.schoolId, addForm.sectionId, isAddOpen])
-
-  useEffect(() => {
-    if (!isEditOpen) {
-      setEditStudentOptions([])
-      return
-    }
-    if (!editForm.schoolId || !editForm.classId || !editForm.sectionId) {
-      setEditStudentOptions([])
-      return
-    }
-
-    let cancelled = false
-    const run = async () => {
-      try {
-        const data = await fetchStudentsByClassSection({
-          schoolId: editForm.schoolId,
-          classId: editForm.classId,
-          sectionId: editForm.sectionId,
-        })
-        if (!cancelled) setEditStudentOptions(Array.isArray(data) ? data : [])
-      } catch {
-        if (!cancelled) setEditStudentOptions([])
-      }
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [editForm.classId, editForm.schoolId, editForm.sectionId, isEditOpen])
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -350,23 +224,7 @@ const Candidate = () => {
     )
   }
 
-  const updateFormField = (setter, field, value) => {
-    setter((prev) => {
-      if (field === 'headOfficeId') {
-        return { ...prev, headOfficeId: value, schoolId: '', classId: '', sectionId: '', studentId: '' }
-      }
-      if (field === 'schoolId') {
-        return { ...prev, schoolId: value, classId: '', sectionId: '', studentId: '' }
-      }
-      if (field === 'classId') {
-        return { ...prev, classId: value, sectionId: '', studentId: '' }
-      }
-      if (field === 'sectionId') {
-        return { ...prev, sectionId: value, studentId: '' }
-      }
-      return { ...prev, [field]: value }
-    })
-  }
+
 
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
@@ -398,77 +256,20 @@ const Candidate = () => {
   }
 
   const openAdd = () => {
-    setError('')
-    setEditingId(null)
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem('edit-candidate-row')
+    } catch {}
+    if (typeof onNavigate === 'function') {
+      onNavigate('candidate-create')
+    }
   }
 
   const openEdit = (row) => {
-    setError('')
-    setEditingId(row?.id ?? null)
-    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
-    const selectedSchool = getSchoolById(schoolsLookup, schoolId)
-    setEditForm({
-      headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : '',
-      schoolId,
-      academicYear: row?.academicYear || '',
-      classId: row?.classId != null ? String(row.classId) : '',
-      sectionId: row?.sectionId != null ? String(row.sectionId) : '',
-      studentId: row?.studentId != null ? String(row.studentId) : '',
-      note: row?.note || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const buildPayload = (form) => ({
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    classId: form.classId ? Number(form.classId) : null,
-    sectionId: form.sectionId ? Number(form.sectionId) : null,
-    studentId: form.studentId ? Number(form.studentId) : null,
-    academicYear: form.academicYear || '',
-    note: form.note || '',
-  })
-
-  const handleCreate = async () => {
-    if (saving) return
-    setSaving(true)
-    setError('')
     try {
-      await createCandidate(buildPayload(addForm))
-      setIsAddOpen(false)
-      setAddForm(emptyForm)
-      setAddStep(0)
-      setCurrentPage(1)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to create candidate')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdate = async () => {
-    if (saving) return
-    if (!editingId) {
-      setError('No candidate selected for update')
-      return
-    }
-    setSaving(true)
-    setError('')
-    try {
-      await updateCandidate(editingId, buildPayload(editForm))
-      setIsEditOpen(false)
-      setEditForm(emptyForm)
-      setEditStep(0)
-      setEditingId(null)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to update candidate')
-    } finally {
-      setSaving(false)
+      sessionStorage.setItem('edit-candidate-row', JSON.stringify(row))
+    } catch {}
+    if (typeof onNavigate === 'function') {
+      onNavigate('candidate-create')
     }
   }
 
@@ -496,115 +297,7 @@ const Candidate = () => {
     return pages
   }
 
-  const renderForm = (form, setter, studentOptions) => {
-    const classOptions = formClassOptions(form.schoolId)
-    const sectionOptions = formSectionOptions(form.schoolId, form.classId)
 
-    return (
-      <>
-        <p className="avm-section-title">{STEPS[0]}</p>
-        <div className="avm-grid">
-          <ManualScopeSelectors
-            enabled
-            headOffices={headOffices}
-            schoolOptions={schoolOptionsFor(form.headOfficeId)}
-            selectedHeadOfficeId={form.headOfficeId}
-            onHeadOfficeChange={(value) => updateFormField(setter, 'headOfficeId', value)}
-            selectedSchoolId={form.schoolId}
-            onSchoolChange={(value) => {
-              const selectedSchool = getSchoolById(schoolsLookup, value)
-              setter((prev) => ({
-                ...prev,
-                schoolId: value,
-                headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
-                classId: '',
-                sectionId: '',
-                studentId: '',
-              }))
-            }}
-            schoolLabel="School"
-          />
-
-          <FormField label="Academic Year" required>
-            <select
-              className="avm-select"
-              id="academicYear"
-              value={form.academicYear}
-              onChange={(e) => updateFormField(setter, 'academicYear', e.target.value)}
-            >
-              <option value="">--Select--</option>
-              {academicYearOptions.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Class" required>
-            <select
-              className="avm-select"
-              id="classId"
-              value={form.classId}
-              onChange={(e) => updateFormField(setter, 'classId', e.target.value)}
-            >
-              <option value="">--Select--</option>
-              {classOptions.map((row) => (
-                <option key={row.id} value={String(row.id)}>
-                  {classLabel(row)}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Section" required>
-            <select
-              className="avm-select"
-              id="sectionId"
-              value={form.sectionId}
-              onChange={(e) => updateFormField(setter, 'sectionId', e.target.value)}
-              disabled={!form.classId}
-            >
-              <option value="">--Select--</option>
-              {sectionOptions.map((row) => (
-                <option key={row.id} value={String(row.id)}>
-                  {sectionLabel(row)}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Student" required full>
-            <select
-              className="avm-select"
-              id="studentId"
-              value={form.studentId}
-              onChange={(e) => updateFormField(setter, 'studentId', e.target.value)}
-              disabled={!form.sectionId}
-            >
-              <option value="">{form.sectionId ? '--Select--' : 'Select Section First'}</option>
-              {studentOptions.map((student) => (
-                <option key={student.id} value={String(student.id)}>
-                  {student.name || student.studentName || `Student ${student.id}`}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Note" full noIcon>
-            <textarea
-              rows={4}
-              className="avm-input avm-textarea"
-              id="note"
-              placeholder="Note"
-              value={form.note}
-              onChange={(e) => updateFormField(setter, 'note', e.target.value)}
-            />
-          </FormField>
-        </div>
-      </>
-    )
-  }
 
   const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(row.id))
 
@@ -868,35 +561,7 @@ const Candidate = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="760px"
-        open={isAddOpen}
-        title="Add Candidate"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleCreate}
-        submitLabel={saving ? 'Saving...' : 'Save'}
-      >
-        {renderForm(addForm, setAddForm, addStudentOptions)}
-      </WizardPopup>
 
-      <WizardPopup
-        modalWidth="760px"
-        open={isEditOpen}
-        title="Edit Candidate"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel={saving ? 'Saving...' : 'Update'}
-      >
-        {renderForm(editForm, setEditForm, editStudentOptions)}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}

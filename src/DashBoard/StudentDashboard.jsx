@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { DonutChart } from '../components/SimpleCharts'
 
 // ─── Static Data ────────────────────────────────────────────────────────────
 
@@ -174,32 +175,12 @@ function StudentProfileCard() {
 
 /** Attendance donut chart */
 function AttendanceCard() {
-  const chartRef = useRef(null)
-
-  useEffect(() => {
-    if (!chartRef.current) return undefined
-    const ApexCharts = window.ApexCharts || globalThis.ApexCharts
-    if (!ApexCharts) return undefined
-
-    const chart = new ApexCharts(chartRef.current, {
-      series: [200, 200, 200, 200],
-      colors: ['#487FFF', '#9935FE', '#FF9F29', '#45B369'],
-      labels: ['Total Visitors', 'Registrations', 'Total Page Views', 'Registrations'],
-      legend: { show: false },
-      chart: {
-        type: 'donut',
-        height: 270,
-        sparkline: { enabled: true },
-        margin:  { top: 0, right: 0, bottom: 0, left: 0 },
-        padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      },
-      stroke: { width: 0 },
-      dataLabels: { enabled: false },
-      responsive: [{ breakpoint: 480, options: { chart: { width: 300 }, legend: { position: 'bottom' } } }],
-    })
-    chart.render()
-    return () => chart.destroy()
-  }, [])
+  const attendanceItems = [
+    { dotClass: 'bg-success-500', count: '200', label: 'Present', value: 200, color: '#45B369' },
+    { dotClass: 'bg-info', count: '300', label: 'Half Day', value: 300, color: '#487FFF' },
+    { dotClass: 'bg-purple', count: '172', label: 'Late', value: 172, color: '#9935FE' },
+    { dotClass: 'bg-warning', count: '500', label: 'Absent', value: 500, color: '#FF9F29' },
+  ]
 
   return (
     <div className="col-xxl-4 col-lg-6">
@@ -216,17 +197,20 @@ function AttendanceCard() {
         <div className="card-body py-24">
           <div className="gap-20">
             <div className="text-center">
-              <div ref={chartRef} className="apexcharts-tooltip-z-none" />
+              <DonutChart
+                segments={attendanceItems}
+                size={270}
+                thickness={42}
+                showLegend={false}
+                tooltip
+                stroke="transparent"
+                strokeWidth={0}
+              />
             </div>
             <div className="d-flex gap-12 justify-content-around mt-24">
-              {[
-                { color: 'bg-success-500', count: '200', label: 'Present'  },
-                { color: 'bg-info',        count: '300', label: 'Half Day' },
-                { color: 'bg-purple',      count: '172', label: 'Late'     },
-                { color: 'bg-warning',     count: '500', label: 'Absent'   },
-              ].map(({ color, count, label }) => (
+              {attendanceItems.map(({ dotClass, count, label }) => (
                 <div key={label} className="d-flex align-items-start gap-8">
-                  <span className={`w-6-px h-16-px ${color} rounded-pill position-relative mt-8`} />
+                  <span className={`w-6-px h-16-px ${dotClass} rounded-pill position-relative mt-8`} />
                   <div>
                     <h6 className="mb-0">{count}</h6>
                     <p className="text-secondary-light text-sm mb-0">{label}</p>

@@ -1,7 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
-import './vendor/apexcharts.min.js'
 import './assets/css/remixicon.css'
 import './css/oldcss/lib/bootstrap.min.css'
 import './assets/css/style.css'

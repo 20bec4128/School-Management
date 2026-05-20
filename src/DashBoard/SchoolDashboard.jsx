@@ -1,50 +1,30 @@
-import { useEffect, useRef } from 'react'
-import { BarChart, StepAreaChart } from '../components/SimpleCharts'
+import { BarChart, DonutChart, StepAreaChart } from '../components/SimpleCharts'
 import MiniCalendar from '../components/MiniCalendar'
 import ProgressRing from '../components/ProgressRing'
 
 function AdmissionsDonutChart() {
-  const chartRef = useRef(null)
   const legendItems = [
-    { label: 'English', value: 15, color: 'bg-success-600' },
-    { label: 'Math', value: 15, color: 'bg-blue-600' },
-    { label: 'Biology', value: 5, color: 'bg-warning-600' },
-    { label: 'Physics', value: 10, color: 'bg-primary-600' },
+    { label: 'English', value: 15, color: '#00B341', dotClass: 'bg-success-600' },
+    { label: 'Math', value: 15, color: '#0A51CE', dotClass: 'bg-blue-600' },
+    { label: 'Biology', value: 5, color: '#FF7A2C', dotClass: 'bg-warning-600' },
+    { label: 'Physics', value: 10, color: '#25A194', dotClass: 'bg-primary-600' },
   ]
-
-  useEffect(() => {
-    if (!chartRef.current) return undefined
-    const ApexCharts = window.ApexCharts || globalThis.ApexCharts
-    if (!ApexCharts) return undefined
-
-    const chart = new ApexCharts(chartRef.current, {
-      series: [15, 15, 5, 10],
-      colors: ['#00B341', '#0A51CE', '#FF7A2C', '#25A194'],
-      labels: ['English', 'Math', 'Biology', 'Physics'],
-      legend: { show: false },
-      chart: {
-        type: 'donut',
-        height: 270,
-        sparkline: { enabled: true },
-        margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      },
-      stroke: { width: 0 },
-      dataLabels: { enabled: false },
-      responsive: [{ breakpoint: 480, options: { chart: { width: 300 }, legend: { position: 'bottom' } } }],
-    })
-
-    chart.render()
-    return () => chart.destroy()
-  }, [])
 
   return (
     <div>
-      <div ref={chartRef} className="apexcharts-tooltip-z-none" />
+      <DonutChart
+        segments={legendItems}
+        size={270}
+        thickness={42}
+        showLegend={false}
+        tooltip
+        stroke="transparent"
+        strokeWidth={0}
+      />
       <div className="d-flex flex-wrap gap-16 justify-content-center mt-20">
         {legendItems.map((item) => (
           <div key={item.label} className="d-flex align-items-center gap-8">
-            <span className={`w-8-px h-8-px rounded-circle ${item.color}`} />
+            <span className={`w-8-px h-8-px rounded-circle ${item.dotClass}`} />
             <div>
               <h6 className="mb-0 text-sm">{item.value}</h6>
               <p className="text-secondary-light text-xs mb-0">{item.label}</p>

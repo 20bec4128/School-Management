@@ -22,6 +22,7 @@ const emptyForm = {
   status: 'Active',
   adminUsername: '',
   adminPassword: '',
+  currentAdminUsername: '',
   headOfficeId: '',
   address: '',
   phone: '',
@@ -361,7 +362,8 @@ const ManageSchool = ({ onNavigate }) => {
             : isHeadOfficeScoped && currentHeadOfficeId != null
               ? String(currentHeadOfficeId)
               : '',
-        adminUsername: row.adminUsername || '',
+        adminUsername: '',
+        currentAdminUsername: row.adminUsername || '',
         frontendLogoUrl: row.frontendLogoUrl || '',
         adminLogoUrl: row.adminLogoUrl || '',
       }),
@@ -679,7 +681,13 @@ const ManageSchool = ({ onNavigate }) => {
                       placeholder="Leave blank to keep current username"
                       value={form.adminUsername || ''}
                       onChange={handleChange(setter)}
+                      autoComplete="off"
                     />
+                    {form.currentAdminUsername ? (
+                      <small className="text-secondary-light d-block mt-8">
+                        Current username: {form.currentAdminUsername}
+                      </small>
+                    ) : null}
                   </FormField>
 
                   <FormField label="School Admin Password" full>
@@ -690,6 +698,7 @@ const ManageSchool = ({ onNavigate }) => {
                       placeholder="Leave blank to keep current password"
                       value={form.adminPassword || ''}
                       onChange={handleChange(setter)}
+                      autoComplete="new-password"
                     />
                   </FormField>
                 </>

@@ -244,6 +244,7 @@ const AddSchool = ({ onNavigate }) => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [editingSchoolId, setEditingSchoolId] = useState(null);
+  const [originalAdminUsername, setOriginalAdminUsername] = useState("");
   const [phoneCode, setPhoneCode] = useState(DEFAULT_PHONE_CODE);
   const redirectTimerRef = useRef(null);
 
@@ -259,6 +260,7 @@ const AddSchool = ({ onNavigate }) => {
       if (row?.id != null) {
         const parsedPhone = splitPhoneValue(row.phone);
         setEditingSchoolId(String(row.id));
+        setOriginalAdminUsername(row.adminUsername || "");
         setPhoneCode(parsedPhone.code);
         setForm({ ...emptyForm, ...mapSchoolRowToForm({ ...row, phone: parsedPhone.number }) });
         setActiveTab(0);
@@ -369,6 +371,11 @@ const AddSchool = ({ onNavigate }) => {
       return;
     }
 
+    if (activeTab < TABS.length - 1) {
+      setActiveTab(activeTab + 1);
+      return;
+    }
+
     setLoading(true);
     try {
       const payload = {
@@ -382,8 +389,12 @@ const AddSchool = ({ onNavigate }) => {
       if (isEditing) {
         const editPayload = {
           ...payload,
-          adminUsername: form.adminUsername || "",
         };
+        if (form.adminUsername && form.adminUsername !== originalAdminUsername) {
+          editPayload.adminUsername = form.adminUsername;
+        } else {
+          delete editPayload.adminUsername;
+        }
         if (!String(form.adminPassword || "").trim()) {
           delete editPayload.adminPassword;
         }
@@ -470,7 +481,14 @@ const AddSchool = ({ onNavigate }) => {
         </div>
 
         <div className="card-body p-24">
-          <form onSubmit={handleSubmit}>
+          <form 
+            onSubmit={handleSubmit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+              }
+            }}
+          >
             {/* ═══ TAB 0 – Basic Information ═══ */}
             {activeTab === 0 && (
               <div className="row">
@@ -711,6 +729,7 @@ const AddSchool = ({ onNavigate }) => {
               <div className="d-flex align-items-center gap-10">
                 {activeTab < TABS.length - 1 ? (
                   <button
+                    key="btn-next"
                     type="button"
                     className="btn btn-primary-600 px-20"
                     onClick={() => handleTabChange(activeTab + 1)}
@@ -718,7 +737,12 @@ const AddSchool = ({ onNavigate }) => {
                     Next <i className="ri-arrow-right-line ms-6" />
                   </button>
                 ) : (
-                  <button type="submit" className="btn btn-primary-600 px-24" disabled={loading}>
+                  <button
+                    key="btn-submit"
+                    type="submit"
+                    className="btn btn-primary-600 px-24"
+                    disabled={loading}
+                  >
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-8" role="status" aria-hidden="true"></span>

@@ -410,9 +410,22 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         String nextPassword = dto.getAdminPassword() == null ? "" : dto.getAdminPassword().trim();
         if (nextUsername.isEmpty() && nextPassword.isEmpty()) return;
 
-        AdminUser admin = adminUserRepository
-                .findFirstBySchoolIdAndRoleOrderByIdAsc(school.getId(), "SCHOOL_ADMIN")
-                .orElse(null);
+        List<AdminUser> schoolAdmins = adminUserRepository
+                .findBySchoolIdAndRoleIgnoreCaseOrderByIdDesc(school.getId(), "SCHOOL_ADMIN");
+
+        AdminUser admin = schoolAdmins.isEmpty() ? null : schoolAdmins.get(0);
+
+        AdminUser usernameOwner = nextUsername.isEmpty()
+                ? null
+                : adminUserRepository.findByUsername(nextUsername).orElse(null);
+
+        if (usernameOwner != null) {
+            if (school.getId().equals(usernameOwner.getSchoolId())) {
+                admin = usernameOwner;
+            } else {
+                throw new ConflictException("Admin username already exists");
+            }
+        }
 
         if (admin == null) {
             if (nextUsername.isEmpty() || nextPassword.isEmpty()) {
@@ -424,10 +437,6 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         }
 
         if (!nextUsername.isEmpty() && !nextUsername.equalsIgnoreCase(admin.getUsername())) {
-            Long adminId = admin.getId() == null ? -1L : admin.getId();
-            if (adminUserRepository.existsByUsernameAndIdNot(nextUsername, adminId)) {
-                throw new ConflictException("Admin username already exists");
-            }
             admin.setUsername(nextUsername);
         }
 
@@ -562,7 +571,9 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
     private String resolveSchoolAdminUsername(Long schoolId) {
         if (schoolId == null) return null;
         return adminUserRepository
-                .findFirstBySchoolIdAndRoleOrderByIdAsc(schoolId, "SCHOOL_ADMIN")
+                .findBySchoolIdAndRoleIgnoreCaseOrderByIdDesc(schoolId, "SCHOOL_ADMIN")
+                .stream()
+                .findFirst()
                 .map(AdminUser::getUsername)
                 .orElse(null);
     }

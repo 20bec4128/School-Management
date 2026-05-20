@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
-import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
@@ -11,12 +10,12 @@ import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
-  createIdCardSetting,
   deleteIdCardSetting,
   fetchIdCardSettingsPage,
-  updateIdCardSetting,
 } from '../apis/idCardSettingsApi'
 import '../assets/css/addModalShared.css'
+
+const EDIT_STORAGE_KEY = 'edit-id-card-setting-row'
 
 const emptyForm = {
   headOfficeId: '',
@@ -47,23 +46,7 @@ const emptyFilters = {
   schoolId: '',
 }
 
-const STEPS = ['Card Style', 'Text Style', 'Signature & Logo']
 
-const FIELD_ICONS = {
-  'Head Office': 'ri-building-4-line',
-  'School Name': 'ri-school-line',
-  'Border Color': 'ri-palette-line',
-  'Top Background': 'ri-paint-fill',
-  'Card School Name': 'ri-font-size',
-  'School Name Font Size': 'ri-text-spacing',
-  'School Address': 'ri-map-pin-2-line',
-  'ID No Font Size': 'ri-hashtag',
-  'Title Font Size': 'ri-heading',
-  'Value Font Size': 'ri-list-check',
-  'Bottom Signature': 'ri-pen-nib-line',
-  'Signature Background': 'ri-palette-line',
-  'Signature Align': 'ri-align-center',
-}
 
 const columnOptions = [
   { key: 'headOfficeName', label: 'Head Office' },
@@ -270,80 +253,12 @@ const IdCardPreview = ({ row, schoolName, headOfficeName }) => {
   )
 }
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
 
-const ColorField = ({ label, required, id, value, onChange, full = false }) => (
-  <div className={`avm-field${full ? ' full' : ''}`}>
-    <label className="avm-label">
-      {label}
-      {required && <span className="req"> *</span>}
-    </label>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-      <input
-        type="color"
-        id={id}
-        value={value}
-        onChange={onChange}
-        style={{
-          width: 38,
-          height: 38,
-          border: '1px solid #d0d5dd',
-          borderRadius: '0.5rem',
-          padding: 2,
-          cursor: 'pointer',
-          background: '#fff',
-          flexShrink: 0,
-        }}
-      />
-      <input
-        type="text"
-        className="avm-input"
-        value={value}
-        onChange={onChange}
-        id={id}
-        placeholder="#000000"
-        style={{ flex: 1 }}
-      />
-    </div>
-  </div>
-)
 
 const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
-const IdCardSetting = () => {
+const IdCardSetting = ({ onNavigate }) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
@@ -364,23 +279,12 @@ const IdCardSetting = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
   const [previewRow, setPreviewRow] = useState(null)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
-  const [addLogoPreview, setAddLogoPreview] = useState('')
-  const [editLogoPreview, setEditLogoPreview] = useState('')
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
-
-  const addLogoRef = useRef(null)
-  const editLogoRef = useRef(null)
 
   const resolveSchoolById = useCallback((schoolId) => getSchoolById(allSchools, schoolId), [allSchools])
 
@@ -398,37 +302,7 @@ const IdCardSetting = () => {
     [authSchoolId, authSchoolName, resolveSchoolById],
   )
 
-  const schoolOptions = useMemo(() => {
-    const rowsList = Array.isArray(allSchools) ? allSchools : []
-    if (isSuperAdmin) {
-      const headOfficeId = String(addForm.headOfficeId || '').trim()
-      if (!headOfficeId) return []
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === headOfficeId)
-    }
-    if (isHeadOfficeAdmin) {
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    }
-    if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
-    }
-    return rowsList
-  }, [allSchools, addForm.headOfficeId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
 
-  const editSchoolOptions = useMemo(() => {
-    const rowsList = Array.isArray(allSchools) ? allSchools : []
-    if (isSuperAdmin) {
-      const headOfficeId = String(editForm.headOfficeId || '').trim()
-      if (!headOfficeId) return []
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === headOfficeId)
-    }
-    if (isHeadOfficeAdmin) {
-      return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    }
-    if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
-    }
-    return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, editForm.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
 
   const filterSchoolOptions = useMemo(() => {
     const rowsList = Array.isArray(allSchools) ? allSchools : []
@@ -506,7 +380,12 @@ const IdCardSetting = () => {
     if (!activeSchoolId) return
     const school = getSchoolById(allSchools, activeSchoolId)
     if (school?.headOfficeId == null) return
-    setAddForm((prev) => ({
+    setPendingFilters((prev) => ({
+      ...prev,
+      headOfficeId: String(school.headOfficeId),
+      schoolId: String(activeSchoolId),
+    }))
+    setFilters((prev) => ({
       ...prev,
       headOfficeId: String(school.headOfficeId),
       schoolId: String(activeSchoolId),
@@ -514,23 +393,23 @@ const IdCardSetting = () => {
   }, [activeSchoolId, allSchools, isSuperAdmin])
 
   useEffect(() => {
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
-      setAddForm((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
-      setEditForm((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
-    }
+    if (!isHeadOfficeAdmin || authHeadOfficeId == null) return
+    setPendingFilters((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
+    setFilters((prev) => ({ ...prev, headOfficeId: String(authHeadOfficeId) }))
   }, [authHeadOfficeId, isHeadOfficeAdmin])
 
   useEffect(() => {
     if (!isSchoolAdmin || authSchoolId == null) return
     const school = getSchoolById(allSchools, authSchoolId)
-    setAddForm((prev) => ({
+    const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    setPendingFilters((prev) => ({
       ...prev,
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
+      headOfficeId: nextHeadOfficeId || prev.headOfficeId,
       schoolId: String(authSchoolId),
     }))
-    setEditForm((prev) => ({
+    setFilters((prev) => ({
       ...prev,
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : prev.headOfficeId,
+      headOfficeId: nextHeadOfficeId || prev.headOfficeId,
       schoolId: String(authSchoolId),
     }))
   }, [allSchools, authSchoolId, isSchoolAdmin])
@@ -541,134 +420,28 @@ const IdCardSetting = () => {
     }
   }, [currentPage, totalPages])
 
-  const buildPayload = (form) => ({
-    headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
-    schoolId: form.schoolId ? Number(form.schoolId) : null,
-    borderColor: String(form.borderColor || '').trim(),
-    topBackground: String(form.topBackground || '').trim(),
-    cardSchoolName: String(form.cardSchoolName || '').trim(),
-    schoolNameFontSize: String(form.schoolNameFontSize || '').trim(),
-    schoolNameColor: String(form.schoolNameColor || '').trim(),
-    schoolAddress: String(form.schoolAddress || '').trim(),
-    schoolAddressColor: String(form.schoolAddressColor || '').trim(),
-    idNoFontSize: String(form.idNoFontSize || '').trim(),
-    idNoColor: String(form.idNoColor || '').trim(),
-    idNoBackground: String(form.idNoBackground || '').trim(),
-    titleFontSize: String(form.titleFontSize || '').trim(),
-    titleColor: String(form.titleColor || '').trim(),
-    valueFontSize: String(form.valueFontSize || '').trim(),
-    valueColor: String(form.valueColor || '').trim(),
-    bottomSignature: String(form.bottomSignature || '').trim(),
-    signatureBackground: String(form.signatureBackground || '').trim(),
-    signatureColor: String(form.signatureColor || '').trim(),
-    signatureAlign: String(form.signatureAlign || '').trim(),
-    cardLogoUrl: String(form.cardLogoUrl || '').trim(),
-  })
-
-  const syncScopeSelection = (headOfficeId, schoolId) => {
-    manualScope.setSelectedScope(headOfficeId, schoolId)
-  }
 
   const openAdd = () => {
-    const base = { ...emptyForm }
-    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
-      base.headOfficeId = String(authHeadOfficeId)
+    if (typeof onNavigate === 'function') {
+      onNavigate('id-card-setting-create')
     }
-    if (isSchoolAdmin && authSchoolId != null) {
-      const school = getSchoolById(allSchools, authSchoolId)
-      base.schoolId = String(authSchoolId)
-      base.headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
-    }
-    if (isSuperAdmin && manualScope.selectedHeadOfficeId) {
-      base.headOfficeId = String(manualScope.selectedHeadOfficeId)
-      base.schoolId = String(manualScope.selectedSchoolId || '')
-    }
-    setAddForm(base)
-    setAddLogoPreview(base.cardLogoUrl || '')
-    setAddStep(0)
-    setIsAddOpen(true)
   }
 
   const openEdit = (row) => {
-    const school = getSchoolById(allSchools, row?.schoolId)
-    const headOfficeId = row?.headOfficeId != null ? String(row.headOfficeId) : school?.headOfficeId != null ? String(school.headOfficeId) : ''
-    const schoolId = row?.schoolId != null ? String(row.schoolId) : ''
-    const nextForm = {
-      id: row?.id != null ? String(row.id) : '',
-      headOfficeId,
-      schoolId,
-      borderColor: row?.borderColor || '#e01ab5',
-      topBackground: row?.topBackground || '#3b82f6',
-      cardSchoolName: row?.cardSchoolName || '',
-      schoolNameFontSize: row?.schoolNameFontSize || '',
-      schoolNameColor: row?.schoolNameColor || '#1f2937',
-      schoolAddress: row?.schoolAddress || '',
-      schoolAddressColor: row?.schoolAddressColor || '#374151',
-      idNoFontSize: row?.idNoFontSize || '',
-      idNoColor: row?.idNoColor || '#e01ab5',
-      idNoBackground: row?.idNoBackground || '#e01ab5',
-      titleFontSize: row?.titleFontSize || '',
-      titleColor: row?.titleColor || '#e01ab5',
-      valueFontSize: row?.valueFontSize || '',
-      valueColor: row?.valueColor || '#e01ab5',
-      bottomSignature: row?.bottomSignature || '',
-      signatureBackground: row?.signatureBackground || '#1e3a5f',
-      signatureColor: row?.signatureColor || '#ffffff',
-      signatureAlign: row?.signatureAlign || '',
-      cardLogoUrl: row?.cardLogoUrl || '',
-    }
-    setEditForm(nextForm)
-    setEditLogoPreview(nextForm.cardLogoUrl || '')
-    setEditStep(0)
-    setIsEditOpen(true)
-    if (isSuperAdmin) {
-      syncScopeSelection(nextForm.headOfficeId, nextForm.schoolId)
-    }
-  }
-
-  const handleSaveAdd = async () => {
-    const payload = buildPayload(addForm)
-    if (!payload.headOfficeId || !payload.schoolId || !payload.borderColor || !payload.topBackground || !payload.bottomSignature || !payload.signatureBackground) {
-      setError('Head office, school, border color, top background, bottom signature, and signature background are required.')
-      return
-    }
-
-    setSaving(true)
-    setError('')
     try {
-      await createIdCardSetting(payload)
-      setIsAddOpen(false)
-      setAddForm(emptyForm)
-      setAddLogoPreview('')
-      await loadIdCardSettings()
-    } catch (err) {
-      console.error('Failed to create ID card setting:', err)
-      setError(err?.message || 'Failed to create ID card setting')
-    } finally {
-      setSaving(false)
+      const school = getSchoolById(allSchools, row?.schoolId)
+      const headOfficeId = row?.headOfficeId != null ? String(row.headOfficeId) : school?.headOfficeId != null ? String(school.headOfficeId) : ''
+      const payload = { ...row, headOfficeId }
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(payload))
+    } catch {
+      // ignore
+    }
+    if (typeof onNavigate === 'function') {
+      onNavigate('id-card-setting-create')
     }
   }
 
-  const handleSaveEdit = async () => {
-    const payload = buildPayload(editForm)
-    if (!payload.headOfficeId || !payload.schoolId || !payload.borderColor || !payload.topBackground || !payload.bottomSignature || !payload.signatureBackground) {
-      setError('Head office, school, border color, top background, bottom signature, and signature background are required.')
-      return
-    }
 
-    setSaving(true)
-    setError('')
-    try {
-      await updateIdCardSetting(editForm.id, payload)
-      setIsEditOpen(false)
-      await loadIdCardSettings()
-    } catch (err) {
-      console.error('Failed to update ID card setting:', err)
-      setError(err?.message || 'Failed to update ID card setting')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete ID card setting for "${row?.schoolName || 'this school'}"?`)) return
@@ -759,261 +532,6 @@ const IdCardSetting = () => {
     return pages
   }
 
-  const renderForm = (form, setter, logoPreview, setLogoPreview, logoRef, step, schoolList) => (
-    <>
-      <p className="avm-section-title">{STEPS[step]}</p>
-      <div className="avm-grid">
-        {step === 0 ? (
-          <>
-            {isSuperAdmin ? (
-              <ManualScopeSelectors
-                enabled
-                headOffices={manualScope.headOffices}
-                schoolOptions={schoolOptions}
-                selectedHeadOfficeId={form.headOfficeId}
-                onHeadOfficeChange={(value) => {
-                  setter((prev) => ({ ...prev, headOfficeId: value, schoolId: '' }))
-                  syncScopeSelection(value, '')
-                }}
-                selectedSchoolId={form.schoolId}
-                onSchoolChange={(value) => {
-                  const selectedSchool = getSchoolById(allSchools, value)
-                  setter((prev) => ({
-                    ...prev,
-                    schoolId: value,
-                    headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
-                  }))
-                  syncScopeSelection(selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : form.headOfficeId, value)
-                }}
-                schoolLabel="School"
-              />
-            ) : (
-              <>
-                {isHeadOfficeAdmin ? (
-                  <FormField label="Head Office" full>
-                    <input
-                      className="avm-input"
-                      value={authHeadOfficeName || String(authHeadOfficeId || '')}
-                      disabled
-                    />
-                  </FormField>
-                ) : null}
-
-                <FormField label="School Name" required full>
-                  <select
-                    className="avm-select"
-                    id="schoolId"
-                    value={form.schoolId}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      const selectedSchool = getSchoolById(schoolList, value)
-                      setter((prev) => ({
-                        ...prev,
-                        schoolId: value,
-                        headOfficeId: selectedSchool?.headOfficeId != null ? String(selectedSchool.headOfficeId) : prev.headOfficeId,
-                      }))
-                    }}
-                  >
-                    <option value="">--Select School--</option>
-                    {schoolList.map((school) => (
-                      <option key={String(school.id)} value={String(school.id)}>
-                        {school.schoolName}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-              </>
-            )}
-
-            <ColorField label="Border Color" id="borderColor" value={form.borderColor} onChange={handleFieldChange(setter)} />
-            <ColorField label="Top Background" id="topBackground" value={form.topBackground} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Card School Name" full>
-              <input
-                type="text"
-                className="avm-input"
-                id="cardSchoolName"
-                placeholder="Card School Name"
-                value={form.cardSchoolName}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="School Name Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="schoolNameFontSize"
-                placeholder="e.g. 14"
-                value={form.schoolNameFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="School Name Color" id="schoolNameColor" value={form.schoolNameColor} onChange={handleFieldChange(setter)} />
-          </>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <FormField label="School Address" full>
-              <input
-                type="text"
-                className="avm-input"
-                id="schoolAddress"
-                placeholder="School Address"
-                value={form.schoolAddress}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="School Address Color" id="schoolAddressColor" value={form.schoolAddressColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="ID No Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="idNoFontSize"
-                placeholder="e.g. 12"
-                value={form.idNoFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="ID No Color" id="idNoColor" value={form.idNoColor} onChange={handleFieldChange(setter)} />
-            <ColorField label="ID No Background" id="idNoBackground" value={form.idNoBackground} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Title Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="titleFontSize"
-                placeholder="e.g. 13"
-                value={form.titleFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="Title Color" id="titleColor" value={form.titleColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Value Font Size">
-              <input
-                type="number"
-                className="avm-input"
-                id="valueFontSize"
-                placeholder="e.g. 13"
-                value={form.valueFontSize}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="Value Color" id="valueColor" value={form.valueColor} onChange={handleFieldChange(setter)} />
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <>
-            <FormField label="Bottom Signature" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="bottomSignature"
-                placeholder="Bottom Signature"
-                value={form.bottomSignature}
-                onChange={handleFieldChange(setter)}
-              />
-            </FormField>
-
-            <ColorField label="Signature Background" id="signatureBackground" value={form.signatureBackground} onChange={handleFieldChange(setter)} />
-            <ColorField label="Signature Color" id="signatureColor" value={form.signatureColor} onChange={handleFieldChange(setter)} />
-
-            <FormField label="Signature Align" noIcon>
-              <select className="avm-select" id="signatureAlign" value={form.signatureAlign} onChange={handleFieldChange(setter)}>
-                <option value="">--Select--</option>
-                <option value="left">Left</option>
-                <option value="center">Center</option>
-                <option value="right">Right</option>
-              </select>
-            </FormField>
-
-            <div className="avm-field full">
-              <label className="avm-label">Card Logo</label>
-              <div
-                style={{
-                  border: '2px dashed #d0d5dd',
-                  borderRadius: '0.75rem',
-                  padding: '1.25rem',
-                  background: '#f8fafc',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  cursor: 'pointer',
-                }}
-                onClick={() => logoRef.current?.click()}
-              >
-                {logoPreview ? (
-                  <img
-                    src={logoPreview}
-                    alt="Card Logo Preview"
-                    style={{
-                      maxWidth: 100,
-                      maxHeight: 110,
-                      objectFit: 'contain',
-                      borderRadius: 6,
-                      border: '1px solid #e0e0e0',
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: '50%',
-                      background: '#e8edf4',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <i className="ri-image-add-line" style={{ fontSize: '1.6rem', color: '#45597a' }}></i>
-                  </div>
-                )}
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#45597a' }}>
-                    {logoPreview ? 'Change Logo' : 'Upload Card Logo'}
-                  </p>
-                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                    Dimension:- Max-W: 100px, Max-H: 110px
-                  </p>
-                  <p style={{ margin: '0.1rem 0 0', fontSize: '0.78rem', color: '#7a8a9a' }}>
-                    Image file format: .jpg, .jpeg, .png or .gif
-                  </p>
-                </div>
-                <input
-                  ref={logoRef}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.gif"
-                  style={{ display: 'none' }}
-                  onChange={handleLogoChange(setter, setLogoPreview)}
-                />
-              </div>
-              {logoPreview ? (
-                <button
-                  type="button"
-                  className="avm-btn light sm"
-                  style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}
-                  onClick={() => clearLogo(setter, setLogoPreview, logoRef)}
-                >
-                  <i className="ri-delete-bin-line"></i> Remove
-                </button>
-              ) : null}
-            </div>
-          </>
-        ) : null}
-      </div>
-    </>
-  )
 
   return (
     <div className="dashboard-main-body">
@@ -1271,37 +789,6 @@ const IdCardSetting = () => {
         </div>
       ) : null}
 
-      <WizardPopup
-        modalWidth="760px"
-        open={isAddOpen}
-        title="Add ID Card Setting"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleSaveAdd}
-        submitLabel="Save"
-        saving={saving}
-      >
-        {renderForm(addForm, setAddForm, addLogoPreview, setAddLogoPreview, addLogoRef, addStep, schoolOptions)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="760px"
-        open={isEditOpen}
-        title="Edit ID Card Setting"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleSaveEdit}
-        submitLabel="Update"
-        saving={saving}
-      >
-        {renderForm(editForm, setEditForm, editLogoPreview, setEditLogoPreview, editLogoRef, editStep, editSchoolOptions)}
-      </WizardPopup>
 
       <SlideSidebar
         isOpen={isFilterSidebarOpen}

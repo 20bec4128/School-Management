@@ -10,6 +10,14 @@ import AppRoute from './AppRoute'
 import { useAuth } from './context/useAuth'
 import { normalizeRole } from './utils/roles'
 
+const isBrowser = typeof window !== 'undefined'
+
+const normalizePathPage = (pathname) => {
+  if (!pathname) return null
+  const page = pathname.replace(/^\/+|\/+$/g, '').split('/')[0]
+  return page || null
+}
+
 function App() {
   const { status, token, user, role, parentChildren, selectedChildId, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('dashboard')
@@ -33,13 +41,51 @@ function App() {
     return 'dashboard'
   }, [role, parentChildren, selectedChildId, user?.homePage])
 
+  const syncBrowserPath = (page) => {
+    if (!isBrowser) return
+
+    const nextPath = page && page !== homePage ? `/${page}` : '/'
+    if (window.location.pathname === nextPath) return
+
+    window.history.pushState({ page }, '', nextPath)
+  }
+
+  const handleNavigate = (page) => {
+    if (!page) return
+    setCurrentPage(page)
+    syncBrowserPath(page)
+  }
+
   useEffect(() => {
     if (status !== 'ready') return
+
     if (!token) {
       setCurrentPage('login')
+      if (isBrowser && window.location.pathname !== '/') {
+        window.history.replaceState({}, '', '/')
+      }
       return
     }
-    setCurrentPage((prev) => (prev === 'login' || prev === 'dashboard' ? homePage : prev))
+
+    const pathPage = isBrowser ? normalizePathPage(window.location.pathname) : null
+    const nextPage = pathPage || homePage
+
+    setCurrentPage((prev) => {
+      if (prev === 'login' || prev === 'dashboard') return nextPage
+      return prev
+    })
+  }, [status, token, homePage])
+
+  useEffect(() => {
+    if (status !== 'ready' || !token || !isBrowser) return undefined
+
+    const handlePopState = () => {
+      const pathPage = normalizePathPage(window.location.pathname)
+      setCurrentPage(pathPage || homePage)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
   }, [status, token, homePage])
 
   if (status !== 'ready') return null
@@ -49,6 +95,7 @@ function App() {
       <Login
         onSuccess={() => {
           setCurrentPage(homePage)
+          syncBrowserPath(homePage)
         }}
       />
     )
@@ -61,7 +108,7 @@ function App() {
           user={user}
           role={role}
           currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
+          onNavigate={handleNavigate}
           parentChildren={parentChildren}
           selectedChildId={selectedChildId}
           logout={logout}
@@ -75,7 +122,7 @@ function AppLayout({
   user,
   role,
   currentPage,
-  setCurrentPage,
+  onNavigate,
   parentChildren,
   selectedChildId,
   logout,
@@ -84,7 +131,7 @@ function AppLayout({
 
   return (
     <>
-      <Sidebar onNavigate={setCurrentPage} currentPage={currentPage} user={user} onLogout={logout} />
+      <Sidebar onNavigate={onNavigate} currentPage={currentPage} user={user} onLogout={logout} />
 
       <main className={`dashboard-main ${isCollapsed ? 'active' : ''}`}>
         <Topbar user={user} />
@@ -94,11 +141,11 @@ function AppLayout({
           role={role}
           parentChildren={parentChildren}
           selectedChildId={selectedChildId}
-          onNavigate={setCurrentPage}
+          onNavigate={onNavigate}
         />
       </main>
 
-      <MobileBottomNav currentPage={currentPage} onNavigate={setCurrentPage} onLogout={logout} />
+      <MobileBottomNav currentPage={currentPage} onNavigate={onNavigate} onLogout={logout} />
     </>
   )
 }

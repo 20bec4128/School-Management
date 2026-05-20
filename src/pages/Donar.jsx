@@ -1,53 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
-import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import TablePagination from '../components/table/TablePagination'
-import '../assets/css/addModalShared.css'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchAcademicYears } from '../apis/academicYearsApi'
-import { createDonor, deleteDonor, fetchDonorsPage, updateDonor } from '../apis/donorsApi'
+import { deleteDonor, fetchDonorsPage } from '../apis/donorsApi'
 
 const donorTypeOptions = ['Individual', 'Organization', 'Foundation', 'Corporate', 'Government']
-
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  academicYear: '',
-  donorType: '',
-  donorName: '',
-  contactName: '',
-  email: '',
-  phone: '',
-  amount: '',
-  address: '',
-  note: '',
-}
 
 const emptyFilters = {
   headOfficeId: 'Select',
   schoolId: 'Select',
   academicYear: 'Select',
   donorType: 'Select',
-}
-
-const STEPS = ['Basic Info', 'Contact & Details']
-
-const FIELD_ICONS = {
-  'School Name': 'ri-school-line',
-  'Academic Year': 'ri-calendar-line',
-  'Donor Type': 'ri-group-line',
-  'Donor Name': 'ri-user-3-line',
-  'Contact Name': 'ri-contacts-line',
-  Email: 'ri-mail-line',
-  Amount: 'ri-money-dollar-circle-line',
-  Address: 'ri-map-pin-2-line',
-  Note: 'ri-sticky-note-line',
 }
 
 const columnOptions = [
@@ -58,40 +27,6 @@ const columnOptions = [
   { key: 'amount', label: 'Amount' },
 ]
 
-const FormField = ({ label, required, children, full = false, noIcon = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label}
-        {required && <span className="req"> *</span>}
-      </label>
-      {!noIcon ? (
-        <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: '0.85rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#667085',
-              fontSize: '0.95rem',
-              lineHeight: 1,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <i className={icon}></i>
-          </span>
-          {children}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  )
-}
-
 const unwrapCollection = (value) => {
   if (Array.isArray(value)) return value
   if (Array.isArray(value?.content)) return value.content
@@ -99,8 +34,6 @@ const unwrapCollection = (value) => {
 }
 
 const schoolLabel = (row) => row?.schoolName || row?.name || ''
-const getSchoolById = (rows, schoolId) =>
-  (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const formatAmount = (value) => {
   const n = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.-]/g, ''))
@@ -108,7 +41,7 @@ const formatAmount = (value) => {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n)
 }
 
-const Donor = () => {
+const Donor = ({ onNavigate }) => {
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -118,7 +51,6 @@ const Donor = () => {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
-  const [editingId, setEditingId] = useState(null)
 
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -127,12 +59,6 @@ const Donor = () => {
   const [totalElements, setTotalElements] = useState(0)
   const [selectedRows, setSelectedRows] = useState([])
 
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [addStep, setAddStep] = useState(0)
-  const [editStep, setEditStep] = useState(0)
-  const [addForm, setAddForm] = useState(emptyForm)
-  const [editForm, setEditForm] = useState(emptyForm)
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -221,11 +147,6 @@ const Donor = () => {
     setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
   }
 
-  const handleChange = (setter) => (e) => {
-    const { id, value } = e.target
-    setter((prev) => ({ ...prev, [id]: value }))
-  }
-
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => ({ ...prev, [id]: value }))
@@ -246,81 +167,17 @@ const Donor = () => {
   }
 
   const openAdd = () => {
-    setAddForm(emptyForm)
-    setAddStep(0)
-    setIsAddOpen(true)
+    try {
+      sessionStorage.removeItem('edit-donor-row')
+    } catch {}
+    onNavigate?.('add-donor')
   }
 
   const openEdit = (row) => {
-    const school = getSchoolById(schoolsLookup, row?.schoolId)
-    setEditingId(row?.id ?? null)
-    setEditForm({
-      headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : '',
-      schoolId: row?.schoolId != null ? String(row.schoolId) : '',
-      academicYear: row?.academicYear || '',
-      donorType: row?.donorType || '',
-      donorName: row?.donorName || '',
-      contactName: row?.contactName || '',
-      email: row?.email || '',
-      phone: row?.phone || '',
-      amount: row?.amount != null ? String(row.amount) : '',
-      address: row?.address || '',
-      note: row?.note || '',
-    })
-    setEditStep(0)
-    setIsEditOpen(true)
-  }
-
-  const handleCreate = async () => {
-    setSaving(true)
-    setError('')
     try {
-      await createDonor({
-        schoolId: addForm.schoolId ? Number(addForm.schoolId) : null,
-        academicYear: addForm.academicYear || null,
-        donorType: addForm.donorType || null,
-        donorName: addForm.donorName || null,
-        contactName: addForm.contactName || null,
-        email: addForm.email || null,
-        phone: addForm.phone || null,
-        amount: addForm.amount === '' ? null : Number(addForm.amount),
-        address: addForm.address || null,
-        note: addForm.note || null,
-      })
-      setIsAddOpen(false)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to create donor')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleUpdate = async () => {
-    if (editingId == null) return
-    setSaving(true)
-    setError('')
-    try {
-      await updateDonor(editingId, {
-        schoolId: editForm.schoolId ? Number(editForm.schoolId) : null,
-        academicYear: editForm.academicYear || null,
-        donorType: editForm.donorType || null,
-        donorName: editForm.donorName || null,
-        contactName: editForm.contactName || null,
-        email: editForm.email || null,
-        phone: editForm.phone || null,
-        amount: editForm.amount === '' ? null : Number(editForm.amount),
-        address: editForm.address || null,
-        note: editForm.note || null,
-      })
-      setIsEditOpen(false)
-      setEditingId(null)
-      setRefreshKey((k) => k + 1)
-    } catch (e) {
-      setError(e?.message || 'Failed to update donor')
-    } finally {
-      setSaving(false)
-    }
+      sessionStorage.setItem('edit-donor-row', JSON.stringify(row))
+    } catch {}
+    onNavigate?.('add-donor')
   }
 
   const handleDelete = async (id) => {
@@ -349,136 +206,17 @@ const Donor = () => {
     return `Showing ${start} - ${end} of ${total} entries`
   }, [currentPage, rowsPerPage, totalElements])
 
-  const renderForm = (form, setter, step) => (
-    <>
-      <p className="avm-section-title">{STEPS[step]}</p>
-      <div className="avm-grid">
-        {step === 0 ? (
-          <>
-            <ManualScopeSelectors
-              enabled
-              headOffices={headOffices}
-              schoolOptions={schoolOptionsFor(form.headOfficeId)}
-              selectedHeadOfficeId={form.headOfficeId}
-              onHeadOfficeChange={(value) => setter((prev) => ({ ...prev, headOfficeId: value || '', schoolId: '' }))}
-              selectedSchoolId={form.schoolId}
-              onSchoolChange={(value) => setter((prev) => ({ ...prev, schoolId: value || '' }))}
-              schoolLabel="School"
-            />
-
-            <FormField label="Academic Year" full>
-              <select className="avm-select" id="academicYear" value={form.academicYear} onChange={handleChange(setter)}>
-                <option value="">--Select--</option>
-                {academicYearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Donor Type" required full>
-              <select className="avm-select" id="donorType" value={form.donorType} onChange={handleChange(setter)}>
-                <option value="">--Select--</option>
-                {donorTypeOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Donor Name" required full>
-              <input
-                type="text"
-                className="avm-input"
-                id="donorName"
-                placeholder="Donor Name"
-                value={form.donorName}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Contact Name" full>
-              <input
-                type="text"
-                className="avm-input"
-                id="contactName"
-                placeholder="Contact Name"
-                value={form.contactName}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-          </>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <FormField label="Email" full>
-              <input
-                type="email"
-                className="avm-input"
-                id="email"
-                placeholder="Email"
-                value={form.email}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <PhoneField
-              id="phone"
-              label="Phone"
-              required
-              value={form.phone}
-              onChange={(fullValue) => setter((prev) => ({ ...prev, phone: fullValue }))}
-            />
-
-            <FormField label="Amount" required>
-              <input
-                type="number"
-                className="avm-input"
-                id="amount"
-                placeholder="Amount"
-                value={form.amount}
-                onChange={handleChange(setter)}
-                min="0"
-              />
-            </FormField>
-
-            <FormField label="Address" full>
-              <textarea
-                rows={3}
-                className="avm-input avm-textarea"
-                id="address"
-                placeholder="Address"
-                value={form.address}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-
-            <FormField label="Note" full>
-              <textarea
-                rows={3}
-                className="avm-input avm-textarea"
-                id="note"
-                placeholder="Note"
-                value={form.note}
-                onChange={handleChange(setter)}
-              />
-            </FormField>
-          </>
-        ) : null}
-      </div>
-    </>
-  )
-
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Donor</h1>
           <div>
-            <button type="button" className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0">
+            <button
+              type="button"
+              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0"
+              onClick={() => onNavigate?.('dashboard')}
+            >
               Dashboard
             </button>
             <span className="text-secondary-light"> / Donor</span>
@@ -664,36 +402,6 @@ const Donor = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="560px"
-        open={isAddOpen}
-        title="Add Donor"
-        steps={STEPS}
-        step={addStep}
-        onClose={() => setIsAddOpen(false)}
-        onBack={() => setAddStep((s) => Math.max(0, s - 1))}
-        onNext={() => setAddStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleCreate}
-        submitLabel={saving ? 'Saving...' : 'Save'}
-      >
-        {renderForm(addForm, setAddForm, addStep)}
-      </WizardPopup>
-
-      <WizardPopup
-        modalWidth="560px"
-        open={isEditOpen}
-        title="Edit Donor"
-        steps={STEPS}
-        step={editStep}
-        onClose={() => setIsEditOpen(false)}
-        onBack={() => setEditStep((s) => Math.max(0, s - 1))}
-        onNext={() => setEditStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        onSubmit={handleUpdate}
-        submitLabel={saving ? 'Saving...' : 'Update'}
-      >
-        {renderForm(editForm, setEditForm, editStep)}
-      </WizardPopup>
-
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Donors" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
@@ -765,4 +473,3 @@ const Donor = () => {
 }
 
 export default Donor
-

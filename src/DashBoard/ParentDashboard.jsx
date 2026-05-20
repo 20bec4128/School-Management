@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { loadApexCharts } from '../utils/loadApexCharts'
 
 const SUMMARY_CARDS = [
   { title: 'Due Fees', amount: '$500', growth: '10%', note: '+5 This Month', iconBg: 'bg-warning-600', gradient: 'gradient-bg-end-12' },
@@ -103,28 +104,38 @@ function StatisticCard() {
   const chartRef = useRef(null)
 
   useEffect(() => {
-    const ApexCharts = window.ApexCharts || globalThis.ApexCharts
-    if (!chartRef.current || !ApexCharts) return undefined
+    let chart
+    let cancelled = false
 
-    const chart = new ApexCharts(chartRef.current, {
-      series: [
-        { name: 'Free Course', data: [48, 35, 55, 32, 48, 30, 55, 50, 57] },
-        { name: 'Paid Course', data: [12, 20, 15, 26, 22, 60, 40, 48, 25] },
-      ],
-      legend: { show: false },
-      chart: { type: 'area', width: '100%', height: 210, toolbar: { show: false }, padding: { left: 0, right: 0, top: 0, bottom: 0 } },
-      dataLabels: { enabled: false },
-      stroke: { curve: 'smooth', width: 3, colors: ['#487FFF', '#FF9F29'], lineCap: 'round' },
-      grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 1, position: 'back', xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { top: -20, right: 0, bottom: -10, left: 0 } },
-      colors: ['#487FFF', '#FF9F29'],
-      markers: { colors: ['#487FFF', '#FF9F29'], strokeWidth: 3, size: 0, hover: { size: 10 } },
-      xaxis: { categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], tooltip: { enabled: false }, labels: { formatter: value => value, style: { fontSize: '14px' } } },
-      yaxis: { labels: { style: { fontSize: '14px' } } },
-      tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
-    })
+    const render = async () => {
+      const ApexCharts = await loadApexCharts()
+      if (cancelled || !chartRef.current || !ApexCharts) return
 
-    chart.render()
-    return () => chart.destroy()
+      chart = new ApexCharts(chartRef.current, {
+        series: [
+          { name: 'Free Course', data: [48, 35, 55, 32, 48, 30, 55, 50, 57] },
+          { name: 'Paid Course', data: [12, 20, 15, 26, 22, 60, 40, 48, 25] },
+        ],
+        legend: { show: false },
+        chart: { type: 'area', width: '100%', height: 210, toolbar: { show: false }, padding: { left: 0, right: 0, top: 0, bottom: 0 } },
+        dataLabels: { enabled: false },
+        stroke: { curve: 'smooth', width: 3, colors: ['#487FFF', '#FF9F29'], lineCap: 'round' },
+        grid: { show: true, borderColor: '#D1D5DB', strokeDashArray: 1, position: 'back', xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { top: -20, right: 0, bottom: -10, left: 0 } },
+        colors: ['#487FFF', '#FF9F29'],
+        markers: { colors: ['#487FFF', '#FF9F29'], strokeWidth: 3, size: 0, hover: { size: 10 } },
+        xaxis: { categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], tooltip: { enabled: false }, labels: { formatter: value => value, style: { fontSize: '14px' } } },
+        yaxis: { labels: { style: { fontSize: '14px' } } },
+        tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
+      })
+
+      chart.render()
+    }
+
+    void render()
+    return () => {
+      cancelled = true
+      chart?.destroy()
+    }
   }, [])
 
   return (

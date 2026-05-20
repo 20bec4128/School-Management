@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -9,10 +8,8 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { TablePagination } from '../components/table'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
-  createSchoolSubscription,
   deleteSchoolSubscription,
   fetchSchoolSubscriptionsPage,
-  updateSchoolSubscription,
 } from '../apis/schoolSubscriptionsApi'
 import { fetchSubscriptionPlans } from '../apis/subscriptionPlansApi'
 import { useAuth } from '../context/useAuth'
@@ -22,42 +19,10 @@ import '../assets/css/addModalShared.css'
 
 const EDIT_STORAGE_KEY = 'edit-school-subscription-row'
 
-const STEPS = ['Subscription Details']
-
-const emptyForm = {
-  headOfficeId: '',
-  schoolId: '',
-  planId: '',
-  planName: '',
-  price: '',
-  name: '',
-  email: '',
-  phone: '',
-  address: '',
-  startDate: '',
-  endDate: '',
-  status: 'Active',
-}
-
 const emptyFilters = {
   headOfficeId: '',
   schoolId: 'Select',
   status: 'Select',
-}
-
-const FIELD_ICONS = {
-  'Head Office': 'ri-government-line',
-  'School Name': 'ri-school-line',
-  'Plan': 'ri-medal-line',
-  'Plan Name': 'ri-medal-line',
-  Price: 'ri-money-dollar-circle-line',
-  Name: 'ri-user-line',
-  Email: 'ri-mail-line',
-  Phone: 'ri-phone-line',
-  Address: 'ri-map-pin-line',
-  'Start Date': 'ri-calendar-line',
-  'End Date': 'ri-calendar-check-line',
-  Status: 'ri-toggle-line',
 }
 
 const columnOptions = [
@@ -72,33 +37,7 @@ const columnOptions = [
   { key: 'status', label: 'Status' },
 ]
 
-const FormField = ({ label, required, children, full = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">
-        {label} {required && <span className="text-danger-600">*</span>}
-      </label>
-      <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-        <span
-          style={{
-            position: 'absolute',
-            left: '0.85rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#667085',
-            zIndex: 1,
-          }}
-        >
-          <i className={icon} />
-        </span>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const SchoolSubscription = () => {
+const SchoolSubscription = ({ onNavigate }) => {
   const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
@@ -114,12 +53,9 @@ const SchoolSubscription = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [formData, setFormData] = useState(emptyForm)
   const [filters, setFilters] = useState(emptyFilters)
   const [selectedRows, setSelectedRows] = useState([])
-  const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
@@ -211,121 +147,25 @@ const SchoolSubscription = () => {
     }
   }, [currentPage, totalPages])
 
-  const filteredData = rows
-  const paginatedData = useMemo(() => filteredData, [filteredData])
-
-  const getPlanById = (planId) => plans.find((plan) => String(plan?.id ?? '') === String(planId ?? ''))
-  const getSchoolById = (schoolId) => allSchools.find((school) => String(school?.id ?? '') === String(schoolId ?? ''))
-
-  const handleInputChange = (e) => {
-    const { id, value } = e.target
-    if (id === 'planId') {
-      const plan = getPlanById(value)
-      setFormData((prev) => ({
-        ...prev,
-        planId: value,
-        planName: plan?.planName || '',
-        price: plan?.price != null ? String(plan.price) : '',
-      }))
-      return
-    }
-    if (id === 'schoolId' && !isSuperAdmin) {
-      const school = getSchoolById(value)
-      setFormData((prev) => ({ ...prev, schoolId: value, headOfficeId: school?.headOfficeId != null ? String(school.headOfficeId) : '' }))
-      return
-    }
-    setFormData((prev) => ({ ...prev, [id]: value }))
-  }
-
   const openAdd = () => {
-    setEditingId(null)
-    setFormData({
-      ...emptyForm,
-      headOfficeId: isSuperAdmin ? manualScope.selectedHeadOfficeId : authHeadOfficeId != null ? String(authHeadOfficeId) : '',
-      schoolId: isSuperAdmin ? manualScope.selectedSchoolId : isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : '',
-    })
-    setIsModalOpen(true)
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    onNavigate('school-subscription-create')
   }
 
   const handleExportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredData)
+    const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'SchoolSubscriptions')
     XLSX.writeFile(wb, 'School_Subscription_List.xlsx')
   }
 
-  const handleSave = async () => {
-    const schoolId = isSuperAdmin
-      ? manualScope.selectedSchoolId
-        ? Number(manualScope.selectedSchoolId)
-        : formData.schoolId
-          ? Number(formData.schoolId)
-          : null
-      : formData.schoolId
-        ? Number(formData.schoolId)
-        : null
-    const planId = formData.planId ? Number(formData.planId) : null
-    if (!schoolId) return window.alert('School is required')
-    if (!planId && !formData.planName.trim()) return window.alert('Plan is required')
-
-    const school = getSchoolById(schoolId)
-    const plan = getPlanById(planId)
-    const payload = {
-      headOfficeId: isSuperAdmin
-        ? manualScope.selectedHeadOfficeId
-          ? Number(manualScope.selectedHeadOfficeId)
-          : school?.headOfficeId != null
-            ? Number(school.headOfficeId)
-            : null
-        : formData.headOfficeId
-          ? Number(formData.headOfficeId)
-          : school?.headOfficeId != null
-            ? Number(school.headOfficeId)
-            : null,
-      schoolId,
-      planId,
-      planName: plan?.planName || formData.planName.trim(),
-      price: formData.price === '' ? null : Number(formData.price),
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      phone: formData.phone.trim(),
-      address: formData.address.trim(),
-      startDate: formData.startDate || null,
-      endDate: formData.endDate || null,
-      status: formData.status,
-    }
-
-    if (editingId) {
-      await updateSchoolSubscription(editingId, payload)
-    } else {
-      await createSchoolSubscription(payload)
-    }
-
-    setIsModalOpen(false)
-    await loadRows()
-  }
-
   const handleEdit = (row) => {
-    sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
-    setEditingId(row.id)
-    setFormData({
-      headOfficeId: row.headOfficeId != null ? String(row.headOfficeId) : '',
-      schoolId: row.schoolId != null ? String(row.schoolId) : '',
-      planId: row.planId != null ? String(row.planId) : '',
-      planName: row.planName || '',
-      price: row.price != null ? String(row.price) : '',
-      name: row.name || '',
-      email: row.email || '',
-      phone: row.phone || '',
-      address: row.address || '',
-      startDate: row.startDate || '',
-      endDate: row.endDate || '',
-      status: row.status || 'Active',
-    })
-    if (isSuperAdmin && row.headOfficeId != null && row.schoolId != null) {
-      manualScope.setSelectedScope(String(row.headOfficeId), String(row.schoolId))
-    }
-    setIsModalOpen(true)
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    } catch {}
+    onNavigate('school-subscription-create')
   }
 
   const handleDelete = async (row) => {
@@ -339,7 +179,16 @@ const SchoolSubscription = () => {
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">School Subscription</h1>
-          <span className="text-secondary-light">Subscription / School Management</span>
+          <div>
+            <button
+              type="button"
+              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0 text-sm"
+              onClick={() => onNavigate('dashboard')}
+            >
+              Dashboard
+            </button>
+            <span className="text-secondary-light text-sm"> / School Subscription</span>
+          </div>
         </div>
         <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
           <i className="ri-add-large-line" /> Add Subscription
@@ -384,7 +233,7 @@ const SchoolSubscription = () => {
                 </ul>
               </div>
               <RowsPerPageSelect
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light bg-white"
                 value={rowsPerPage}
                 onChange={(next) => {
                   setRowsPerPage(next)
@@ -431,14 +280,14 @@ const SchoolSubscription = () => {
                       Loading...
                     </td>
                   </tr>
-                ) : paginatedData.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
                       No records found.
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row, idx) => (
+                  rows.map((row, idx) => (
                     <tr key={row.id ?? idx}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -515,92 +364,6 @@ const SchoolSubscription = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="840px"
-        open={isModalOpen}
-        title={editingId ? 'Edit Subscription' : 'Add Subscription'}
-        steps={STEPS}
-        step={0}
-        onClose={() => setIsModalOpen(false)}
-        onSubmit={handleSave}
-        submitLabel={editingId ? 'Update' : 'Save'}
-      >
-        <div className="avm-grid">
-          {isSuperAdmin ? (
-            <ManualScopeSelectors
-              enabled
-              headOffices={manualScope.headOffices}
-              schoolOptions={manualScope.schoolOptions}
-              selectedHeadOfficeId={manualScope.selectedHeadOfficeId}
-              onHeadOfficeChange={manualScope.setSelectedHeadOfficeId}
-              selectedSchoolId={manualScope.selectedSchoolId}
-              onSchoolChange={manualScope.setSelectedSchoolId}
-            />
-          ) : (
-            <FormField label="School Name" required>
-              <select className="avm-input form-select" id="schoolId" value={formData.schoolId} onChange={handleInputChange}>
-                <option value="">--Select--</option>
-                {schoolOptions.map((school) => (
-                  <option key={school.id} value={school.id}>
-                    {school.schoolName || school.name || String(school.id)}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-          )}
-
-          <FormField label="Plan" required>
-            <select className="avm-input form-select" id="planId" value={formData.planId} onChange={handleInputChange}>
-              <option value="">--Select--</option>
-              {plans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.planName || String(plan.id)}
-                </option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Plan Name">
-            <input type="text" className="avm-input" id="planName" value={formData.planName} onChange={handleInputChange} placeholder="Plan name" />
-          </FormField>
-
-          <FormField label="Price">
-            <input type="number" className="avm-input" id="price" value={formData.price} onChange={handleInputChange} placeholder="Price" />
-          </FormField>
-
-          <FormField label="Name" required>
-            <input type="text" className="avm-input" id="name" value={formData.name} onChange={handleInputChange} placeholder="Name" />
-          </FormField>
-
-          <FormField label="Email">
-            <input type="email" className="avm-input" id="email" value={formData.email} onChange={handleInputChange} placeholder="Email" />
-          </FormField>
-
-          <FormField label="Phone">
-            <input type="text" className="avm-input" id="phone" value={formData.phone} onChange={handleInputChange} placeholder="Phone" />
-          </FormField>
-
-          <FormField label="Address" full>
-            <input type="text" className="avm-input" id="address" value={formData.address} onChange={handleInputChange} placeholder="Address" />
-          </FormField>
-
-          <FormField label="Start Date">
-            <input type="date" className="avm-input" id="startDate" value={formData.startDate} onChange={handleInputChange} />
-          </FormField>
-
-          <FormField label="End Date">
-            <input type="date" className="avm-input" id="endDate" value={formData.endDate} onChange={handleInputChange} />
-          </FormField>
-
-          <FormField label="Status">
-            <select className="avm-input form-select" id="status" value={formData.status} onChange={handleInputChange}>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </FormField>
-        </div>
-      </WizardPopup>
-
       <SlideSidebar isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} title="Find Subscription">
         <form
           className="p-20 d-grid gap-16"
@@ -632,7 +395,7 @@ const SchoolSubscription = () => {
             <div>
               <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
               <select
-                className="form-control form-select"
+                className="form-control form-select bg-white"
                 value={filters.schoolId || 'Select'}
                 onChange={(e) => setFilters((prev) => ({ ...prev, schoolId: e.target.value, headOfficeId: '' }))}
               >
@@ -648,7 +411,7 @@ const SchoolSubscription = () => {
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8">Status</label>
             <select
-              className="form-control form-select"
+              className="form-control form-select bg-white"
               value={filters.status}
               onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
             >

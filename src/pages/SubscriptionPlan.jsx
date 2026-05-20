@@ -1,39 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
 import useColumnVisibility from '../hooks/useColumnVisibility'
-import { createSubscriptionPlan, deleteSubscriptionPlan, fetchSubscriptionPlansPage, updateSubscriptionPlan } from '../apis/subscriptionPlansApi'
+import { deleteSubscriptionPlan, fetchSubscriptionPlansPage } from '../apis/subscriptionPlansApi'
 import '../assets/css/addModalShared.css'
 
 const EDIT_STORAGE_KEY = 'edit-subscription-plan-row'
 
-const STEPS = ['Plan Details']
-
-const emptyForm = {
-  planName: '',
-  price: '',
-  studentLimit: '',
-  guardianLimit: '',
-  teacherLimit: '',
-  employeeLimit: '',
-  status: 'Active',
-}
-
 const emptyFilters = { status: 'Select' }
-
-const FIELD_ICONS = {
-  'Plan Name': 'ri-medal-line',
-  Price: 'ri-money-dollar-circle-line',
-  'Student Limit': 'ri-user-star-line',
-  'Guardian Limit': 'ri-parent-line',
-  'Teacher Limit': 'ri-user-voice-line',
-  'Employee Limit': 'ri-team-line',
-  Status: 'ri-toggle-line',
-}
 
 const columnOptions = [
   { key: 'planName', label: 'Plan Name' },
@@ -45,34 +22,16 @@ const columnOptions = [
   { key: 'status', label: 'Status' },
 ]
 
-const FormField = ({ label, required, children, full = false }) => {
-  const icon = FIELD_ICONS[label] || 'ri-edit-line'
-  return (
-    <div className={`avm-field${full ? ' full' : ''}`}>
-      <label className="avm-label">{label} {required && <span className="text-danger-600">*</span>}</label>
-      <div className="avm-input-with-icon" style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#667085', zIndex: 1 }}>
-          <i className={icon} />
-        </span>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const SubscriptionPlan = () => {
+const SubscriptionPlan = ({ onNavigate }) => {
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [formData, setFormData] = useState(emptyForm)
   const [filters, setFilters] = useState(emptyFilters)
   const [selectedRows, setSelectedRows] = useState([])
-  const [editingId, setEditingId] = useState(null)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -88,7 +47,9 @@ const SubscriptionPlan = () => {
     setTotalPages(Number(result?.totalPages ?? 1) || 1)
   }
 
-  useEffect(() => { void loadRows() // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    void loadRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, rowsPerPage, search, filters.status])
 
   useEffect(() => {
@@ -97,61 +58,25 @@ const SubscriptionPlan = () => {
     }
   }, [currentPage, totalPages])
 
-  const filteredData = rows
-
-  const paginatedData = useMemo(() => filteredData, [filteredData])
-
-  const handleInputChange = (e) => {
-    const { id, value } = e.target
-    setFormData((prev) => ({ ...prev, [id]: value }))
-  }
-
   const openAdd = () => {
-    setEditingId(null)
-    setFormData(emptyForm)
-    setIsModalOpen(true)
+    try {
+      sessionStorage.removeItem(EDIT_STORAGE_KEY)
+    } catch {}
+    onNavigate('subscription-plans-create')
   }
 
   const handleExportExcel = async () => {
-    const ws = XLSX.utils.json_to_sheet(filteredData)
+    const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'SubscriptionPlans')
     XLSX.writeFile(wb, 'Subscription_Plan_List.xlsx')
   }
 
-  const handleSave = async () => {
-    const payload = {
-      planName: formData.planName.trim(),
-      price: formData.price === '' ? null : Number(formData.price),
-      studentLimit: formData.studentLimit.trim(),
-      guardianLimit: formData.guardianLimit.trim(),
-      teacherLimit: formData.teacherLimit.trim(),
-      employeeLimit: formData.employeeLimit.trim(),
-      status: formData.status,
-    }
-    if (!payload.planName) return alert('Plan name is required')
-    if (editingId) {
-      await updateSubscriptionPlan(editingId, payload)
-    } else {
-      await createSubscriptionPlan(payload)
-    }
-    setIsModalOpen(false)
-    await loadRows()
-  }
-
   const handleEdit = (row) => {
-    sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
-    setEditingId(row.id)
-    setFormData({
-      planName: row.planName || '',
-      price: row.price != null ? String(row.price) : '',
-      studentLimit: row.studentLimit || '',
-      guardianLimit: row.guardianLimit || '',
-      teacherLimit: row.teacherLimit || '',
-      employeeLimit: row.employeeLimit || '',
-      status: row.status || 'Active',
-    })
-    setIsModalOpen(true)
+    try {
+      sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(row))
+    } catch {}
+    onNavigate('subscription-plans-create')
   }
 
   const handleDelete = async (row) => {
@@ -165,9 +90,18 @@ const SubscriptionPlan = () => {
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
         <div>
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Subscription Plan</h1>
-          <span className="text-secondary-light">Subscription / Plan Management</span>
+          <div>
+            <button
+              type="button"
+              className="text-secondary-light hover-text-primary hover-underline border-0 bg-transparent px-0 text-sm"
+              onClick={() => onNavigate('dashboard')}
+            >
+              Dashboard
+            </button>
+            <span className="text-secondary-light text-sm"> / Subscription Plan</span>
+          </div>
         </div>
-        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+        <button className="btn btn-primary-600 d-flex align-items-center gap-6 animate-up" onClick={openAdd}>
           <i className="ri-add-large-line" /> Add Plan
         </button>
       </div>
@@ -196,7 +130,7 @@ const SubscriptionPlan = () => {
                 </ul>
               </div>
               <RowsPerPageSelect
-                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light bg-white"
                 value={rowsPerPage}
                 onChange={(next) => {
                   setRowsPerPage(next)
@@ -225,10 +159,10 @@ const SubscriptionPlan = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.length === 0 ? (
+                {rows.length === 0 ? (
                   <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
                 ) : (
-                  paginatedData.map((row, idx) => (
+                  rows.map((row, idx) => (
                     <tr key={row.id ?? idx}>
                       <td>
                         <div className="form-check style-check d-flex align-items-center">
@@ -273,49 +207,11 @@ const SubscriptionPlan = () => {
         </div>
       </div>
 
-      <WizardPopup
-        modalWidth="700px"
-        open={isModalOpen}
-        title={editingId ? 'Edit Plan' : 'Add Plan'}
-        steps={STEPS}
-        step={0}
-        onClose={() => setIsModalOpen(false)}
-        onSubmit={handleSave}
-        submitLabel={editingId ? 'Update' : 'Save'}
-      >
-        <div className="avm-grid">
-          <FormField label="Plan Name" required full>
-            <input type="text" className="avm-input" id="planName" placeholder="Enter plan name" value={formData.planName} onChange={handleInputChange} />
-          </FormField>
-          <FormField label="Price" required>
-            <input type="number" className="avm-input" id="price" placeholder="Enter price" value={formData.price} onChange={handleInputChange} />
-          </FormField>
-          <FormField label="Student Limit" required>
-            <input type="text" className="avm-input" id="studentLimit" placeholder="Enter student limit" value={formData.studentLimit} onChange={handleInputChange} />
-          </FormField>
-          <FormField label="Guardian Limit" required>
-            <input type="text" className="avm-input" id="guardianLimit" placeholder="Enter guardian limit" value={formData.guardianLimit} onChange={handleInputChange} />
-          </FormField>
-          <FormField label="Teacher Limit" required>
-            <input type="text" className="avm-input" id="teacherLimit" placeholder="Enter teacher limit" value={formData.teacherLimit} onChange={handleInputChange} />
-          </FormField>
-          <FormField label="Employee Limit" required>
-            <input type="text" className="avm-input" id="employeeLimit" placeholder="Enter employee limit" value={formData.employeeLimit} onChange={handleInputChange} />
-          </FormField>
-          <FormField label="Status" required>
-            <select className="avm-input form-select" id="status" value={formData.status} onChange={handleInputChange}>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </FormField>
-        </div>
-      </WizardPopup>
-
       <SlideSidebar isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} title="Find Plan">
         <form className="p-20 d-grid gap-16" onSubmit={(e) => { e.preventDefault(); setIsFilterOpen(false); setCurrentPage(1); }}>
           <div>
             <label className="text-sm fw-semibold text-primary-light mb-8">Status</label>
-            <select className="form-control form-select" value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}>
+            <select className="form-control form-select bg-white" value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}>
               <option value="Select">--Select Status--</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>

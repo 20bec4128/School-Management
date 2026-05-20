@@ -37,6 +37,7 @@ export function DonutChart({
   centerLabel,
   centerValue,
   legendMode = 'percent', // 'percent' | 'values'
+  showLegend = true,
   tooltip = false,
   stroke = '#ffffff',
   strokeWidth = 2,
@@ -48,6 +49,8 @@ export function DonutChart({
   const rInner = rOuter - thickness
 
   const [tip, setTip] = React.useState(null)
+  const [activeLabel, setActiveLabel] = React.useState(null)
+  const [activeColor, setActiveColor] = React.useState(null)
 
   let angle = 0
   const paths = segments.map((s) => {
@@ -64,6 +67,7 @@ export function DonutChart({
     }
   })
 
+  const showCenter = centerLabel != null || centerValue != null
   const displayedCenterValue = centerValue ?? String(total)
 
   return (
@@ -76,7 +80,7 @@ export function DonutChart({
               left: tip.x,
               top: tip.y,
               transform: 'translate(-50%, -120%)',
-              background: '#009F5E',
+              background: tip.color || '#009F5E',
               color: '#fff',
               padding: '10px 14px',
               borderRadius: 8,
@@ -107,23 +111,46 @@ export function DonutChart({
               fill={p.color}
               stroke={stroke}
               strokeWidth={strokeWidth}
+              style={{
+                cursor: tooltip ? 'pointer' : 'default',
+                transformBox: 'fill-box',
+                transformOrigin: 'center',
+                transform: activeLabel === p.label ? 'scale(1.035)' : 'scale(1)',
+                filter:
+                  activeLabel === p.label && activeColor
+                    ? `drop-shadow(0 0 10px ${activeColor}55)`
+                    : 'none',
+                transition: 'transform 180ms ease, opacity 180ms ease',
+                opacity: activeLabel && activeLabel !== p.label ? 0.82 : 1,
+              }}
               onMouseMove={(e) => {
                 if (!tooltip) return
                 const rect = e.currentTarget.ownerSVGElement.getBoundingClientRect()
                 setTip({
                   label: p.label,
                   value: p.value,
+                  color: p.color,
                   x: e.clientX - rect.left,
                   y: e.clientY - rect.top,
                 })
               }}
               onMouseEnter={() => {
+                setActiveLabel(p.label)
+                setActiveColor(p.color)
                 if (!tooltip) return
-                setTip((t) => (t ? { ...t, label: p.label, value: p.value } : { label: p.label, value: p.value, x: cx, y: 18 }))
+                setTip((t) =>
+                  t
+                    ? { ...t, label: p.label, value: p.value, color: p.color }
+                    : { label: p.label, value: p.value, color: p.color, x: cx, y: 18 },
+                )
+              }}
+              onMouseLeave={() => {
+                setActiveLabel(null)
+                setActiveColor(null)
               }}
             />
           ))}
-          {(centerLabel || displayedCenterValue) && (
+          {showCenter && (centerLabel || displayedCenterValue) && (
             <>
               {displayedCenterValue != null && (
                 <text
@@ -152,35 +179,37 @@ export function DonutChart({
         </svg>
       </div>
 
-      <div className="d-flex flex-wrap justify-content-center gap-20 mt-8">
-        {segments.map((s) => (
-          <div key={s.label} className="d-flex align-items-center gap-8">
-            <span
-              className="w-10-px h-10-px radius-2"
-              style={{
-                background: s.color,
-                transform: 'rotate(45deg)',
-                borderRadius: 2,
-                display: 'inline-block',
-              }}
-            ></span>
-            <span className="text-secondary-light text-sm fw-semibold">
-              {legendMode === 'values' ? (
-                <>
-                  {s.label}: <span className="text-primary-light fw-bold">{Number(s.value) || 0}</span>
-                </>
-              ) : (
-                <>
-                  {s.label}:{' '}
-                  <span className="text-primary-light fw-bold">
-                    {roundTo((Number(s.value) / total) * 100, 0)}%
-                  </span>
-                </>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
+      {showLegend && (
+        <div className="d-flex flex-wrap justify-content-center gap-20 mt-8">
+          {segments.map((s) => (
+            <div key={s.label} className="d-flex align-items-center gap-8">
+              <span
+                className="w-10-px h-10-px radius-2"
+                style={{
+                  background: s.color,
+                  transform: 'rotate(45deg)',
+                  borderRadius: 2,
+                  display: 'inline-block',
+                }}
+              ></span>
+              <span className="text-secondary-light text-sm fw-semibold">
+                {legendMode === 'values' ? (
+                  <>
+                    {s.label}: <span className="text-primary-light fw-bold">{Number(s.value) || 0}</span>
+                  </>
+                ) : (
+                  <>
+                    {s.label}:{' '}
+                    <span className="text-primary-light fw-bold">
+                      {roundTo((Number(s.value) / total) * 100, 0)}%
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

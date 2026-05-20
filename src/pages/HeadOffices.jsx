@@ -82,6 +82,7 @@ const HeadOffices = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
+  const [selectedRows, setSelectedRows] = useState([])
   const isSuperAdmin = getCurrentRole() === 'SUPER_ADMIN'
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -123,6 +124,20 @@ const HeadOffices = () => {
   useEffect(() => {
     void load()
   }, [currentPage, filters.name, filters.status, rowsPerPage, search])
+
+  const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(row.id))
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedRows((prev) => [...new Set([...prev, ...rows.map((row) => row.id)])])
+    } else {
+      setSelectedRows((prev) => prev.filter((id) => !rows.some((row) => row.id === id)))
+    }
+  }
+
+  const handleSelectRow = (id) => {
+    setSelectedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
+  }
 
   const handleChange = (e) => {
     const { id, value } = e.target
@@ -367,7 +382,17 @@ const HeadOffices = () => {
             <table className="table bordered-table mb-0 data-table">
               <thead>
                 <tr>
-                  <th scope="col" style={{ width: 90 }}>ID</th>
+                  <th scope="col">
+                    <div className="form-check style-check d-flex align-items-center">
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={allSelected}
+                        onChange={handleSelectAll}
+                      />
+                      <label className="form-check-label">S.L</label>
+                    </div>
+                  </th>
                   {visibleColumns.name ? <th scope="col">Name</th> : null}
                   {visibleColumns.status ? <th scope="col" style={{ width: 120 }}>Status</th> : null}
                   <th scope="col">Action</th>
@@ -379,9 +404,19 @@ const HeadOffices = () => {
                 ) : rows.length === 0 ? (
                   <tr><td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">No records found.</td></tr>
                 ) : (
-                  rows.map((row) => (
+                  rows.map((row, idx) => (
                     <tr key={row.id}>
-                      <td>{row.id}</td>
+                      <td>
+                        <div className="form-check style-check d-flex align-items-center">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={selectedRows.includes(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
+                          />
+                          <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
+                        </div>
+                      </td>
                       {visibleColumns.name ? (
                         <td>
                           <span className="fw-medium text-primary-light">{row.name || '-'}</span>
