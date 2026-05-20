@@ -5,6 +5,7 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import PhoneField from '../components/PhoneField'
 import useColumnVisibility from '../hooks/useColumnVisibility'
+import { fetchSubscriptionPlans } from '../apis/subscriptionPlansApi'
 import { createSchoolWithAdmin, deleteSchool, fetchSchoolsLookup, fetchSchoolsPage, updateSchool } from '../apis/schoolsApi'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { useAuth } from '../context/useAuth'
@@ -16,7 +17,7 @@ const emptyForm = {
   schoolUrl: '',
   schoolCode: '',
   schoolName: '',
-  subscription: 'Standard',
+  subscription: '',
   isDemo: 'No',
   status: 'Active',
   adminUsername: '',
@@ -104,7 +105,6 @@ const columnOptions = [
   { key: 'status', label: 'Status' },
 ]
 
-const subscriptionOptions = ['Trial', 'Standard', 'Premium']
 const demoOptions = ['Yes', 'No']
 const statusOptions = ['Active', 'Inactive']
 const languageOptions = ['English', 'Spanish', 'French', 'German', 'Arabic', 'Hindi']
@@ -187,6 +187,7 @@ const ManageSchool = ({ onNavigate }) => {
   const [schools, setSchools] = useState([])
   const [allSchools, setAllSchools] = useState([])
   const [headOffices, setHeadOffices] = useState([])
+  const [subscriptionPlans, setSubscriptionPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -240,6 +241,14 @@ const ManageSchool = ({ onNavigate }) => {
     }
     return normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)))
   }, [currentHeadOfficeId, currentHeadOfficeName, headOffices, isHeadOfficeScoped])
+
+  const subscriptionOptions = useMemo(() => {
+    return Array.isArray(subscriptionPlans) ? subscriptionPlans : []
+  }, [subscriptionPlans])
+
+  const selectedSubscriptionValue = useMemo(() => {
+    return editForm.subscription || ''
+  }, [editForm.subscription])
 
   const schoolsToRender = useMemo(() => schools, [schools])
 
@@ -320,7 +329,7 @@ const ManageSchool = ({ onNavigate }) => {
         schoolUrl: row.schoolUrl || '',
         schoolCode: row.schoolCode || '',
         schoolName: row.schoolName || '',
-        subscription: row.subscription || 'Standard',
+        subscription: row.subscription || '',
         isDemo: row.isDemo || 'No',
         status: toUiStatus(row.status),
         address: row.address || '',
@@ -419,6 +428,15 @@ const ManageSchool = ({ onNavigate }) => {
     }
   }, [currentHeadOfficeId, currentHeadOfficeName, isHeadOfficeScoped, isSuperAdmin])
 
+  const loadSubscriptionPlans = useCallback(async () => {
+    try {
+      const plans = await fetchSubscriptionPlans()
+      setSubscriptionPlans(Array.isArray(plans) ? plans : [])
+    } catch {
+      setSubscriptionPlans([])
+    }
+  }, [])
+
   const loadAllSchools = useCallback(async () => {
     try {
       const list = await fetchSchoolsLookup()
@@ -434,6 +452,10 @@ const ManageSchool = ({ onNavigate }) => {
     }
     void fetchData()
   }, [currentPage, rowsPerPage, loadAllSchools, loadSchools])
+
+  useEffect(() => {
+    void loadSubscriptionPlans()
+  }, [loadSubscriptionPlans])
 
   useEffect(() => {
     void loadHeadOffices()
@@ -454,7 +476,7 @@ const ManageSchool = ({ onNavigate }) => {
     schoolUrl: form.schoolUrl || '',
     schoolCode: form.schoolCode || '',
     schoolName: form.schoolName || '',
-    subscription: form.subscription || 'Standard',
+    subscription: form.subscription || '',
     isDemo: form.isDemo || 'No',
     status: toApiStatus(form.status),
     address: form.address || '',
@@ -490,6 +512,10 @@ const ManageSchool = ({ onNavigate }) => {
     if (saving) return
     if (!editingSchoolId) {
       setError('No school selected for update')
+      return
+    }
+    if (!String(editForm.subscription || '').trim()) {
+      setError('Subscription is required')
       return
     }
     setSaving(true)
@@ -592,11 +618,15 @@ const ManageSchool = ({ onNavigate }) => {
                   value={form.subscription}
                   onChange={handleChange(setter)}
                 >
-                  {subscriptionOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  <option value="">--Select Plan--</option>
+                  {subscriptionOptions.map((plan) => (
+                    <option key={plan.id} value={plan.planName}>
+                      {plan.planName}
                     </option>
                   ))}
+                  {selectedSubscriptionValue && !subscriptionOptions.some((plan) => plan.planName === selectedSubscriptionValue) ? (
+                    <option value={selectedSubscriptionValue}>{selectedSubscriptionValue} (Legacy)</option>
+                  ) : null}
                 </select>
               </FormField>
 

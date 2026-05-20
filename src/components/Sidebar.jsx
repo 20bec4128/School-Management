@@ -610,7 +610,6 @@ const menuSections = [
             href: "#",
             page: "subscription-settings",
           },
-          { label: "General Settings", href: "#", page: "general-settings" },
           {
             label: "Subscription Plans",
             href: "#",

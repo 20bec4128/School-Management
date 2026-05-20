@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createSchoolWithAdmin, updateSchool } from "../apis/schoolsApi";
 import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
+import { fetchSubscriptionPlans } from "../apis/subscriptionPlansApi";
 import { useAuth } from "../context/useAuth";
 import PhoneCodeField from "../components/PhoneCodeField";
 import "../assets/css/addModalShared.css";
@@ -50,7 +51,7 @@ const emptyForm = {
   schoolUrl: "",
   schoolCode: "",
   schoolName: "",
-  subscription: "Standard",
+  subscription: "",
   isDemo: "No",
   status: "Active",
   adminUsername: "",
@@ -90,7 +91,7 @@ const mapSchoolRowToForm = (row = {}) => ({
   schoolUrl: row.schoolUrl || "",
   schoolCode: row.schoolCode || "",
   schoolName: row.schoolName || "",
-  subscription: row.subscription || "Standard",
+  subscription: row.subscription || "",
   isDemo: row.isDemo || "No",
   status: row.status || "Active",
   adminUsername: row.adminUsername || "",
@@ -238,6 +239,7 @@ const AddSchool = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [headOffices, setHeadOffices] = useState([]);
+  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -292,6 +294,18 @@ const AddSchool = ({ onNavigate }) => {
   }, [currentHeadOfficeId, currentHeadOfficeName, isHeadOfficeScoped, isSuperAdmin]);
 
   useEffect(() => {
+    const loadSubscriptionPlans = async () => {
+      try {
+        const plans = await fetchSubscriptionPlans();
+        setSubscriptionPlans(Array.isArray(plans) ? plans : []);
+      } catch {
+        setSubscriptionPlans([]);
+      }
+    };
+    void loadSubscriptionPlans();
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (redirectTimerRef.current) {
         clearTimeout(redirectTimerRef.current);
@@ -316,6 +330,7 @@ const AddSchool = ({ onNavigate }) => {
       if (isSuperAdmin && !form.headOfficeId) return "Head Office is required";
       if (!form.adminUsername.trim()) return "School Admin Username is required";
       if (!isEditing && !form.adminPassword.trim()) return "School Admin Password is required";
+      if (!form.subscription.trim()) return "Subscription is required";
       if (!form.email.trim()) return "Email is required";
       if (!form.phone.trim()) return "Phone is required";
       if (!form.address.trim()) return "Address is required";
@@ -358,6 +373,7 @@ const AddSchool = ({ onNavigate }) => {
     try {
       const payload = {
         ...form,
+        subscription: form.subscription.trim(),
         headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : null,
         phone: combinePhoneValue(phoneCode, form.phone),
         status: form.status.toUpperCase(),
@@ -392,6 +408,14 @@ const AddSchool = ({ onNavigate }) => {
   };
 
   const isEditing = Boolean(editingSchoolId);
+
+  useEffect(() => {
+    if (editingSchoolId || form.subscription || subscriptionPlans.length === 0) return;
+    setForm((prev) => ({
+      ...prev,
+      subscription: subscriptionPlans[0]?.planName || "",
+    }));
+  }, [editingSchoolId, form.subscription, subscriptionPlans]);
 
   return (
     <div className="dashboard-main-body">
@@ -518,9 +542,15 @@ const AddSchool = ({ onNavigate }) => {
 
                 <FormField label="Subscription" required>
                   <select id="subscription" className="form-control form-select" value={form.subscription} onChange={handleChange} style={{ paddingLeft: '2.5rem' }}>
-                    <option value="Trial">Trial</option>
-                    <option value="Standard">Standard</option>
-                    <option value="Premium">Premium</option>
+                    <option value="">--Select Plan--</option>
+                    {subscriptionPlans.map((plan) => (
+                      <option key={plan.id} value={plan.planName}>
+                        {plan.planName}
+                      </option>
+                    ))}
+                    {form.subscription && !subscriptionPlans.some((plan) => plan.planName === form.subscription) ? (
+                      <option value={form.subscription}>{form.subscription} (Legacy)</option>
+                    ) : null}
                   </select>
                 </FormField>
 

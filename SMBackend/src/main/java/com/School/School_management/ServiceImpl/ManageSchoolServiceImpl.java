@@ -5,11 +5,15 @@ import com.School.School_management.Dto.CreateSchoolWithAdminRequest;
 import com.School.School_management.Dto.CreateSchoolWithAdminResponse;
 import com.School.School_management.Entity.AdminUser;
 import com.School.School_management.Entity.ManageSchool;
+import com.School.School_management.Entity.SchoolSubscription;
+import com.School.School_management.Entity.SubscriptionPlan;
 import com.School.School_management.Exception.ConflictException;
 import com.School.School_management.Exception.BadRequestException;
 import com.School.School_management.Repository.AdminUserRepository;
 import com.School.School_management.Repository.HeadOfficeRepository;
 import com.School.School_management.Repository.SchoolRepository;
+import com.School.School_management.Repository.SchoolSubscriptionRepository;
+import com.School.School_management.Repository.SubscriptionPlanRepository;
 import com.School.School_management.Service.ManageSchoolService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
@@ -36,6 +40,8 @@ import java.util.UUID;
 public class ManageSchoolServiceImpl implements ManageSchoolService {
 
     private final SchoolRepository schoolRepository;
+    private final SchoolSubscriptionRepository schoolSubscriptionRepository;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final AdminUserRepository adminUserRepository;
     private final HeadOfficeRepository headOfficeRepository;
     private final PasswordEncoder passwordEncoder;
@@ -44,12 +50,16 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
 
     public ManageSchoolServiceImpl(
             SchoolRepository schoolRepository,
+            SchoolSubscriptionRepository schoolSubscriptionRepository,
+            SubscriptionPlanRepository subscriptionPlanRepository,
             AdminUserRepository adminUserRepository,
             HeadOfficeRepository headOfficeRepository,
             PasswordEncoder passwordEncoder,
             UploadProperties uploadProperties
     ) {
         this.schoolRepository = schoolRepository;
+        this.schoolSubscriptionRepository = schoolSubscriptionRepository;
+        this.subscriptionPlanRepository = subscriptionPlanRepository;
         this.adminUserRepository = adminUserRepository;
         this.headOfficeRepository = headOfficeRepository;
         this.passwordEncoder = passwordEncoder;
@@ -57,6 +67,7 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
     }
 
     @Override
+    @Transactional
     public ManageSchoolDto createSchool(
             ManageSchoolDto dto,
             MultipartFile adminLogo,
@@ -74,7 +85,7 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
             school.setFrontendLogoUrl(saveFile(frontendLogo));
         }
 
-        return toDto(schoolRepository.save(school));
+        return toDto(saveSchoolWithSubscriptionSync(school));
     }
 
     @Override
@@ -117,7 +128,7 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
             school.setFrontendLogoUrl(saveFile(frontendLogo));
         }
 
-        ManageSchool savedSchool = schoolRepository.save(school);
+        ManageSchool savedSchool = saveSchoolWithSubscriptionSync(school);
 
         if (existingAdmin != null && isSameSchool(existingAdmin, savedSchool)) {
             return new CreateSchoolWithAdminResponse(
@@ -251,15 +262,20 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
             school.setFrontendLogoUrl(saveFile(frontendLogo));
         }
 
-        return toDto(schoolRepository.save(school));
+        return toDto(saveSchoolWithSubscriptionSync(school));
     }
 
     @Override
+    @Transactional
     public void deleteSchool(Long id) {
         if (!schoolRepository.existsById(id)) {
             throw new RuntimeException("School not found");
         }
 
+        schoolSubscriptionRepository.findBySchoolIdAndDeletedFalseOrderByIdDesc(id).forEach(subscription -> {
+            subscription.setDeleted(true);
+            schoolSubscriptionRepository.save(subscription);
+        });
         schoolRepository.deleteById(id);
     }
 
@@ -424,11 +440,64 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         adminUserRepository.save(admin);
     }
 
+    private ManageSchool saveSchoolWithSubscriptionSync(ManageSchool school) {
+        ManageSchool savedSchool = schoolRepository.save(school);
+        syncSchoolSubscription(savedSchool);
+        return savedSchool;
+    }
+
+    private void syncSchoolSubscription(ManageSchool school) {
+        if (school == null || school.getId() == null) return;
+
+        String selectedPlanName = normalizeOptional(school.getSubscription());
+        if (selectedPlanName == null) return;
+
+        SubscriptionPlan selectedPlan = subscriptionPlanRepository.findAllByDeletedFalseOrderByIdDesc().stream()
+                .filter(plan -> plan.getPlanName() != null && plan.getPlanName().trim().equalsIgnoreCase(selectedPlanName))
+                .findFirst()
+                .orElse(null);
+
+        SchoolSubscription subscription = schoolSubscriptionRepository
+                .findFirstBySchoolIdAndDeletedFalseOrderByIdDesc(school.getId())
+                .orElseGet(SchoolSubscription::new);
+
+        subscription.setSchoolId(school.getId());
+        subscription.setSchoolName(school.getSchoolName());
+        subscription.setHeadOfficeId(school.getHeadOfficeId());
+        subscription.setPlanId(selectedPlan != null ? selectedPlan.getId() : null);
+        subscription.setPlanName(selectedPlan != null ? selectedPlan.getPlanName() : selectedPlanName);
+        subscription.setPrice(selectedPlan != null ? selectedPlan.getPrice() : null);
+        subscription.setName(resolveSubscriptionContactName(school));
+        subscription.setEmail(normalizeOptional(school.getEmail()));
+        subscription.setPhone(normalizeOptional(school.getPhone()));
+        subscription.setAddress(normalizeOptional(school.getAddress()));
+        if (subscription.getId() == null && normalizeOptional(subscription.getStatus()) == null) {
+            subscription.setStatus("Active");
+        } else if (normalizeOptional(subscription.getStatus()) == null) {
+            subscription.setStatus("Active");
+        }
+
+        schoolSubscriptionRepository.save(subscription);
+    }
+
+    private String resolveSubscriptionContactName(ManageSchool school) {
+        if (school == null) return null;
+        String schoolName = normalizeOptional(school.getSchoolName());
+        if (schoolName != null) return schoolName;
+        return normalizeOptional(school.getEmail());
+    }
+
     private String normalizeRequired(String value, String message) {
         if (value == null) throw new BadRequestException(message);
         String trimmed = value.trim();
         if (trimmed.isEmpty()) throw new BadRequestException(message);
         return trimmed;
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String normalizeStatus(String value) {
@@ -447,7 +516,7 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         dto.setSchoolUrl(school.getSchoolUrl());
         dto.setSchoolCode(school.getSchoolCode());
         dto.setSchoolName(school.getSchoolName());
-        dto.setSubscription(school.getSubscription());
+        dto.setSubscription(resolveSchoolSubscriptionLabel(school));
         dto.setIsDemo(school.getIsDemo());
         dto.setStatus(school.getStatus());
         dto.setAddress(school.getAddress());
@@ -478,6 +547,16 @@ public class ManageSchoolServiceImpl implements ManageSchoolService {
         dto.setAdminLogoUrl(school.getAdminLogoUrl());
         dto.setAdminUsername(resolveSchoolAdminUsername(school.getId()));
         return dto;
+    }
+
+    private String resolveSchoolSubscriptionLabel(ManageSchool school) {
+        if (school == null) return null;
+        String fallback = normalizeOptional(school.getSubscription());
+        if (school.getId() == null) return fallback;
+        return schoolSubscriptionRepository.findFirstBySchoolIdAndDeletedFalseOrderByIdDesc(school.getId())
+                .map(SchoolSubscription::getPlanName)
+                .map(this::normalizeOptional)
+                .orElse(fallback);
     }
 
     private String resolveSchoolAdminUsername(Long schoolId) {

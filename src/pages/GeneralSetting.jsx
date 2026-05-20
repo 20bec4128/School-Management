@@ -421,7 +421,7 @@ const GeneralSetting = () => {
                   </div>
                 </div>
                 <div className="card-body p-20">
-                  <div className="row g-0">
+                  <div className="row g-10">
                     <Field label="School Name" icon="ri-school-line">
                       <input
                         type="text"
@@ -459,7 +459,7 @@ const GeneralSetting = () => {
                       />
                     </Field>
 
-                    <Field label="Brand Footer" full icon="ri-copyright-line">
+                    <Field label="Brand Footer"  icon="ri-copyright-line">
                       <input
                         type="text"
                         id="brandFooter"
@@ -488,7 +488,7 @@ const GeneralSetting = () => {
                   </div>
                 </div>
                 <div className="card-body p-20">
-                  <div className="row g-0">
+                  <div className="row g-10">
                     <Field label="Global Language" required icon="ri-translate-2">
                       <select
                         id="language"
@@ -591,7 +591,7 @@ const GeneralSetting = () => {
                   </div>
                 </div>
                 <div className="card-body p-20">
-                  <div className="row g-0">
+                  <div className="row g-10">
                     <Field label="Enable Frontend" required icon="ri-layout-line">
                       <select
                         id="enableFrontend"
