@@ -64,6 +64,7 @@ const GenerateCertificate = lazy(() => import("./pages/GenerateCertificate"));
 const Candidate = lazy(() => import("./pages/Candidate"));
 const CandidateCreate = lazy(() => import("./pages/CandidateCreate"));
 const Donar = lazy(() => import("./pages/Donar"));
+const AddDonor = lazy(() => import("./pages/AddDonor"));
 const Scholarship = lazy(() => import("./pages/Scholarship"));
 const AddScholarship = lazy(() => import("./pages/AddScholarship"));
 const Guardian = lazy(() => import("./pages/Guardian"));
@@ -340,6 +341,7 @@ const routeEntries = [
   { pageKey: "candidate", component: Candidate },
   { pageKey: "candidate-create", component: CandidateCreate },
   { pageKey: "donar", component: Donar },
+  { pageKey: "add-donor", component: AddDonor },
   { pageKey: "scholarship", component: Scholarship },
   { pageKey: "add-scholarship", component: AddScholarship },
   { pageKey: "guardian", component: Guardian },
@@ -587,6 +589,7 @@ const routeEntries = [
   { pageKey: "candidate", component: Candidate },
   { pageKey: "candidate-create", component: CandidateCreate },
   { pageKey: "donar", component: Donar },
+  { pageKey: "add-donor", component: AddDonor },
   { pageKey: "scholarship", component: Scholarship },
   { pageKey: "add-scholarship", component: AddScholarship },
   { pageKey: "guardian", component: Guardian },
