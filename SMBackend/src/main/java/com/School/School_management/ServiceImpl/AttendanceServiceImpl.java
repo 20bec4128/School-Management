@@ -20,12 +20,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,8 +63,8 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public List<AttendanceDto> list(Long headOfficeId, Long schoolId, String examTerm, String className, String sectionName, String subjectName, LocalDate attendanceDate, String search) {
-        String cleanSearch = (search != null) ? search.trim() : "";
-        return attendanceRepository.findAllWithFilters(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, cleanSearch)
+        String cleanSearch = trimToNull(search);
+        return attendanceRepository.findAll(buildSpec(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, cleanSearch))
                 .stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
@@ -69,9 +72,9 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public Page<AttendanceDto> listPaginated(Long headOfficeId, Long schoolId, String examTerm, String className, String sectionName, String subjectName, LocalDate attendanceDate, String search, int page, int size) {
-        String cleanSearch = (search != null) ? search.trim() : "";
+        String cleanSearch = trimToNull(search);
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        return attendanceRepository.findAllWithFiltersPaginated(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, cleanSearch, pageable)
+        return attendanceRepository.findAll(buildSpec(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, cleanSearch), pageable)
                 .map(this::convertToDto);
     }
 
@@ -92,7 +95,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 && dto.getSubjectName() != null
                 && dto.getRollNo() != null
                 && dto.getAttendanceDate() != null) {
-            var existing = attendanceRepository.findExistingAttendance(
+            var existing = attendanceRepository.findFirstBySchoolIdAndExamTermAndClassNameAndSectionNameAndSubjectNameAndRollNoAndAttendanceDate(
                     dto.getSchoolId(),
                     dto.getExamTerm(),
                     dto.getClassName(),
@@ -355,6 +358,60 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Specification<Attendance> buildSpec(
+            Long headOfficeId,
+            Long schoolId,
+            String examTerm,
+            String className,
+            String sectionName,
+            String subjectName,
+            LocalDate attendanceDate,
+            String search) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (headOfficeId != null) {
+                predicates.add(cb.equal(root.get("headOfficeId"), headOfficeId));
+            }
+            if (schoolId != null) {
+                predicates.add(cb.equal(root.get("schoolId"), schoolId));
+            }
+            if (examTerm != null) {
+                predicates.add(cb.equal(root.get("examTerm"), examTerm));
+            }
+            if (className != null) {
+                predicates.add(cb.equal(root.get("className"), className));
+            }
+            if (sectionName != null) {
+                predicates.add(cb.equal(root.get("sectionName"), sectionName));
+            }
+            if (subjectName != null) {
+                predicates.add(cb.equal(root.get("subjectName"), subjectName));
+            }
+            if (attendanceDate != null) {
+                predicates.add(cb.equal(root.get("attendanceDate"), attendanceDate));
+            }
+            if (search != null) {
+                String like = "%" + search.toLowerCase() + "%";
+                Predicate searchPredicate = cb.or(
+                        cb.like(cb.lower(cb.coalesce(root.get("name"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("phone"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("rollNo"), "")), like),
+                        cb.like(cb.lower(cb.coalesce(root.get("attendAll"), "")), like)
+                );
+                predicates.add(searchPredicate);
+            }
+
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     private String render(String template, String schoolName, String receiverName, String studentName, String className, String sectionName, String absentDate) {
