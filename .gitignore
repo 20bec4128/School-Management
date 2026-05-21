@@ -28,4 +28,14 @@ uploads
 *.njsproj
 *.sln
 *.sw?
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+.env
+.env.*
+*.env
+=======
+
+>>>>>>> da8fc5e319f96a1a08914162f2f562ba12e4dc0a
+>>>>>>> 92b32723050633ef6b8521da49dc36a8c1994d2b
 /.metadata/
