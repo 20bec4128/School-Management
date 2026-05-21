@@ -6,6 +6,7 @@ public class EmployeeDto {
     private Long id;
     private Long schoolId;
     private Long designationId;
+    private String designationName;
     private String role;
 
     private String name;
@@ -45,6 +46,9 @@ public class EmployeeDto {
 
     public Long getDesignationId() { return designationId; }
     public void setDesignationId(Long designationId) { this.designationId = designationId; }
+
+    public String getDesignationName() { return designationName; }
+    public void setDesignationName(String designationName) { this.designationName = designationName; }
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }

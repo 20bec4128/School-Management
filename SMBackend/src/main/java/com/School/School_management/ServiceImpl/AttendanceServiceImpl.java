@@ -23,6 +23,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -58,19 +59,19 @@ public class AttendanceServiceImpl implements AttendanceService {
     private EmailMessageDispatchService emailMessageDispatchService;
 
     @Override
-    public List<AttendanceDto> list(Long headOfficeId, Long schoolId, String examTerm, String className, String sectionName, String subjectName, String search) {
+    public List<AttendanceDto> list(Long headOfficeId, Long schoolId, String examTerm, String className, String sectionName, String subjectName, LocalDate attendanceDate, String search) {
         String cleanSearch = (search != null) ? search.trim() : "";
-        return attendanceRepository.findAllWithFilters(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, cleanSearch)
+        return attendanceRepository.findAllWithFilters(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, cleanSearch)
                 .stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public Page<AttendanceDto> listPaginated(Long headOfficeId, Long schoolId, String examTerm, String className, String sectionName, String subjectName, String search, int page, int size) {
+    public Page<AttendanceDto> listPaginated(Long headOfficeId, Long schoolId, String examTerm, String className, String sectionName, String subjectName, LocalDate attendanceDate, String search, int page, int size) {
         String cleanSearch = (search != null) ? search.trim() : "";
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        return attendanceRepository.findAllWithFiltersPaginated(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, cleanSearch, pageable)
+        return attendanceRepository.findAllWithFiltersPaginated(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, cleanSearch, pageable)
                 .map(this::convertToDto);
     }
 

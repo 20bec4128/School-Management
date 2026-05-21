@@ -24,6 +24,7 @@ export const fetchAttendances = async ({
   className,
   sectionName,
   subjectName,
+  attendanceDate,
   search = '',
 } = {}) => {
   const qs = new URLSearchParams()
@@ -33,6 +34,7 @@ export const fetchAttendances = async ({
   if (className != null && String(className).trim() !== '') qs.set('className', String(className))
   if (sectionName != null && String(sectionName).trim() !== '') qs.set('sectionName', String(sectionName))
   if (subjectName != null && String(subjectName).trim() !== '') qs.set('subjectName', String(subjectName))
+  if (attendanceDate != null && String(attendanceDate).trim() !== '') qs.set('attendanceDate', String(attendanceDate))
   if (search != null && String(search).trim() !== '') qs.set('search', String(search).trim())
 
   const url = qs.size ? `${BASE}?${qs.toString()}` : BASE
@@ -49,6 +51,7 @@ export const fetchAttendancesPage = async ({
   className,
   sectionName,
   subjectName,
+  attendanceDate,
   search = '',
   page = 0,
   size = 10,
@@ -63,6 +66,7 @@ export const fetchAttendancesPage = async ({
   if (className != null && String(className).trim() !== '') qs.set('className', String(className))
   if (sectionName != null && String(sectionName).trim() !== '') qs.set('sectionName', String(sectionName))
   if (subjectName != null && String(subjectName).trim() !== '') qs.set('subjectName', String(subjectName))
+  if (attendanceDate != null && String(attendanceDate).trim() !== '') qs.set('attendanceDate', String(attendanceDate))
   if (search != null && String(search).trim() !== '') qs.set('search', String(search).trim())
 
   const res = await apiFetch(`${BASE}/page?${qs.toString()}`, { headers: { Accept: 'application/json' } })

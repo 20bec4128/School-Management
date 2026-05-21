@@ -10,6 +10,7 @@ import Login from './pages/Login'
 import AppRoute from './AppRoute'
 import { useAuth } from './context/useAuth'
 import { normalizeRole } from './utils/roles'
+import LandingPage from './landingPage/LandingPage'
 
 const isBrowser = typeof window !== 'undefined'
 
@@ -45,7 +46,8 @@ function App() {
   const syncBrowserPath = (page) => {
     if (!isBrowser) return
 
-    const nextPath = page && page !== homePage ? `/${page}` : '/'
+    const nextPath =
+      page === 'login' ? '/login' : page && page !== homePage ? `/${page}` : '/'
     if (window.location.pathname === nextPath) return
 
     window.history.pushState({ page }, '', nextPath)
@@ -61,7 +63,7 @@ function App() {
     if (status !== 'ready') return
 
     if (!token) {
-      setCurrentPage('login')
+      setCurrentPage('landing')
       if (isBrowser && window.location.pathname !== '/') {
         window.history.replaceState({}, '', '/')
       }
@@ -69,7 +71,7 @@ function App() {
     }
 
     const pathPage = isBrowser ? normalizePathPage(window.location.pathname) : null
-    const nextPage = pathPage || homePage
+    const nextPage = pathPage && pathPage !== 'login' ? pathPage : homePage
 
     setCurrentPage((prev) => {
       if (prev === 'login' || prev === 'dashboard') return nextPage
@@ -82,7 +84,7 @@ function App() {
 
     const handlePopState = () => {
       const pathPage = normalizePathPage(window.location.pathname)
-      setCurrentPage(pathPage || homePage)
+      setCurrentPage(pathPage && pathPage !== 'login' ? pathPage : homePage)
     }
 
     window.addEventListener('popstate', handlePopState)
@@ -91,12 +93,23 @@ function App() {
 
   if (status !== 'ready') return null
 
-  if (!token || currentPage === 'login') {
+  if (!token && currentPage === 'login') {
     return (
       <Login
         onSuccess={() => {
           setCurrentPage(homePage)
           syncBrowserPath(homePage)
+        }}
+      />
+    )
+  }
+
+  if (!token) {
+    return (
+      <LandingPage
+        onOpenLogin={() => {
+          setCurrentPage('login')
+          syncBrowserPath('login')
         }}
       />
     )

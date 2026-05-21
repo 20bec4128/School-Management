@@ -21,6 +21,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
            "(:className IS NULL OR a.className = :className) AND " +
            "(:sectionName IS NULL OR a.sectionName = :sectionName) AND " +
            "(:subjectName IS NULL OR a.subjectName = :subjectName) AND " +
+           "(:attendanceDate IS NULL OR a.attendanceDate = :attendanceDate) AND " +
            "(:search IS NULL OR :search = '' OR " +
            " LOWER(a.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            " LOWER(a.phone) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
@@ -32,6 +33,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                                         @Param("className") String className,
                                         @Param("sectionName") String sectionName,
                                         @Param("subjectName") String subjectName,
+                                        @Param("attendanceDate") java.time.LocalDate attendanceDate,
                                         @Param("search") String search);
 
     @Query("SELECT a FROM Attendance a WHERE " +
@@ -41,6 +43,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
            "(:className IS NULL OR a.className = :className) AND " +
            "(:sectionName IS NULL OR a.sectionName = :sectionName) AND " +
            "(:subjectName IS NULL OR a.subjectName = :subjectName) AND " +
+           "(:attendanceDate IS NULL OR a.attendanceDate = :attendanceDate) AND " +
            "(:search IS NULL OR :search = '' OR " +
            " LOWER(a.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            " LOWER(a.phone) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
@@ -52,6 +55,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                                                  @Param("className") String className,
                                                  @Param("sectionName") String sectionName,
                                                  @Param("subjectName") String subjectName,
+                                                 @Param("attendanceDate") java.time.LocalDate attendanceDate,
                                                  @Param("search") String search,
                                                  Pageable pageable);
 

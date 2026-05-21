@@ -27,6 +27,24 @@ const STATUS_OPTIONS = [
   { value: 'Late', label: 'Late', className: 'bg-warning-100 text-warning-600' },
 ]
 
+const STATUS_INLINE_STYLES = {
+  Present: {
+    backgroundColor: '#dcfce7',
+    color: '#16a34a',
+    borderColor: '#bbf7d0',
+  },
+  Absent: {
+    backgroundColor: '#fee2e2',
+    color: '#dc2626',
+    borderColor: '#fecaca',
+  },
+  Late: {
+    backgroundColor: '#fef3c7',
+    color: '#d97706',
+    borderColor: '#fde68a',
+  },
+}
+
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
 const emptyPendingFilters = {
@@ -62,6 +80,28 @@ const normalizeStatus = (value) => {
 const pickStudentKey = (row) => String(row?.id ?? row?.studentId ?? row?.rollNo ?? row?.name ?? '').trim()
 
 const pickStudentRollNo = (row) => normalizeText(row?.rollNo ?? row?.studentRollNo ?? '')
+
+const normalizeIdentity = (value) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+
+const buildAttendanceKeys = (row, date) => {
+  const keys = []
+  const normalizedDate = normalizeIdentity(date)
+  const name = normalizeIdentity(row?.name)
+  const rollNo = normalizeIdentity(row?.rollNo ?? row?.studentRollNo)
+  const phone = normalizeIdentity(row?.phone)
+  const className = normalizeIdentity(row?.className)
+  const sectionName = normalizeIdentity(row?.sectionName || row?.section)
+
+  if (rollNo && normalizedDate) keys.push(`roll:${rollNo}|date:${normalizedDate}`)
+  if (name && phone && normalizedDate) keys.push(`name:${name}|phone:${phone}|class:${className}|section:${sectionName}|date:${normalizedDate}`)
+  if (name && className && sectionName && normalizedDate) keys.push(`name:${name}|class:${className}|section:${sectionName}|date:${normalizedDate}`)
+  if (name && normalizedDate) keys.push(`name:${name}|date:${normalizedDate}`)
+
+  return keys
+}
 
 const StudentAttendance = () => {
   const { role, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
@@ -102,6 +142,7 @@ const StudentAttendance = () => {
   const [leaveByStudentId, setLeaveByStudentId] = useState(() => new Map())
   const [studentTotalElements, setStudentTotalElements] = useState(0)
   const [studentTotalPages, setStudentTotalPages] = useState(1)
+  const [savedStudentKeys, setSavedStudentKeys] = useState(() => new Set())
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const selectedHeadOfficeId =
@@ -207,14 +248,46 @@ const StudentAttendance = () => {
     return map
   }, [attendanceRows, filters.date])
 
+  const attendanceLookup = useMemo(() => {
+    const map = new Map()
+    const sorted = [...(Array.isArray(attendanceRows) ? attendanceRows : [])].sort(
+      (a, b) => Number(b?.id ?? 0) - Number(a?.id ?? 0),
+    )
+
+    sorted.forEach((row) => {
+      const attendanceDate = normalizeIdentity(row?.attendanceDate)
+      const keys = buildAttendanceKeys(row, attendanceDate)
+      for (const key of keys) {
+        if (!map.has(key)) {
+          map.set(key, row)
+        }
+      }
+    })
+
+    return map
+  }, [attendanceRows])
+
+  const findAttendanceForStudent = useCallback(
+    (student) => {
+      const keys = buildAttendanceKeys(student, filters.date)
+      for (const key of keys) {
+        const match = attendanceLookup.get(key)
+        if (match) return match
+      }
+      return null
+    },
+    [attendanceLookup, filters.date],
+  )
+
   const resolveStudentRow = useCallback(
     (row) => {
       const key = pickStudentKey(row)
       const rollNo = pickStudentRollNo(row)
-      const attendance = rollNo ? attendanceByRollNo.get(rollNo) || null : null
+      const attendance = (rollNo ? attendanceByRollNo.get(rollNo) || null : null) || findAttendanceForStudent(row)
       const draft = drafts[key] || null
       const status = normalizeStatus(draft?.status || attendance?.status || '')
       const recordId = draft?.recordId ?? attendance?.id ?? null
+      const isSaved = recordId != null || savedStudentKeys.has(key)
       return {
         key,
         id: row?.id ?? null,
@@ -227,13 +300,13 @@ const StudentAttendance = () => {
         sectionName: row?.section || row?.sectionName || row?.schoolSection?.sectionName || row?.schoolSection?.name || '',
         status,
         recordId,
-        isSaved: recordId != null,
+        isSaved,
         attendanceDate: filters.date,
         note: draft?.note ?? attendance?.note ?? '',
         phone: row?.phone || '',
       }
     },
-    [attendanceByRollNo, authSchoolName, drafts, filters.date],
+    [attendanceByRollNo, authSchoolName, drafts, findAttendanceForStudent, filters.date, savedStudentKeys],
   )
 
   const displayedStudents = useMemo(() => {
@@ -480,9 +553,8 @@ const StudentAttendance = () => {
           headOfficeId: selectedHeadOfficeId || undefined,
           schoolId: selectedSchoolId || undefined,
           examTerm: DAILY_EXAM_TERM,
-          className: selectedClassLabel || undefined,
-          sectionName: selectedSectionLabel || undefined,
           subjectName: ATTENDANCE_SUBJECT,
+          attendanceDate: filters.date,
         }),
       ])
 
@@ -620,6 +692,7 @@ const StudentAttendance = () => {
     }
     setFilters(pendingFilters)
     setDrafts({})
+    setSavedStudentKeys(new Set())
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
   }
@@ -629,6 +702,7 @@ const StudentAttendance = () => {
     setPendingFilters(reset)
     setFilters(reset)
     setDrafts({})
+    setSavedStudentKeys(new Set())
     setCurrentPage(1)
   }
 
@@ -678,6 +752,8 @@ const StudentAttendance = () => {
     setError('')
 
     try {
+      const savedKeys = []
+
       for (const entry of dirtyDraftEntries) {
         const student = entry.student || {}
         const studentLabel = `${student.name || 'Student'}${student.rollNo ? ` (Roll: ${student.rollNo})` : ''}`
@@ -707,6 +783,7 @@ const StudentAttendance = () => {
         }
         const nextId = saved?.id ?? null
         if (nextId != null) {
+          savedKeys.push(student.key)
           setDrafts((prev) => ({
             ...prev,
             [student.key]: {
@@ -723,13 +800,19 @@ const StudentAttendance = () => {
         headOfficeId: selectedHeadOfficeId || undefined,
         schoolId: selectedSchoolId || undefined,
         examTerm: DAILY_EXAM_TERM,
-        className: selectedClassLabel || undefined,
-        sectionName: selectedSectionLabel || undefined,
         subjectName: ATTENDANCE_SUBJECT,
+        attendanceDate: filters.date,
       })
       setAttendanceRows(Array.isArray(refreshedAttendance) ? refreshedAttendance : [])
       // Clear local drafts after a successful save so the button disables and the UI reflects DB state.
       setDrafts({})
+      if (savedKeys.length > 0) {
+        setSavedStudentKeys((prev) => {
+          const next = new Set(prev)
+          for (const key of savedKeys) next.add(key)
+          return next
+        })
+      }
       await loadPageData()
     } catch (err) {
       // Surfacing the error in both UI and console makes it easier to diagnose API issues.
@@ -1043,9 +1126,21 @@ const StudentAttendance = () => {
                                     key={option.value}
                                     className={`d-flex align-items-center gap-6 px-10 py-6 radius-8 border ${
                                       disabled ? 'opacity-75 cursor-not-allowed' : 'cursor-pointer'
-                                    } ${checked ? option.className : 'bg-white text-secondary-light'}
                                     }`}
-                                    style={{ flex: '1 1 0', justifyContent: 'center' }}
+                                    style={{
+                                      flex: '1 1 0',
+                                      justifyContent: 'center',
+                                      backgroundColor: checked
+                                        ? STATUS_INLINE_STYLES[option.value]?.backgroundColor
+                                        : '#ffffff',
+                                      color: checked
+                                        ? STATUS_INLINE_STYLES[option.value]?.color
+                                        : 'var(--text-secondary-light)',
+                                      borderColor: checked
+                                        ? STATUS_INLINE_STYLES[option.value]?.borderColor
+                                        : 'var(--border-color)',
+                                      transition: 'background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease',
+                                    }}
                                   >
                                     <input
                                       type="checkbox"
