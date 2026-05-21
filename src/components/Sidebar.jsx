@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import "../css/sidebar.css";
 import { useSidebar } from "../context/SidebarContext";
 import { normalizeRole } from "../utils/roles";
@@ -651,7 +651,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const buildOpenKey = (sectionIndex, itemIndex) =>
     `${sectionIndex}-${itemIndex}`;
 
-  const findActiveKey = () => {
+  const activeKey = useMemo(() => {
     for (let si = 0; si < filteredSections.length; si++) {
       const section = filteredSections[si];
       for (let ii = 0; ii < section.items.length; ii++) {
@@ -665,28 +665,22 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
       }
     }
     return null;
-  };
+  }, [filteredSections, currentPage]);
 
-  const [openKey, setOpenKey] = useState(() => findActiveKey());
-
-  useEffect(() => {
-    const activeKey = findActiveKey();
-    if (!isCollapsed && activeKey) {
-      setOpenKey(activeKey);
-    }
-  }, [currentPage, isCollapsed]);
-
-  useEffect(() => {
-    if (isCollapsed) {
-      setOpenKey(null);
-    } else {
-      const activeKey = findActiveKey();
-      if (activeKey) setOpenKey(activeKey);
-    }
-  }, [isCollapsed]);
+  // undefined = follow the active route, false = explicitly closed, string = explicitly opened
+  const [manualOpenKey, setManualOpenKey] = useState(undefined);
+  const openKey =
+    isCollapsed
+      ? null
+      : manualOpenKey === undefined
+        ? activeKey
+        : manualOpenKey || null;
 
   const handleDropdownToggle = (key) => {
-    setOpenKey((prev) => (prev === key ? null : key));
+    setManualOpenKey((prev) => {
+      const currentOpenKey = prev === undefined ? activeKey : prev || null;
+      return currentOpenKey === key ? false : key;
+    });
   };
 
   const handleNavClick = (e, page) => {

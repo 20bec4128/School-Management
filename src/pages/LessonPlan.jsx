@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
+import useColumnVisibility from '../hooks/useColumnVisibility'
 import { fetchLessonPlanView } from '../apis/lessonTimelineApi'
+import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
@@ -9,11 +14,21 @@ import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 
 const emptyFilters = {
+  headOfficeId: 'Select',
   school: 'Select',
   academicYear: 'Select',
   classId: 'Select',
   subjectId: 'Select',
 }
+
+const columnOptions = [
+  { key: 'lessonName', label: 'Lesson' },
+  { key: 'lessonStartDate', label: 'Lesson Start' },
+  { key: 'lessonEndDate', label: 'Lesson End' },
+  { key: 'topicName', label: 'Topic' },
+  { key: 'topicStartDate', label: 'Topic Start' },
+  { key: 'topicEndDate', label: 'Topic End' },
+]
 
 const getChildScope = (children, selectedChildId) => {
   const list = Array.isArray(children) ? children : []
@@ -26,6 +41,7 @@ const getChildScope = (children, selectedChildId) => {
 const LessonPlan = () => {
   const { role, schoolId, studentClassId, selectedChildId, parentChildren } = useAuth()
   const [rows, setRows] = useState([])
+  const [headOfficesLookup, setHeadOfficesLookup] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -33,11 +49,13 @@ const LessonPlan = () => {
   const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
   const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
@@ -55,6 +73,25 @@ const LessonPlan = () => {
     : roleUpper === 'PARENT'
       ? selectedChild?.classId ?? null
       : null
+  const headOfficeOptions = useMemo(() => {
+    const list = Array.isArray(headOfficesLookup) ? headOfficesLookup : []
+    return list
+      .map((row) => ({
+        id: row?.id,
+        name: row?.name || row?.headOfficeName || '',
+      }))
+      .filter((row) => row.id != null && row.name)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }, [headOfficesLookup])
+
+  const schoolOptions = useMemo(() => {
+    const list = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    if (roleUpper === 'SUPER_ADMIN' && pendingFilters.headOfficeId !== 'Select') {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+    }
+    return list
+  }, [pendingFilters.headOfficeId, roleUpper, schoolsLookup])
+
   const academicYearOptions = useAcademicYearOptions({
     schoolId:
       isStudentScope
@@ -97,13 +134,18 @@ const LessonPlan = () => {
             subjectId: 'Select',
           }
           setPendingFilters(nextFilters)
-          setFilters(nextFilters)
           setHasSearched(true)
           return
         }
 
-        const [schools, classes, subjects] = await Promise.all([fetchSchoolsLookup(), fetchClasses(), fetchSubjects()])
+        const [headOffices, schools, classes, subjects] = await Promise.all([
+          fetchHeadOfficesPage(0, 500),
+          fetchSchoolsLookup(),
+          fetchClasses(),
+          fetchSubjects(),
+        ])
         if (ignore) return
+        setHeadOfficesLookup(Array.isArray(headOffices?.content) ? headOffices.content : [])
         setSchoolsLookup(Array.isArray(schools) ? schools : [])
         setClassesLookup(Array.isArray(classes) ? classes : [])
         setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
@@ -129,9 +171,23 @@ const LessonPlan = () => {
     })
   }, [rows, search, hasSearched])
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage
+    return filtered.slice(start, start + rowsPerPage)
+  }, [currentPage, filtered, rowsPerPage])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   const handlePendingFilterChange = (e) => {
     const { id, value } = e.target
     setPendingFilters((prev) => {
+      if (id === 'headOfficeId') return { ...prev, headOfficeId: value, school: 'Select', academicYear: 'Select', classId: 'Select', subjectId: 'Select' }
       if (id === 'school') return { ...prev, school: value, academicYear: 'Select', classId: 'Select', subjectId: 'Select' }
       if (id === 'classId') return { ...prev, classId: value, subjectId: 'Select' }
       return { ...prev, [id]: value }
@@ -141,6 +197,7 @@ const LessonPlan = () => {
 
   const validateFind = () => {
     const errs = {}
+    if (roleUpper === 'SUPER_ADMIN' && pendingFilters.headOfficeId === 'Select') errs.headOfficeId = 'Head Office is required.'
     if (pendingFilters.school === 'Select') errs.school = 'School Name is required.'
     if (pendingFilters.academicYear === 'Select') errs.academicYear = 'Academic Year is required.'
     if (pendingFilters.classId === 'Select') errs.classId = 'Class is required.'
@@ -167,9 +224,9 @@ const LessonPlan = () => {
         subjectId: pendingFilters.subjectId === 'Select' ? null : pendingFilters.subjectId,
       })
       setRows(Array.isArray(data) ? data : [])
-      setFilters(pendingFilters)
       setHasSearched(true)
       setIsFindSidebarOpen(false)
+      setCurrentPage(1)
     } catch (e2) {
       setError(e2?.message || 'Failed to load lesson plan')
     } finally {
@@ -180,11 +237,11 @@ const LessonPlan = () => {
   const handleResetFilters = () => {
     if (isStudentScope) return
     setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
     setFindErrors({})
     setHasSearched(false)
     setRows([])
     setSearch('')
+    setCurrentPage(1)
   }
 
   return (
@@ -211,16 +268,22 @@ const LessonPlan = () => {
         <div className="card-body p-0 dataTable-wrapper">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
+              <ExportDropdown
+                rows={filtered}
+                columns={columnOptions}
+                visibleColumns={visibleColumns}
+                fileName="Lesson_Plan"
+                sheetName="Lesson Plan"
+                pdfTitle="Lesson Plan"
+              />
               {!isStudentScope ? (
                 <button
                   type="button"
-                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
                   onClick={() => setIsFindSidebarOpen(true)}
                 >
-                  <span className="d-flex align-items-center gap-1 text-secondary-light text-sm">Find</span>
-                  <span>
-                    <i className="ri-arrow-right-line"></i>
-                  </span>
+                  <span className="text-secondary-light text-sm">Find</span>
+                  <i className="ri-arrow-right-line"></i>
                 </button>
               ) : null}
               {hasSearched && !isStudentScope ? (
@@ -228,16 +291,55 @@ const LessonPlan = () => {
                   Reset
                 </button>
               ) : null}
+              <div className="dropdown">
+                <button
+                  type="button"
+                  className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                  data-bs-toggle="dropdown"
+                >
+                  <span className="text-secondary-light text-sm">Columns</span>
+                  <i className="ri-arrow-down-s-line"></i>
+                </button>
+                <ul className="dropdown-menu p-12 border shadow">
+                  {columnOptions.map((column) => (
+                    <li key={column.key}>
+                      <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="form-check-input mt-0"
+                          checked={visibleColumns[column.key]}
+                          onChange={() => toggleColumn(column.key)}
+                        />
+                        {column.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <RowsPerPageSelect
+                className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                value={rowsPerPage}
+                onChange={(v) => {
+                  setRowsPerPage(Number(v))
+                  setCurrentPage(1)
+                }}
+              />
             </div>
-            <div className="d-flex align-items-center gap-8">
+            <div className="position-relative">
               <input
                 type="text"
-                className="form-control form-control-sm border border-neutral-300 radius-8"
+                className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search lesson plan..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
                 disabled={!hasSearched}
               />
+              <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
+                <i className="ri-search-line"></i>
+              </span>
             </div>
           </div>
 
@@ -259,36 +361,52 @@ const LessonPlan = () => {
               </div>
             </div>
           ) : loading ? (
-            <div className="px-20 py-40 text-center text-secondary-light">Loading…</div>
+            <div className="px-20 py-40 text-center text-secondary-light">Loading...</div>
           ) : (
             <div className="table-responsive">
-              <table className="table bordered-table mb-0">
+              <table className="table bordered-table mb-0 data-table">
                 <thead>
                   <tr>
-                    <th>Lesson</th>
-                    <th style={{ width: 130 }}>Lesson Start</th>
-                    <th style={{ width: 130 }}>Lesson End</th>
-                    <th>Topic</th>
-                    <th style={{ width: 130 }}>Topic Start</th>
-                    <th style={{ width: 130 }}>Topic End</th>
+                    <th scope="col">
+                      <div className="form-check style-check d-flex align-items-center">
+                        <input type="checkbox" className="form-check-input" />
+                        <label className="form-check-label">S.L</label>
+                      </div>
+                    </th>
+                    {columnOptions.map(
+                      (col) =>
+                        visibleColumns[col.key] && (
+                          <th scope="col" key={col.key}>
+                            {col.label}
+                          </th>
+                        ),
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-40 text-secondary-light">
+                      <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
                         No rows found for the selected criteria.
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((r, idx) => (
+                    paginated.map((r, idx) => (
                       <tr key={`${r.lessonId || 'l'}-${r.topicId || 't'}-${idx}`}>
-                        <td className="fw-medium text-primary-light">{r.lessonName || '-'}</td>
-                        <td>{r.lessonStartDate || '-'}</td>
-                        <td>{r.lessonEndDate || '-'}</td>
-                        <td className="fw-medium text-primary-light">{r.topicName || '-'}</td>
-                        <td>{r.topicStartDate || '-'}</td>
-                        <td>{r.topicEndDate || '-'}</td>
+                        <td>
+                          <div className="form-check style-check d-flex align-items-center">
+                            <input className="form-check-input" type="checkbox" />
+                            <label className="form-check-label">
+                              {(currentPage - 1) * rowsPerPage + idx + 1}
+                            </label>
+                          </div>
+                        </td>
+                        {visibleColumns.lessonName ? <td className="fw-medium text-primary-light">{r.lessonName || '-'}</td> : null}
+                        {visibleColumns.lessonStartDate ? <td>{r.lessonStartDate || '-'}</td> : null}
+                        {visibleColumns.lessonEndDate ? <td>{r.lessonEndDate || '-'}</td> : null}
+                        {visibleColumns.topicName ? <td className="fw-medium text-primary-light">{r.topicName || '-'}</td> : null}
+                        {visibleColumns.topicStartDate ? <td>{r.topicStartDate || '-'}</td> : null}
+                        {visibleColumns.topicEndDate ? <td>{r.topicEndDate || '-'}</td> : null}
                       </tr>
                     ))
                   )}
@@ -299,6 +417,17 @@ const LessonPlan = () => {
         </div>
       </div>
 
+      <div className="px-20 py-16 border-top border-neutral-200">
+        <TablePagination
+          paginationProps={{
+            currentPage,
+            totalPages,
+            pageInfo: `Showing ${filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, filtered.length)} of ${filtered.length} entries`,
+            onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+          }}
+        />
+      </div>
+
       {!isStudentScope ? (
         <SlideSidebar
           isOpen={isFindSidebarOpen}
@@ -307,102 +436,124 @@ const LessonPlan = () => {
           className="filter-sidebar"
         >
           <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              School Name <span className="text-danger-600">*</span>
-            </label>
-            <select
-              id="school"
-              className={`form-control form-select${findErrors.school ? ' is-invalid' : ''}`}
-              value={pendingFilters.school}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select School--</option>
-              {schoolsLookup.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName}
-                </option>
-              ))}
-            </select>
-            {findErrors.school && <div className="text-danger-600 text-sm mt-4">{findErrors.school}</div>}
-          </div>
+            {roleUpper === 'SUPER_ADMIN' ? (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label htmlFor="headOfficeId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  Head Office <span className="text-danger-600">*</span>
+                </label>
+                <select
+                  id="headOfficeId"
+                  className={`form-control form-select${findErrors.headOfficeId ? ' is-invalid' : ''}`}
+                  value={pendingFilters.headOfficeId}
+                  onChange={handlePendingFilterChange}
+                >
+                  <option value="Select">--Select Head Office--</option>
+                  {headOfficeOptions.map((headOffice) => (
+                    <option key={headOffice.id} value={String(headOffice.id)}>
+                      {headOffice.name}
+                    </option>
+                  ))}
+                </select>
+                {findErrors.headOfficeId && <div className="text-danger-600 text-sm mt-4">{findErrors.headOfficeId}</div>}
+              </div>
+            ) : null}
 
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label htmlFor="academicYear" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Academic Year <span className="text-danger-600">*</span>
-            </label>
-            <select
-              id="academicYear"
-              className={`form-control form-select${findErrors.academicYear ? ' is-invalid' : ''}`}
-              value={pendingFilters.academicYear}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select--</option>
-              {academicYearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-            {findErrors.academicYear && <div className="text-danger-600 text-sm mt-4">{findErrors.academicYear}</div>}
-          </div>
-
-          <div>
-            <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Class <span className="text-danger-600">*</span>
-            </label>
-            <select
-              id="classId"
-              className={`form-control form-select${findErrors.classId ? ' is-invalid' : ''}`}
-              value={pendingFilters.classId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select--</option>
-              {classesLookup
-                .filter((c) => pendingFilters.school === 'Select' || String(c.schoolId) === String(pendingFilters.school))
-                .map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.className}
-                  </option>
-                ))}
-            </select>
-            {findErrors.classId && <div className="text-danger-600 text-sm mt-4">{findErrors.classId}</div>}
-          </div>
-
-          <div>
-            <label htmlFor="subjectId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-              Subject <span className="text-danger-600">*</span>
-            </label>
-            <select
-              id="subjectId"
-              className={`form-control form-select${findErrors.subjectId ? ' is-invalid' : ''}`}
-              value={pendingFilters.subjectId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select--</option>
-              {subjectsLookup
-                .filter((s) => {
-                  if (pendingFilters.school !== 'Select' && String(s.schoolId) !== String(pendingFilters.school)) return false
-                  if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
-                  return true
-                })
-                .map((s) => (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="school" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                School Name <span className="text-danger-600">*</span>
+              </label>
+              <select
+                id="school"
+                className={`form-control form-select${findErrors.school ? ' is-invalid' : ''}`}
+                value={pendingFilters.school}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select School--</option>
+                {schoolOptions.map((s) => (
                   <option key={s.id} value={String(s.id)}>
-                    {s.name}
+                    {s.schoolName}
                   </option>
                 ))}
-            </select>
-            {findErrors.subjectId && <div className="text-danger-600 text-sm mt-4">{findErrors.subjectId}</div>}
-          </div>
+              </select>
+              {findErrors.school && <div className="text-danger-600 text-sm mt-4">{findErrors.school}</div>}
+            </div>
 
-          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <button type="button" className="btn btn-sm btn-secondary-600" onClick={handleResetFilters}>
-              Reset
-            </button>
-            <button type="submit" className="btn btn-sm btn-primary-600" disabled={loading}>
-              {loading ? 'Loading...' : 'Apply'}
-            </button>
-          </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="academicYear" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                Academic Year <span className="text-danger-600">*</span>
+              </label>
+              <select
+                id="academicYear"
+                className={`form-control form-select${findErrors.academicYear ? ' is-invalid' : ''}`}
+                value={pendingFilters.academicYear}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select--</option>
+                {academicYearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              {findErrors.academicYear && <div className="text-danger-600 text-sm mt-4">{findErrors.academicYear}</div>}
+            </div>
+
+            <div>
+              <label htmlFor="classId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                Class <span className="text-danger-600">*</span>
+              </label>
+              <select
+                id="classId"
+                className={`form-control form-select${findErrors.classId ? ' is-invalid' : ''}`}
+                value={pendingFilters.classId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select--</option>
+                {classesLookup
+                  .filter((c) => pendingFilters.school === 'Select' || String(c.schoolId) === String(pendingFilters.school))
+                  .map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.className}
+                    </option>
+                  ))}
+              </select>
+              {findErrors.classId && <div className="text-danger-600 text-sm mt-4">{findErrors.classId}</div>}
+            </div>
+
+            <div>
+              <label htmlFor="subjectId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                Subject <span className="text-danger-600">*</span>
+              </label>
+              <select
+                id="subjectId"
+                className={`form-control form-select${findErrors.subjectId ? ' is-invalid' : ''}`}
+                value={pendingFilters.subjectId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select--</option>
+                {subjectsLookup
+                  .filter((s) => {
+                    if (pendingFilters.school !== 'Select' && String(s.schoolId) !== String(pendingFilters.school)) return false
+                    if (pendingFilters.classId !== 'Select' && String(s.classId) !== String(pendingFilters.classId)) return false
+                    return true
+                  })
+                  .map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </option>
+                  ))}
+              </select>
+              {findErrors.subjectId && <div className="text-danger-600 text-sm mt-4">{findErrors.subjectId}</div>}
+            </div>
+
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-sm btn-secondary-600" onClick={handleResetFilters}>
+                Reset
+              </button>
+              <button type="submit" className="btn btn-sm btn-primary-600" disabled={loading}>
+                {loading ? 'Loading...' : 'Apply'}
+              </button>
+            </div>
           </form>
         </SlideSidebar>
       ) : null}

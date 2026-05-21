@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
+import ExportDropdown from '../components/ExportDropdown'
+import RowsPerPageSelect from '../components/RowsPerPageSelect'
+import { TablePagination } from '../components/table'
+import useColumnVisibility from '../hooks/useColumnVisibility'
 import { fetchLessonTimelines, fetchTopicTimelinesForLesson, updateLessonTimeline, updateTopicTimeline } from '../apis/lessonTimelineApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
@@ -16,6 +20,12 @@ const emptyFilters = {
   classId: 'Select',
   subjectId: 'Select',
 }
+
+const lessonColumnOptions = [
+  { key: 'lessonName', label: 'Lesson' },
+  { key: 'startDate', label: 'Start' },
+  { key: 'endDate', label: 'End' },
+]
 
 const getChildScope = (children, selectedChildId) => {
   const list = Array.isArray(children) ? children : []
@@ -42,11 +52,14 @@ const LessonTimeline = () => {
   const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
   const [isFindSidebarOpen, setIsFindSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [findErrors, setFindErrors] = useState({})
   const [hasSearched, setHasSearched] = useState(false)
+  const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(lessonColumnOptions)
 
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
@@ -223,6 +236,7 @@ const LessonTimeline = () => {
     setTopics([])
     setSelectedLessonId(null)
     setSearch('')
+    setCurrentPage(1)
   }
 
   const handlePendingFilterChange = (e) => {
@@ -244,6 +258,19 @@ const LessonTimeline = () => {
       return text.toLowerCase().includes(q)
     })
   }, [lessons, search, hasSearched])
+
+  const totalPages = Math.max(1, Math.ceil(filteredLessons.length / rowsPerPage))
+
+  const paginatedLessons = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage
+    return filteredLessons.slice(start, start + rowsPerPage)
+  }, [currentPage, filteredLessons, rowsPerPage])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const selectedLesson = useMemo(() => {
     return lessons.find((l) => String(l.lessonId) === String(selectedLessonId)) || null
@@ -335,26 +362,74 @@ const LessonTimeline = () => {
 
       <div className="card h-100">
         <div className="card-body p-0">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 p-20 border-bottom">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
+            <div className="d-flex flex-wrap align-items-center gap-16">
+                <ExportDropdown
+                  rows={filteredLessons}
+                  columns={lessonColumnOptions}
+                  visibleColumns={visibleColumns}
+                  fileName="Lesson_Timeline"
+                  sheetName="Lesson Timeline"
+                  pdfTitle="Lesson Timeline"
+                />
+                {!isStudentScope ? (
+                  <button
+                    type="button"
+                    className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                    onClick={() => setIsFindSidebarOpen(true)}
+                  >
+                    <span className="text-secondary-light text-sm">Find</span>
+                    <i className="ri-arrow-right-line"></i>
+                  </button>
+                ) : null}
+                <div className="dropdown">
+                  <button
+                    type="button"
+                    className="px-12 py-5-px border border-neutral-300 radius-8 d-flex align-items-center gap-20 bg-white"
+                    data-bs-toggle="dropdown"
+                  >
+                    <span className="text-secondary-light text-sm">Columns</span>
+                    <i className="ri-arrow-down-s-line"></i>
+                  </button>
+                  <ul className="dropdown-menu p-12 border shadow">
+                    {lessonColumnOptions.map((column) => (
+                      <li key={column.key}>
+                        <label className="dropdown-item px-12 py-8 rounded text-secondary-light d-flex align-items-center gap-8 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="form-check-input mt-0"
+                            checked={visibleColumns[column.key]}
+                            onChange={() => toggleColumn(column.key)}
+                          />
+                          {column.label}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <RowsPerPageSelect
+                  className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
+                  value={rowsPerPage}
+                  onChange={(v) => {
+                    setRowsPerPage(Number(v))
+                    setCurrentPage(1)
+                  }}
+                />
+            </div>
             <div className="position-relative">
               <input
+                type="text"
                 className="form-control ps-40 py-9 border border-neutral-300 radius-8 text-secondary-light"
                 placeholder="Search lessons..."
                 value={search}
-                disabled={!hasSearched}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setCurrentPage(1)
+                }}
               />
               <span className="position-absolute start-0 top-50 translate-middle-y ps-16 text-secondary-light">
                 <i className="ri-search-line"></i>
               </span>
-            </div>
-
-            <div className="d-flex align-items-center gap-8 ms-auto">
-              {!isStudentScope ? (
-                <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
-                  Find
-                </button>
-              ) : null}
             </div>
           </div>
 
@@ -367,16 +442,21 @@ const LessonTimeline = () => {
                     <table className="table table-striped align-middle mb-0">
                         <thead>
                           <tr>
-                            <th style={{ width: '42%' }}>Lesson</th>
-                            <th>Start</th>
-                            <th>End</th>
+                            {lessonColumnOptions.map(
+                              (col) =>
+                                visibleColumns[col.key] && (
+                                  <th scope="col" key={col.key}>
+                                    {col.label}
+                                  </th>
+                                ),
+                            )}
                             <th style={{ width: 80 }}></th>
                           </tr>
                         </thead>
                         <tbody>
                           {!hasSearched ? (
                             <tr>
-                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                              <td colSpan={visibleColumnCount + 1} className="text-center py-20 text-secondary-light">
                                 <FindEmptyState
                                   title="Lesson Timeline"
                                   description="Use the Find button to select School, Academic Year, Class and Subject to load the timeline."
@@ -387,49 +467,55 @@ const LessonTimeline = () => {
                             </tr>
                           ) : loading ? (
                             <tr>
-                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                              <td colSpan={visibleColumnCount + 1} className="text-center py-20 text-secondary-light">
                                 Loading...
                               </td>
                             </tr>
                           ) : filteredLessons.length === 0 ? (
                             <tr>
-                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                              <td colSpan={visibleColumnCount + 1} className="text-center py-20 text-secondary-light">
                                 No lessons found.
                               </td>
                             </tr>
                           ) : (
-                            filteredLessons.map((l) => {
+                            paginatedLessons.map((l) => {
                               const isActive = String(l.lessonId) === String(selectedLessonId)
                               return (
                                 <tr key={l.lessonId} style={{ background: isActive ? '#f8fafc' : undefined }}>
-                                  <td
-                                    className="fw-medium text-primary-light"
-                                    style={{ cursor: 'pointer' }}
-                                    onClick={() => {
-                                      if (!hasSearched || loading) return
-                                      handleSelectLesson(l.lessonId)
-                                    }}
-                                  >
-                                    {l.lessonName || `Lesson ${l.lessonId}`}
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="date"
-                                      className="form-control form-control-sm"
-                                      value={toDateInputValue(l.startDate)}
-                                      disabled={!canManageTimeline || saving}
-                                      onChange={(e) => patchLesson(l.lessonId, { startDate: e.target.value || null })}
-                                    />
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="date"
-                                      className="form-control form-control-sm"
-                                      value={toDateInputValue(l.endDate)}
-                                      disabled={!canManageTimeline || saving}
-                                      onChange={(e) => patchLesson(l.lessonId, { endDate: e.target.value || null })}
-                                    />
-                                  </td>
+                                  {visibleColumns.lessonName ? (
+                                    <td
+                                      className="fw-medium text-primary-light"
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={() => {
+                                        if (!hasSearched || loading) return
+                                        handleSelectLesson(l.lessonId)
+                                      }}
+                                    >
+                                      {l.lessonName || `Lesson ${l.lessonId}`}
+                                    </td>
+                                  ) : null}
+                                  {visibleColumns.startDate ? (
+                                    <td>
+                                      <input
+                                        type="date"
+                                        className="form-control form-control-sm"
+                                        value={toDateInputValue(l.startDate)}
+                                        disabled={!canManageTimeline || saving}
+                                        onChange={(e) => patchLesson(l.lessonId, { startDate: e.target.value || null })}
+                                      />
+                                    </td>
+                                  ) : null}
+                                  {visibleColumns.endDate ? (
+                                    <td>
+                                      <input
+                                        type="date"
+                                        className="form-control form-control-sm"
+                                        value={toDateInputValue(l.endDate)}
+                                        disabled={!canManageTimeline || saving}
+                                        onChange={(e) => patchLesson(l.lessonId, { endDate: e.target.value || null })}
+                                      />
+                                    </td>
+                                  ) : null}
                                   <td>
                                     <button
                                       type="button"
@@ -444,11 +530,11 @@ const LessonTimeline = () => {
                               )
                             })
                           )}
-                        </tbody>
-                      </table>
-                    </div>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
+              </div>
 
               <div className="col-12 col-lg-7">
                 <div className="border rounded">
@@ -468,7 +554,14 @@ const LessonTimeline = () => {
                         <tbody>
                           {!hasSearched ? (
                             <tr>
-                              
+                              <td colSpan={4} className="text-center py-20 text-secondary-light">
+                                <FindEmptyState
+                                  title="Lesson Timeline"
+                                  description="Use the Find button to select School, Academic Year, Class and Subject to load the timeline."
+                                  buttonLabel="Find Lesson Timeline"
+                                  onFind={() => setIsFindSidebarOpen(true)}
+                                />
+                              </td>
                             </tr>
                           ) : loading ? (
                             <tr>
@@ -525,11 +618,22 @@ const LessonTimeline = () => {
                           )}
                         </tbody>
                       </table>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
+          </div>
+
+          <div className="px-16 py-12 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                pageInfo: `Showing ${filteredLessons.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, filteredLessons.length)} of ${filteredLessons.length} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
+          </div>
+        </div>
+      </div>
           </div>
         </div>
       {!isStudentScope ? (

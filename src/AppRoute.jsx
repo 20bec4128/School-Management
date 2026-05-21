@@ -223,6 +223,7 @@ const FrontendPageCreate = lazy(() => import("./pages/FrontendPageCreate.jsx"));
 const Slider = lazy(() => import("./pages/Slider.jsx"));
 const SliderCreate = lazy(() => import("./pages/SliderCreate.jsx"));
 const AboutSchool = lazy(() => import("./pages/AboutSchool.jsx"));
+const AboutSchoolEdit = lazy(() => import("./pages/AboutSchoolEdit.jsx"));
 const ManageAward = lazy(() => import("./pages/ManageAward.jsx"));
 const AwardCreate = lazy(() => import("./pages/AwardCreate.jsx"));
 const TodoCreate = lazy(() => import("./pages/TodoCreate.jsx"));
@@ -561,6 +562,7 @@ const routeEntries = [
   { pageKey: "slider", component: Slider },
   { pageKey: "slider-create", component: SliderCreate },
   { pageKey: "about-school", component: AboutSchool },
+  { pageKey: "about-school-edit", component: AboutSchoolEdit },
   { pageKey: "manage-award", component: ManageAward },
   { pageKey: "manage-award-create", component: AwardCreate },
   { pageKey: "manage-todo", component: ManageTodo },

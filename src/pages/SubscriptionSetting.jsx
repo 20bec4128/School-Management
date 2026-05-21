@@ -190,7 +190,7 @@ const SubscriptionSetting = () => {
           <form onSubmit={handleSubmit}>
             {/* ═══ TAB 0 – Basic Information ═══ */}
             {activeTab === 0 && (
-              <div className="row g-0">
+              <div className="row g-4">
                 <Field label="Phone" icon="ri-phone-line">
                   <input
                     type="tel"
@@ -358,7 +358,7 @@ const SubscriptionSetting = () => {
 
             {/* ═══ TAB 1 – Social Links ═══ */}
             {activeTab === 1 && (
-              <div className="row g-0">
+              <div className="row g-4">
                 {[
                   {
                     id: "facebookUrl",
@@ -477,7 +477,7 @@ const SubscriptionSetting = () => {
 
             {/* ═══ TAB 2 – Other Information ═══ */}
             {activeTab === 2 && (
-              <div className="row g-0">
+              <div className="row g-4">
                 <div className="col-12 mb-20">
                   <p className="text-sm text-secondary-light mb-16">
                     Upload the images used in your subscription portal. Supported formats: jpg, jpeg, png, gif, svg, webp.
