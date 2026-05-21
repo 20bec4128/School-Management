@@ -253,12 +253,18 @@ const ManageFeedback = lazy(() => import("./pages/ManageFeedback.jsx"));
 const BackupDatabase = lazy(() => import("./pages/BackupDatabase.jsx"));
 const OpeningHour = lazy(() => import("./pages/OpeningHour.jsx"));
 const OpeningHourCreate = lazy(() => import("./pages/OpeningHourCreate.jsx"));
+const SuperAdminDashboard = lazy(() => import("./pages/SchoolAdminDashboard"));
 
 const routeEntries = [
   {
+    pageKey: "super-admin-dashboard",
+    component: SuperAdminDashboard,
+    allowedRoles: ["SUPER_ADMIN"],
+  },
+  {
     pageKey: "school-admin-dashboard",
     component: SchoolAdminDashboard,
-    allowedRoles: ["SCHOOL_ADMIN"],
+    allowedRoles: ["SCHOOL_ADMIN", "SUPER_ADMIN"],
   },
   {
     pageKey: "head-office-dashboard",

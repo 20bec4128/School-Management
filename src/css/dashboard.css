@@ -80,6 +80,10 @@
   font-weight: 700;
 }
 
+.school-dashboard__scope-selector {
+  min-width: min(100%, 280px);
+}
+
 .cr-month-calendar__header {
   align-items: flex-start;
 }
@@ -124,7 +128,11 @@
   }
 }
 
-@media (max-width: 575.98px) {
+@media (max-width: 640px) {
+  .school-dashboard__scope-selector .avm-grid {
+    grid-template-columns: 1fr;
+  }
+
   .cr-month-calendar__surface {
     min-width: 520px;
   }

@@ -987,3 +987,9 @@
     white-space: normal;
   }
 }
+
+@media (max-width: 640px) {
+  .avm-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

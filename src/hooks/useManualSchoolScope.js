@@ -30,16 +30,25 @@ export const useManualSchoolScope = (enabled) => {
         ])
         if (cancelled) return
         const nextHeadOffices = Array.isArray(headOfficePage?.content) ? headOfficePage.content : []
-        setHeadOffices(
-          nextHeadOffices
-            .map((ho) => ({
-              id: ho?.id,
-              name: ho?.name || ho?.headOfficeName || '',
-            }))
-            .filter((ho) => ho.id != null && ho.name)
-            .sort((a, b) => String(a.name).localeCompare(String(b.name))),
-        )
-        setSchools(Array.isArray(schoolList) ? schoolList : [])
+        const sortedHOs = nextHeadOffices
+          .map((ho) => ({
+            id: ho?.id,
+            name: ho?.name || ho?.headOfficeName || '',
+          }))
+          .filter((ho) => ho.id != null && ho.name)
+          .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+        
+        setHeadOffices(sortedHOs)
+        const rawSchools = Array.isArray(schoolList) ? schoolList : []
+        setSchools(rawSchools)
+
+        // Default to first head office if none currently selected
+        if (sortedHOs.length > 0) {
+          setSelectedHeadOfficeId((currHO) => {
+            if (currHO) return currHO
+            return String(sortedHOs[0].id)
+          })
+        }
       } catch {
         if (cancelled) return
         setHeadOffices([])
@@ -60,8 +69,19 @@ export const useManualSchoolScope = (enabled) => {
       syncingScopeRef.current = false
       return
     }
-    setSelectedSchoolId('')
-  }, [selectedHeadOfficeId])
+    if (!selectedHeadOfficeId) {
+      setSelectedSchoolId('')
+      return
+    }
+    const matchingSchools = schools.filter(
+      (school) => String(school?.headOfficeId ?? '') === String(selectedHeadOfficeId)
+    )
+    if (matchingSchools.length > 0) {
+      setSelectedSchoolId(String(matchingSchools[0].id))
+    } else {
+      setSelectedSchoolId('')
+    }
+  }, [selectedHeadOfficeId, schools])
 
   const schoolOptions = useMemo(() => {
     const rows = Array.isArray(schools) ? schools : []
@@ -81,7 +101,22 @@ export const useManualSchoolScope = (enabled) => {
     setSelectedScope: (headOfficeId, schoolId) => {
       syncingScopeRef.current = true
       setSelectedHeadOfficeId(headOfficeId)
-      setSelectedSchoolId(schoolId)
+      if (schoolId) {
+        setSelectedSchoolId(schoolId)
+      } else {
+        if (!headOfficeId) {
+          setSelectedSchoolId('')
+        } else {
+          const matching = schools.filter(
+            (school) => String(school?.headOfficeId ?? '') === String(headOfficeId)
+          )
+          if (matching.length > 0) {
+            setSelectedSchoolId(String(matching[0].id))
+          } else {
+            setSelectedSchoolId('')
+          }
+        }
+      }
     },
   }
 }

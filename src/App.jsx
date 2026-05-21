@@ -28,7 +28,7 @@ function App() {
     const backendHome = user?.homePage
     if (typeof backendHome === 'string' && backendHome.trim()) {
       if (backendHome === 'parent-dashboard' || backendHome === 'parent-child-select') return 'parent-dashboard'
-      if (backendHome === 'lms-dashboard') return 'school-admin-dashboard'
+      if (backendHome === 'lms-dashboard' || backendHome === 'super-admin-dashboard') return 'school-admin-dashboard'
       return backendHome
     }
 
