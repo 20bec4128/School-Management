@@ -837,7 +837,7 @@ const AppRoute = ({
     const r = normalizeRole(
       role || user?.role || user?.userRole || user?.authority,
     );
-    if (r === "SUPER_ADMIN") return "lms-dashboard";
+    if (r === "SUPER_ADMIN") return "school-admin-dashboard";
     if (r === "HEAD_OFFICE_ADMIN") return "head-office-dashboard";
     if (r === "SCHOOL_ADMIN") return "school-admin-dashboard";
     if (r === "TEACHER") return "teacher-dashboard";
@@ -849,6 +849,7 @@ const AppRoute = ({
   const entry = routeEntries.find((item) => item.pageKey === effectivePage);
   const homeEntry =
     routeEntries.find((item) => item.pageKey === homePage) ||
+    routeEntries.find((item) => item.pageKey === "school-admin-dashboard") ||
     routeEntries.find((item) => item.pageKey === "lms-dashboard") ||
     routeEntries[0];
   const HomeComponent = homeEntry?.component;

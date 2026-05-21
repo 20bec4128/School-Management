@@ -28,11 +28,12 @@ function App() {
     const backendHome = user?.homePage
     if (typeof backendHome === 'string' && backendHome.trim()) {
       if (backendHome === 'parent-dashboard' || backendHome === 'parent-child-select') return 'parent-dashboard'
+      if (backendHome === 'lms-dashboard') return 'school-admin-dashboard'
       return backendHome
     }
 
     const r = normalizeRole(role)
-    if (r === 'SUPER_ADMIN') return 'lms-dashboard'
+    if (r === 'SUPER_ADMIN') return 'school-admin-dashboard'
     if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
@@ -46,8 +47,7 @@ function App() {
   const syncBrowserPath = (page) => {
     if (!isBrowser) return
 
-    const nextPath =
-      page === 'login' ? '/login' : page && page !== homePage ? `/${page}` : '/'
+    const nextPath = page === 'login' ? '/login' : page ? `/${page}` : `/${homePage}`
     if (window.location.pathname === nextPath) return
 
     window.history.pushState({ page }, '', nextPath)
@@ -77,6 +77,10 @@ function App() {
       if (prev === 'login' || prev === 'dashboard') return nextPage
       return prev
     })
+
+    if (isBrowser && (!pathPage || pathPage === 'login') && window.location.pathname !== `/${homePage}`) {
+      window.history.replaceState({ page: homePage }, '', `/${homePage}`)
+    }
   }, [status, token, homePage])
 
   useEffect(() => {
