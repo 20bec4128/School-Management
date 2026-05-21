@@ -414,18 +414,18 @@ const LessonPlan = () => {
               </table>
             </div>
           )}
-        </div>
-      </div>
 
-      <div className="px-20 py-16 border-top border-neutral-200">
-        <TablePagination
-          paginationProps={{
-            currentPage,
-            totalPages,
-            pageInfo: `Showing ${filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, filtered.length)} of ${filtered.length} entries`,
-            onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
-          }}
-        />
+          <div className="px-20 py-16 border-top border-neutral-200">
+            <TablePagination
+              paginationProps={{
+                currentPage,
+                totalPages,
+                pageInfo: `Showing ${filtered.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} - ${Math.min(currentPage * rowsPerPage, filtered.length)} of ${filtered.length} entries`,
+                onPageChange: (next) => setCurrentPage(Math.min(Math.max(1, Number(next) || 1), totalPages)),
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {!isStudentScope ? (

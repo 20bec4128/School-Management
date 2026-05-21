@@ -24,5 +24,7 @@ uploads
 *.njsproj
 *.sln
 *.sw?
+.env
+.env.*
 *.env
 /.metadata/
