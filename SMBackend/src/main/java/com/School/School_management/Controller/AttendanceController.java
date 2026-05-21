@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/attendances")
@@ -34,8 +35,9 @@ public class AttendanceController {
             @RequestParam(required = false) String className,
             @RequestParam(required = false) String sectionName,
             @RequestParam(required = false) String subjectName,
+            @RequestParam(required = false) LocalDate attendanceDate,
             @RequestParam(defaultValue = "") String search) {
-        return ResponseEntity.ok(attendanceService.list(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, search));
+        return ResponseEntity.ok(attendanceService.list(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, search));
     }
 
     @GetMapping("/page")
@@ -46,10 +48,11 @@ public class AttendanceController {
             @RequestParam(required = false) String className,
             @RequestParam(required = false) String sectionName,
             @RequestParam(required = false) String subjectName,
+            @RequestParam(required = false) LocalDate attendanceDate,
             @RequestParam(defaultValue = "") String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(attendanceService.listPaginated(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, search, page, size));
+        return ResponseEntity.ok(attendanceService.listPaginated(headOfficeId, schoolId, examTerm, className, sectionName, subjectName, attendanceDate, search, page, size));
     }
 
     @GetMapping("/{id}")

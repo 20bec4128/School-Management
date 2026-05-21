@@ -7,6 +7,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
+import { fetchAllDepartments } from '../apis/departmentsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { createAttendance, fetchAttendances } from '../apis/attendanceApi'
 import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
@@ -95,6 +96,7 @@ const TeacherAttendance = () => {
   const [drafts, setDrafts] = useState({})
   const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
   const [leaveByTeacherId, setLeaveByTeacherId] = useState(() => new Map())
+  const [departments, setDepartments] = useState([])
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -135,18 +137,27 @@ const TeacherAttendance = () => {
 
   const departmentOptions = useMemo(() => {
     const schoolId = normalizeText(pendingFilters.schoolId)
-    const scoped = (Array.isArray(teachers) ? teachers : []).filter((t) => {
+    const masterRows = (Array.isArray(departments) ? departments : []).filter((row) => {
+      if (!schoolId) return false
+      return String(row?.schoolId ?? '') === schoolId
+    })
+    const fallbackRows = (Array.isArray(teachers) ? teachers : []).filter((t) => {
       if (!schoolId) return false
       return String(t?.schoolId ?? '') === schoolId
     })
     const uniq = new Map()
-    scoped.forEach((t) => {
-      const dept = normalizeText(t?.department)
+    masterRows.forEach((row) => {
+      const dept = normalizeText(row?.title)
+      if (!dept) return
+      uniq.set(dept.toLowerCase(), dept)
+    })
+    fallbackRows.forEach((t) => {
+      const dept = normalizeText(t?.department || t?.designationName)
       if (!dept) return
       uniq.set(dept.toLowerCase(), dept)
     })
     return Array.from(uniq.values()).sort((a, b) => a.localeCompare(b))
-  }, [pendingFilters.schoolId, teachers])
+  }, [departments, pendingFilters.schoolId, teachers])
 
   const attendanceByTeacherCode = useMemo(() => {
     const map = new Map()
@@ -191,6 +202,7 @@ const TeacherAttendance = () => {
         photo: row?.photoUrl || row?.photoPath || row?.photo || '',
         name: row?.name || '',
         department: row?.department || row?.designationName || '',
+        designationName: row?.designationName || '',
         phone: row?.phone || '',
         email: row?.email || '',
         status,
@@ -210,7 +222,7 @@ const TeacherAttendance = () => {
         if (!selectedSchoolId) return false
         if (String(t?.schoolId ?? '') !== String(selectedSchoolId)) return false
         if (selectedDept && selectedDept !== 'Select') {
-          const dept = normalizeText(t?.department)
+          const dept = normalizeText(t?.department || t?.designationName)
           if (dept !== selectedDept) return false
         }
         return true
@@ -276,6 +288,31 @@ const TeacherAttendance = () => {
       cancelled = true
     }
   }, [filters.date, paginatedTeachers, selectedSchoolId])
+
+  useEffect(() => {
+    const schoolId = normalizeText(pendingFilters.schoolId)
+    if (!schoolId) {
+      setDepartments([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchAllDepartments()
+        if (cancelled) return
+        setDepartments(Array.isArray(rows) ? rows : [])
+      } catch {
+        if (!cancelled) setDepartments([])
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [pendingFilters.schoolId])
 
   const dirtyDraftEntries = useMemo(() => {
     const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId)
@@ -492,7 +529,7 @@ const TeacherAttendance = () => {
           schoolId: teacher.schoolId ? Number(teacher.schoolId) : selectedSchoolId ? Number(selectedSchoolId) : null,
           examTerm: TEACHER_EXAM_TERM,
           className: TEACHER_CLASS_NAME,
-          sectionName: teacher.department || (filters.department !== 'Select' ? filters.department : '') || '',
+          sectionName: teacher.department || teacher.designationName || (filters.department !== 'Select' ? filters.department : '') || '',
           subjectName: ATTENDANCE_SUBJECT,
           name: teacher.name || '',
           phone: teacher.phone || '',

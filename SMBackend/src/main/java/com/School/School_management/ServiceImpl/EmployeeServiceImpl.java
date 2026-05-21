@@ -6,6 +6,7 @@ import com.School.School_management.Exception.BadRequestException;
 import com.School.School_management.Exception.ForbiddenException;
 import com.School.School_management.Exception.NotFoundException;
 import com.School.School_management.Repository.EmployeeRepository;
+import com.School.School_management.Repository.DesignationRepository;
 import com.School.School_management.Repository.SalaryGradeRepository;
 import com.School.School_management.Repository.SchoolRepository;
 import com.School.School_management.Service.EmployeeService;
@@ -36,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeRepository employeeRepository;
+    private final DesignationRepository designationRepository;
     private final SalaryGradeRepository salaryGradeRepository;
     private final SchoolRepository schoolRepository;
     private final PasswordEncoder passwordEncoder;
@@ -43,12 +45,14 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     public EmployeeServiceImpl(
             EmployeeRepository employeeRepository,
+            DesignationRepository designationRepository,
             SalaryGradeRepository salaryGradeRepository,
             SchoolRepository schoolRepository,
             PasswordEncoder passwordEncoder,
             UploadProperties uploadProperties
     ) {
         this.employeeRepository = employeeRepository;
+        this.designationRepository = designationRepository;
         this.salaryGradeRepository = salaryGradeRepository;
         this.schoolRepository = schoolRepository;
         this.passwordEncoder = passwordEncoder;
@@ -254,6 +258,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         dto.setId(e.getId());
         dto.setSchoolId(e.getSchoolId());
         dto.setDesignationId(e.getDesignationId());
+        dto.setDesignationName(resolveDesignationName(e.getDesignationId()));
         dto.setRole(e.getRole());
 
         dto.setName(e.getName());
@@ -336,5 +341,12 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private String safe(String v) {
         return v == null ? "" : v;
+    }
+
+    private String resolveDesignationName(Long designationId) {
+        if (designationId == null) return null;
+        return designationRepository.findById(designationId)
+                .map(designation -> designation.getName())
+                .orElse(null);
     }
 }

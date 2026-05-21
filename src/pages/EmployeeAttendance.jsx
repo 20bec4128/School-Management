@@ -8,6 +8,7 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { fetchEmployees } from '../apis/employeesApi'
+import { fetchDesignations } from '../apis/designationsApi'
 import { createAttendance, fetchAttendances } from '../apis/attendanceApi'
 import { fetchLeaveCoverage } from '../apis/leaveApplicationsApi'
 import '../assets/css/addModalShared.css'
@@ -95,6 +96,7 @@ const EmployeeAttendance = () => {
   const [drafts, setDrafts] = useState({})
   const [allFilteredUniformStatus, setAllFilteredUniformStatus] = useState('')
   const [leaveByEmployeeId, setLeaveByEmployeeId] = useState(() => new Map())
+  const [designations, setDesignations] = useState([])
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -135,18 +137,27 @@ const EmployeeAttendance = () => {
 
   const designationOptions = useMemo(() => {
     const schoolId = normalizeText(pendingFilters.schoolId)
-    const scoped = (Array.isArray(employees) ? employees : []).filter((e) => {
+    const masterRows = (Array.isArray(designations) ? designations : []).filter((row) => {
+      if (!schoolId) return false
+      return String(row?.schoolId ?? '') === schoolId
+    })
+    const fallbackRows = (Array.isArray(employees) ? employees : []).filter((e) => {
       if (!schoolId) return false
       return String(e?.schoolId ?? '') === schoolId
     })
     const uniq = new Map()
-    scoped.forEach((e) => {
+    masterRows.forEach((row) => {
+      const des = normalizeText(row?.name)
+      if (!des) return
+      uniq.set(des.toLowerCase(), des)
+    })
+    fallbackRows.forEach((e) => {
       const des = normalizeText(e?.designationName ?? e?.designation)
       if (!des) return
       uniq.set(des.toLowerCase(), des)
     })
     return Array.from(uniq.values()).sort((a, b) => a.localeCompare(b))
-  }, [employees, pendingFilters.schoolId])
+  }, [designations, employees, pendingFilters.schoolId])
 
   const attendanceByEmployeeCode = useMemo(() => {
     const map = new Map()
@@ -191,6 +202,7 @@ const EmployeeAttendance = () => {
         photo: row?.photoUrl || row?.photoPath || row?.photo || '',
         name: row?.name || '',
         designation: row?.designationName || row?.designation || '',
+        designationName: row?.designationName || row?.designation || '',
         phone: row?.phone || '',
         email: row?.email || '',
         status,
@@ -279,6 +291,31 @@ const EmployeeAttendance = () => {
       cancelled = true
     }
   }, [filters.date, paginatedEmployees, selectedSchoolId])
+
+  useEffect(() => {
+    const schoolId = normalizeText(pendingFilters.schoolId)
+    if (!schoolId) {
+      setDesignations([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchDesignations({ schoolId })
+        if (cancelled) return
+        setDesignations(Array.isArray(rows) ? rows : [])
+      } catch {
+        if (!cancelled) setDesignations([])
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [pendingFilters.schoolId])
 
   const dirtyDraftEntries = useMemo(() => {
     const entries = Object.values(drafts).filter((entry) => normalizeStatus(entry?.status) && !entry?.recordId)
@@ -495,7 +532,7 @@ const EmployeeAttendance = () => {
           schoolId: employee.schoolId ? Number(employee.schoolId) : selectedSchoolId ? Number(selectedSchoolId) : null,
           examTerm: EMPLOYEE_EXAM_TERM,
           className: EMPLOYEE_CLASS_NAME,
-          sectionName: employee.designation || (filters.designation !== 'Select' ? filters.designation : '') || '',
+          sectionName: employee.designation || employee.designationName || (filters.designation !== 'Select' ? filters.designation : '') || '',
           subjectName: ATTENDANCE_SUBJECT,
           name: employee.name || '',
           phone: employee.phone || '',
