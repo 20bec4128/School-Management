@@ -1,5 +1,6 @@
 import './landingPage.scss'
 import dashboardPreview from './images/dashboardPreview.png'
+import schoolLogo from './images/infitoolz-logo.png'
 
 const navLinks = [
   { label: 'Home', href: '#home' },
@@ -98,13 +99,11 @@ function LandingPage({ onOpenLogin }) {
 
   return (
     <div className="landing-page" id="home">
-      <header className="landing-page__header">
+      <header className="landing-page__header " >
+        
         <div className="landing-page__brand">
-          <img src="/assets/images/logo-icon.png" alt="" className="landing-page__brand-mark" />
-          <div>
-            <strong>EduManage</strong>
-            <span>Smart School System</span>
-          </div>
+          <img src={schoolLogo} alt="" className="landing-page__brand-mark" />
+          
         </div>
 
         <nav className="landing-page__nav" aria-label="Primary">
@@ -127,7 +126,7 @@ function LandingPage({ onOpenLogin }) {
         </div>
       </header>
 
-      <main>
+      <main className='main'>
         <section className="landing-hero ">
           <div className="landing-hero__copy">
             <span className="landing-kicker">All-in-One School Management Solution</span>
@@ -430,7 +429,7 @@ function LandingPage({ onOpenLogin }) {
             <span className="landing-kicker">All-in-One Modules</span>
             <h2>
               A complete suite of modules to manage
-              <br />
+            
               every aspect of your institution.
             </h2>
             <p>Powerful, integrated and easy-to-use modules that help your school run smarter and faster.</p>
@@ -458,7 +457,7 @@ function LandingPage({ onOpenLogin }) {
       <footer className="landing-footer">
         <div className="landing-footer__brand">
           <div className="landing-page__brand landing-page__brand--footer">
-            <img src="/assets/images/logo-icon.png" alt="" className="landing-page__brand-mark" />
+            <img src={schoolLogo} alt="" className="landing-page__brand-mark" />
             <div>
               <strong>EduManage</strong>
               <span>Smart School System</span>
@@ -469,7 +468,7 @@ function LandingPage({ onOpenLogin }) {
 
         <div className="landing-footer__cols">
           <div>
-            <h3>Quick Links</h3>
+            <h3>Links</h3>
             <a href="#home">Home</a>
             <a href="#features">Features</a>
             <a href="#modules">Modules</a>
