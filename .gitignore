@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.local
+env
+env.local
 uploads
 .npm-cache
 
@@ -24,5 +28,5 @@ uploads
 *.njsproj
 *.sln
 *.sw?
-*.env
+
 /.metadata/
