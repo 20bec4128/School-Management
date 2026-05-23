@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
 import './landingPage.scss'
 import dashboardPreview from './images/dashboardPreview.png'
+import dashboardPreviewLight from './images/dashboard-white.png'
 import schoolLogo from './images/infitoolz-logo.png'
+import schoolLogoLight from './images/logo-white.png'
 
 const navLinks = [
   { label: 'Home', href: '#home' },
@@ -87,6 +90,29 @@ const analyticsBarValues = [36, 52, 46, 67, 48, 78, 61, 86]
 const studentGrowthBars = [28, 40, 52, 63, 74]
 
 function LandingPage({ onOpenLogin }) {
+  const [isDarkTheme, setIsDarkTheme] = useState(() => {
+    if (typeof window === 'undefined') return false
+
+    const storedTheme = window.localStorage.getItem('landing-theme')
+    if (storedTheme === 'dark') return true
+    if (storedTheme === 'light') return false
+
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    window.localStorage.setItem('landing-theme', isDarkTheme ? 'dark' : 'light')
+  }, [isDarkTheme])
+
+  const handleContactScroll = () => {
+    document.getElementById('contact')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }
+
   const handleCardMove = (event) => {
     const card = event.currentTarget
     const rect = card.getBoundingClientRect()
@@ -97,12 +123,18 @@ function LandingPage({ onOpenLogin }) {
     card.style.setProperty('--mouse-y', `${y}px`)
   }
 
+  const handleThemeToggle = () => {
+    setIsDarkTheme((current) => !current)
+  }
+
+  const brandLogo = isDarkTheme ? schoolLogo : schoolLogoLight
+
   return (
-    <div className="landing-page" id="home">
+    <div className={`landing-page ${isDarkTheme ? 'is-dark' : 'is-light'}`} id="home">
       <header className="landing-page__header " >
         
         <div className="landing-page__brand">
-          <img src={schoolLogo} alt="" className="landing-page__brand-mark" />
+          <img src={brandLogo} alt="" className="landing-page__brand-mark" />
           
         </div>
 
@@ -115,6 +147,17 @@ function LandingPage({ onOpenLogin }) {
         </nav>
 
         <div className="landing-page__actions">
+         
+          <button
+            type="button"
+            className="landing-page__outline landing-page__theme-toggle"
+            onClick={handleThemeToggle}
+            aria-label={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-pressed={isDarkTheme}
+          >
+            <i className={isDarkTheme ? 'ri-sun-line' : 'ri-moon-line'} aria-hidden="true" />
+            
+          </button>
           <button type="button" className="landing-page__ghost" onClick={onOpenLogin}>
             <i className="ri-user-3-line" aria-hidden="true" />
             Login
@@ -168,16 +211,20 @@ function LandingPage({ onOpenLogin }) {
           </div>
 
           <div className="landing-hero__visual" aria-hidden="true">
-            <img src={dashboardPreview} alt="" className="landing-hero__preview-image" />
+            <img
+              src={isDarkTheme ? dashboardPreview : dashboardPreviewLight}
+              alt=""
+              className="landing-hero__preview-image"
+            />
           </div>
         </section>
 
         <section className="landing-section" id="features">
           <div className="landing-section__head landing-section__head--features">
             <span className="landing-kicker">Powerful Features</span>
-            <h2 >
+            <h3 >
               Everything you need to run your educational institution smoothly.
-            </h2>
+            </h3>
           </div>
 
           <div className="landing-grid landing-grid--features">
@@ -186,7 +233,7 @@ function LandingPage({ onOpenLogin }) {
                 <span className="landing-card__icon">
                   <i className={card.icon} aria-hidden="true" />
                 </span>
-                <h3>{card.title}</h3>
+                <h4>{card.title}</h4>
                 <p>{card.copy}</p>
               </article>
             ))}
@@ -196,11 +243,11 @@ function LandingPage({ onOpenLogin }) {
         <section className="landing-section landing-section--analytics" id="pricing">
           <div className="landing-analytics__intro">
             <span className="landing-kicker">Analytics & Insights</span>
-            <h2>
+            <h3>
               Real-Time School Analytics &
               <br />
               Smart Reports
-            </h2>
+            </h3>
             <p>
               Track attendance, fees, admissions, exams, staff activity, and school performance
               from one intelligent reporting center.
@@ -208,7 +255,7 @@ function LandingPage({ onOpenLogin }) {
 
             <div className="landing-analytics__points">
               {analyticsPoints.map((point) => (
-                <div className="landing-analytics__point" key={point.title} onMouseMove={handleCardMove}>
+                <div className="landing-analytics__point" key={point.title}>
                   <div className="landing-analytics__point-icon">
                     <i className={point.icon} aria-hidden="true" />
                   </div>
@@ -374,9 +421,9 @@ function LandingPage({ onOpenLogin }) {
           <div className="landing-section__hero landing-section__hero--roles">
             <div className="landing-section__head landing-section__head--roles">
               <span className="landing-kicker">Built for Everyone</span>
-              <h2>
+              <h3>
                 Customized dashboards and features                for every role.
-              </h2>
+              </h3>
               <p>
                 Powerful tools tailored to the unique needs of administrators, teachers, students,
                 and parents.
@@ -400,7 +447,7 @@ function LandingPage({ onOpenLogin }) {
                 <div className="landing-role__icon">
                   <i className={card.icon} aria-hidden="true" />
                 </div>
-                <h3>{card.role}</h3>
+                <h4>{card.role}</h4>
                 <ul>
                   {card.items.map((item) => (
                     <li key={item}>{item}</li>
@@ -427,11 +474,11 @@ function LandingPage({ onOpenLogin }) {
         <section className="landing-section" id="modules">
           <div className="landing-section__head landing-section__head--center landing-section__head--modules">
             <span className="landing-kicker">All-in-One Modules</span>
-            <h2>
+            <h3>
               A complete suite of modules to manage
-            
+            <br />
               every aspect of your institution.
-            </h2>
+            </h3>
             <p>Powerful, integrated and easy-to-use modules that help your school run smarter and faster.</p>
           </div>
 
@@ -441,7 +488,7 @@ function LandingPage({ onOpenLogin }) {
                 <span className="landing-module__icon">
                   <i className={moduleCard.icon} aria-hidden="true" />
                 </span>
-                <h3>{moduleCard.title}</h3>
+                <h4>{moduleCard.title}</h4>
                 <p>{moduleCard.copy}</p>
                 <div className="landing-module__footer">
                   <span>{moduleCard.footer}</span>
@@ -454,34 +501,31 @@ function LandingPage({ onOpenLogin }) {
 
       </main>
 
-      <footer className="landing-footer">
+      <footer className="landing-footer" id="contact">
         <div className="landing-footer__brand">
           <div className="landing-page__brand landing-page__brand--footer">
-            <img src={schoolLogo} alt="" className="landing-page__brand-mark" />
-            <div>
-              <strong>EduManage</strong>
-              <span>Smart School System</span>
-            </div>
+            <img src={brandLogo} alt="" className="landing-page__brand-mark" />
+            
           </div>
           <p>Founded in 2016 by four passionate tech enthusiasts, TechieKit Solutions was built on the belief that technology should be as dependable and accessible as a toolkit.</p>
         </div>
 
         <div className="landing-footer__cols">
           <div>
-            <h3>Links</h3>
+            <h4>Links</h4>
             <a href="#home">Home</a>
             <a href="#features">Features</a>
             <a href="#modules">Modules</a>
             <a href="#about">About</a>
           </div>
           <div>
-            <h3>Support</h3>
+            <h4>Support</h4>
             <a href="#contact">Documentation</a>
             <a href="#contact">Help Center</a>
             <a href="#contact">Privacy Policy</a>
           </div>
           <div>
-            <h3>Contact Us</h3>
+            <h4>Contact Us</h4>
             <span>Nagananda Commercial Complex, No.07/3, Second Floor, 15/1, 185/2, 185/A, 18th Main Road, Jayanagar 9th Block, Bengaluru - 560041</span>
             <span>+91 7996 101112</span>
             <span>info@techiekit.com</span>
