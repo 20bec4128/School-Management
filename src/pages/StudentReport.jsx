@@ -10,6 +10,8 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
+import { ReportGraphPanel } from '../components/ReportGraphPanel'
+import { ReportTabPanel, ReportTabs } from '../components/ReportTabs'
 import '../assets/css/addModalShared.css'
 
 const makeDefaultFilters = (schoolId = 'Select') => ({
@@ -106,6 +108,7 @@ const StudentReport = () => {
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
   const [pendingFilters, setPendingFilters] = useState(() => makeDefaultFilters(initialSchoolId))
   const [filters, setFilters] = useState(() => makeDefaultFilters(initialSchoolId))
+  const [activeTab, setActiveTab] = useState('table')
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
@@ -327,7 +330,16 @@ const StudentReport = () => {
       </div>
 
       <div className="card h-100">
+        <ReportTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { key: 'table', label: 'Tabular Report', icon: 'ri-list-unordered' },
+            { key: 'graph', label: 'Graphical Report', icon: 'ri-line-chart-line' },
+          ]}
+        />
         <div className="card-body p-0 dataTable-wrapper">
+          <ReportTabPanel active={activeTab === 'table'}>
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown
@@ -479,6 +491,18 @@ const StudentReport = () => {
               }}
             />
           </div>
+          </ReportTabPanel>
+
+          <ReportTabPanel active={activeTab === 'graph'}>
+            <ReportGraphPanel
+              rows={filteredData}
+              title="Student Report"
+              emptyMessage="No student records found for chart."
+              hint="category"
+              labelKeys={['className', 'schoolName']}
+              valueKey="total"
+            />
+          </ReportTabPanel>
         </div>
       </div>
 

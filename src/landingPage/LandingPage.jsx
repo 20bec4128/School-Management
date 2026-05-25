@@ -86,6 +86,30 @@ const analyticsTasks = [
   { icon: 'ri-calendar-check-line', tone: 'cyan', title: '7 Exam Schedules', copy: 'Upcoming Exams' },
 ]
 
+const mobileNotifications = [
+  {
+    id: 'profile-verified',
+    title: 'Profile verified',
+    body: 'Your school account has been verified successfully.',
+    time: '23m ago',
+    icon: 'ri-shield-check-line',
+  },
+  {
+    id: 'attendance-update',
+    title: 'Attendance update',
+    body: 'A new attendance record is ready for review.',
+    time: '1h ago',
+    icon: 'ri-calendar-check-line',
+  },
+  {
+    id: 'routine-change',
+    title: 'Routine changed',
+    body: 'Your class routine was updated for tomorrow.',
+    time: 'Today',
+    icon: 'ri-time-line',
+  },
+]
+
 const analyticsBarValues = [36, 52, 46, 67, 48, 78, 61, 86]
 const studentGrowthBars = [28, 40, 52, 63, 74]
 
@@ -99,12 +123,54 @@ function LandingPage({ onOpenLogin }) {
 
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
   })
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia?.('(max-width: 768px)').matches ?? false
+  })
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     window.localStorage.setItem('landing-theme', isDarkTheme ? 'dark' : 'light')
   }, [isDarkTheme])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia?.('(max-width: 768px)')
+    if (!media) return
+
+    const handleChange = () => setIsMobileView(media.matches)
+    handleChange()
+
+    // Safari < 14 uses addListener/removeListener
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handleChange)
+      return () => media.removeEventListener('change', handleChange)
+    }
+
+    media.addListener(handleChange)
+    return () => media.removeListener(handleChange)
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    document.body.style.overflow = isMobileMenuOpen ? 'hidden' : ''
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsMobileMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [isMobileMenuOpen])
 
   const handleContactScroll = () => {
     document.getElementById('contact')?.scrollIntoView({
@@ -127,15 +193,30 @@ function LandingPage({ onOpenLogin }) {
     setIsDarkTheme((current) => !current)
   }
 
+  const handleMobileMenuToggle = () => {
+    setIsMobileMenuOpen((current) => !current)
+  }
+
+  const handleMobileMenuClose = () => {
+    setIsMobileMenuOpen(false)
+  }
+
+  const handleNavClick = () => {
+    handleMobileMenuClose()
+  }
+
+  const handlePrimaryAction = () => {
+    handleMobileMenuClose()
+    onOpenLogin?.()
+  }
+
   const brandLogo = isDarkTheme ? schoolLogo : schoolLogoLight
 
   return (
     <div className={`landing-page ${isDarkTheme ? 'is-dark' : 'is-light'}`} id="home">
-      <header className="landing-page__header " >
-        
+      <header className="landing-page__header">
         <div className="landing-page__brand">
           <img src={brandLogo} alt="" className="landing-page__brand-mark" />
-          
         </div>
 
         <nav className="landing-page__nav" aria-label="Primary">
@@ -147,27 +228,123 @@ function LandingPage({ onOpenLogin }) {
         </nav>
 
         <div className="landing-page__actions">
-         
           <button
             type="button"
-            className="landing-page__outline landing-page__theme-toggle"
+            className="landing-page__outline landing-page__theme-toggle landing-page__theme-toggle--mobile-header"
             onClick={handleThemeToggle}
             aria-label={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
             aria-pressed={isDarkTheme}
           >
             <i className={isDarkTheme ? 'ri-sun-line' : 'ri-moon-line'} aria-hidden="true" />
-            
           </button>
-          <button type="button" className="landing-page__ghost" onClick={onOpenLogin}>
+          <button type="button" className="landing-page__ghost" onClick={handlePrimaryAction}>
             <i className="ri-user-3-line" aria-hidden="true" />
             Login
           </button>
-          <button type="button" className="landing-page__primary" onClick={onOpenLogin}>
+          <button type="button" className="landing-page__primary landing-page__primary--desktop-only" onClick={handlePrimaryAction}>
             Get Started
             <i className="ri-arrow-right-line" aria-hidden="true" />
           </button>
+          {isMobileView ? (
+            <button
+              type="button"
+              className="landing-page__outline landing-page__menu-toggle"
+              onClick={handleMobileMenuToggle}
+              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-nav-menu"
+            >
+              <i className={isMobileMenuOpen ? 'ri-close-line' : 'ri-menu-3-line'} aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
       </header>
+
+      {isMobileView ? (
+        <>
+          <div
+            className={`landing-page__mobile-overlay ${isMobileMenuOpen ? 'is-open' : ''}`}
+            onClick={handleMobileMenuClose}
+            aria-hidden="true"
+          />
+
+          <aside
+            id="mobile-nav-menu"
+            className={`landing-page__mobile-menu ${isMobileMenuOpen ? 'is-open' : ''}`}
+            aria-hidden={!isMobileMenuOpen}
+          >
+            <div className="landing-page__mobile-menu-head">
+              <div className="landing-page__brand landing-page__brand--mobile">
+                <img src={brandLogo} alt="" className="landing-page__brand-mark" />
+                <span className="landing-page__brand-text">School Management</span>
+              </div>
+              <button
+                type="button"
+                className="landing-page__outline landing-page__mobile-close"
+                onClick={handleMobileMenuClose}
+                aria-label="Close menu"
+              >
+                <i className="ri-close-line" aria-hidden="true" />
+              </button>
+            </div>
+
+            <nav className="landing-page__mobile-nav" aria-label="Mobile primary">
+              {navLinks.map((link) => (
+                <a key={link.label} href={link.href} onClick={handleNavClick}>
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+
+            <section className="landing-page__mobile-notifications" aria-labelledby="mobile-notifications-title">
+              <div className="landing-page__mobile-section-head">
+                <h2 id="mobile-notifications-title">Notifications</h2>
+                <span>Latest updates</span>
+              </div>
+
+              <div className="landing-page__mobile-notification-list">
+                {mobileNotifications.map((item) => (
+                  <article key={item.id} className="landing-page__mobile-notification-card">
+                    <span className="landing-page__mobile-notification-icon">
+                      <i className={item.icon} aria-hidden="true" />
+                    </span>
+                    <div className="landing-page__mobile-notification-copy">
+                      <strong>{item.title}</strong>
+                      <p>{item.body}</p>
+                    </div>
+                    <span className="landing-page__mobile-notification-time">{item.time}</span>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <div className="landing-page__mobile-actions">
+              <button
+                type="button"
+                className="landing-page__outline landing-page__theme-toggle landing-page__theme-toggle--mobile"
+                onClick={handleThemeToggle}
+                aria-label={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
+                aria-pressed={isDarkTheme}
+              >
+                <i className={isDarkTheme ? 'ri-sun-line' : 'ri-moon-line'} aria-hidden="true" />
+                Theme
+              </button>
+              <button type="button" className="landing-page__ghost" onClick={handlePrimaryAction}>
+                <i className="ri-user-3-line" aria-hidden="true" />
+                Login
+              </button>
+              <button
+                type="button"
+                className="landing-page__primary landing-page__primary--desktop-only"
+                onClick={handlePrimaryAction}
+              >
+                Get Started
+                <i className="ri-arrow-right-line" aria-hidden="true" />
+              </button>
+            </div>
+          </aside>
+        </>
+      ) : null}
 
       <main className='main'>
         <section className="landing-hero ">
@@ -183,7 +360,7 @@ function LandingPage({ onOpenLogin }) {
               <button
                 type="button"
                 className="landing-page__primary landing-page__primary--large"
-                onClick={onOpenLogin}
+                onClick={handlePrimaryAction}
               >
                 Get Started
                 <i className="ri-arrow-right-line" aria-hidden="true" />
@@ -267,7 +444,7 @@ function LandingPage({ onOpenLogin }) {
               ))}
             </div>
 
-            <button type="button" className="landing-page__primary landing-page__primary--large" onClick={onOpenLogin}>
+            <button type="button" className="landing-page__primary landing-page__primary--large" onClick={handlePrimaryAction}>
               Explore All Reports
               <i className="ri-arrow-right-line" aria-hidden="true" />
             </button>
