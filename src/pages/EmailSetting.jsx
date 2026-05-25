@@ -13,7 +13,8 @@ const emptyFilters = {
 };
 
 const EmailSetting = ({ onNavigate }) => {
-  const { headOfficeId, schoolId } = useAuth();
+  const { headOfficeId, schoolId, canAdd, canEdit, canDelete } = useAuth();
+  const PAGE_SLUG = "email-setting";
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -155,12 +156,14 @@ const EmailSetting = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Email Setting</h1>
           <span className="text-secondary-light">Administrator / Email Setting</span>
         </div>
-        <button
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <i className="ri-add-line"></i> Add Email Setting
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <i className="ri-add-line"></i> Add Email Setting
+          </button>
+        )}
       </div>
 
       {error ? <div className="alert alert-danger mb-24 radius-8">{error}</div> : null}
@@ -243,20 +246,24 @@ const EmailSetting = ({ onNavigate }) => {
                         <td>{row.fromEmail || "-"}</td>
                         <td>
                           <div className="d-flex align-items-center gap-10">
-                            <button
-                              type="button"
-                              className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                              onClick={() => openEdit(row)}
-                            >
-                              <i className="ri-edit-line"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                              onClick={() => handleDelete(row)}
-                            >
-                              <i className="ri-delete-bin-line"></i>
-                            </button>
+                            {canEdit(PAGE_SLUG) && (
+                              <button
+                                type="button"
+                                className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                                onClick={() => openEdit(row)}
+                              >
+                                <i className="ri-edit-line"></i>
+                              </button>
+                            )}
+                            {canDelete(PAGE_SLUG) && (
+                              <button
+                                type="button"
+                                className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                                onClick={() => handleDelete(row)}
+                              >
+                                <i className="ri-delete-bin-line"></i>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

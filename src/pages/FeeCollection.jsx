@@ -145,7 +145,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const FeeCollection = ({ onNavigate } = {}) => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'fee-collection'
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -958,26 +959,30 @@ const FeeCollection = ({ onNavigate } = {}) => {
           </div>
         </div>
         <div className="d-flex gap-10">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line"></i>
-            </span>
-            Create Invoice
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary-600 d-flex align-items-center gap-6"
-            onClick={openBulk}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-file-copy-line"></i>
-            </span>
-            Bulk Invoice
-          </button>
+          {canAdd('fee-collection') && (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary-600 d-flex align-items-center gap-6"
+                onClick={openAdd}
+              >
+                <span className="d-flex text-md">
+                  <i className="ri-add-large-line"></i>
+                </span>
+                Create Invoice
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary-600 d-flex align-items-center gap-6"
+                onClick={openBulk}
+              >
+                <span className="d-flex text-md">
+                  <i className="ri-file-copy-line"></i>
+                </span>
+                Bulk Invoice
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1135,14 +1140,16 @@ const FeeCollection = ({ onNavigate } = {}) => {
                       {visibleColumns.status ? <td>{getStatusBadge(row.paidStatus)}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
+                          {canEdit('fee-collection') && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="bg-success-focus bg-hover-success-200 text-success-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
@@ -1151,19 +1158,21 @@ const FeeCollection = ({ onNavigate } = {}) => {
                           >
                             <i className="ri-download-2-line"></i>
                           </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={async () => {
-                              if (window.confirm('Are you sure you want to delete this invoice?')) {
-                                await deleteFeeCollection(row.id)
-                                loadData()
-                              }
-                            }}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canDelete('fee-collection') && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={async () => {
+                                if (window.confirm('Are you sure you want to delete this invoice?')) {
+                                  await deleteFeeCollection(row.id)
+                                  loadData()
+                                }
+                              }}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

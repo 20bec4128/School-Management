@@ -47,12 +47,11 @@ const evaluateBadge = (value) => {
 }
 
 const Submission = ({ onNavigate }) => {
-  const { user, role, schoolId: authSchoolId, schoolName: authSchoolName, studentId, parentChildren, selectedChildId } = useAuth()
+  const { user, role, schoolId: authSchoolId, schoolName: authSchoolName, studentId, parentChildren, selectedChildId, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId } = useSchool()
 
   const canSubmit = can(user, ['ASSIGNMENT_SUBMIT', '*'])
   const canEvaluate = can(user, ['SUBMISSION_MANAGE', 'SUBMISSION_EVALUATE_ASSIGNED', '*'])
-  const canManage = can(user, ['SUBMISSION_MANAGE', '*'])
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : () => {}
 
   const roleUpper = String(role || '').toUpperCase()
@@ -277,7 +276,7 @@ const Submission = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Submission</span>
           </div>
         </div>
-        {canSubmit && (
+        {canSubmit && canAdd('submission') && (
           <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
             <i className="ri-add-large-line text-md"></i> Submit Assignment
           </button>
@@ -393,7 +392,7 @@ const Submission = ({ onNavigate }) => {
                                <i className="ri-eye-line"></i>
                              </a>
                           )}
-                          {isStudent && String(r.studentId) === String(studentId) && (
+                          {canEdit('submission') && isStudent && String(r.studentId) === String(studentId) && (
                             <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => openEdit(r)} title="Edit">
                               <i className="ri-edit-line"></i>
                             </button>
@@ -403,7 +402,7 @@ const Submission = ({ onNavigate }) => {
                               <i className="ri-check-line"></i>
                             </button>
                           )}
-                          {canManage && (
+                          {canDelete('submission') && (
                             <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(r.id)} title="Delete">
                               <i className="ri-delete-bin-line"></i>
                             </button>

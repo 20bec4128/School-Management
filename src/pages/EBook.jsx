@@ -93,7 +93,8 @@ const resolveMediaUrl = (value) => {
 }
 
 const EBook = ({ onNavigate }) => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'ebook'
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -323,16 +324,18 @@ const EBook = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">E-Book</h1>
           <span className="text-secondary-light">Library / E-Book Management</span>
         </div>
-        <button
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          type="button"
-          onClick={() => {
-            sessionStorage.removeItem('edit-ebook-row')
-            onNavigate?.('ebook-create')
-          }}
-        >
-          <i className="ri-add-large-line"></i> Add E-Book
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            type="button"
+            onClick={() => {
+              sessionStorage.removeItem('edit-ebook-row')
+              onNavigate?.('ebook-create')
+            }}
+          >
+            <i className="ri-add-large-line"></i> Add E-Book
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -480,22 +483,26 @@ const EBook = ({ onNavigate }) => {
                       ))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => openEdit(row)}
-                            title="Edit E-Book"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleDelete(row)}
-                            title="Delete E-Book"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => openEdit(row)}
+                              title="Edit E-Book"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleDelete(row)}
+                              title="Delete E-Book"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

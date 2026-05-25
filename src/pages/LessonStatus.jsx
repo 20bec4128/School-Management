@@ -55,7 +55,7 @@ const canCompleteLesson = (lesson) => {
 }
 
 const LessonStatus = () => {
-  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user } = useAuth()
+  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user, canEdit } = useAuth()
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -91,7 +91,8 @@ const LessonStatus = () => {
     : roleUpper === 'PARENT'
       ? selectedChild?.classId ?? null
       : null
-  const canManageLessonStatus = can(user, ['LESSON_PLAN_MANAGE', 'LESSON_PLAN_MANAGE_ASSIGNED', '*'])
+  const PAGE_SLUG = 'lesson-status'
+  const canManageLessonStatus = canEdit(PAGE_SLUG)
   const academicYearOptions = useAcademicYearOptions({
     schoolId:
       isStudentScope

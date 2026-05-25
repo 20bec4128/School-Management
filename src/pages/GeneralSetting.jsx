@@ -138,7 +138,10 @@ const GeneralSetting = () => {
     schoolId: authSchoolId,
     schoolName: authSchoolName,
     headOfficeId: authHeadOfficeId,
+    canEdit,
   } = useAuth();
+
+  const PAGE_SLUG = "general-settings";
 
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
@@ -300,7 +303,7 @@ const GeneralSetting = () => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">General Settings</h1>
           <span className="text-secondary-light">Administrator / General Settings</span>
         </div>
-        {activeSchoolId && (
+        {activeSchoolId && canEdit(PAGE_SLUG) && (
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
@@ -866,22 +869,24 @@ const GeneralSetting = () => {
               </div>
 
               {/* Save button */}
-              <button
-                type="submit"
-                className="btn btn-primary-600 w-100 d-flex align-items-center justify-content-center gap-8"
-                disabled={saving}
-              >
-                {saving ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-save-line" /> Save Settings
-                  </>
-                )}
-              </button>
+              {canEdit(PAGE_SLUG) && (
+                <button
+                  type="submit"
+                  className="btn btn-primary-600 w-100 d-flex align-items-center justify-content-center gap-8"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-save-line" /> Save Settings
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </form>

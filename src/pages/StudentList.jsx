@@ -40,7 +40,11 @@ const StudentList = ({ onNavigate }) => {
     headOfficeName: authHeadOfficeName,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth()
+  const PAGE_SLUG = 'student-list'
   const { activeSchoolId } = useSchool()
   
   const [students, setStudents] = useState([])
@@ -322,9 +326,11 @@ const StudentList = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Student List</h1>
           <span className="text-secondary-light">Student / Student List</span>
         </div>
-        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-          <i className="ri-add-large-line"></i> Add Student
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+            <i className="ri-add-large-line"></i> Add Student
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -458,22 +464,26 @@ const StudentList = ({ onNavigate }) => {
                       {visibleColumns.email ? <td>{row.email || '-'}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleDelete(row.id)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleDelete(row.id)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

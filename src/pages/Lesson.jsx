@@ -79,7 +79,11 @@ const Lesson = ({ onNavigate }) => {
     headOfficeName: authHeadOfficeName,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth();
+  const PAGE_SLUG = 'lesson';
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool();
 
   const [data, setData] = useState([]); // Standardized to 'data'
@@ -405,12 +409,14 @@ const Lesson = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Lesson</h1>
           <span className="text-secondary-light">Dashboard / Lesson</span>
         </div>
-        <button
-                className="btn btn-primary-600 radius-8 px-20 py-11 d-flex align-items-center gap-2"
-                onClick={() => onNavigate?.("add-lesson")}
-              >
-                <i className="ri-add-line"></i> Add Lesson
-              </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            className="btn btn-primary-600 radius-8 px-20 py-11 d-flex align-items-center gap-2"
+            onClick={() => onNavigate?.("add-lesson")}
+          >
+            <i className="ri-add-line"></i> Add Lesson
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -544,12 +550,16 @@ const Lesson = ({ onNavigate }) => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button type="button" className="text-primary-600 bg-primary-100 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)}>
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button type="button" className="text-danger-600 bg-danger-100 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle">
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button type="button" className="text-primary-600 bg-primary-100 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)}>
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button type="button" className="text-danger-600 bg-danger-100 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle">
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

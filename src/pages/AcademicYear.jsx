@@ -103,7 +103,8 @@ const FormField = ({ label, id, required, children, full = false, noIcon = false
 )
 
 const AcademicYear = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'academic-year'
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -368,12 +369,14 @@ const AcademicYear = () => {
 
         <div className="d-flex flex-wrap align-items-center gap-12">
           {isSchoolAdmin ? <div className="text-secondary-light small">{scopeSchoolName}</div> : null}
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line" />
-            </span>
-            Add Year
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+              <span className="d-flex text-md">
+                <i className="ri-add-large-line" />
+              </span>
+              Add Year
+            </button>
+          )}
         </div>
       </div>
 
@@ -491,22 +494,26 @@ const AcademicYear = () => {
                       {visibleColumns.note ? <td>{row.note || '--'}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line" />
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => removeAcademicYear(row)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line" />
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line" />
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => removeAcademicYear(row)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

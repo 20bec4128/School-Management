@@ -8,7 +8,6 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
-import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
@@ -95,9 +94,9 @@ const getFileIcon = (fileName) => {
 }
 
 const Syllabus = ({ onNavigate }) => {
-  const { user, role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const { role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
-  const canManage = can(user, ['SYLLABUS_MANAGE', 'SYLLABUS_MANAGE_ASSIGNED', '*'])
+  const canManage = canAdd('syllabus') || canEdit('syllabus') || canDelete('syllabus')
 
   const [syllabuses, setSyllabuses] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -393,7 +392,7 @@ const Syllabus = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Syllabus</span>
           </div>
         </div>
-        {canManage ? (
+        {canAdd('syllabus') ? (
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
@@ -602,23 +601,27 @@ const Syllabus = ({ onNavigate }) => {
                       {canManage ? (
                         <td>
                           <div className="d-flex align-items-center gap-10">
-                            <button
-                              type="button"
-                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                              onClick={() => handleEdit(row)}
-                              title="Edit"
-                            >
-                              <i className="ri-edit-line"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                              onClick={() => handleDelete(row.id)}
-                              title="Delete"
-                              disabled={saving}
-                            >
-                              <i className="ri-delete-bin-line"></i>
-                            </button>
+                            {canEdit('syllabus') ? (
+                              <button
+                                type="button"
+                                className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                                onClick={() => handleEdit(row)}
+                                title="Edit"
+                              >
+                                <i className="ri-edit-line"></i>
+                              </button>
+                            ) : null}
+                            {canDelete('syllabus') ? (
+                              <button
+                                type="button"
+                                className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                                onClick={() => handleDelete(row.id)}
+                                title="Delete"
+                                disabled={saving}
+                              >
+                                <i className="ri-delete-bin-line"></i>
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       ) : (

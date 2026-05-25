@@ -38,7 +38,7 @@ const getChildScope = (children, selectedChildId) => {
 const toDateInputValue = (d) => (d ? String(d) : '')
 
 const LessonTimeline = () => {
-  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user } = useAuth()
+  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user, canEdit } = useAuth()
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -74,7 +74,8 @@ const LessonTimeline = () => {
     : roleUpper === 'PARENT'
       ? selectedChild?.classId ?? null
       : null
-  const canManageTimeline = can(user, ['LESSON_PLAN_MANAGE', 'LESSON_PLAN_MANAGE_ASSIGNED', '*'])
+  const PAGE_SLUG = 'lesson-timeline'
+  const canManageTimeline = canEdit(PAGE_SLUG)
   const academicYearOptions = useAcademicYearOptions({
     schoolId:
       isStudentScope

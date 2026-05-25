@@ -62,7 +62,7 @@ const getChildScope = (children, selectedChildId) => {
 }
 
 const LiveClass = ({ onNavigate }) => {
-  const { user, role, schoolId, studentClassId, studentSectionId, selectedChildId, parentChildren } = useAuth()
+  const { user, role, schoolId, studentClassId, studentSectionId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
@@ -70,7 +70,7 @@ const LiveClass = ({ onNavigate }) => {
   const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
   const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
   const effectiveSectionId = roleUpper === 'STUDENT' ? studentSectionId : roleUpper === 'PARENT' ? selectedChild?.sectionId ?? null : null
-  const canManage = !isStudentScope && can(user, ['LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
+  const canManage = canAdd('live-class') || canEdit('live-class') || canDelete('live-class')
   const canJoin = !isStudentScope && can(user, ['LIVE_CLASS_JOIN', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
 
   const [rows, setRows] = useState([])
@@ -297,7 +297,7 @@ const LiveClass = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Live Class</span>
           </div>
         </div>
-        {canManage && (
+        {!isStudentScope && canAdd('live-class') && (
           <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
             <i className="ri-add-large-line text-md"></i> Add Live Class
           </button>
@@ -411,14 +411,18 @@ const LiveClass = ({ onNavigate }) => {
                       {visibleColumns.status && <td><span className={statusBadge(r.status)}>{r.status}</span></td>}
                       <td>
                         <div className="d-flex align-items-center gap-8">
-                          {canManage && (
+                          {!isStudentScope && (
                             <>
+                              {canEdit('live-class') && (
                               <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => openEdit(r)} title="Edit">
                                 <i className="ri-edit-line"></i>
                               </button>
+                              )}
+                              {canDelete('live-class') && (
                               <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(r.id)} title="Delete">
                                 <i className="ri-delete-bin-line"></i>
                               </button>
+                              )}
                             </>
                           )}
                           <div className="dropdown">

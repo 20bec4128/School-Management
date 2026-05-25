@@ -30,7 +30,15 @@ const columnOptions = [
 ];
 
 const FrontendPage = ({ onNavigate }) => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth();
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    schoolId: authSchoolId,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth();
+  const PAGE_SLUG = "frontend-page";
   const normalizedRole = normalizeRole(role);
   const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
   const isHeadOfficeAdmin = normalizedRole === "HEAD_OFFICE_ADMIN";
@@ -191,15 +199,17 @@ const FrontendPage = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Frontend Page</h1>
           <span className="text-secondary-light">Frontend / Frontend Page</span>
         </div>
-        <button 
-          className="btn btn-primary-600 d-flex align-items-center gap-6" 
-          onClick={() => {
-            sessionStorage.removeItem(EDIT_STORAGE_KEY);
-            onNavigate?.("frontend-page-create");
-          }}
-        >
-          <i className="ri-add-large-line"></i> Add Frontend Page
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button 
+            className="btn btn-primary-600 d-flex align-items-center gap-6" 
+            onClick={() => {
+              sessionStorage.removeItem(EDIT_STORAGE_KEY);
+              onNavigate?.("frontend-page-create");
+            }}
+          >
+            <i className="ri-add-large-line"></i> Add Frontend Page
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -331,18 +341,22 @@ const FrontendPage = ({ onNavigate }) => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button 
-                            className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleEdit(row)}
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button 
-                            className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleDelete(row)}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button 
+                              className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleEdit(row)}
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button 
+                              className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleDelete(row)}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
