@@ -4,6 +4,7 @@ import { getToken, setToken } from '../apis/apiClient'
 import { normalizeRole } from '../utils/roles'
 import { AuthContext } from './authContext'
 import { fetchGeneralSettingBySchoolId } from '../apis/generalSettingApi'
+import { fetchMyPagePermissions } from '../apis/pagePermissionApi'
 
 const USER_KEY = 'sm_user'
 const CHILD_KEY = 'sm_selected_child_id'
@@ -80,6 +81,15 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => readJson(USER_KEY))
   const [status, setStatus] = useState('idle') // idle | loading | ready
 
+  const [pagePermissions, setPagePermissions] = useState(() => {
+    const saved = readJson('sm_page_perms')
+    return saved && !saved.superAdmin ? saved : {}
+  })
+  const [isSuperAdminRole, setIsSuperAdminRole] = useState(() => {
+    const saved = readJson('sm_page_perms')
+    return saved?.superAdmin === true
+  })
+
   const permissions = useMemo(() => pickPermissions(user), [user])
   const role = useMemo(() => normalizeRole(user?.role || user?.userRole || user?.authority), [user])
   const headOfficeId = user?.headOfficeId ?? user?.headOffice?.id ?? null
@@ -128,7 +138,10 @@ export const AuthProvider = ({ children }) => {
   }, [schoolId])
 
   useEffect(() => {
-    void refreshGeneralSettings()
+    const timer = setTimeout(() => {
+      void refreshGeneralSettings()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [refreshGeneralSettings])
 
   useEffect(() => {
@@ -165,6 +178,9 @@ export const AuthProvider = ({ children }) => {
       setTokenState(null)
       setUser(null)
       writeJson(USER_KEY, null)
+      setPagePermissions({})
+      setIsSuperAdminRole(false)
+      writeJson('sm_page_perms', null)
       setStatus('ready')
       return null
     }
@@ -175,6 +191,28 @@ export const AuthProvider = ({ children }) => {
       setTokenState(t)
       setUser(nextUser)
       writeJson(USER_KEY, nextUser)
+
+      if (nextUser) {
+        try {
+          const pp = await fetchMyPagePermissions()
+          if (pp?.superAdmin) {
+            setIsSuperAdminRole(true)
+            setPagePermissions({})
+            writeJson('sm_page_perms', { superAdmin: true })
+          } else {
+            setIsSuperAdminRole(false)
+            setPagePermissions(pp || {})
+            writeJson('sm_page_perms', pp || {})
+          }
+        } catch (e) {
+          console.error('Failed to fetch page permissions', e)
+        }
+      } else {
+        setPagePermissions({})
+        setIsSuperAdminRole(false)
+        writeJson('sm_page_perms', null)
+      }
+
       setStatus('ready')
       return nextUser
     } catch {
@@ -182,14 +220,19 @@ export const AuthProvider = ({ children }) => {
       setTokenState(null)
       setUser(null)
       writeJson(USER_KEY, null)
+      setPagePermissions({})
+      setIsSuperAdminRole(false)
+      writeJson('sm_page_perms', null)
       setStatus('ready')
       return null
     }
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refreshMe()
+    const timer = setTimeout(() => {
+      void refreshMe()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [refreshMe])
 
   useEffect(() => {
@@ -205,7 +248,12 @@ export const AuthProvider = ({ children }) => {
 
     const children = Array.isArray(parentChildren) ? parentChildren : []
     if (children.length === 0) {
-      if (selectedChildId != null) setSelectedChildId(null)
+      if (selectedChildId != null) {
+        const timer = setTimeout(() => {
+          setSelectedChildId(null)
+        }, 0)
+        return () => clearTimeout(timer)
+      }
       return
     }
 
@@ -217,7 +265,12 @@ export const AuthProvider = ({ children }) => {
     if (selectedExists) return
 
     const firstChildId = children[0]?.studentId ?? children[0]?.id ?? children[0]?.student?.id ?? null
-    if (firstChildId != null) setSelectedChildId(firstChildId)
+    if (firstChildId != null) {
+      const timer = setTimeout(() => {
+        setSelectedChildId(firstChildId)
+      }, 0)
+      return () => clearTimeout(timer)
+    }
   }, [parentChildren, role, selectedChildId, setSelectedChildId])
 
   const login = useCallback(async ({ username, password, remember = true }) => {
@@ -240,8 +293,43 @@ export const AuthProvider = ({ children }) => {
     setTokenState(null)
     setUser(null)
     writeJson(USER_KEY, null)
+    setPagePermissions({})
+    setIsSuperAdminRole(false)
+    writeJson('sm_page_perms', null)
     setSelectedChildId(null)
   }, [setSelectedChildId])
+
+  const canView = useCallback((slug) => {
+    if (isSuperAdminRole) return true
+    if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
+    const perms = pagePermissions[slug]
+    if (!perms) return true
+    return perms.view === true
+  }, [isSuperAdminRole, pagePermissions])
+
+  const canAdd = useCallback((slug) => {
+    if (isSuperAdminRole) return true
+    if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
+    const perms = pagePermissions[slug]
+    if (!perms) return true
+    return perms.add === true
+  }, [isSuperAdminRole, pagePermissions])
+
+  const canEdit = useCallback((slug) => {
+    if (isSuperAdminRole) return true
+    if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
+    const perms = pagePermissions[slug]
+    if (!perms) return true
+    return perms.edit === true
+  }, [isSuperAdminRole, pagePermissions])
+
+  const canDelete = useCallback((slug) => {
+    if (isSuperAdminRole) return true
+    if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
+    const perms = pagePermissions[slug]
+    if (!perms) return true
+    return perms.delete === true
+  }, [isSuperAdminRole, pagePermissions])
 
   const value = useMemo(
     () => ({
@@ -267,6 +355,12 @@ export const AuthProvider = ({ children }) => {
       logout,
       generalSettings,
       refreshGeneralSettings,
+      pagePermissions,
+      isSuperAdminRole,
+      canView,
+      canAdd,
+      canEdit,
+      canDelete,
     }),
     [
       status,
@@ -291,6 +385,12 @@ export const AuthProvider = ({ children }) => {
       logout,
       generalSettings,
       refreshGeneralSettings,
+      pagePermissions,
+      isSuperAdminRole,
+      canView,
+      canAdd,
+      canEdit,
+      canDelete,
     ],
   )
 

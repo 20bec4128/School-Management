@@ -11,7 +11,7 @@ const themeState = () => {
 }
 
 const MobileBottomNav = ({ currentPage, onNavigate, onLogout }) => {
-  const { user, role } = useAuth()
+  const { user, role, pagePermissions, isSuperAdminRole } = useAuth()
   const [activePanel, setActivePanel] = useState('none') // none | profile | actions
   const [theme, setTheme] = useState(themeState)
   const [isCompact, setIsCompact] = useState(false)
@@ -81,7 +81,10 @@ const MobileBottomNav = ({ currentPage, onNavigate, onLogout }) => {
     }
   }, [activePanel])
 
-  const nav = useMemo(() => getMobileNavigationConfig({ user, role }), [role, user])
+  const nav = useMemo(
+    () => getMobileNavigationConfig({ user, role, pagePermissions, isSuperAdminRole }),
+    [role, user, pagePermissions, isSuperAdminRole]
+  )
 
   const roleLabel = normalizeRole(role || user?.role || user?.userRole || user?.authority).replaceAll('_', ' ')
 

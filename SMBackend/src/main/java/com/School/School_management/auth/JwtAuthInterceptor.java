@@ -128,6 +128,10 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         request.setAttribute(ATTR_USER, user);
         CurrentUserHolder.set(user);
 
+        if ("/api/rbac/page-permissions/me".equals(path) || "/api/rbac/page-permissions/modules".equals(path)) {
+            return true;
+        }
+
         // SUPER_ADMIN is all-access for all API endpoints.
         // RBAC annotations are still required for other roles (default-deny).
         if (user.isSuperAdmin()) {

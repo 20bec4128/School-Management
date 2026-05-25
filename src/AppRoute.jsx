@@ -9,7 +9,8 @@ const StudentDashboard = lazy(() => import("./pages/StudentDashboard"));
 const ParentDashboard = lazy(() => import("./pages/ParentDashboard"));
 const LmsDashboard = lazy(() => import("./pages/LmsDashboard"));
 const HeadOffices = lazy(() => import("./pages/HeadOffices"));
-const UserRoleAcl = lazy(() => import("./pages/UserRoleAcl"));
+const RoleTable = lazy(() => import("./pages/RoleTable"));
+const RolePermissionSetting = lazy(() => import("./pages/RolePermissionSetting"));
 const TeacherDepartment = lazy(() => import("./pages/TeacherDepartment"));
 const StudentList = lazy(() => import("./pages/StudentList"));
 const AddStudent = lazy(() => import("./pages/AddStudent"));
@@ -294,7 +295,12 @@ const routeEntries = [
   { pageKey: "lms-dashboard", component: LmsDashboard },
   {
     pageKey: "user-role-acl",
-    component: UserRoleAcl,
+    component: RoleTable,
+    permission: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE", "*"],
+  },
+  {
+    pageKey: "role-permission-setting",
+    component: RolePermissionSetting,
     permission: ["RBAC_MANAGE", "SCHOOL_RBAC_MANAGE", "*"],
   },
   { pageKey: "teacher-department", component: TeacherDepartment },
@@ -852,7 +858,10 @@ const AppRoute = ({
     return "dashboard";
   })();
   const effectivePage = currentPage === "dashboard" ? homePage : currentPage;
-  const entry = routeEntries.find((item) => item.pageKey === effectivePage);
+  const [basePage, queryString] = (effectivePage || '').split('?');
+  const entry = routeEntries.find((item) => item.pageKey === basePage);
+  const searchParams = new URLSearchParams(queryString || '');
+
   const homeEntry =
     routeEntries.find((item) => item.pageKey === homePage) ||
     routeEntries.find((item) => item.pageKey === "school-admin-dashboard") ||
@@ -866,7 +875,12 @@ const AppRoute = ({
   if (!entry) return homeContent;
 
   const PageComponent = entry.component;
-  const content = <PageComponent onNavigate={onNavigate} />;
+  const pageProps = {
+    onNavigate,
+    role: searchParams.get('role'),
+    schoolId: searchParams.get('schoolId'),
+  };
+  const content = <PageComponent {...pageProps} />;
 
   return (
     <ProtectedRoute
@@ -874,6 +888,7 @@ const AppRoute = ({
       role={normalizedRole}
       allowedRoles={entry.allowedRoles}
       permission={entry.permission}
+      pageKey={basePage}
       fallback={homeContent}
     >
       {content}

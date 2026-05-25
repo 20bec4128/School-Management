@@ -624,7 +624,7 @@ const menuSections = [
 
 const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const { isOpen, isCollapsed, closeSidebar, toggleSidebar } = useSidebar();
-  const { generalSettings } = useAuth();
+  const { generalSettings, canView } = useAuth();
 
   const username =
     user?.username ||
@@ -636,17 +636,39 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
 
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
 
-  const filteredSections = menuSections.map((section) => ({
-    ...section,
-    items: (Array.isArray(section.items) ? section.items : []).map((item) => ({
-      ...item,
-      submenu: Array.isArray(item.submenu)
-        ? item.submenu.map((sub) => ({ ...sub }))
-        : item.submenu,
-    })),
-  }));
-
   const canOpenUserRoles = () => true;
+
+  const filteredSections = menuSections.map((section) => {
+    const items = (Array.isArray(section.items) ? section.items : [])
+      .map((item) => {
+        const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+        if (hasSubmenu) {
+          const filteredSubs = item.submenu.filter((sub) => {
+            if (sub?.page === "user-role-acl" && !canOpenUserRoles()) return false;
+            if (sub?.page) return canView(sub.page);
+            return true;
+          });
+          return {
+            ...item,
+            submenu: filteredSubs
+          };
+        } else {
+          return { ...item };
+        }
+      })
+      .filter((item) => {
+        const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+        if (hasSubmenu) return true;
+        if (Array.isArray(item.submenu) && item.submenu.length === 0) return false;
+        if (item.page) return canView(item.page);
+        return true;
+      });
+
+    return {
+      ...section,
+      items
+    };
+  }).filter(section => section.items.length > 0);
 
   const buildOpenKey = (sectionIndex, itemIndex) =>
     `${sectionIndex}-${itemIndex}`;
@@ -882,13 +904,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                   const isOpenDropdown = hasSubmenu && openKey === key;
                   const isItemActive = item.page && item.page === currentPage;
 
-                  const filteredSubs = hasSubmenu
-                    ? item.submenu.filter((sub) => {
-                        if (sub?.page === "user-role-acl")
-                          return canOpenUserRoles();
-                        return true;
-                      })
-                    : [];
+                  const filteredSubs = hasSubmenu ? item.submenu : [];
 
                   return (
                     <li

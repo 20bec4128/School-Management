@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class RbacAdminController {
 
     private static final Pattern ROLE_NAME = Pattern.compile("^[A-Z0-9_]{3,50}$");
+    private static final Set<String> DEFAULT_ROLES = Set.of(
+            "SUPER_ADMIN", "ADMIN", "SCHOOL_ADMIN", "TEACHER",
+            "STUDENT", "PARENT", "GUARDIAN", "ACCOUNTANT", "LIBRARIAN", "RECEPTIONIST"
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final RbacService rbacService;
@@ -35,7 +40,7 @@ public class RbacAdminController {
 
     public record PermissionDto(String code, String description) {}
 
-    public record RoleDto(String name, String description, List<String> permissions) {}
+    public record RoleDto(String name, String description, List<String> permissions, boolean isDefault) {}
 
     public record CreateRoleRequest(String name, String description, List<String> permissions) {}
 
@@ -72,10 +77,11 @@ public class RbacAdminController {
 
         List<RoleDto> result = new ArrayList<>();
         for (RoleDtoBuilder b : byRole.values()) {
+            boolean isDefault = DEFAULT_ROLES.contains(b.name.toUpperCase());
             if ("SUPER_ADMIN".equalsIgnoreCase(b.name)) {
-                result.add(new RoleDto("SUPER_ADMIN", b.description, List.of("*")));
+                result.add(new RoleDto("SUPER_ADMIN", b.description, List.of("*"), true));
             } else {
-                result.add(new RoleDto(b.name, b.description, b.permissions.stream().distinct().sorted().toList()));
+                result.add(new RoleDto(b.name, b.description, b.permissions.stream().distinct().sorted().toList(), isDefault));
             }
         }
         return result;

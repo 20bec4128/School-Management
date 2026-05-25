@@ -171,9 +171,7 @@ const firstAccessiblePage = (user, pages) => {
   return list.find(Boolean) || null
 }
 
-const isVisible = () => true
-
-export const getMobileNavigationConfig = ({ user, role }) => {
+export const getMobileNavigationConfig = ({ user, role, pagePermissions = {}, isSuperAdminRole = false }) => {
   const normalizedRole = normalizeRole(role || user?.role || user?.userRole || user?.authority)
   const raw = ROLE_CONFIGS[normalizedRole] || DEFAULT_CONFIG
   const notificationCount = Number(
@@ -182,6 +180,15 @@ export const getMobileNavigationConfig = ({ user, role }) => {
       user?.notifications?.length ??
       0,
   )
+
+  const isVisible = (permission, page) => {
+    if (isSuperAdminRole) return true
+    if (!page) return true
+    if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
+    const perms = pagePermissions[page]
+    if (!perms) return true
+    return perms.view === true
+  }
 
   const tabs = raw.tabs
     .filter((tab) => isVisible(tab.permission, tab.page))
