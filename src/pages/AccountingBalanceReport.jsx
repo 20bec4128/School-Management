@@ -11,6 +11,8 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
+import { ReportGraphPanel } from '../components/ReportGraphPanel'
+import { ReportTabPanel, ReportTabs } from '../components/ReportTabs'
 import '../assets/css/addModalShared.css'
 
 const makeDefaultFilters = (schoolId = 'Select') => ({
@@ -119,6 +121,7 @@ const AccountingBalanceReport = () => {
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [activeTab, setActiveTab] = useState('table')
 
   const [schools, setSchools] = useState([])
   const [search, setSearch] = useState('')
@@ -341,7 +344,16 @@ const AccountingBalanceReport = () => {
       </div>
 
       <div className="card h-100">
+        <ReportTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { key: 'table', label: 'Tabular Report', icon: 'ri-list-unordered' },
+            { key: 'graph', label: 'Graphical Report', icon: 'ri-line-chart-line' },
+          ]}
+        />
         <div className="card-body p-0 dataTable-wrapper">
+          <ReportTabPanel active={activeTab === 'table'}>
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown
@@ -493,6 +505,18 @@ const AccountingBalanceReport = () => {
               }}
             />
           </div>
+          </ReportTabPanel>
+
+          <ReportTabPanel active={activeTab === 'graph'}>
+            <ReportGraphPanel
+              rows={filteredData}
+              title="Accounting Balance Report"
+              emptyMessage="No balance rows found for chart."
+              hint="time"
+              labelKeys={['groupByData', 'schoolName']}
+              valueKey="balance"
+            />
+          </ReportTabPanel>
         </div>
       </div>
 

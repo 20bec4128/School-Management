@@ -6,6 +6,8 @@ import SlideSidebar from '../components/SlideSidebar';
 import useColumnVisibility from '../hooks/useColumnVisibility';
 import '../assets/css/addModalShared.css';
 import ExportDropdown from '../components/ExportDropdown'
+import { ReportGraphPanel } from '../components/ReportGraphPanel'
+import { ReportTabPanel, ReportTabs } from '../components/ReportTabs'
 
 /** * 1. Configuration & Constants
  * Defined outside to prevent re-initialization on every render.
@@ -69,6 +71,7 @@ const DailyStatementReport = () => {
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false);
   const [filters, setFilters] = useState(emptyFilters);
   const [pendingFilters, setPendingFilters] = useState(emptyFilters);
+  const [activeTab, setActiveTab] = useState('table');
   
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions);
 
@@ -137,7 +140,16 @@ const DailyStatementReport = () => {
       </div>
 
       <div className="card h-100">
+        <ReportTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { key: 'table', label: 'Tabular Report', icon: 'ri-list-unordered' },
+            { key: 'graph', label: 'Graphical Report', icon: 'ri-line-chart-line' },
+          ]}
+        />
         <div className="card-body p-0 dataTable-wrapper">
+          <ReportTabPanel active={activeTab === 'table'}>
           {/* Persistent Toolbar */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
@@ -253,6 +265,18 @@ const DailyStatementReport = () => {
               <button type="button" className="btn btn-sm btn-light border" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</button>
             </div>
           </div>
+          </ReportTabPanel>
+
+          <ReportTabPanel active={activeTab === 'graph'}>
+            <ReportGraphPanel
+              rows={filteredData}
+              title="Daily Statement Report"
+              emptyMessage="No statement rows found for chart."
+              hint="time"
+              labelKeys={['date']}
+              valueKey="balance"
+            />
+          </ReportTabPanel>
         </div>
       </div>
 

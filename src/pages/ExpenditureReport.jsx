@@ -11,6 +11,9 @@ import { fetchExpendituresPage } from '../apis/expendituresApi'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
+import { ReportGraphPanel } from '../components/ReportGraphPanel'
+import { ReportTabPanel, ReportTabs } from '../components/ReportTabs'
+import { fetchAllPages } from '../utils/reportPagination'
 import '../assets/css/addModalShared.css'
 
 const EXPENDITURE_METHOD_OPTIONS = ['Cash', 'Bank', 'Online', 'Cheque', 'Mobile Banking', 'Other']
@@ -71,10 +74,13 @@ const ExpenditureReport = () => {
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
   const initialHeadOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : 'Select'
   const [rows, setRows] = useState([])
+  const [graphRows, setGraphRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [graphBusy, setGraphBusy] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [activeTab, setActiveTab] = useState('table')
 
   const [schools, setSchools] = useState([])
   const [expenditureHeads, setExpenditureHeads] = useState([])
@@ -226,6 +232,60 @@ const ExpenditureReport = () => {
   ])
 
   useEffect(() => {
+    if (status !== 'ready' || !token) return
+
+    if (!canLoadRows) {
+      setGraphRows([])
+      return
+    }
+
+    let cancelled = false
+
+    const load = async () => {
+      setGraphBusy(true)
+      try {
+        const data = await fetchAllPages(
+          fetchExpendituresPage,
+          {
+            schoolId: selectedSchoolId || null,
+            expenditureHeadId:
+              filters.expenditureHeadId && filters.expenditureHeadId !== 'Select'
+                ? filters.expenditureHeadId
+                : null,
+            expenditureMethod:
+              filters.expenditureMethod && filters.expenditureMethod !== 'Select'
+                ? filters.expenditureMethod
+                : null,
+            startDate: filters.startDate || null,
+            endDate: filters.endDate || null,
+            search: '',
+          },
+          250,
+        )
+        if (!cancelled) setGraphRows(Array.isArray(data) ? data : [])
+      } catch {
+        if (!cancelled) setGraphRows([])
+      } finally {
+        if (!cancelled) setGraphBusy(false)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    status,
+    token,
+    canLoadRows,
+    selectedSchoolId,
+    filters.expenditureHeadId,
+    filters.expenditureMethod,
+    filters.startDate,
+    filters.endDate,
+  ])
+
+  useEffect(() => {
     setPendingFilters((prev) => {
       if (prev.schoolId !== 'Select' || initialSchoolId === 'Select') return prev
       return { ...prev, headOfficeId: initialHeadOfficeId, schoolId: initialSchoolId }
@@ -309,7 +369,16 @@ const ExpenditureReport = () => {
       </div>
 
       <div className="card h-100">
+        <ReportTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { key: 'table', label: 'Tabular Report', icon: 'ri-list-unordered' },
+            { key: 'graph', label: 'Graphical Report', icon: 'ri-line-chart-line' },
+          ]}
+        />
         <div className="card-body p-0 dataTable-wrapper">
+          <ReportTabPanel active={activeTab === 'table'}>
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown
@@ -454,6 +523,28 @@ const ExpenditureReport = () => {
               }}
             />
           </div>
+          </ReportTabPanel>
+
+          <ReportTabPanel active={activeTab === 'graph'}>
+            {graphBusy && graphRows.length === 0 ? (
+              <div className="px-20 py-40 text-center text-secondary-light">
+                Loading graphical report...
+              </div>
+            ) : (
+              <ReportGraphPanel
+                rows={graphRows}
+                title="Expenditure Report"
+                emptyMessage={
+                  canLoadRows
+                    ? 'No expenditure records found for chart.'
+                    : 'Select a school to view the graphical expenditure report.'
+                }
+                hint="category"
+                labelKeys={['expenditureHeadName', 'expenditureMethod', 'reference', 'schoolName', 'expenditureDate']}
+                valueKey="amount"
+              />
+            )}
+          </ReportTabPanel>
         </div>
       </div>
 
