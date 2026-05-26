@@ -40,7 +40,8 @@ const columnOptions = [
 ]
 
 const Holiday = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'holiday'
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
@@ -278,16 +279,18 @@ const Holiday = ({ onNavigate }) => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-            disabled={!isSuperAdmin && !listSchoolId}
-            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
-          >
-            <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
-            Add Holiday
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button
+              type="button"
+              className="btn btn-primary-600 d-flex align-items-center gap-6"
+              onClick={openAdd}
+              disabled={!isSuperAdmin && !listSchoolId}
+              title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+            >
+              <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
+              Add Holiday
+            </button>
+          )}
         </div>
       </div>
 
@@ -361,8 +364,12 @@ const Holiday = ({ onNavigate }) => {
                     {visibleColumns.isViewOnWeb ? <td><div className="form-check form-switch d-flex justify-content-center mb-0"><input className="form-check-input" type="checkbox" checked={row.isViewOnWeb} readOnly /></div></td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">
-                        <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)} title="Edit"><i className="ri-edit-line"></i></button>
-                        <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete" onClick={() => handleDelete(row)}><i className="ri-delete-bin-line"></i></button>
+                        {canEdit(PAGE_SLUG) && (
+                          <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)} title="Edit"><i className="ri-edit-line"></i></button>
+                        )}
+                        {canDelete(PAGE_SLUG) && (
+                          <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete" onClick={() => handleDelete(row)}><i className="ri-delete-bin-line"></i></button>
+                        )}
                       </div>
                     </td>
                   </tr>

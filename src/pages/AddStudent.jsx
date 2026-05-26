@@ -82,10 +82,15 @@ const splitPhoneValue = (fullValue) => {
   const trimmed = String(fullValue || '').trim()
   if (!trimmed) return { code: DEFAULT_PHONE_CODE, number: '' }
   if (!trimmed.startsWith('+')) return { code: DEFAULT_PHONE_CODE, number: trimmed.replace(/\D/g, '') }
+  const compact = trimmed.replace(/[\s()-]+/g, '')
+  const prefixed = compact.match(/^(\+\d{1,4})(\d{6,})$/)
+  if (prefixed) {
+    return { code: prefixed[1], number: prefixed[2] }
+  }
   const parts = trimmed.split(/\s+/)
   const code = parts[0] || DEFAULT_PHONE_CODE
   const number = parts.slice(1).join('').replace(/\D/g, '')
-  return { code, number }
+  return { code, number: number || compact.replace(/^\+\d{1,4}/, '').replace(/\D/g, '') }
 }
 
 const buildPayload = (form, phoneCodes) => ({
@@ -515,7 +520,9 @@ const AddStudent = ({ onNavigate }) => {
         await createStudent(payload, form)
       }
       setSuccess(true)
-      setTimeout(() => onNavigate('student-list'), 1000)
+      if (!initialEditRow) {
+        setTimeout(() => onNavigate('student-list'), 1000)
+      }
     } catch (err) {
       setError(err?.message || 'Failed to process student registration')
     } finally {
@@ -532,7 +539,7 @@ const AddStudent = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">{isEditing ? 'Edit' : 'Add'} Student</h1>
           <span className="text-secondary-light">Student / {isEditing ? 'Edit' : 'Add'}</span>
         </div>
-        <button className="btn btn-light border px-20 d-flex align-items-center gap-6" onClick={() => onNavigate('student-list')}>
+        <button type="button" className="btn btn-light border px-20 d-flex align-items-center gap-6" onClick={() => onNavigate('student-list')}>
           <i className="ri-arrow-left-line"></i> Back to List
         </button>
       </div>
@@ -547,7 +554,7 @@ const AddStudent = ({ onNavigate }) => {
       {success && (
         <div className="alert alert-success d-flex align-items-center gap-10 mb-24 radius-8">
           <i className="ri-checkbox-circle-line text-lg" />
-          Student {isEditing ? 'updated' : 'registered'} successfully! Redirecting...
+          Student {isEditing ? 'updated successfully!' : 'registered successfully! Redirecting...'}
         </div>
       )}
 

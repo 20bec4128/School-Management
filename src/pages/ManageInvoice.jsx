@@ -133,7 +133,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 const formatMoney = (value) => Number(value || 0).toFixed(2)
 
 const ManageInvoice = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'manage-invoice'
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -809,12 +810,16 @@ const ManageInvoice = () => {
           <span className="text-secondary-light">Dashboard / Manage Invoice</span>
         </div>
         <div className="d-flex gap-12 flex-wrap">
-          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-            <i className="ri-add-line" /> Create Invoice
-          </button>
-          <button type="button" className="btn btn-warning-600 d-flex align-items-center gap-6" onClick={openBulk}>
-            <i className="ri-file-list-3-line" /> Create Bulk Invoice
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+              <i className="ri-add-line" /> Create Invoice
+            </button>
+          )}
+          {canAdd(PAGE_SLUG) && (
+            <button type="button" className="btn btn-warning-600 d-flex align-items-center gap-6" onClick={openBulk}>
+              <i className="ri-file-list-3-line" /> Create Bulk Invoice
+            </button>
+          )}
         </div>
       </div>
 
@@ -971,22 +976,26 @@ const ManageInvoice = () => {
                           >
                             <i className="ri-download-2-line" />
                           </button>
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line" />
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDelete(row)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line" />
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line" />
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleDelete(row)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

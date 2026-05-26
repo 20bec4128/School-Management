@@ -73,7 +73,8 @@ const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const IssueReturn = ({ onNavigate }) => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'issue-return'
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -288,13 +289,15 @@ const IssueReturn = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Issue & Return</h1>
           <span className="text-secondary-light">Library / Issue & Return</span>
         </div>
-        <button
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          type="button"
-          onClick={() => onNavigate?.('issue-book-create')}
-        >
-          <i className="ri-add-large-line"></i> Issue Book
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            type="button"
+            onClick={() => onNavigate?.('issue-book-create')}
+          >
+            <i className="ri-add-large-line"></i> Issue Book
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -465,15 +468,17 @@ const IssueReturn = ({ onNavigate }) => {
                       ))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="text-success-600 bg-success-focus w-32-px h-32-px rounded-circle border-0 d-flex align-items-center justify-content-center"
-                            title="Return Book"
-                            onClick={() => handleReturnBook(row)}
-                            disabled={saving || row.status === 'RETURNED'}
-                          >
-                            <i className="ri-arrow-go-back-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="text-success-600 bg-success-focus w-32-px h-32-px rounded-circle border-0 d-flex align-items-center justify-content-center"
+                              title="Return Book"
+                              onClick={() => handleReturnBook(row)}
+                              disabled={saving || row.status === 'RETURNED'}
+                            >
+                              <i className="ri-arrow-go-back-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

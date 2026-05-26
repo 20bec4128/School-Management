@@ -41,7 +41,11 @@ const ManageDesignation = ({ onNavigate }) => {
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth();
+  const PAGE_SLUG = "manage-designation";
 
   const role = useMemo(
     () =>
@@ -427,16 +431,18 @@ const ManageDesignation = ({ onNavigate }) => {
             </select>
           ) : null}
 
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={() => navigateTo("add-manage-designation")}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line" />
-            </span>
-            Add Designation
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button
+              type="button"
+              className="btn btn-primary-600 d-flex align-items-center gap-6"
+              onClick={() => navigateTo("add-manage-designation")}
+            >
+              <span className="d-flex text-md">
+                <i className="ri-add-large-line" />
+              </span>
+              Add Designation
+            </button>
+          )}
         </div>
       </div>
 
@@ -611,23 +617,27 @@ const ManageDesignation = ({ onNavigate }) => {
 
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line" />
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line" />
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleDelete(row)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line" />
-                          </button>
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleDelete(row)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

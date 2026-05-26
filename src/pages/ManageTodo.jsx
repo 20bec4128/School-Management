@@ -47,7 +47,13 @@ const fetchAllPages = async (query) => {
 }
 
 const ManageTodo = ({ onNavigate }) => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'manage-todo'
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  }
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
@@ -192,9 +198,11 @@ const ManageTodo = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Manage Todo</h1>
           <span className="text-secondary-light">Dashboard / Manage Todo</span>
         </div>
-        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => onNavigate?.('manage-todo-create')}>
-          <i className="ri-add-large-line" /> Add Todo
-        </button>
+        {PAGE_PERMISSIONS.add && (
+          <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => onNavigate?.('manage-todo-create')}>
+            <i className="ri-add-large-line" /> Add Todo
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -286,12 +294,16 @@ const ManageTodo = ({ onNavigate }) => {
                       ))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button type="button" className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleEdit(row)}>
-                            <i className="ri-edit-line" />
-                          </button>
-                          <button type="button" className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(row)}>
-                            <i className="ri-delete-bin-line" />
-                          </button>
+                          {PAGE_PERMISSIONS.edit && (
+                            <button type="button" className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleEdit(row)}>
+                              <i className="ri-edit-line" />
+                            </button>
+                          )}
+                          {PAGE_PERMISSIONS.delete && (
+                            <button type="button" className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(row)}>
+                              <i className="ri-delete-bin-line" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

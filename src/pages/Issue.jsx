@@ -139,7 +139,11 @@ const Issue = ({ onNavigate } = {}) => {
     role: authRole,
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth()
+  const PAGE_SLUG = 'issue'
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -708,13 +712,15 @@ const Issue = ({ onNavigate } = {}) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Issue</h1>
           <span className="text-secondary-light">Inventory / Issue Management</span>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={handleOpenAdd}
-        >
-          <i className="ri-add-large-line"></i> Add Issue
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={handleOpenAdd}
+          >
+            <i className="ri-add-large-line"></i> Add Issue
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -847,29 +853,33 @@ const Issue = ({ onNavigate } = {}) => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleEdit(row)}
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={async () => {
-                              if (!window.confirm(`Delete issue "${row.issueToName || row.productName || 'this issue'}"?`)) return
-                              try {
-                                await deleteIssue(row.id)
-                                await loadIssues()
-                              } catch (err) {
-                                console.error('Failed to delete issue:', err)
-                                setError(err?.message || 'Failed to delete issue')
-                              }
-                            }}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleEdit(row)}
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={async () => {
+                                if (!window.confirm(`Delete issue "${row.issueToName || row.productName || 'this issue'}"?`)) return
+                                try {
+                                  await deleteIssue(row.id)
+                                  await loadIssues()
+                                } catch (err) {
+                                  console.error('Failed to delete issue:', err)
+                                  setError(err?.message || 'Failed to delete issue')
+                                }
+                              }}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

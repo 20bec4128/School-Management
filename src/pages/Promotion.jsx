@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from '../context/useAuth'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
@@ -134,6 +135,8 @@ const classOptions = ['Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
 const schoolOptions = ['Windsor Park High School']
 
 const Promotion = () => {
+  const { canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'promotion'
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)

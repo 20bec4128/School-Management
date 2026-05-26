@@ -13,6 +13,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsByClassSection } from '../apis/studentsApi'
 import { createScholarship, deleteScholarship, fetchScholarshipsPage, updateScholarship } from '../apis/scholarshipsApi'
+import { useAuth } from '../context/useAuth'
 
 const emptyForm = {
   headOfficeId: '',
@@ -111,6 +112,8 @@ const formatAmount = (value) => {
 const EDIT_STORAGE_KEY = 'edit-scholarship-row'
 
 const Scholarship = ({ onNavigate } = {}) => {
+  const { canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'scholarship'
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -512,12 +515,14 @@ const Scholarship = ({ onNavigate } = {}) => {
             <span className="text-secondary-light"> / Scholarship</span>
           </div>
         </div>
-        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Scholarship
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Scholarship
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -667,23 +672,27 @@ const Scholarship = ({ onNavigate } = {}) => {
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={() => handleDelete(row.id)}
-                            disabled={saving}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                              onClick={() => handleDelete(row.id)}
+                              disabled={saving}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
