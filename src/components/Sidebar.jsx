@@ -9,15 +9,10 @@ const menuSections = [
     title: "Core System",
     items: [
       {
-        title: "Dashboard",
+         title: "Dashboard",
         icon: "ri:dashboard-line",
         submenu: [
-          {
-            label: "School",
-            href: "#",
-            page: "school-admin-dashboard",
-            perm: "*",
-          },
+          { label: "School", href: "#", page: "school-admin-dashboard", perm: "*" },
           { label: "Student", href: "#", page: "student-dashboard", perm: "*" },
           { label: "Teacher", href: "#", page: "teacher-dashboard", perm: "*" },
           { label: "Parent", href: "#", page: "parent-dashboard", perm: "*" },

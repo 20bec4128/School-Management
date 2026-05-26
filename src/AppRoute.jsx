@@ -2,7 +2,6 @@ import { lazy } from 'react'
 import ProtectedRoute from './components/ProtectedRoute'
 import { normalizeRole } from './utils/roles'
 
-const HeadOfficeDashboard = lazy(() => import("./pages/HeadOfficeDashboard"));
 const SchoolAdminDashboard = lazy(() => import("./pages/SchoolAdminDashboard"));
 const TeacherDashboard = lazy(() => import("./pages/TeacherDashboard"));
 const StudentDashboard = lazy(() => import("./pages/StudentDashboard"));
@@ -255,6 +254,8 @@ const BackupDatabase = lazy(() => import("./pages/BackupDatabase.jsx"));
 const OpeningHour = lazy(() => import("./pages/OpeningHour.jsx"));
 const OpeningHourCreate = lazy(() => import("./pages/OpeningHourCreate.jsx"));
 const SuperAdminDashboard = lazy(() => import("./pages/SchoolAdminDashboard"));
+const AccessDenied = lazy(() => import("./pages/AccessDenied"));
+
 
 const routeEntries = [
   {
@@ -265,12 +266,7 @@ const routeEntries = [
   {
     pageKey: "school-admin-dashboard",
     component: SchoolAdminDashboard,
-    allowedRoles: ["SCHOOL_ADMIN", "SUPER_ADMIN"],
-  },
-  {
-    pageKey: "head-office-dashboard",
-    component: HeadOfficeDashboard,
-    allowedRoles: ["HEAD_OFFICE_ADMIN"],
+    allowedRoles: ["SCHOOL_ADMIN", "SUPER_ADMIN", "HEAD_OFFICE_ADMIN"],
   },
   {
     pageKey: "head-offices",
@@ -850,7 +846,7 @@ const AppRoute = ({
       role || user?.role || user?.userRole || user?.authority,
     );
     if (r === "SUPER_ADMIN") return "school-admin-dashboard";
-    if (r === "HEAD_OFFICE_ADMIN") return "head-office-dashboard";
+    if (r === "HEAD_OFFICE_ADMIN") return "school-admin-dashboard";
     if (r === "SCHOOL_ADMIN") return "school-admin-dashboard";
     if (r === "TEACHER") return "teacher-dashboard";
     if (r === "STUDENT") return "student-dashboard";
@@ -889,7 +885,7 @@ const AppRoute = ({
       allowedRoles={entry.allowedRoles}
       permission={entry.permission}
       pageKey={basePage}
-      fallback={homeContent}
+      fallback={<AccessDenied />}
     >
       {content}
     </ProtectedRoute>

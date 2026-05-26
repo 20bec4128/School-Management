@@ -151,7 +151,7 @@ const Topbar = ({ user }) => {
     document.documentElement.dataset.theme = nextTheme
   }, [])
 
-  const selectorMode = isHeadOfficeAdmin ? 'school' : null
+  const selectorMode = null
 
   const schoolLabelById = useMemo(() => {
     const map = new Map()
@@ -246,32 +246,6 @@ const Topbar = ({ user }) => {
 
   const webToolbar = isDesktopWebView ? (
     <div className="sm-topbar__desktop-tools" ref={webToolbarRef}>
-      {isHeadOfficeAdmin ? (
-        <div className="sm-topbar__select-shell">
-          <span className="sm-topbar__select-icon">
-            <iconify-icon icon="ri-school-line" />
-          </span>
-          <select
-            className="sm-topbar__select-input"
-            value={activeSchoolId || ''}
-            onChange={(event) => setActiveSchoolId(event.target.value || null)}
-            aria-label="Select school"
-          >
-            <option value="">All schools</option>
-            {schoolOptions.map((school) => {
-              const id = school?.id ?? school?.schoolId ?? null
-              if (id == null) return null
-              const label = school?.schoolName ?? school?.name ?? school?.label ?? `School ${id}`
-              return (
-                <option key={String(id)} value={String(id)}>
-                  {label}
-                </option>
-              )
-            })}
-          </select>
-        </div>
-      ) : null}
-
       {isParent ? (
         <ParentChildSelector showLabel={false} variant="topbar" />
       ) : null}

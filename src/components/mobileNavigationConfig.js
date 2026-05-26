@@ -44,7 +44,7 @@ const ROLE_CONFIGS = {
   HEAD_OFFICE_ADMIN: {
     accent: 'head-office',
     tabs: [
-      makeTab('dashboard', 'Dashboard', 'head-office-dashboard', 'ri-dashboard-3-line'),
+      makeTab('dashboard', 'Dashboard', 'school-admin-dashboard', 'ri-dashboard-3-line'),
       makeTab('schools', 'Schools', 'manage-school', 'ri-school-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
       makeTab('roles', 'Manage Users/Roles', 'user-role-acl', 'ri-shield-user-line', ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']),
       makeTab('profile', 'Profile', null, 'ri-user-3-line'),

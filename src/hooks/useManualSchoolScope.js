@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 
-export const useManualSchoolScope = (enabled) => {
+export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
   const [selectedHeadOfficeId, setSelectedHeadOfficeId] = useState('')
@@ -43,7 +43,9 @@ export const useManualSchoolScope = (enabled) => {
         setSchools(rawSchools)
 
         // Default to first head office if none currently selected
-        if (sortedHOs.length > 0) {
+        if (initialHeadOfficeId) {
+          setSelectedHeadOfficeId(String(initialHeadOfficeId))
+        } else if (sortedHOs.length > 0) {
           setSelectedHeadOfficeId((currHO) => {
             if (currHO) return currHO
             return String(sortedHOs[0].id)
@@ -62,7 +64,7 @@ export const useManualSchoolScope = (enabled) => {
     return () => {
       cancelled = true
     }
-  }, [enabled])
+  }, [enabled, initialHeadOfficeId])
 
   useEffect(() => {
     if (syncingScopeRef.current) {

@@ -34,7 +34,7 @@ function App() {
 
     const r = normalizeRole(role)
     if (r === 'SUPER_ADMIN') return 'school-admin-dashboard'
-    if (r === 'HEAD_OFFICE_ADMIN') return 'head-office-dashboard'
+    if (r === 'HEAD_OFFICE_ADMIN') return 'school-admin-dashboard'
     if (r === 'SCHOOL_ADMIN') return 'school-admin-dashboard'
     if (r === 'TEACHER') return 'teacher-dashboard'
     if (r === 'STUDENT') return 'student-dashboard'

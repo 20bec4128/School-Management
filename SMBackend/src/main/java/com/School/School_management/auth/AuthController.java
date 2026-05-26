@@ -119,7 +119,7 @@ public class AuthController {
         if (clientRole == null) return "dashboard";
         return switch (clientRole) {
             case "SUPER_ADMIN" -> "super-admin-dashboard";
-            case "HEAD_OFFICE_ADMIN" -> "head-office-dashboard";
+            case "HEAD_OFFICE_ADMIN" -> "school-admin-dashboard";
             case "SCHOOL_ADMIN" -> "school-admin-dashboard";
             case "TEACHER" -> "teacher-dashboard";
             case "STUDENT" -> "student-dashboard";

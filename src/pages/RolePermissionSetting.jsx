@@ -15,7 +15,6 @@ import '../assets/css/rolePermissionSetting.css'
 // ---------------------------------------------------------------------------
 const SLUG_ALLOWED_ACTIONS = {
   // ── Dashboards — view only ────────────────────────────────────────────────
-  'head-office-dashboard':  ['canView'],
   'lms-dashboard':          ['canView'],
   'parent-dashboard':       ['canView'],
   'school-admin-dashboard': ['canView'],

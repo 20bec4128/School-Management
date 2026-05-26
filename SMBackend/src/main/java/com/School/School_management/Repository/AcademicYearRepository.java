@@ -28,9 +28,9 @@ public interface AcademicYearRepository extends JpaRepository<AcademicYear, Long
             where a.schoolId = :schoolId
               and (:running is null or a.isRunning = :running)
               and (
-                :search is null
-                or lower(a.academicYear) like lower(concat('%', :search, '%'))
-                or lower(coalesce(a.note, '')) like lower(concat('%', :search, '%'))
+                CAST(:search AS string) is null
+                or lower(a.academicYear) like lower(concat('%', CAST(:search AS string), '%'))
+                or lower(coalesce(a.note, '')) like lower(concat('%', CAST(:search AS string), '%'))
               )
             order by a.sessionStart desc, a.id desc
             """)
@@ -46,9 +46,9 @@ public interface AcademicYearRepository extends JpaRepository<AcademicYear, Long
             where a.schoolId in :schoolIds
               and (:running is null or a.isRunning = :running)
               and (
-                :search is null
-                or lower(a.academicYear) like lower(concat('%', :search, '%'))
-                or lower(coalesce(a.note, '')) like lower(concat('%', :search, '%'))
+                CAST(:search AS string) is null
+                or lower(a.academicYear) like lower(concat('%', CAST(:search AS string), '%'))
+                or lower(coalesce(a.note, '')) like lower(concat('%', CAST(:search AS string), '%'))
               )
             order by a.sessionStart desc, a.id desc
             """)

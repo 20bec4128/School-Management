@@ -31,7 +31,7 @@ public class SchoolScopeTest {
     void globalAdminWriteRequiresSchoolId() {
         CurrentUser user = new CurrentUser(
                 "u",
-                "ADMIN",
+                "SUPER_ADMIN",
                 1L,
                 null,
                 null,

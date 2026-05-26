@@ -209,8 +209,10 @@ const fetchAllBooks = async (filters = {}) => {
 
 const Dashboard = () => {
   const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
-  const isSuperAdmin = normalizeRole(role) === 'SUPER_ADMIN'
-  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const isRealSuperAdmin = normalizeRole(role) === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = normalizeRole(role) === 'HEAD_OFFICE_ADMIN'
+  const isSuperAdmin = isRealSuperAdmin || isHeadOfficeAdmin
+  const manualScope = useManualSchoolScope(isSuperAdmin, isHeadOfficeAdmin ? authHeadOfficeId : null)
   const [totalStudents, setTotalStudents] = useState(null)
   const [monthlyStudentsTrend, setMonthlyStudentsTrend] = useState(null)
   const [studentsLoading, setStudentsLoading] = useState(false)
@@ -1074,6 +1076,7 @@ const Dashboard = () => {
                 }}
                 compact
                 showSchoolSelector
+                showHeadOfficeSelector={isRealSuperAdmin}
               />
             </div>
           ) : null}
