@@ -63,7 +63,12 @@ const CertificateType = ({ onNavigate }) => {
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth()
+
+  const PAGE_SLUG = 'certificate-type'
 
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
@@ -347,16 +352,18 @@ const CertificateType = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Certificate Type</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6 animate-up"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Certificate Type
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6 animate-up"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Certificate Type
+          </button>
+        )}
       </div>
 
       {error ? <div className="alert alert-danger border-0 radius-8 mb-16">{error}</div> : null}
@@ -543,24 +550,28 @@ const CertificateType = ({ onNavigate }) => {
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                            disabled={saving}
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            title="Delete"
-                            onClick={() => handleDelete(row)}
-                            disabled={saving}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                              disabled={saving}
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              title="Delete"
+                              onClick={() => handleDelete(row)}
+                              disabled={saving}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

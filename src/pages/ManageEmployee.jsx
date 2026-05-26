@@ -51,7 +51,11 @@ const ManageEmployee = ({ onNavigate }) => {
     headOfficeName: authHeadOfficeName,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth();
+  const PAGE_SLUG = "manage-employee";
 
   const { activeSchoolId, setActiveSchoolId } = useSchool();
 
@@ -639,17 +643,19 @@ const ManageEmployee = ({ onNavigate }) => {
             </select>
           ) : null}
 
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-            disabled={isHeadOfficeAdmin && !activeSchoolId}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line"></i>
-            </span>
-            Add Employee
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button
+              type="button"
+              className="btn btn-primary-600 d-flex align-items-center gap-6"
+              onClick={openAdd}
+              disabled={isHeadOfficeAdmin && !activeSchoolId}
+            >
+              <span className="d-flex text-md">
+                <i className="ri-add-large-line"></i>
+              </span>
+              Add Employee
+            </button>
+          )}
         </div>
       </div>
 
@@ -886,24 +892,28 @@ const ManageEmployee = ({ onNavigate }) => {
 
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            title="Delete"
-                            onClick={() => handleDelete(row.id)}
-                            disabled={saving}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              title="Delete"
+                              onClick={() => handleDelete(row.id)}
+                              disabled={saving}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -68,7 +68,8 @@ const fetchAllPages = async (params) => {
 }
 
 const SalaryHistory = () => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'salary-history'
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'

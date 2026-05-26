@@ -95,7 +95,11 @@ const Topic = ({ onNavigate }) => {
     schoolId: authSchoolId,
     schoolName: authSchoolName,
     role,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth();
+  const PAGE_SLUG = "topic";
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool();
   const [topics, setTopics] = useState([]);
   const [schoolsLookup, setSchoolsLookup] = useState([]);
@@ -570,7 +574,7 @@ const Topic = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Topic</span>
           </div>
         </div>
-        {canAddTopics && (
+        {canAddTopics && canAdd(PAGE_SLUG) && (
           <button
             type="button"
             className="btn btn-primary-600 d-flex align-items-center gap-6"
@@ -754,24 +758,28 @@ const Topic = ({ onNavigate }) => {
                       {visibleColumns.note && <td>{r.note}</td>}
                       <td>
                         <div className="d-flex align-items-center gap-8">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => openEdit(r)}
-                            title="Edit"
-                            disabled={saving}
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleDelete(r)}
-                            title="Delete"
-                            disabled={saving}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => openEdit(r)}
+                              title="Edit"
+                              disabled={saving}
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleDelete(r)}
+                              title="Delete"
+                              disabled={saving}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

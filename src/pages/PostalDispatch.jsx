@@ -24,7 +24,13 @@ const columnOptions = [
 ]
 
 const PostalDispatch = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId } = useAuth()
+  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'postal-dispatch'
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  }
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
@@ -178,9 +184,11 @@ const PostalDispatch = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Postal Dispatch</h1>
           <span className="text-secondary-light">Dashboard / Postal Dispatch</span>
         </div>
-        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd} disabled={!isSuperAdmin && !listSchoolId}>
-          <i className="ri-add-large-line"></i> Add Postal Dispatch
-        </button>
+        {PAGE_PERMISSIONS.add && (
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd} disabled={!isSuperAdmin && !listSchoolId}>
+            <i className="ri-add-large-line"></i> Add Postal Dispatch
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -266,8 +274,12 @@ const PostalDispatch = ({ onNavigate }) => {
                     {visibleColumns.date && <td>{row.date}</td>}
                     <td>
                       <div className="d-flex align-items-center gap-10">
-                        <button className="bg-info-focus text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)}><i className="ri-edit-line"></i></button>
-                        <button className="bg-danger-focus text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => handleDelete(row.id)}><i className="ri-delete-bin-line"></i></button>
+                        {PAGE_PERMISSIONS.edit && (
+                          <button className="bg-info-focus text-info-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => openEdit(row)}><i className="ri-edit-line"></i></button>
+                        )}
+                        {PAGE_PERMISSIONS.delete && (
+                          <button className="bg-danger-focus text-danger-600 w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" onClick={() => handleDelete(row.id)}><i className="ri-delete-bin-line"></i></button>
+                        )}
                       </div>
                     </td>
                   </tr>

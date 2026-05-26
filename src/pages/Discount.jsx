@@ -82,7 +82,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Discount = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'discount'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
@@ -420,16 +421,18 @@ const Discount = () => {
             </select>
           ) : null}
 
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line"></i>
-            </span>
-            Add Discount
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button
+              type="button"
+              className="btn btn-primary-600 d-flex align-items-center gap-6"
+              onClick={openAdd}
+            >
+              <span className="d-flex text-md">
+                <i className="ri-add-large-line"></i>
+              </span>
+              Add Discount
+            </button>
+          )}
         </div>
       </div>
 
@@ -589,35 +592,39 @@ const Discount = () => {
                       {visibleColumns.note ? <td style={{ maxWidth: 250, whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.note || '-'}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={async () => {
-                              if (!window.confirm('Are you sure?')) return
-                              setBusy(true)
-                              try {
-                                await deleteDiscount(row.id)
-                                await loadDiscounts({
-                                  schoolId: isSchoolAdmin ? authSchoolId : (scopeSchoolId || filters.schoolId || null),
-                                  page: currentPage - 1,
-                                  size: rowsPerPage,
-                                  search: debouncedSearch
-                                })
-                              } catch (e) { setLoadError(e.message) }
-                              finally { setBusy(false) }
-                            }}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                              onClick={async () => {
+                                if (!window.confirm('Are you sure?')) return
+                                setBusy(true)
+                                try {
+                                  await deleteDiscount(row.id)
+                                  await loadDiscounts({
+                                    schoolId: isSchoolAdmin ? authSchoolId : (scopeSchoolId || filters.schoolId || null),
+                                    page: currentPage - 1,
+                                    size: rowsPerPage,
+                                    search: debouncedSearch
+                                  })
+                                } catch (e) { setLoadError(e.message) }
+                                finally { setBusy(false) }
+                              }}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

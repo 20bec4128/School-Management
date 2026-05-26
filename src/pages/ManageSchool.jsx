@@ -184,7 +184,11 @@ const ManageSchool = ({ onNavigate }) => {
     headOfficeName: currentHeadOfficeName,
     schoolId: currentSchoolId,
     schoolName: currentSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth()
+  const PAGE_SLUG = 'manage-school'
   const [schools, setSchools] = useState([])
   const [allSchools, setAllSchools] = useState([])
   const [headOffices, setHeadOffices] = useState([])
@@ -1224,16 +1228,18 @@ const ManageSchool = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Manage School</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add School
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add School
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -1414,22 +1420,26 @@ const ManageSchool = ({ onNavigate }) => {
                       {visibleColumns.status ? <td>{getStatusBadge(row.status)}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDeleteSchool(row.id)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleDeleteSchool(row.id)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -72,7 +72,8 @@ const fetchAllPages = async (loader, params) => {
 }
 
 const SalaryPayment = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'salary-payment'
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -527,14 +528,16 @@ const SalaryPayment = () => {
                       {columnOptions.map((col) => visibleColumns[col.key] && <td key={col.key}>{renderCell(row, col)}</td>)}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={() => handleDelete(row)}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                              onClick={() => handleDelete(row)}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

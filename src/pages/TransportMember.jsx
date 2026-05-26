@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
+import { useAuth } from "../context/useAuth";
 import "../assets/css/addModalShared.css";
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -22,6 +23,13 @@ const columnOptions = [
 ];
 
 const TransportMember = () => {
+  const { canAdd, canEdit, canDelete } = useAuth();
+  const PAGE_SLUG = 'transport-member';
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  };
   const [data] = useState([]);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -215,12 +223,16 @@ const TransportMember = () => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {PAGE_PERMISSIONS.edit && (
+                            <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {PAGE_PERMISSIONS.delete && (
+                            <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

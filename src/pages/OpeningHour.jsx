@@ -27,7 +27,16 @@ const OpeningHour = ({ onNavigate }) => {
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth();
+  const PAGE_SLUG = 'opening-hour';
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  };
 
   const { activeSchoolId, setActiveSchoolId } = useSchool();
 
@@ -292,13 +301,15 @@ const OpeningHour = ({ onNavigate }) => {
 
         {/* Actions */}
         <div className="d-flex flex-wrap align-items-center gap-16">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6 px-16 py-8 radius-8 text-sm"
-            onClick={handleCreateNew}
-          >
-            <i className="ri-add-line text-lg"></i> Add Opening Hour
-          </button>
+          {PAGE_PERMISSIONS.add && (
+            <button
+              type="button"
+              className="btn btn-primary-600 d-flex align-items-center gap-6 px-16 py-8 radius-8 text-sm"
+              onClick={handleCreateNew}
+            >
+              <i className="ri-add-line text-lg"></i> Add Opening Hour
+            </button>
+          )}
         </div>
       </div>
 
@@ -430,24 +441,28 @@ const OpeningHour = ({ onNavigate }) => {
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center justify-content-center gap-12">
-                          <button
-                            type="button"
-                            className="w-32-px h-32-px bg-success-50 text-success-600 rounded-circle d-flex align-items-center justify-content-center border-0"
-                            onClick={() => handleEdit(row)}
-                            disabled={saving}
-                            title="Edit"
-                          >
-                            <i className="ri-pencil-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="w-32-px h-32-px bg-danger-50 text-danger-600 rounded-circle d-flex align-items-center justify-content-center border-0"
-                            onClick={() => handleDelete(row.id)}
-                            disabled={saving}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {PAGE_PERMISSIONS.edit && (
+                            <button
+                              type="button"
+                              className="w-32-px h-32-px bg-success-50 text-success-600 rounded-circle d-flex align-items-center justify-content-center border-0"
+                              onClick={() => handleEdit(row)}
+                              disabled={saving}
+                              title="Edit"
+                            >
+                              <i className="ri-pencil-line"></i>
+                            </button>
+                          )}
+                          {PAGE_PERMISSIONS.delete && (
+                            <button
+                              type="button"
+                              className="w-32-px h-32-px bg-danger-50 text-danger-600 rounded-circle d-flex align-items-center justify-content-center border-0"
+                              onClick={() => handleDelete(row.id)}
+                              disabled={saving}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

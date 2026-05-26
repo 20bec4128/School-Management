@@ -50,7 +50,13 @@ const formatContact = (row) => {
 }
 
 const Vehicle = ({ onNavigate }) => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'vehicle'
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  }
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -406,13 +412,15 @@ const Vehicle = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Vehicle</h1>
           <span className="text-secondary-light">Transport / Vehicle Management</span>
         </div>
-        <button
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={() => onNavigate?.('vehicle-create')}
-          type="button"
-        >
-          <i className="ri-add-large-line"></i> Add Vehicle
-        </button>
+        {PAGE_PERMISSIONS.add && (
+          <button
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={() => onNavigate?.('vehicle-create')}
+            type="button"
+          >
+            <i className="ri-add-large-line"></i> Add Vehicle
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -543,22 +551,26 @@ const Vehicle = ({ onNavigate }) => {
                       ) : null))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDelete(row)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {PAGE_PERMISSIONS.edit && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {PAGE_PERMISSIONS.delete && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleDelete(row)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

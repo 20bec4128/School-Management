@@ -58,7 +58,11 @@ const EmployeeAttendance = () => {
     headOfficeName: authHeadOfficeName,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth()
+  const PAGE_SLUG = 'employee-attendance'
   const {
     activeSchoolId,
     schoolOptions: contextSchoolOptions,
@@ -614,16 +618,18 @@ const EmployeeAttendance = () => {
             <span className="text-secondary-light"> / Employee Attendance</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 px-16 py-8"
-          onClick={saveAttendance}
-          disabled={saving || dirtyDraftEntries.length === 0}
-        >
-          {saving
-            ? 'Saving...'
-            : `Save Attendance${dirtyDraftEntries.length > 0 ? ` (${dirtyDraftEntries.length})` : ''}`}
-        </button>
+        {(canAdd(PAGE_SLUG) || canEdit(PAGE_SLUG)) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 px-16 py-8"
+            onClick={saveAttendance}
+            disabled={saving || dirtyDraftEntries.length === 0}
+          >
+            {saving
+              ? 'Saving...'
+              : `Save Attendance${dirtyDraftEntries.length > 0 ? ` (${dirtyDraftEntries.length})` : ''}`}
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -742,6 +748,7 @@ const EmployeeAttendance = () => {
                               allFilteredUniformStatus === option.value ? option.className : 'bg-white text-secondary-light'
                             }`}
                             style={{ flex: '1 1 0' }}
+                            disabled={!canAdd(PAGE_SLUG) && !canEdit(PAGE_SLUG)}
                             onClick={() => applyBulkStatus(option.value)}
                             title={`${option.label} All (This Page)`}
                           >
@@ -819,7 +826,7 @@ const EmployeeAttendance = () => {
                                       type="checkbox"
                                       className="form-check-input mt-0"
                                       checked={checked}
-                                      disabled={disabled}
+                                      disabled={disabled || (!canAdd(PAGE_SLUG) && !canEdit(PAGE_SLUG))}
                                       onChange={() => setEmployeeStatus(row, option.value)}
                                     />
                                     <span className="fw-medium">{option.label}</span>

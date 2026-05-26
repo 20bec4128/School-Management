@@ -259,7 +259,8 @@ const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const IdCardSetting = ({ onNavigate }) => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'id-card-setting'
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -548,16 +549,18 @@ const IdCardSetting = ({ onNavigate }) => {
             <span className="text-secondary-light"> / ID Card Setting</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add ID Card Setting
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add ID Card Setting
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -688,22 +691,26 @@ const IdCardSetting = ({ onNavigate }) => {
                           >
                             <i className="ri-eye-line"></i>
                           </button>
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={() => handleDelete(row)}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                              onClick={() => handleDelete(row)}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

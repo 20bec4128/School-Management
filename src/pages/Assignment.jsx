@@ -7,7 +7,6 @@ import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
-import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
@@ -66,11 +65,10 @@ const getBestLabel = (...values) =>
     .find(Boolean) || ''
 
 const Assignment = ({ onNavigate }) => {
-  const { user, role, schoolId: authSchoolId, schoolName: authSchoolName, studentId, selectedChildId, parentChildren } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, studentId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId } = useSchool()
 
   const roleUpper = String(role || '').toUpperCase()
-  const canManage = can(user, ['ASSIGNMENT_MANAGE', 'ASSIGNMENT_MANAGE_ASSIGNED', '*'])
   const isStudentOrParent = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const isParent = roleUpper === 'PARENT'
 
@@ -260,7 +258,7 @@ const Assignment = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Assignment</span>
           </div>
         </div>
-        {canManage && !isStudentOrParent && (
+        {canAdd('assignment') && !isStudentOrParent && (
           <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
             <i className="ri-add-large-line text-md"></i> Add Assignment
           </button>
@@ -396,14 +394,18 @@ const Assignment = ({ onNavigate }) => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-8">
-                          {canManage && !isStudentOrParent && (
+                          {!isStudentOrParent && (
                             <>
+                              {canEdit('assignment') && (
                               <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => openEdit(r)} title="Edit">
                                 <i className="ri-edit-line"></i>
                               </button>
+                              )}
+                              {canDelete('assignment') && (
                               <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(r.id)} title="Delete">
                                 <i className="ri-delete-bin-line"></i>
                               </button>
+                              )}
                             </>
                           )}
                           {isStudentOrParent && r.assignmentFileUrl && (

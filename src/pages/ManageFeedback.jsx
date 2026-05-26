@@ -26,7 +26,11 @@ const ManageFeedback = ({ onNavigate }) => {
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth();
+  const PAGE_SLUG = "manage-feedback";
 
   const { activeSchoolId, setActiveSchoolId } = useSchool();
 
@@ -464,7 +468,7 @@ const ManageFeedback = ({ onNavigate }) => {
                               role="switch"
                               checked={row.isPublish}
                               onChange={() => handleTogglePublish(row.id)}
-                              disabled={saving}
+                              disabled={saving || !canEdit(PAGE_SLUG)}
                               style={{ width: "40px", height: "20px" }}
                             />
                             <span className={`ms-8 text-sm fw-medium ${row.isPublish ? "text-success-600" : "text-neutral-500"}`}>
@@ -476,15 +480,17 @@ const ManageFeedback = ({ onNavigate }) => {
                       {visibleColumns.date && <td>{row.date || "-"}</td>}
                       <td>
                         <div className="d-flex align-items-center justify-content-center">
-                          <button
-                            type="button"
-                            className="w-32-px h-32-px bg-danger-50 text-danger-600 rounded-circle d-flex align-items-center justify-content-center border-0"
-                            onClick={() => handleDelete(row.id)}
-                            disabled={saving}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="w-32-px h-32-px bg-danger-50 text-danger-600 rounded-circle d-flex align-items-center justify-content-center border-0"
+                              onClick={() => handleDelete(row.id)}
+                              disabled={saving}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

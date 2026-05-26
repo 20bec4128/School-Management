@@ -164,7 +164,11 @@ const Schedule = ({ onNavigate }) => {
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
     schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
   } = useAuth()
+  const PAGE_SLUG = 'schedule'
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -698,24 +702,26 @@ const Schedule = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Schedule</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={() => {
-            sessionStorage.removeItem('sm_schedule_edit_id')
-            if (typeof onNavigate === 'function') {
-              onNavigate('schedule-create')
-              return
-            }
-            openAdd()
-          }}
-          disabled={busy}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Schedule
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={() => {
+              sessionStorage.removeItem('sm_schedule_edit_id')
+              if (typeof onNavigate === 'function') {
+                onNavigate('schedule-create')
+                return
+              }
+              openAdd()
+            }}
+            disabled={busy}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Schedule
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -843,31 +849,35 @@ const Schedule = ({ onNavigate }) => {
                       {visibleColumns.roomNo ? <td>{row.roomNo}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                      <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => {
-                              sessionStorage.setItem('sm_schedule_edit_id', String(row.id))
-                              if (typeof onNavigate === 'function') {
-                                onNavigate('schedule-create')
-                                return
-                              }
-                              openEdit(row)
-                            }}
-                            title="Edit"
-                            disabled={busy}
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={() => handleDelete(row)}
-                            disabled={busy}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => {
+                                sessionStorage.setItem('sm_schedule_edit_id', String(row.id))
+                                if (typeof onNavigate === 'function') {
+                                  onNavigate('schedule-create')
+                                  return
+                                }
+                                openEdit(row)
+                              }}
+                              title="Edit"
+                              disabled={busy}
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                              onClick={() => handleDelete(row)}
+                              disabled={busy}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

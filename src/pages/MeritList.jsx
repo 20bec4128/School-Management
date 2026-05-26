@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -166,6 +167,13 @@ const getLetterGradeBadge = (grade) => {
 }
 
 const MeritList = () => {
+  const { canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'merit-list'
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  }
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -475,13 +483,15 @@ const MeritList = () => {
                           >
                             <i className="ri-eye-line"></i>
                           </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {PAGE_PERMISSIONS.delete && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

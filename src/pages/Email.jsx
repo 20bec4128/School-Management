@@ -33,7 +33,8 @@ const uniqueStrings = (items) =>
   Array.from(new Set((items || []).map((i) => String(i ?? "").trim()).filter(Boolean))).sort();
 
 const Email = ({ onNavigate }) => {
-  const { role: authRole, user, schoolId, headOfficeId } = useAuth();
+  const { role: authRole, user, schoolId, headOfficeId, canAdd, canEdit, canDelete } = useAuth();
+  const PAGE_SLUG = 'email';
   const isSuperAdmin = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === "SUPER_ADMIN",
     [authRole, user],
@@ -213,9 +214,11 @@ const Email = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Email</h1>
           <span className="text-secondary-light">Communications / Email</span>
         </div>
-        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-          <i className="ri-send-plane-2-line"></i> Send Email
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+            <i className="ri-send-plane-2-line"></i> Send Email
+          </button>
+        )}
       </div>
 
       {error ? <div className="alert alert-danger radius-8">{error}</div> : null}
@@ -293,12 +296,16 @@ const Email = ({ onNavigate }) => {
                       ))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Edit" onClick={() => openEdit(row)}>
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete" onClick={() => handleDelete(row)}>
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Edit" onClick={() => openEdit(row)}>
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete" onClick={() => handleDelete(row)}>
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

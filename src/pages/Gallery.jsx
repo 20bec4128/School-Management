@@ -36,7 +36,8 @@ const columnOptions = [
 ]
 
 const Gallery = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId } = useAuth()
+  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'gallery'
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
@@ -244,18 +245,20 @@ const Gallery = ({ onNavigate }) => {
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-12">
-          <button
-            type="button"
-            className="btn btn-primary-600 d-flex align-items-center gap-6"
-            onClick={openAdd}
-            disabled={!isSuperAdmin && !listSchoolId}
-            title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
-          >
-            <span className="d-flex text-md">
-              <i className="ri-add-large-line"></i>
-            </span>
-            Add Gallery
-          </button>
+          {canAdd(PAGE_SLUG) && (
+            <button
+              type="button"
+              className="btn btn-primary-600 d-flex align-items-center gap-6"
+              onClick={openAdd}
+              disabled={!isSuperAdmin && !listSchoolId}
+              title={!isSuperAdmin && !listSchoolId ? 'Select a school first' : ''}
+            >
+              <span className="d-flex text-md">
+                <i className="ri-add-large-line"></i>
+              </span>
+              Add Gallery
+            </button>
+          )}
         </div>
       </div>
 
@@ -367,22 +370,26 @@ const Gallery = ({ onNavigate }) => {
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDelete(row.id)}
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleDelete(row.id)}
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

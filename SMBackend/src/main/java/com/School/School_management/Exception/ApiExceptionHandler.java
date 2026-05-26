@@ -36,8 +36,14 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<?> conflict(DataIntegrityViolationException ex) {
         String raw = ex.getMostSpecificCause() == null ? "" : String.valueOf(ex.getMostSpecificCause().getMessage());
-        String message = "Operation not allowed: remove dependent records first.";
-        if (raw.contains("admin_users_username_key") || raw.contains("Key (username)=")) {
+        String message;
+        if (raw.contains("ux_students_admission_no_active") || raw.contains("students_admission_no_key") || raw.contains("Key (admission_no)=")) {
+            message = "Student admission number already exists.";
+        } else if (raw.contains("ux_students_username_active") || raw.contains("students_username_key") || raw.contains("students_username_key")) {
+            message = "Student username already exists.";
+        } else if (raw.contains("parents_username_key")) {
+            message = "Parent username already exists.";
+        } else if (raw.contains("admin_users_username_key")) {
             message = "Admin username already exists.";
         } else if (raw.contains("schools_school_url_key") || raw.contains("Key (school_url)=")) {
             message = "School URL already exists.";
@@ -49,6 +55,8 @@ public class ApiExceptionHandler {
             message = "Invalid school status. Use ACTIVE or INACTIVE.";
         } else if (raw.contains("table \"teachers\"")) {
             message = "Cannot delete teacher: related records still reference this teacher. Remove those references first.";
+        } else {
+            message = "Operation not allowed: remove dependent records first.";
         }
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", message));
     }

@@ -87,7 +87,8 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Section = () => {
-  const { schoolId: authSchoolId, schoolName: authSchoolName, role: authRole, user } = useAuth()
+  const { schoolId: authSchoolId, schoolName: authSchoolName, role: authRole, user, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'section'
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -518,16 +519,18 @@ const Section = () => {
             <span className="text-secondary-light"> / Section</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary-600 d-flex align-items-center gap-6"
-          onClick={openAdd}
-        >
-          <span className="d-flex text-md">
-            <i className="ri-add-large-line"></i>
-          </span>
-          Add Section
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button
+            type="button"
+            className="btn btn-primary-600 d-flex align-items-center gap-6"
+            onClick={openAdd}
+          >
+            <span className="d-flex text-md">
+              <i className="ri-add-large-line"></i>
+            </span>
+            Add Section
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -709,23 +712,27 @@ const Section = () => {
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => handleDelete(row.id)}
-                            title="Delete"
-                            disabled={saving}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => handleDelete(row.id)}
+                              title="Delete"
+                              disabled={saving}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

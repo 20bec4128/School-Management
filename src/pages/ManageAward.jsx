@@ -51,7 +51,8 @@ const fetchAllPages = async (baseQuery) => {
 }
 
 const ManageAward = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
+  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'manage-award'
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
@@ -215,9 +216,11 @@ const ManageAward = ({ onNavigate }) => {
           <h1 className="fw-semibold mb-4 h6 text-primary-light">Manage Award</h1>
           <span className="text-secondary-light">Award / Manage Award</span>
         </div>
-        <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => onNavigate?.('manage-award-create')}>
-          <i className="ri-add-large-line" /> Add Award
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={() => onNavigate?.('manage-award-create')}>
+            <i className="ri-add-large-line" /> Add Award
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -324,20 +327,24 @@ const ManageAward = ({ onNavigate }) => {
                       ))}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleEdit(row)}
-                          >
-                            <i className="ri-edit-line" />
-                          </button>
-                          <button
-                            type="button"
-                            className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
-                            onClick={() => handleDelete(row)}
-                          >
-                            <i className="ri-delete-bin-line" />
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleEdit(row)}
+                            >
+                              <i className="ri-edit-line" />
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0"
+                              onClick={() => handleDelete(row)}
+                            >
+                              <i className="ri-delete-bin-line" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

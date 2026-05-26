@@ -78,7 +78,13 @@ const statusBadgeClass = (status) => {
 const STEPS = ['Basic']
 
 const StudentStatusList = () => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'online-admission'
+  const PAGE_PERMISSIONS = {
+    add: canAdd(PAGE_SLUG),
+    edit: canEdit(PAGE_SLUG),
+    delete: canDelete(PAGE_SLUG),
+  }
   const { activeSchoolId } = useSchool()
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -367,21 +373,25 @@ const StudentStatusList = () => {
                       ) : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Edit"
-                            onClick={() => openEdit(row)}
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {PAGE_PERMISSIONS.edit && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Edit"
+                              onClick={() => openEdit(row)}
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {PAGE_PERMISSIONS.delete && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

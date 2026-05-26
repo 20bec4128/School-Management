@@ -4,6 +4,7 @@ import SlideSidebar from "../components/SlideSidebar";
 import useColumnVisibility from "../hooks/useColumnVisibility";
 import "../assets/css/addModalShared.css";
 import ExportDropdown from '../components/ExportDropdown'
+import { useAuth } from '../context/useAuth'
 
 const emptyFilters = {
   schoolId: "Select",
@@ -24,6 +25,8 @@ const columnOptions = [
 ];
 
 const HostelMember = () => {
+  const { canAdd, canEdit, canDelete } = useAuth();
+  const PAGE_SLUG = "hostel-member";
   const [data, setData] = useState([]);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -191,12 +194,16 @@ const HostelMember = () => {
                       )}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button className="text-info-600 bg-info-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button className="text-danger-600 bg-danger-focus w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0">
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

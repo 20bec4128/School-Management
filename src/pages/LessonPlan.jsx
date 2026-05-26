@@ -39,7 +39,8 @@ const getChildScope = (children, selectedChildId) => {
 }
 
 const LessonPlan = () => {
-  const { role, schoolId, studentClassId, selectedChildId, parentChildren } = useAuth()
+  const { role, schoolId, studentClassId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'lesson-plan'
   const [rows, setRows] = useState([])
   const [headOfficesLookup, setHeadOfficesLookup] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])

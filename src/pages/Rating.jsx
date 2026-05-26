@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
+import { useAuth } from '../context/useAuth'
 
 const ratings = [
   { sl: '01', school: 'Windsor Park High School', photo: null, teacher: 'John Smith', department: 'Mathematics', rating: 5, comment: 'Excellent teaching methods and very helpful.', student: 'Alice Brown' },
@@ -34,6 +35,8 @@ const StarDisplay = ({ value }) => (
 )
 
 const Rating = () => {
+  const { canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'rating'
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -219,13 +222,15 @@ const Rating = () => {
                     {visibleColumns.student ? <td>{row.student}</td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">
-                        <button
-                          type="button"
-                          className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                          title="Delete"
-                        >
-                          <i className="ri-delete-bin-line" />
-                        </button>
+                        {canDelete(PAGE_SLUG) && (
+                          <button
+                            type="button"
+                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                            title="Delete"
+                          >
+                            <i className="ri-delete-bin-line" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

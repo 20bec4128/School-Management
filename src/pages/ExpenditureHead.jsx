@@ -74,7 +74,20 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ExpenditureHead = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const {
+    status,
+    token,
+    user,
+    role: authRole,
+    headOfficeId: authHeadOfficeId,
+    headOfficeName: authHeadOfficeName,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
+  const PAGE_SLUG = 'expenditure-head'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
@@ -283,9 +296,11 @@ const ExpenditureHead = () => {
             <span className="text-secondary-light"> / Expenditure Head</span>
           </div>
         </div>
-        <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
-          <i className="ri-add-line"></i> Add Expenditure Head
-        </button>
+        {canAdd(PAGE_SLUG) && (
+          <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
+            <i className="ri-add-line"></i> Add Expenditure Head
+          </button>
+        )}
       </div>
 
       <div className="card h-100">
@@ -387,39 +402,43 @@ const ExpenditureHead = () => {
                       {visibleColumns.note && <td style={{ maxWidth: 250, whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.note || '-'}</td>}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button
-                            type="button"
-                            className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            onClick={() => openEdit(row)}
-                            title="Edit"
-                          >
-                            <i className="ri-edit-line"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
-                            title="Delete"
-                            onClick={async () => {
-                              if (!window.confirm('Are you sure you want to delete this expenditure head?')) return
-                              setBusy(true)
-                              setLoadError('')
-                              try {
-                                await deleteExpenditureHead(row.id)
-                                await loadRows({
-                                  schoolId: currentSchoolId || null,
-                                  page: currentPage - 1,
-                                  size: rowsPerPage,
-                                  search: debouncedSearch,
-                                })
-                              } catch (error) {
-                                setLoadError(error?.message || 'Failed to delete expenditure head')
-                              } finally {
-                                setBusy(false)
-                              }
-                            }}
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              onClick={() => openEdit(row)}
+                              title="Edit"
+                            >
+                              <i className="ri-edit-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button
+                              type="button"
+                              className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle"
+                              title="Delete"
+                              onClick={async () => {
+                                if (!window.confirm('Are you sure you want to delete this expenditure head?')) return
+                                setBusy(true)
+                                setLoadError('')
+                                try {
+                                  await deleteExpenditureHead(row.id)
+                                  await loadRows({
+                                    schoolId: currentSchoolId || null,
+                                    page: currentPage - 1,
+                                    size: rowsPerPage,
+                                    search: debouncedSearch,
+                                  })
+                                } catch (error) {
+                                  setLoadError(error?.message || 'Failed to delete expenditure head')
+                                } finally {
+                                  setBusy(false)
+                                }
+                              }}
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from '../context/useAuth'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
@@ -161,6 +162,8 @@ const gradeBadge = (grade) => {
 const subHeaderCellClass = 'text-sm text-center border border-neutral-200 bg-neutral-50'
 
 const ManageMark = () => {
+  const { canAdd, canEdit, canDelete } = useAuth()
+  const PAGE_SLUG = 'manage-mark'
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
@@ -470,12 +473,16 @@ const ManageMark = () => {
                       {visibleColumns.remark ? <td>{row.remark || '-'}</td> : null}
                       <td>
                         <div className="d-flex align-items-center gap-10">
-                          <button type="button" className="bg-success-focus bg-hover-success-200 text-success-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Save">
-                            <i className="ri-save-line"></i>
-                          </button>
-                          <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete">
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
+                          {canEdit(PAGE_SLUG) && (
+                            <button type="button" className="bg-success-focus bg-hover-success-200 text-success-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Save">
+                              <i className="ri-save-line"></i>
+                            </button>
+                          )}
+                          {canDelete(PAGE_SLUG) && (
+                            <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle" title="Delete">
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

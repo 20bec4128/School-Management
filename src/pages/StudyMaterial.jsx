@@ -66,7 +66,7 @@ const getChildScope = (children, selectedChildId) => {
 }
 
 const StudyMaterial = ({ onNavigate }) => {
-  const { user, role, schoolId, selectedChildId, parentChildren, studentClassId } = useAuth()
+  const { user, role, schoolId, selectedChildId, parentChildren, studentClassId, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
@@ -74,6 +74,7 @@ const StudyMaterial = ({ onNavigate }) => {
   const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
   const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
   const canManage = !isStudentScope && can(user, ['STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'])
+  const PAGE_SLUG = 'study-material'
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -243,7 +244,7 @@ const StudyMaterial = ({ onNavigate }) => {
             <span className="text-secondary-light"> / Study Material</span>
           </div>
         </div>
-        {canManage && (
+        {canManage && canAdd(PAGE_SLUG) && (
           <button className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
             <i className="ri-add-large-line text-md"></i> Add Study Material
           </button>
@@ -371,12 +372,16 @@ const StudyMaterial = ({ onNavigate }) => {
                       {canManage && (
                         <td>
                           <div className="d-flex align-items-center gap-10">
-                            <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => openEdit(r)} title="Edit">
-                              <i className="ri-edit-line"></i>
-                            </button>
-                            <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(r.id)} title="Delete">
-                              <i className="ri-delete-bin-line"></i>
-                            </button>
+                            {canEdit(PAGE_SLUG) && (
+                              <button type="button" className="bg-info-focus bg-hover-info-200 text-info-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => openEdit(r)} title="Edit">
+                                <i className="ri-edit-line"></i>
+                              </button>
+                            )}
+                            {canDelete(PAGE_SLUG) && (
+                              <button type="button" className="bg-danger-focus bg-hover-danger-200 text-danger-600 fw-medium w-32-px h-32-px d-flex align-items-center justify-content-center rounded-circle border-0" onClick={() => handleDelete(r.id)} title="Delete">
+                                <i className="ri-delete-bin-line"></i>
+                              </button>
+                            )}
                           </div>
                         </td>
                       )}

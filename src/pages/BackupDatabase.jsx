@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { apiFetch } from "../apis/apiClient";
+import { useAuth } from "../context/useAuth";
 
 const BackupDatabase = ({ onNavigate }) => {
   const navigateTo = typeof onNavigate === "function" ? onNavigate : () => {};
+  const { canAdd } = useAuth();
+  const PAGE_SLUG = "backup-database";
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -201,27 +204,29 @@ const BackupDatabase = ({ onNavigate }) => {
                 </div>
 
                 {/* Download Button */}
-                <div className="text-center pt-16">
-                  <button
-                    type="button"
-                    style={mainButtonStyle}
-                    className="w-100 d-flex align-items-center justify-content-center gap-10 hover-scale"
-                    onClick={handleDownloadBackup}
-                    disabled={busy}
-                  >
-                    {busy ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span>Compiling Database Backup...</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="ri-download-cloud-2-line text-xl"></i>
-                        <span>Download Complete Backup (.SQL)</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                {canAdd(PAGE_SLUG) && (
+                  <div className="text-center pt-16">
+                    <button
+                      type="button"
+                      style={mainButtonStyle}
+                      className="w-100 d-flex align-items-center justify-content-center gap-10 hover-scale"
+                      onClick={handleDownloadBackup}
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <span>Compiling Database Backup...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="ri-download-cloud-2-line text-xl"></i>
+                          <span>Download Complete Backup (.SQL)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
 
               </div>
             </div>

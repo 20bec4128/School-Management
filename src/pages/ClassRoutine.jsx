@@ -8,7 +8,6 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { fetchTeachers } from '../apis/teachersApi'
-import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 const STEPS = ['Basic Info']
@@ -114,8 +113,7 @@ const monthLabel = (date) =>
   })
 
 const ClassRoutine = () => {
-  const { user, schoolId, role, teacherContext, selectedChildId, parentChildren } = useAuth()
-  const canManage = can(user, ['CLASS_ROUTINE_MANAGE', '*'])
+  const { user, schoolId, role, teacherContext, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
   const normalizedRole = String(role || '').toUpperCase()
   const isTeacher = normalizedRole === 'TEACHER'
   const isStudent = normalizedRole === 'STUDENT'
@@ -806,7 +804,7 @@ const ClassRoutine = () => {
               <button type="button" className="btn btn-secondary-600" onClick={() => setIsFindSidebarOpen(true)}>
                 Find
               </button>
-              {canManage ? (
+              {canAdd('class-routine') ? (
                 <button type="button" className="btn btn-primary-600" onClick={openAdd} disabled={saving}>
                   + Add
                 </button>
@@ -873,26 +871,30 @@ const ClassRoutine = () => {
                                 </div>
                                 {!isReadOnlyViewer ? (
                                   <div className="d-flex align-items-center gap-6 flex-shrink-0">
-                                    <button
-                                      type="button"
-                                      className="btn btn-primary-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
-                                      onClick={() => openEdit(r)}
-                                      disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
-                                      aria-label="Edit routine"
-                                      title="Edit"
-                                    >
-                                      <i className="ri-pencil-line" aria-hidden="true" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn btn-danger-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
-                                      onClick={() => handleDelete(r)}
-                                      disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
-                                      aria-label="Delete routine"
-                                      title="Delete"
-                                    >
-                                      <i className="ri-delete-bin-line" aria-hidden="true" />
-                                    </button>
+                                    {canEdit('class-routine') ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                        onClick={() => openEdit(r)}
+                                        disabled={saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                        aria-label="Edit routine"
+                                        title="Edit"
+                                      >
+                                        <i className="ri-pencil-line" aria-hidden="true" />
+                                      </button>
+                                    ) : null}
+                                    {canDelete('class-routine') ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn-danger-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                        onClick={() => handleDelete(r)}
+                                        disabled={saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                        aria-label="Delete routine"
+                                        title="Delete"
+                                      >
+                                        <i className="ri-delete-bin-line" aria-hidden="true" />
+                                      </button>
+                                    ) : null}
                                   </div>
                                 ) : null}
                               </div>
@@ -1033,26 +1035,30 @@ const ClassRoutine = () => {
                                             <div className="fw-semibold text-primary-light">{r.subjectName || r.subjectId || 'Subject'}</div>
                                             {!isReadOnlyViewer ? (
                                               <div className="d-flex align-items-center gap-6 flex-shrink-0">
-                                              <button
-                                                type="button"
-                                                className="btn btn-primary-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
-                                                onClick={() => openEdit(r)}
-                                                disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
-                                                aria-label="Edit routine"
-                                                title="Edit"
-                                              >
-                                                <i className="ri-pencil-line" aria-hidden="true" />
-                                              </button>
-                                              <button
-                                                type="button"
-                                                className="btn btn-danger-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
-                                                onClick={() => handleDelete(r)}
-                                                disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
-                                                aria-label="Delete routine"
-                                                title="Delete"
-                                              >
-                                                <i className="ri-delete-bin-line" aria-hidden="true" />
-                                              </button>
+                                              {canEdit('class-routine') ? (
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-primary-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                                  onClick={() => openEdit(r)}
+                                                  disabled={saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                                  aria-label="Edit routine"
+                                                  title="Edit"
+                                                >
+                                                  <i className="ri-pencil-line" aria-hidden="true" />
+                                                </button>
+                                              ) : null}
+                                              {canDelete('class-routine') ? (
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-danger-600 px-8 py-4 radius-4 d-inline-flex align-items-center justify-content-center"
+                                                  onClick={() => handleDelete(r)}
+                                                  disabled={saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                                  aria-label="Delete routine"
+                                                  title="Delete"
+                                                >
+                                                  <i className="ri-delete-bin-line" aria-hidden="true" />
+                                                </button>
+                                              ) : null}
                                               </div>
                                             ) : null}
                                           </div>
@@ -1069,26 +1075,30 @@ const ClassRoutine = () => {
                                         </div>
                                       </div>
                                       <div className="d-none">
-                                        <button
-                                          type="button"
-                                          className="btn btn-sm btn-primary-600 d-inline-flex align-items-center justify-content-center"
-                                          onClick={() => openEdit(r)}
-                                          disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
-                                          aria-label="Edit routine"
-                                          title="Edit"
-                                        >
-                                          <i className="ri-pencil-line" aria-hidden="true" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="btn btn-sm btn-danger-600 d-inline-flex align-items-center justify-content-center"
-                                          onClick={() => handleDelete(r)}
-                                          disabled={!canManage || saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
-                                          aria-label="Delete routine"
-                                          title="Delete"
-                                        >
-                                          <i className="ri-delete-bin-line" aria-hidden="true" />
-                                        </button>
+                                        {canEdit('class-routine') ? (
+                                          <button
+                                            type="button"
+                                            className="btn btn-sm btn-primary-600 d-inline-flex align-items-center justify-content-center"
+                                            onClick={() => openEdit(r)}
+                                            disabled={saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                            aria-label="Edit routine"
+                                            title="Edit"
+                                          >
+                                            <i className="ri-pencil-line" aria-hidden="true" />
+                                          </button>
+                                        ) : null}
+                                        {canDelete('class-routine') ? (
+                                          <button
+                                            type="button"
+                                            className="btn btn-sm btn-danger-600 d-inline-flex align-items-center justify-content-center"
+                                            onClick={() => handleDelete(r)}
+                                            disabled={saving || (isTeacher && currentTeacherId && String(r.teacherId ?? '') !== currentTeacherId)}
+                                            aria-label="Delete routine"
+                                            title="Delete"
+                                          >
+                                            <i className="ri-delete-bin-line" aria-hidden="true" />
+                                          </button>
+                                        ) : null}
                                       </div>
                                     </div>
                                   ))}
