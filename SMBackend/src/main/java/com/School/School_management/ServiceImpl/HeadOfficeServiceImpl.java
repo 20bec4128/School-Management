@@ -181,9 +181,15 @@ public class HeadOfficeServiceImpl implements HeadOfficeService {
         if (headOfficeId == null) throw new BadRequestException("id is required");
 
         headOfficeRepository.findById(headOfficeId).orElseThrow(NotFoundException::new);
-        AdminUser admin = adminUserRepository
+        java.util.Optional<AdminUser> adminOpt = adminUserRepository
                 .findFirstByHeadOfficeIdAndSchoolIdIsNullOrderByIdAsc(headOfficeId)
-                .orElseThrow(NotFoundException::new);
+                // Fallback: some admins may have been created with a schoolId (legacy data)
+                .or(() -> adminUserRepository.findFirstByHeadOfficeIdAndRoleOrderByIdAsc(headOfficeId, "ADMIN"));
+        
+        if (adminOpt.isEmpty()) {
+            return new HeadOfficeAdminInfoResponse(null, "");
+        }
+        AdminUser admin = adminOpt.get();
         return new HeadOfficeAdminInfoResponse(admin.getId(), admin.getUsername());
     }
 
@@ -195,19 +201,31 @@ public class HeadOfficeServiceImpl implements HeadOfficeService {
         if (request == null) throw new BadRequestException("body is required");
 
         headOfficeRepository.findById(headOfficeId).orElseThrow(NotFoundException::new);
-        AdminUser admin = adminUserRepository
+        java.util.Optional<AdminUser> adminOpt = adminUserRepository
                 .findFirstByHeadOfficeIdAndSchoolIdIsNullOrderByIdAsc(headOfficeId)
-                .orElseThrow(NotFoundException::new);
+                // Fallback: some admins may have been created with a schoolId (legacy data)
+                .or(() -> adminUserRepository.findFirstByHeadOfficeIdAndRoleOrderByIdAsc(headOfficeId, "ADMIN"));
+
+        AdminUser admin;
+        if (adminOpt.isEmpty()) {
+            admin = new AdminUser();
+            admin.setHeadOfficeId(headOfficeId);
+            admin.setSchoolId(null);
+            admin.setRole("ADMIN");
+            admin.setActive(Boolean.TRUE);
+        } else {
+            admin = adminOpt.get();
+        }
 
         String nextUsername = request.getUsername() == null ? "" : request.getUsername().trim();
         String nextPassword = request.getPassword() == null ? "" : request.getPassword().trim();
 
-        if (nextUsername.isEmpty() && nextPassword.isEmpty()) {
+        if (nextUsername.isEmpty() && (admin.getUsername() == null || admin.getUsername().isEmpty()) && nextPassword.isEmpty()) {
             throw new BadRequestException("username or password is required");
         }
 
         if (!nextUsername.isEmpty() && !nextUsername.equalsIgnoreCase(admin.getUsername())) {
-            if (adminUserRepository.existsByUsernameAndIdNot(nextUsername, admin.getId())) {
+            if (adminUserRepository.existsByUsernameAndIdNot(nextUsername, admin.getId() == null ? -1L : admin.getId())) {
                 throw new ConflictException("Admin username already exists");
             }
             admin.setUsername(nextUsername);
