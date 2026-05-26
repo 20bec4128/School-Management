@@ -690,6 +690,9 @@ const StudentAttendance = () => {
     if (!pendingFilters.date) {
       return
     }
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope(pendingFilters.headOfficeId, pendingFilters.schoolId)
+    }
     setFilters(pendingFilters)
     setDrafts({})
     setSavedStudentKeys(new Set())
@@ -699,6 +702,9 @@ const StudentAttendance = () => {
 
   const handleResetFilters = () => {
     const reset = buildDefaultFilters()
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope('', '')
+    }
     setPendingFilters(reset)
     setFilters(reset)
     setDrafts({})
@@ -1190,6 +1196,7 @@ const StudentAttendance = () => {
                 schoolOptions={scopeSchoolOptions}
                 selectedHeadOfficeId={pendingFilters.headOfficeId}
                 onHeadOfficeChange={(value) => {
+                  manualScope.setSelectedScope(value, '')
                   setPendingFilters((prev) => ({
                     ...prev,
                     headOfficeId: value,
@@ -1200,6 +1207,7 @@ const StudentAttendance = () => {
                 }}
                 selectedSchoolId={pendingFilters.schoolId}
                 onSchoolChange={(value) => {
+                  manualScope.setSelectedScope(pendingFilters.headOfficeId, value)
                   setPendingFilters((prev) => ({
                     ...prev,
                     schoolId: value,
@@ -1231,6 +1239,7 @@ const StudentAttendance = () => {
                   onHeadOfficeChange={() => {}}
                   selectedSchoolId={pendingFilters.schoolId}
                   onSchoolChange={(value) => {
+                    manualScope.setSelectedScope(selectedHeadOfficeId, value)
                     setPendingFilters((prev) => ({
                       ...prev,
                       schoolId: value,

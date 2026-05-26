@@ -460,9 +460,11 @@ const EmployeeAttendance = () => {
     const { id, value } = event.target
     setPendingFilters((prev) => {
       if (id === 'headOfficeId') {
+        manualScope.setSelectedScope(value, '')
         return { ...prev, headOfficeId: value, schoolId: '', designation: 'Select' }
       }
       if (id === 'schoolId') {
+        manualScope.setSelectedScope(prev.headOfficeId, value)
         return { ...prev, schoolId: value, designation: 'Select' }
       }
       return { ...prev, [id]: value }
@@ -474,6 +476,9 @@ const EmployeeAttendance = () => {
     if ((isSuperAdmin || isHeadOfficeAdmin) && !pendingFilters.headOfficeId) return
     if (!pendingFilters.schoolId) return
     if (!pendingFilters.date) return
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope(pendingFilters.headOfficeId, pendingFilters.schoolId)
+    }
     setFilters(pendingFilters)
     setDrafts({})
     setCurrentPage(1)
@@ -482,6 +487,9 @@ const EmployeeAttendance = () => {
 
   const handleResetFilters = () => {
     const reset = buildDefaultFilters()
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope('', '')
+    }
     setPendingFilters(reset)
     setFilters(reset)
     setDrafts({})

@@ -500,7 +500,7 @@ const AddStudent = ({ onNavigate }) => {
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e?.preventDefault?.()
     if (loading) return
     setError('')
     setSuccess(false)
@@ -584,7 +584,7 @@ const AddStudent = ({ onNavigate }) => {
         </div>
 
         <div className="card-body p-24">
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={(e) => e.preventDefault()}>
             {/* ═══ TAB 0 – Basic Information ═══ */}
             {activeTab === 0 && (
             <div className="row g-20">
@@ -931,11 +931,16 @@ const AddStudent = ({ onNavigate }) => {
                     Next <i className="ri-arrow-right-line" />
                   </button>
                 ) : (
-                  <button type="submit" className="btn btn-primary-600 px-24 d-flex align-items-center gap-8" disabled={loading}>
+                  <button
+                    type="button"
+                    className="btn btn-primary-600 px-24 d-flex align-items-center gap-8"
+                    onClick={handleSubmit}
+                    disabled={loading}
+                  >
                     {loading ? (
                       <><span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...</>
                     ) : (
-                      <><i className="ri-save-line" /> {isEditing ? 'Update' : 'Save'} Student</>
+                      <><i className="ri-save-line" /> {isEditing ? 'Update Student' : 'Save Student'}</>
                     )}
                   </button>
                 )}

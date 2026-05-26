@@ -453,9 +453,11 @@ const TeacherAttendance = () => {
     const { id, value } = event.target
     setPendingFilters((prev) => {
       if (id === 'headOfficeId') {
+        manualScope.setSelectedScope(value, '')
         return { ...prev, headOfficeId: value, schoolId: '', department: 'Select' }
       }
       if (id === 'schoolId') {
+        manualScope.setSelectedScope(prev.headOfficeId, value)
         return { ...prev, schoolId: value, department: 'Select' }
       }
       return { ...prev, [id]: value }
@@ -467,6 +469,9 @@ const TeacherAttendance = () => {
     if ((isSuperAdmin || isHeadOfficeAdmin) && !pendingFilters.headOfficeId) return
     if (!pendingFilters.schoolId) return
     if (!pendingFilters.date) return
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope(pendingFilters.headOfficeId, pendingFilters.schoolId)
+    }
     setFilters(pendingFilters)
     setDrafts({})
     setCurrentPage(1)
@@ -475,6 +480,9 @@ const TeacherAttendance = () => {
 
   const handleResetFilters = () => {
     const reset = buildDefaultFilters()
+    if (isSuperAdmin) {
+      manualScope.setSelectedScope('', '')
+    }
     setPendingFilters(reset)
     setFilters(reset)
     setDrafts({})
