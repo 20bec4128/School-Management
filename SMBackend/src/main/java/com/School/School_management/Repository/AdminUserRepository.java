@@ -18,6 +18,8 @@ public interface AdminUserRepository extends JpaRepository<AdminUser, Long> {
 
     Optional<AdminUser> findFirstByHeadOfficeIdAndSchoolIdIsNullOrderByIdAsc(Long headOfficeId);
 
+    Optional<AdminUser> findFirstByHeadOfficeIdAndRoleOrderByIdAsc(Long headOfficeId, String role);
+
     Optional<AdminUser> findFirstBySchoolIdAndRoleOrderByIdAsc(Long schoolId, String role);
 
     List<AdminUser> findBySchoolIdAndRoleIgnoreCaseOrderByIdDesc(Long schoolId, String role);

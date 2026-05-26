@@ -27,19 +27,22 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
     private final ObjectMapper objectMapper;
     private final HeadOfficeRepository headOfficeRepository;
     private final SchoolRepository schoolRepository;
+    private final PagePermissionService pagePermissionService;
 
     public JwtAuthInterceptor(
             JwtService jwtService,
             RbacService rbacService,
             ObjectMapper objectMapper,
             HeadOfficeRepository headOfficeRepository,
-            SchoolRepository schoolRepository
+            SchoolRepository schoolRepository,
+            PagePermissionService pagePermissionService
     ) {
         this.jwtService = jwtService;
         this.rbacService = rbacService;
         this.objectMapper = objectMapper;
         this.headOfficeRepository = headOfficeRepository;
         this.schoolRepository = schoolRepository;
+        this.pagePermissionService = pagePermissionService;
     }
 
     @Override
@@ -138,6 +141,26 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        // 1. Check for RequirePagePermission annotation
+        RequirePagePermission pagePerm = getRequirePagePermission(handler);
+        if (pagePerm != null) {
+            boolean ok = pagePermissionService.hasPagePermission(effectivePermRole, permissionSchoolId, pagePerm.slug(), pagePerm.action());
+            if (!ok) {
+                log.warn(
+                        "Forbidden (missing page permission). path={} user={} role={} slug={} action={}",
+                        path,
+                        user.username(),
+                        user.role(),
+                        pagePerm.slug(),
+                        pagePerm.action()
+                );
+                writeError(response, 403, "Forbidden", Map.of("role", user.role(), "required", pagePerm.slug() + ":" + pagePerm.action()));
+                return false;
+            }
+            return true;
+        }
+
+        // 2. Fallback to existing RequirePermission annotation
         String[] required = requiredPermissions(handler);
         if (required == null || required.length == 0) {
             // Default deny for safety: all /api/** routes must declare required permissions.
@@ -230,6 +253,13 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         if (method != null) return normalize(method.value());
         RequirePermission type = hm.getBeanType().getAnnotation(RequirePermission.class);
         return type == null ? null : normalize(type.value());
+    }
+
+    private RequirePagePermission getRequirePagePermission(Object handler) {
+        if (!(handler instanceof HandlerMethod hm)) return null;
+        RequirePagePermission method = hm.getMethodAnnotation(RequirePagePermission.class);
+        if (method != null) return method;
+        return hm.getBeanType().getAnnotation(RequirePagePermission.class);
     }
 
     private String[] normalize(String[] values) {

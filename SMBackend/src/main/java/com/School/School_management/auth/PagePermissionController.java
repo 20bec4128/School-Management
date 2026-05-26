@@ -75,6 +75,17 @@ public class PagePermissionController {
         String role = user.role();
         Long schoolId = user.schoolId();
 
+        if (schoolId == null && user.isHeadOfficeScopedAdmin()) {
+            List<Long> schoolIds = jdbcTemplate.queryForList(
+                    "SELECT id FROM schools WHERE head_office_id = ? AND is_deleted = false ORDER BY id ASC LIMIT 1",
+                    Long.class,
+                    user.headOfficeId()
+            );
+            if (!schoolIds.isEmpty()) {
+                schoolId = schoolIds.get(0);
+            }
+        }
+
         List<FunctionPermissionDto> perms;
         if (schoolId != null) {
             perms = jdbcTemplate.query(
