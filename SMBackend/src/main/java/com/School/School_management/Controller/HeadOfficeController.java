@@ -7,6 +7,7 @@ import com.School.School_management.Dto.HeadOfficeAdminCredentialsRequest;
 import com.School.School_management.Dto.HeadOfficeAdminInfoResponse;
 import com.School.School_management.Service.HeadOfficeService;
 import com.School.School_management.auth.CurrentUserHolder;
+import com.School.School_management.auth.RequirePagePermission;
 import com.School.School_management.auth.RequirePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -36,7 +37,7 @@ public class HeadOfficeController {
         return headOfficeService.createWithAdmin(request, CurrentUserHolder.get());
     }
 
-    @RequirePermission({"HEAD_OFFICE_MANAGE", "*"})
+    @RequirePagePermission(slug = "head-offices", action = "view")
     @GetMapping
     public Page<HeadOfficeDto> getAll(
             @RequestParam(defaultValue = "0") int page,

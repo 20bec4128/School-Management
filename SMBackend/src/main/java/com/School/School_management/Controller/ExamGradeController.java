@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.ExamGradeDto;
 import com.School.School_management.Service.ExamGradeService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/exam-grades")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
 public class ExamGradeController {
 
     private final ExamGradeService examGradeService;
@@ -27,6 +26,7 @@ public class ExamGradeController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "exam-grade", action = "view")
     public List<ExamGradeDto> list(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId
@@ -35,6 +35,7 @@ public class ExamGradeController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "exam-grade", action = "view")
     public Page<ExamGradeDto> listPaginated(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -46,16 +47,19 @@ public class ExamGradeController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "exam-grade", action = "add")
     public ExamGradeDto create(@RequestBody ExamGradeDto dto) {
         return examGradeService.create(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "exam-grade", action = "edit")
     public ExamGradeDto update(@PathVariable Long id, @RequestBody ExamGradeDto dto) {
         return examGradeService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "exam-grade", action = "delete")
     public String delete(@PathVariable Long id) {
         examGradeService.delete(id);
         return "Exam Grade deleted successfully";

@@ -132,7 +132,7 @@ const Class = () => {
 
   const loadLookups = useCallback(async () => {
     const [headOfficeResult, schoolsResult, teachersResult] = await Promise.allSettled([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
       fetchTeachers(),
     ])
@@ -154,7 +154,7 @@ const Class = () => {
         .filter((t) => t.id != null && t.name)
         .sort((a, b) => a.name.localeCompare(b.name)),
     )
-  }, [])
+  }, [isSuperAdmin])
 
   const loadClasses = useCallback(async () => {
     if (!resolvedSchoolId && !isSuperAdmin) {

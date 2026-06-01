@@ -3,6 +3,7 @@ import "../css/sidebar.css";
 import { useSidebar } from "../context/SidebarContext";
 import { normalizeRole } from "../utils/roles";
 import { useAuth } from "../context/useAuth";
+import { canShowNavPage } from "../utils/navigationVisibility";
 
 const menuSections = [
   {
@@ -619,7 +620,7 @@ const menuSections = [
 
 const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
   const { isOpen, isCollapsed, closeSidebar, toggleSidebar } = useSidebar();
-  const { generalSettings, canView } = useAuth();
+  const { generalSettings, pagePermissions, isSuperAdminRole } = useAuth();
 
   const username =
     user?.username ||
@@ -640,7 +641,13 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
         if (hasSubmenu) {
           const filteredSubs = item.submenu.filter((sub) => {
             if (sub?.page === "user-role-acl" && !canOpenUserRoles()) return false;
-            if (sub?.page) return canView(sub.page);
+            if (sub?.page) {
+              return canShowNavPage({
+                page: sub.page,
+                pagePermissions,
+                isSuperAdminRole,
+              });
+            }
             return true;
           });
           return {
@@ -655,7 +662,13 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
         const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
         if (hasSubmenu) return true;
         if (Array.isArray(item.submenu) && item.submenu.length === 0) return false;
-        if (item.page) return canView(item.page);
+        if (item.page) {
+          return canShowNavPage({
+            page: item.page,
+            pagePermissions,
+            isSuperAdminRole,
+          });
+        }
         return true;
       });
 

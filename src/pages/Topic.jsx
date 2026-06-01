@@ -224,7 +224,7 @@ const Topic = ({ onNavigate }) => {
         setError("");
         const [headOfficesResult, schoolsResult, classesResult, subjectsResult] =
           await Promise.allSettled([
-            fetchHeadOfficesPage(0, 500),
+            isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
             fetchSchoolsLookup(),
             fetchClasses(),
             fetchSubjects(),
@@ -252,7 +252,7 @@ const Topic = ({ onNavigate }) => {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [isSuperAdmin]);
 
   const loadLessonsLookup = useCallback(async (base) => {
     if (

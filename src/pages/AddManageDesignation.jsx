@@ -221,7 +221,7 @@ const AddManageDesignation = ({ onNavigate }) => {
     try {
       const tasks = [];
 
-      if (isSuperAdmin || isHeadOfficeAdmin) {
+      if (isSuperAdmin) {
         tasks.push(
           fetchHeadOfficesPage(0, 500)
             .then((page) => {

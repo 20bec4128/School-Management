@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.CandidateDto;
 import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Service.CandidateService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/candidates")
-@RequirePermission({"CANDIDATE", "*"})
 public class CandidateController {
 
     private final CandidateService candidateService;
@@ -28,6 +27,7 @@ public class CandidateController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "candidate", action = "view")
     public ResponseEntity<PaginationResponse<CandidateDto.Response>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -41,11 +41,13 @@ public class CandidateController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "candidate", action = "add")
     public ResponseEntity<CandidateDto.Response> create(@RequestBody CandidateDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(candidateService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "candidate", action = "edit")
     public ResponseEntity<CandidateDto.Response> update(
             @PathVariable Long id,
             @RequestBody CandidateDto.Request request) {
@@ -53,6 +55,7 @@ public class CandidateController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "candidate", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         candidateService.delete(id);
         return ResponseEntity.ok("Candidate deleted successfully");

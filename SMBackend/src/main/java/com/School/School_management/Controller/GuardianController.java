@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.GuardianDto;
 import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Service.GuardianService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/guardians")
-@RequirePermission({"GUARDIAN", "*"})
 public class GuardianController {
 
     private final GuardianService guardianService;
@@ -28,6 +27,7 @@ public class GuardianController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "guardian", action = "view")
     public ResponseEntity<PaginationResponse<GuardianDto.Response>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -39,11 +39,13 @@ public class GuardianController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "guardian", action = "add")
     public ResponseEntity<GuardianDto.Response> create(@RequestBody GuardianDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(guardianService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "guardian", action = "edit")
     public ResponseEntity<GuardianDto.Response> update(
             @PathVariable Long id,
             @RequestBody GuardianDto.Request request) {
@@ -51,9 +53,9 @@ public class GuardianController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "guardian", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         guardianService.delete(id);
         return ResponseEntity.ok("Guardian deleted successfully");
     }
 }
-

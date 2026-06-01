@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.SuggestionDto;
 import com.School.School_management.Service.SuggestionService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,7 +31,6 @@ import java.util.List;
         },
         allowCredentials = "true"
 )
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
 public class SuggestionController {
 
     private final SuggestionService suggestionService;
@@ -41,6 +40,7 @@ public class SuggestionController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "suggestion", action = "view")
     public List<SuggestionDto> list(
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
             @RequestParam(name = "schoolId", required = false) Long schoolId,
@@ -53,6 +53,7 @@ public class SuggestionController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "suggestion", action = "view")
     public ResponseEntity<Page<SuggestionDto>> listPaginated(
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
             @RequestParam(name = "schoolId", required = false) Long schoolId,
@@ -69,11 +70,13 @@ public class SuggestionController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "suggestion", action = "view")
     public SuggestionDto getById(@PathVariable Long id) {
         return suggestionService.getById(id, CurrentUserHolder.get());
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "suggestion", action = "add")
     public SuggestionDto create(
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
             @RequestParam(name = "schoolId") Long schoolId,
@@ -100,6 +103,7 @@ public class SuggestionController {
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "suggestion", action = "edit")
     public SuggestionDto update(
             @PathVariable Long id,
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
@@ -127,6 +131,7 @@ public class SuggestionController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "suggestion", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         suggestionService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();

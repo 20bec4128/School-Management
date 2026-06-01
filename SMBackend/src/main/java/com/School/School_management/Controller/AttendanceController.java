@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.AttendanceDto;
 import com.School.School_management.Service.AttendanceService;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,7 @@ public class AttendanceController {
     private AttendanceService attendanceService;
 
     @GetMapping
+    @RequirePagePermission(slug = "attendance", action = "view")
     public ResponseEntity<List<AttendanceDto>> getAttendanceList(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -41,6 +43,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "attendance", action = "view")
     public ResponseEntity<Page<AttendanceDto>> getAttendancePaginated(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -56,21 +59,25 @@ public class AttendanceController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "attendance", action = "view")
     public ResponseEntity<AttendanceDto> getAttendanceById(@PathVariable Long id) {
         return ResponseEntity.ok(attendanceService.getById(id));
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "attendance", action = "add")
     public ResponseEntity<AttendanceDto> createAttendance(@RequestBody AttendanceDto dto) {
         return new ResponseEntity<>(attendanceService.create(dto), HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "attendance", action = "edit")
     public ResponseEntity<AttendanceDto> updateAttendance(@PathVariable Long id, @RequestBody AttendanceDto dto) {
         return ResponseEntity.ok(attendanceService.update(id, dto));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "attendance", action = "delete")
     public ResponseEntity<Void> deleteAttendance(@PathVariable Long id) {
         attendanceService.delete(id);
         return ResponseEntity.noContent().build();

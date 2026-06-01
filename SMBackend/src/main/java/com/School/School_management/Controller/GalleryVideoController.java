@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.GalleryVideoDto;
 import com.School.School_management.Service.GalleryVideoService;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,7 @@ public class GalleryVideoController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "gallery", action = "view")
     public ResponseEntity<List<GalleryVideoDto.Response>> list(
             @RequestParam(value = "schoolId", required = false) Long schoolId,
             @RequestParam(value = "galleryId", required = false) Long galleryId
@@ -35,6 +37,7 @@ public class GalleryVideoController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "gallery", action = "view")
     public ResponseEntity<Page<GalleryVideoDto.Response>> page(
             @RequestParam Long schoolId,
             @RequestParam(value = "galleryId", required = false) Long galleryId,
@@ -46,6 +49,7 @@ public class GalleryVideoController {
     }
 
     @PostMapping(consumes = "multipart/form-data")
+    @RequirePagePermission(slug = "gallery", action = "add")
     public ResponseEntity<GalleryVideoDto.Response> create(
             @RequestPart("data") GalleryVideoDto.Request request,
             @RequestPart(value = "file", required = false) MultipartFile file
@@ -54,6 +58,7 @@ public class GalleryVideoController {
     }
 
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+    @RequirePagePermission(slug = "gallery", action = "edit")
     public ResponseEntity<GalleryVideoDto.Response> update(
             @PathVariable Long id,
             @RequestPart("data") GalleryVideoDto.Request request,
@@ -63,6 +68,7 @@ public class GalleryVideoController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "gallery", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         galleryVideoService.delete(id);
         return ResponseEntity.ok("Deleted successfully");

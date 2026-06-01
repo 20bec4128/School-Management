@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 
-export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
+export const useManualSchoolScope = (enabled, initialHeadOfficeId, options = {}) => {
+  const autoSelectSchool = options.autoSelectSchool !== false
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
   const [selectedHeadOfficeId, setSelectedHeadOfficeId] = useState('')
@@ -25,7 +26,7 @@ export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
       setLoading(true)
       try {
         const [headOfficePage, schoolList] = await Promise.all([
-          fetchHeadOfficesPage(0, 500),
+          initialHeadOfficeId ? Promise.resolve({ content: [] }) : fetchHeadOfficesPage(0, 500),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
@@ -37,12 +38,11 @@ export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
           }))
           .filter((ho) => ho.id != null && ho.name)
           .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-        
+
         setHeadOffices(sortedHOs)
         const rawSchools = Array.isArray(schoolList) ? schoolList : []
         setSchools(rawSchools)
 
-        // Default to first head office if none currently selected
         if (initialHeadOfficeId) {
           setSelectedHeadOfficeId(String(initialHeadOfficeId))
         } else if (sortedHOs.length > 0) {
@@ -75,6 +75,9 @@ export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
       setSelectedSchoolId('')
       return
     }
+    if (!autoSelectSchool) {
+      return
+    }
     const matchingSchools = schools.filter(
       (school) => String(school?.headOfficeId ?? '') === String(selectedHeadOfficeId)
     )
@@ -83,7 +86,7 @@ export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
     } else {
       setSelectedSchoolId('')
     }
-  }, [selectedHeadOfficeId, schools])
+  }, [autoSelectSchool, selectedHeadOfficeId, schools])
 
   const schoolOptions = useMemo(() => {
     const rows = Array.isArray(schools) ? schools : []
@@ -107,6 +110,8 @@ export const useManualSchoolScope = (enabled, initialHeadOfficeId) => {
         setSelectedSchoolId(schoolId)
       } else {
         if (!headOfficeId) {
+          setSelectedSchoolId('')
+        } else if (!autoSelectSchool) {
           setSelectedSchoolId('')
         } else {
           const matching = schools.filter(

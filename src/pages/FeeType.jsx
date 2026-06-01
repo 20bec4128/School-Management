@@ -6,6 +6,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { createFeeType, deleteFeeType, fetchFeeTypesPage, updateFeeType } from '../apis/feeTypesApi'
@@ -79,6 +80,7 @@ const FeeType = () => {
     canEdit,
     canDelete,
   } = useAuth()
+  const { activeSchoolId } = useSchool()
   const PAGE_SLUG = 'fee-type'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -93,8 +95,6 @@ const FeeType = () => {
 
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
-
-  const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -139,6 +139,13 @@ const FeeType = () => {
     return []
   }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
 
+  const currentSchoolId = useMemo(() => {
+    if (isSchoolAdmin) return authSchoolId != null ? authSchoolId : null
+    if (filters.schoolId) return filters.schoolId
+    if (isHeadOfficeAdmin) return activeSchoolId || null
+    return null
+  }, [activeSchoolId, authSchoolId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin])
+
   const schoolOptionsForForm = (form) => {
     if (isSchoolAdmin) return []
     const hoId = isSuperAdmin ? form.headOfficeId : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
@@ -149,7 +156,7 @@ const FeeType = () => {
   const loadLookups = async () => {
     if (isSchoolAdmin) return
     const tasks = []
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       tasks.push(
         fetchHeadOfficesPage(0, 500)
           .then(p => setHeadOffices(Array.isArray(p?.content) ? p.content : []))
@@ -184,12 +191,11 @@ const FeeType = () => {
     Promise.resolve()
       .then(loadLookups)
       .then(() => {
-        const schoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId ? Number(filters.schoolId) : null))
-        return loadFeeTypes({ schoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+        return loadFeeTypes({ schoolId: currentSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
       })
       .catch(e => setLoadError(e?.message || 'Failed to load fee types'))
       .finally(() => setBusy(false))
-  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters])
+  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters, currentSchoolId])
 
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
@@ -294,8 +300,6 @@ const FeeType = () => {
     </>
   )
 
-  const currentSchoolId = () => isSchoolAdmin ? authSchoolId : (scopeSchoolId || filters.schoolId || null)
-
   return (
     <div className="dashboard-main-body">
       <div className="breadcrumb d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -307,13 +311,6 @@ const FeeType = () => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isHeadOfficeAdmin && (
-            <select className="form-select" style={{ minWidth: 240 }} value={scopeSchoolId}
-              onChange={e => { setScopeSchoolId(e.target.value); setCurrentPage(1) }}>
-              <option value="">Select School</option>
-              {schoolOptionsForScope.map(s => <option key={s.id} value={String(s.id)}>{s.schoolName}</option>)}
-            </select>
-          )}
           {canAdd(PAGE_SLUG) && (
             <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
               <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
@@ -388,7 +385,13 @@ const FeeType = () => {
                 {busy && rows.length === 0 ? (
                   <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">Loading...</td></tr>
                 ) : rows.length === 0 ? (
-                  <tr><td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">No fee type records found.</td></tr>
+                  <tr>
+                    <td colSpan={visibleColumnCount + 1} className="text-center py-40 text-secondary-light">
+                      {isHeadOfficeAdmin && !activeSchoolId && !filters.schoolId
+                        ? 'Select a school from the topbar or filter panel to load fee types.'
+                        : 'No fee type records found.'}
+                    </td>
+                  </tr>
                 ) : rows.map((row, idx) => (
                   <tr key={row.id}>
                     <td>
@@ -425,7 +428,7 @@ const FeeType = () => {
                               setBusy(true)
                               try {
                                 await deleteFeeType(row.id)
-                                await loadFeeTypes({ schoolId: currentSchoolId(), page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
+                                await loadFeeTypes({ schoolId: currentSchoolId, page: currentPage - 1, size: rowsPerPage, search: debouncedSearch })
                               } catch (e) { setLoadError(e.message) }
                               finally { setBusy(false) }
                             }}>

@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.NewsDto;
 import com.School.School_management.Service.NewsService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/news")
-@RequirePermission({"ADMIN_USER_MANAGE", "SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
 public class NewsController {
 
     private final NewsService newsService;
@@ -29,11 +28,13 @@ public class NewsController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "news", action = "view")
     public ResponseEntity<List<NewsDto.Response>> list(@RequestParam(required = false) Long schoolId) {
         return ResponseEntity.ok(newsService.list(schoolId));
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "news", action = "view")
     public ResponseEntity<Page<NewsDto.Response>> page(
             @RequestParam Long schoolId,
             @RequestParam(required = false) String search,
@@ -45,16 +46,19 @@ public class NewsController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "news", action = "add")
     public ResponseEntity<NewsDto.Response> create(@RequestBody NewsDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(newsService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "news", action = "edit")
     public ResponseEntity<NewsDto.Response> update(@PathVariable Long id, @RequestBody NewsDto.Request request) {
         return ResponseEntity.ok(newsService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "news", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         newsService.delete(id);
         return ResponseEntity.ok("News deleted successfully");

@@ -71,7 +71,7 @@ const OnlineExam = ({ onNavigate } = {}) => {
   useEffect(() => {
     if (status !== 'ready' || !token) return
     Promise.all([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
     ])
       .then(([headOfficePage, rowsData]) => {
@@ -83,7 +83,7 @@ const OnlineExam = ({ onNavigate } = {}) => {
         setHeadOffices([])
         setSchools([])
       })
-  }, [status, token])
+  }, [isSuperAdmin, status, token])
 
   const selectedSchoolId = useMemo(() => {
     if (pendingFilters.schoolId) return String(pendingFilters.schoolId)

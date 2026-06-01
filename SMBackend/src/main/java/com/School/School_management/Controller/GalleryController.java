@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.GalleryDto;
 import com.School.School_management.Service.GalleryService;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +27,13 @@ public class GalleryController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "gallery", action = "view")
     public ResponseEntity<List<GalleryDto.Response>> list(@RequestParam(value = "schoolId", required = false) Long schoolId) {
         return ResponseEntity.ok(galleryService.list(schoolId));
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "gallery", action = "view")
     public ResponseEntity<Page<GalleryDto.Response>> page(
             @RequestParam Long schoolId,
             @RequestParam(required = false) String search,
@@ -42,16 +45,19 @@ public class GalleryController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "gallery", action = "add")
     public ResponseEntity<GalleryDto.Response> create(@RequestBody GalleryDto.Request request) {
         return ResponseEntity.ok(galleryService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "gallery", action = "edit")
     public ResponseEntity<GalleryDto.Response> update(@PathVariable Long id, @RequestBody GalleryDto.Request request) {
         return ResponseEntity.ok(galleryService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "gallery", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         galleryService.delete(id);
         return ResponseEntity.ok("Deleted successfully");

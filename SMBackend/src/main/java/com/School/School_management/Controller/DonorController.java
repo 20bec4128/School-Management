@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.DonorDto;
 import com.School.School_management.Dto.PaginationResponse;
 import com.School.School_management.Service.DonorService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/donors")
-@RequirePermission({"DONOR", "*"})
 public class DonorController {
 
     private final DonorService donorService;
@@ -28,6 +27,7 @@ public class DonorController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "donar", action = "view")
     public ResponseEntity<PaginationResponse<DonorDto.Response>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -40,11 +40,13 @@ public class DonorController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "donar", action = "add")
     public ResponseEntity<DonorDto.Response> create(@RequestBody DonorDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(donorService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "donar", action = "edit")
     public ResponseEntity<DonorDto.Response> update(
             @PathVariable Long id,
             @RequestBody DonorDto.Request request) {
@@ -52,9 +54,9 @@ public class DonorController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "donar", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         donorService.delete(id);
         return ResponseEntity.ok("Donor deleted successfully");
     }
 }
-

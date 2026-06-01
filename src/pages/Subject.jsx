@@ -39,6 +39,7 @@ const SubjectList = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'subject'
   const { activeSchoolId } = useSchool()
+  const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   
   const [subjects, setSubjects] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -85,10 +86,15 @@ const SubjectList = ({ onNavigate }) => {
   }, [])
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setHeadOfficesLookup([])
+      return
+    }
+
     void fetchHeadOfficesPage(0, 500)
       .then((page) => setHeadOfficesLookup(Array.isArray(page?.content) ? page.content : []))
       .catch(() => setHeadOfficesLookup([]))
-  }, [])
+  }, [isSuperAdmin])
 
   useEffect(() => {
     setCurrentPage(1)

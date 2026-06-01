@@ -94,7 +94,7 @@ const QuestionBank = ({ onNavigate } = {}) => {
   useEffect(() => {
     if (authStatus === 'ready' && token) {
       Promise.all([
-        fetchHeadOfficesPage(0, 500),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
         fetchSchoolsLookup(),
       ])
         .then(([headOfficePage, schoolRows]) => {
@@ -107,7 +107,7 @@ const QuestionBank = ({ onNavigate } = {}) => {
           setSchools([])
         })
     }
-  }, [authStatus, token])
+  }, [authStatus, isSuperAdmin, token])
 
   const filterSchoolId = useMemo(() => {
     if (pendingFilters.schoolId) return pendingFilters.schoolId

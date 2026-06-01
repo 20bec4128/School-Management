@@ -112,8 +112,19 @@ const formatAmount = (value) => {
 const EDIT_STORAGE_KEY = 'edit-scholarship-row'
 
 const Scholarship = ({ onNavigate } = {}) => {
-  const { canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    schoolId: authSchoolId,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const PAGE_SLUG = 'scholarship'
+  const normalizedRole = String(role || '').toUpperCase()
+  const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -151,11 +162,38 @@ const Scholarship = ({ onNavigate } = {}) => {
   const schoolOptionsFor = useCallback(
     (headOfficeId) =>
       schoolsLookup
-        .filter((s) => !headOfficeId || String(s?.headOfficeId ?? '') === String(headOfficeId))
+        .filter((s) => {
+          if (isSchoolAdmin && authSchoolId != null) {
+            return String(s?.id ?? '') === String(authSchoolId)
+          }
+          if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+            return String(s?.headOfficeId ?? '') === String(authHeadOfficeId)
+          }
+          return !headOfficeId || String(s?.headOfficeId ?? '') === String(headOfficeId)
+        })
         .slice()
         .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b))),
-    [schoolsLookup],
+    [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, schoolsLookup],
   )
+
+  const fixedHeadOfficeId = !isSuperAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+  const fixedSchoolId = isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : ''
+  const pendingHeadOfficeId = isSuperAdmin
+    ? (pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)
+    : fixedHeadOfficeId
+  const pendingSchoolId = isSuperAdmin
+    ? (pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId)
+    : fixedSchoolId || (pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId)
+
+  const getDefaultFilters = useCallback(() => {
+    if (isSuperAdmin) return { ...emptyFilters }
+    return {
+      headOfficeId: fixedHeadOfficeId || 'Select',
+      schoolId: fixedSchoolId || 'Select',
+      classId: 'Select',
+      sectionId: 'Select',
+    }
+  }, [fixedHeadOfficeId, fixedSchoolId, isSuperAdmin])
 
   const formClassOptions = useCallback(
     (schoolId) =>
@@ -181,30 +219,38 @@ const Scholarship = ({ onNavigate } = {}) => {
 
   const loadLookups = useCallback(async () => {
     const [headOfficesResult, schoolsResult, classesResult, sectionsResult] = await Promise.allSettled([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
       fetchClasses(),
       fetchSections(),
     ])
 
     setHeadOffices(
-      unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
-        .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
-        .filter((ho) => ho.id != null && ho.name)
-        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+      isSuperAdmin
+        ? unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
+            .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
+            .filter((ho) => ho.id != null && ho.name)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+        : [],
     )
     setSchoolsLookup(unwrapCollection(schoolsResult.status === 'fulfilled' ? schoolsResult.value : []))
     setClassesLookup(unwrapCollection(classesResult.status === 'fulfilled' ? classesResult.value : []))
     setSectionsLookup(unwrapCollection(sectionsResult.status === 'fulfilled' ? sectionsResult.value : []))
-  }, [])
+  }, [isSuperAdmin])
 
   const loadScholarships = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      const effectiveHeadOfficeId = isSuperAdmin
+        ? (filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined)
+        : fixedHeadOfficeId || undefined
+      const effectiveSchoolId = isSuperAdmin
+        ? (filters.schoolId !== 'Select' ? filters.schoolId : undefined)
+        : fixedSchoolId || (filters.schoolId !== 'Select' ? filters.schoolId : undefined)
       const data = await fetchScholarshipsPage(currentPage - 1, rowsPerPage, {
-        headOfficeId: filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined,
-        schoolId: filters.schoolId !== 'Select' ? filters.schoolId : undefined,
+        headOfficeId: effectiveHeadOfficeId,
+        schoolId: effectiveSchoolId,
         classId: filters.classId !== 'Select' ? filters.classId : undefined,
         sectionId: filters.sectionId !== 'Select' ? filters.sectionId : undefined,
         search: search.trim(),
@@ -220,7 +266,7 @@ const Scholarship = ({ onNavigate } = {}) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, rowsPerPage, filters, search])
+  }, [currentPage, rowsPerPage, filters, search, fixedHeadOfficeId, fixedSchoolId, isSuperAdmin])
 
   useEffect(() => {
     loadLookups().catch(() => {})
@@ -229,6 +275,17 @@ const Scholarship = ({ onNavigate } = {}) => {
   useEffect(() => {
     loadScholarships().catch(() => {})
   }, [loadScholarships, refreshKey])
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    const defaults = getDefaultFilters()
+    setPendingFilters(defaults)
+    setFilters(defaults)
+    if (isSchoolAdmin && authSchoolId != null) {
+      setAddForm((prev) => ({ ...prev, schoolId: String(authSchoolId) }))
+      setEditForm((prev) => ({ ...prev, schoolId: String(authSchoolId) }))
+    }
+  }, [authSchoolId, getDefaultFilters, isSchoolAdmin, isSuperAdmin])
 
   useEffect(() => {
     if (!isAddOpen) return
@@ -298,8 +355,9 @@ const Scholarship = ({ onNavigate } = {}) => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const defaults = getDefaultFilters()
+    setPendingFilters(defaults)
+    setFilters(defaults)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
   }
@@ -393,33 +451,55 @@ const Scholarship = ({ onNavigate } = {}) => {
     <>
       <p className="avm-section-title">Basic Information</p>
       <div className="avm-grid">
-        <ManualScopeSelectors
-          enabled
-          headOffices={headOffices}
-          schoolOptions={schoolOptionsFor(form.headOfficeId)}
-          selectedHeadOfficeId={form.headOfficeId}
-          onHeadOfficeChange={(value) =>
-            setter((prev) => ({
-              ...prev,
-              headOfficeId: value || '',
-              schoolId: '',
-              classId: '',
-              sectionId: '',
-              studentId: '',
-            }))
-          }
-          selectedSchoolId={form.schoolId}
-          onSchoolChange={(value) =>
-            setter((prev) => ({
-              ...prev,
-              schoolId: value || '',
-              classId: '',
-              sectionId: '',
-              studentId: '',
-            }))
-          }
-          schoolLabel="School"
-        />
+        {isSuperAdmin ? (
+          <ManualScopeSelectors
+            enabled
+            headOffices={headOffices}
+            schoolOptions={schoolOptionsFor(form.headOfficeId)}
+            selectedHeadOfficeId={form.headOfficeId}
+            onHeadOfficeChange={(value) =>
+              setter((prev) => ({
+                ...prev,
+                headOfficeId: value || '',
+                schoolId: '',
+                classId: '',
+                sectionId: '',
+                studentId: '',
+              }))
+            }
+            selectedSchoolId={form.schoolId}
+            onSchoolChange={(value) =>
+              setter((prev) => ({
+                ...prev,
+                schoolId: value || '',
+                classId: '',
+                sectionId: '',
+                studentId: '',
+              }))
+            }
+            schoolLabel="School"
+          />
+        ) : (
+          <ManualScopeSelectors
+            enabled
+            headOffices={[]}
+            schoolOptions={schoolOptionsFor(fixedHeadOfficeId)}
+            selectedSchoolId={isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : form.schoolId}
+            onSchoolChange={(value) =>
+              !isSchoolAdmin &&
+              setter((prev) => ({
+                ...prev,
+                schoolId: value || '',
+                classId: '',
+                sectionId: '',
+                studentId: '',
+              }))
+            }
+            schoolLabel="School"
+            showHeadOfficeSelector={false}
+            disabled={isSchoolAdmin}
+          />
+        )}
 
         <FormField label="Class" required full>
           <select
@@ -746,31 +826,52 @@ const Scholarship = ({ onNavigate } = {}) => {
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Scholarships" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <ManualScopeSelectors
-              enabled
-              headOffices={headOffices}
-              schoolOptions={schoolOptionsFor(pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)}
-              selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
-              onHeadOfficeChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  headOfficeId: value || 'Select',
-                  schoolId: 'Select',
-                  classId: 'Select',
-                  sectionId: 'Select',
-                }))
-              }
-              selectedSchoolId={pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId}
-              onSchoolChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  schoolId: value || 'Select',
-                  classId: 'Select',
-                  sectionId: 'Select',
-                }))
-              }
-              schoolLabel="School"
-            />
+            {isSuperAdmin ? (
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOffices}
+                schoolOptions={schoolOptionsFor(pendingHeadOfficeId)}
+                selectedHeadOfficeId={pendingHeadOfficeId}
+                onHeadOfficeChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    headOfficeId: value || 'Select',
+                    schoolId: 'Select',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }
+                selectedSchoolId={pendingSchoolId}
+                onSchoolChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: value || 'Select',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }
+                schoolLabel="School"
+              />
+            ) : (
+              <ManualScopeSelectors
+                enabled
+                headOffices={[]}
+                schoolOptions={schoolOptionsFor(fixedHeadOfficeId)}
+                selectedSchoolId={pendingSchoolId}
+                onSchoolChange={(value) =>
+                  !isSchoolAdmin &&
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: value || 'Select',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }
+                schoolLabel="School"
+                showHeadOfficeSelector={false}
+                disabled={isSchoolAdmin}
+              />
+            )}
           </div>
 
           <div>

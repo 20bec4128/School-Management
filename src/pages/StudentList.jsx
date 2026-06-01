@@ -136,10 +136,15 @@ const StudentList = ({ onNavigate }) => {
   }, [scopedSchoolId])
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setHeadOffices([])
+      return
+    }
+
     void fetchHeadOfficesPage(0, 500)
       .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
       .catch(() => setHeadOffices([]))
-  }, [])
+  }, [isSuperAdmin])
 
   useEffect(() => {
     if (!selectedSchoolIdForLookups) {

@@ -105,8 +105,12 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
-        return employeeRepository.searchEmployees(effectiveSchoolId, normalizedSearch, pageable)
-                .map(this::toDto);
+        List<EmployeeDto> rows = employeeRepository.findBySchoolIdOrderByIdDesc(effectiveSchoolId)
+                .stream()
+                .map(this::toDto)
+                .filter(dto -> matchesEmployeeSearch(dto, normalizedSearch))
+                .toList();
+        return slice(rows, pageable);
     }
 
     @Override
@@ -337,6 +341,18 @@ public class EmployeeServiceImpl implements EmployeeService {
         int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), rows.size());
         int end = Math.min(start + pageable.getPageSize(), rows.size());
         return new PageImpl<>(rows.subList(start, end), pageable, rows.size());
+    }
+
+    private boolean matchesEmployeeSearch(EmployeeDto dto, String search) {
+        if (search == null) return true;
+        String haystack = String.join(" ",
+                safe(dto.getName()),
+                safe(dto.getEmail()),
+                safe(dto.getPhone()),
+                safe(dto.getUsername()),
+                safe(dto.getRole()))
+                .toLowerCase();
+        return haystack.contains(search.toLowerCase());
     }
 
     private String safe(String v) {

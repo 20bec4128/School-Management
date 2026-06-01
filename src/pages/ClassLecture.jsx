@@ -149,7 +149,7 @@ const ClassLecture = ({ onNavigate }) => {
     const run = async () => {
       try {
         const [headOfficePage, schoolRows] = await Promise.allSettled([
-          fetchHeadOfficesPage(0, 500),
+          isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
           fetchSchoolsLookup(),
         ]);
 
@@ -177,7 +177,7 @@ const ClassLecture = ({ onNavigate }) => {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [isSuperAdmin]);
 
   const previewLectures = useMemo(() => {
     const selectedSchoolIdValue = pendingSchoolId;

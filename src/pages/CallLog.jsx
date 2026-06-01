@@ -98,7 +98,7 @@ const callTypeBadge = (type) => {
 }
 
 const CallLog = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'call-log'
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -125,6 +125,12 @@ const CallLog = ({ onNavigate }) => {
   const schoolOptions = isSuperAdmin
     ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
     : contextSchoolOptions
+  const currentSchool = useMemo(() => {
+    const targetSchoolId = activeSchoolId || authSchoolId || ''
+    return (Array.isArray(contextSchoolOptions) ? contextSchoolOptions : []).find((school) => String(school?.id ?? '') === String(targetSchoolId)) || null
+  }, [activeSchoolId, authSchoolId, contextSchoolOptions])
+  const schoolHeadOfficeId = currentSchool?.headOfficeId != null ? String(currentSchool.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+  const schoolHeadOfficeName = authHeadOfficeName || (schoolHeadOfficeId ? `Head Office ${schoolHeadOfficeId}` : '')
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
       if (filters.schoolId) return [String(filters.schoolId)]
@@ -721,22 +727,35 @@ const CallLog = ({ onNavigate }) => {
               />
             </div>
           ) : (
-            <div className="full">
-              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-                School
-              </label>
-              <select
-                id="schoolId"
-                className="form-control form-select"
-                value={pendingFilters.schoolId}
-                onChange={handlePendingFilterChange}
-              >
-                <option value="">All Schools</option>
-                {(contextSchoolOptions || []).map((s) => (
-                  <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="full">
+                <label htmlFor="headOfficeId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  Head Office
+                </label>
+                <input
+                  id="headOfficeId"
+                  className="form-control"
+                  value={schoolHeadOfficeName}
+                  readOnly
+                />
+              </div>
+              <div className="full">
+                <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  School
+                </label>
+                <select
+                  id="schoolId"
+                  className="form-control form-select"
+                  value={pendingFilters.schoolId}
+                  onChange={handlePendingFilterChange}
+                >
+                  <option value="">All Schools</option>
+                  {(contextSchoolOptions || []).map((s) => (
+                    <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
           <div>
             <label htmlFor="callType" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">

@@ -75,7 +75,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const VisitorPurpose = () => {
-  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'visitor-purpose'
   const PAGE_PERMISSIONS = {
     add: canAdd(PAGE_SLUG),
@@ -107,6 +107,12 @@ const VisitorPurpose = () => {
   const schoolOptions = isSuperAdmin
     ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
     : contextSchoolOptions
+  const currentSchool = useMemo(() => {
+    const targetSchoolId = activeSchoolId || authSchoolId || ''
+    return (Array.isArray(contextSchoolOptions) ? contextSchoolOptions : []).find((school) => String(school?.id ?? '') === String(targetSchoolId)) || null
+  }, [activeSchoolId, authSchoolId, contextSchoolOptions])
+  const schoolHeadOfficeId = currentSchool?.headOfficeId != null ? String(currentSchool.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
+  const schoolHeadOfficeName = authHeadOfficeName || (schoolHeadOfficeId ? `Head Office ${schoolHeadOfficeId}` : '')
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
       if (filters.schoolId) return [String(filters.schoolId)]
@@ -581,22 +587,35 @@ const VisitorPurpose = () => {
             />
             </div>
           ) : (
-            <div className="full">
-              <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
-                School
-              </label>
-              <select
-                id="schoolId"
-                className="form-control form-select"
-                value={pendingFilters.schoolId}
-                onChange={handlePendingFilterChange}
-              >
-                <option value="">All Schools</option>
-                {(contextSchoolOptions || []).map((s) => (
-                  <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="full">
+                <label htmlFor="headOfficeId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  Head Office
+                </label>
+                <input
+                  id="headOfficeId"
+                  className="form-control"
+                  value={schoolHeadOfficeName}
+                  readOnly
+                />
+              </div>
+              <div className="full">
+                <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
+                  School
+                </label>
+                <select
+                  id="schoolId"
+                  className="form-control form-select"
+                  value={pendingFilters.schoolId}
+                  onChange={handlePendingFilterChange}
+                >
+                  <option value="">All Schools</option>
+                  {(contextSchoolOptions || []).map((s) => (
+                    <option key={String(s.id)} value={String(s.id)}>{s.schoolName}</option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
           <div>
             <button type="button" onClick={handleResetFilters} className="btn btn-danger-200 text-danger-600 w-100">

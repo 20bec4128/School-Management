@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.CallLogDto;
 import com.School.School_management.Service.CallLogService;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +18,13 @@ public class CallLogController {
     private CallLogService service;
 
     @GetMapping("/school/{schoolId}")
+    @RequirePagePermission(slug = "call-log", action = "view")
     public List<CallLogDto> getAllBySchool(@PathVariable Long schoolId) {
         return service.getAllBySchool(schoolId);
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "call-log", action = "view")
     public Page<CallLogDto> page(
             @RequestParam Long schoolId,
             @RequestParam(required = false) String search,
@@ -33,16 +36,19 @@ public class CallLogController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "call-log", action = "add")
     public CallLogDto create(@RequestBody CallLogDto dto) {
         return service.save(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "call-log", action = "edit")
     public CallLogDto update(@PathVariable Long id, @RequestBody CallLogDto dto) {
         return service.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "call-log", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.ok().build();

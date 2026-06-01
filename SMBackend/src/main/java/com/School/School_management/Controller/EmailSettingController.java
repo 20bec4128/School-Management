@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.EmailSettingDto;
 import com.School.School_management.Service.EmailSettingService;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,7 @@ public class EmailSettingController {
     private EmailSettingService service;
 
     @GetMapping
+    @RequirePagePermission(slug = "email-setting", action = "view")
     public ResponseEntity<List<EmailSettingDto>> getEmailSettingsList(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId) {
@@ -33,21 +35,25 @@ public class EmailSettingController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "email-setting", action = "view")
     public ResponseEntity<EmailSettingDto> getEmailSettingById(@PathVariable Long id) {
         return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "email-setting", action = "add")
     public ResponseEntity<EmailSettingDto> createEmailSetting(@RequestBody EmailSettingDto dto) {
         return new ResponseEntity<>(service.create(dto), HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "email-setting", action = "edit")
     public ResponseEntity<EmailSettingDto> updateEmailSetting(@PathVariable Long id, @RequestBody EmailSettingDto dto) {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "email-setting", action = "delete")
     public ResponseEntity<Void> deleteEmailSetting(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.noContent().build();

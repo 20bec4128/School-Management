@@ -117,6 +117,7 @@ const Syllabus = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const roleUpper = String(role || '').toUpperCase()
+  const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const isTeacherScope = roleUpper === 'TEACHER'
   const sessionYearOptions = useAcademicYearOptions()
@@ -158,7 +159,7 @@ const Syllabus = ({ onNavigate }) => {
     }
 
     const [headOfficesResult, schoolsResult, classesResult, subjectsResult] = await Promise.allSettled([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
       fetchClasses(),
       fetchSubjects(),
@@ -171,7 +172,7 @@ const Syllabus = ({ onNavigate }) => {
     setSchoolsLookup(Array.isArray(schools) ? schools : [])
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
-  }, [canManage])
+  }, [canManage, isSuperAdmin])
 
   const loadSyllabuses = useCallback(async () => {
     setLoading(true)

@@ -12,6 +12,7 @@ import { fetchSchoolsLookup } from "../apis/schoolsApi";
 import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import { useAuth } from "../context/useAuth";
 import { useSchool } from "../context/useSchool";
+import { normalizeRole } from "../utils/roles";
 import "../assets/css/addModalShared.css";
 import ExportDropdown from "../components/ExportDropdown";
 
@@ -57,12 +58,12 @@ const ManageEmployee = ({ onNavigate }) => {
   } = useAuth();
   const PAGE_SLUG = "manage-employee";
 
-  const { activeSchoolId, setActiveSchoolId } = useSchool();
+  const { activeSchoolId } = useSchool();
 
-  const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
-  const isHeadOfficeAdmin =
-    String(role || "").toUpperCase() === "HEAD_OFFICE_ADMIN";
-  const isSchoolAdmin = String(role || "").toUpperCase() === "SCHOOL_ADMIN";
+  const normalizedRole = useMemo(() => normalizeRole(role), [role]);
+  const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
+  const isHeadOfficeAdmin = normalizedRole === "HEAD_OFFICE_ADMIN";
+  const isSchoolAdmin = normalizedRole === "SCHOOL_ADMIN";
 
   const navigateTo = typeof onNavigate === "function" ? onNavigate : () => {};
 
@@ -135,36 +136,6 @@ const ManageEmployee = ({ onNavigate }) => {
 
     return map;
   }, [currentSchoolOption, schools]);
-
-  const schoolPickerOptions = useMemo(() => {
-    if (isSchoolAdmin) {
-      return currentSchoolOption ? [currentSchoolOption] : [];
-    }
-
-    if (isHeadOfficeAdmin) {
-      const targetHeadOfficeId =
-        authHeadOfficeId != null ? String(authHeadOfficeId) : "";
-
-      return schools
-        .filter(
-          (school) =>
-            String(school?.headOfficeId ?? "") === targetHeadOfficeId,
-        )
-        .sort((a, b) =>
-          String(a?.schoolName || "").localeCompare(
-            String(b?.schoolName || ""),
-          ),
-        );
-    }
-
-    return [];
-  }, [
-    authHeadOfficeId,
-    currentSchoolOption,
-    isHeadOfficeAdmin,
-    isSchoolAdmin,
-    schools,
-  ]);
 
   const loadDesignationCacheForSchools = useCallback(async (schoolIds) => {
     const uniqueIds = Array.from(
@@ -625,30 +596,11 @@ const ManageEmployee = ({ onNavigate }) => {
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isHeadOfficeAdmin ? (
-            <select
-              className="form-select form-select-sm w-auto border border-neutral-300 radius-8 text-secondary-light"
-              value={activeSchoolId || ""}
-              onChange={(e) => {
-                setActiveSchoolId(e.target.value || null);
-                setCurrentPage(1);
-              }}
-            >
-              <option value="">Select School</option>
-              {schoolPickerOptions.map((school) => (
-                <option key={school.id} value={String(school.id)}>
-                  {school.schoolName}
-                </option>
-              ))}
-            </select>
-          ) : null}
-
           {canAdd(PAGE_SLUG) && (
             <button
               type="button"
               className="btn btn-primary-600 d-flex align-items-center gap-6"
               onClick={openAdd}
-              disabled={isHeadOfficeAdmin && !activeSchoolId}
             >
               <span className="d-flex text-md">
                 <i className="ri-add-large-line"></i>
@@ -669,7 +621,7 @@ const ManageEmployee = ({ onNavigate }) => {
       {isHeadOfficeAdmin && !activeSchoolId ? (
         <div className="alert alert-info d-flex align-items-center gap-8 mb-16">
           <i className="ri-information-line"></i>
-          <span>Please choose a school to load and manage employees.</span>
+          <span>Please choose a school from the topbar to load employees.</span>
         </div>
       ) : null}
 

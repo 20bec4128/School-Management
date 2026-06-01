@@ -1,4 +1,5 @@
 import { normalizeRole } from '../utils/roles'
+import { canShowNavPage } from '../utils/navigationVisibility'
 
 const makeTab = (key, label, page, icon, permission) => ({
   key,
@@ -181,13 +182,13 @@ export const getMobileNavigationConfig = ({ user, role, pagePermissions = {}, is
       0,
   )
 
-  const isVisible = (permission, page) => {
-    if (isSuperAdminRole) return true
+  const isVisible = (_permission, page) => {
     if (!page) return true
-    if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
-    const perms = pagePermissions[page]
-    if (!perms) return true
-    return perms.view === true
+    return canShowNavPage({
+      page,
+      pagePermissions,
+      isSuperAdminRole,
+    })
   }
 
   const tabs = raw.tabs

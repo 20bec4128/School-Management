@@ -441,12 +441,12 @@ const GenerateCertificate = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     try {
       const [headOfficePage, schoolList] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
         fetchSchoolsLookup(),
       ])
 
       setHeadOffices(
-        Array.isArray(headOfficePage?.content)
+        isSuperAdmin && Array.isArray(headOfficePage?.content)
           ? headOfficePage.content
               .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
               .filter((ho) => ho.id != null && ho.name)
@@ -458,7 +458,7 @@ const GenerateCertificate = ({ onNavigate }) => {
       setHeadOffices([])
       setSchools([])
     }
-  }, [])
+  }, [isSuperAdmin])
 
   const loadClassesAndSections = useCallback(async () => {
     if (!currentScopeForLookups.schoolId) {

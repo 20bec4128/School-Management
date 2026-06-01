@@ -179,7 +179,7 @@ const ExamGrade = () => {
   const loadLookups = async () => {
     if (isSchoolAdmin) return
     const [headOfficePage, list] = await Promise.all([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
     ])
     setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])

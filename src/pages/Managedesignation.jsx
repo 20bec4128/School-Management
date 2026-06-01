@@ -5,6 +5,7 @@ import useColumnVisibility from "../hooks/useColumnVisibility";
 import "../assets/css/addModalShared.css";
 
 import { useAuth } from "../context/useAuth";
+import { useSchool } from "../context/useSchool";
 import { fetchHeadOfficesPage } from "../apis/headOfficesApi";
 import { fetchSchoolsLookup } from "../apis/schoolsApi";
 import ManualScopeSelectors from "../components/ManualScopeSelectors";
@@ -45,6 +46,7 @@ const ManageDesignation = ({ onNavigate }) => {
     canEdit,
     canDelete,
   } = useAuth();
+  const { activeSchoolId } = useSchool();
   const PAGE_SLUG = "manage-designation";
 
   const role = useMemo(
@@ -69,10 +71,6 @@ const ManageDesignation = ({ onNavigate }) => {
 
   const [headOffices, setHeadOffices] = useState([]);
   const [schools, setSchools] = useState([]);
-
-  const [scopeSchoolId, setScopeSchoolId] = useState(() =>
-    authSchoolId != null ? String(authSchoolId) : "",
-  );
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -114,12 +112,18 @@ const ManageDesignation = ({ onNavigate }) => {
     return row?.schoolName || row?.name || fallbackName || "";
   };
 
+  const getListingSchoolId = () => {
+    if (isSchoolAdmin) return authSchoolId != null ? authSchoolId : null;
+    if (isHeadOfficeAdmin) return activeSchoolId ? Number(activeSchoolId) : null;
+    return null;
+  };
+
   const loadLookups = async () => {
     if (isSchoolAdmin) return;
 
     const tasks = [];
 
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       tasks.push(
         fetchHeadOfficesPage(0, 500)
           .then((page) => {
@@ -205,11 +209,7 @@ const ManageDesignation = ({ onNavigate }) => {
     Promise.resolve()
       .then(loadLookups)
       .then(() => {
-        const initialSchoolId = isSchoolAdmin
-          ? authSchoolId
-          : scopeSchoolId
-            ? Number(scopeSchoolId)
-            : null;
+        const initialSchoolId = getListingSchoolId();
 
         return loadDesignations({
           schoolId: initialSchoolId,
@@ -220,12 +220,14 @@ const ManageDesignation = ({ onNavigate }) => {
       })
       .catch((e) => setLoadError(e?.message || "Failed to load designations"))
       .finally(() => setBusy(false));
-  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch]);
+  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, activeSchoolId]);
 
   useEffect(() => {
     if (status !== "ready" || !token || isSchoolAdmin || isSuperAdmin) return;
 
-    if (!scopeSchoolId) {
+    const schoolId = activeSchoolId ? Number(activeSchoolId) : null;
+
+    if (!schoolId) {
       setRows([]);
       setTotalElements(0);
       setTotalPages(0);
@@ -236,7 +238,7 @@ const ManageDesignation = ({ onNavigate }) => {
     setBusy(true);
 
     loadDesignations({
-      schoolId: Number(scopeSchoolId),
+      schoolId,
       page: currentPage - 1,
       size: rowsPerPage,
       search: debouncedSearch,
@@ -248,7 +250,7 @@ const ManageDesignation = ({ onNavigate }) => {
     token,
     isSchoolAdmin,
     isSuperAdmin,
-    scopeSchoolId,
+    activeSchoolId,
     currentPage,
     rowsPerPage,
     debouncedSearch,
@@ -358,7 +360,7 @@ const ManageDesignation = ({ onNavigate }) => {
     try {
       await deleteDesignation(row.id);
 
-      const nextSchoolId = isSchoolAdmin ? authSchoolId : row.schoolId;
+      const nextSchoolId = getListingSchoolId();
 
       await loadDesignations({
         schoolId: nextSchoolId,
@@ -406,31 +408,6 @@ const ManageDesignation = ({ onNavigate }) => {
         </div>
 
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isHeadOfficeAdmin && !isSuperAdmin ? (
-            <select
-              className="form-select"
-              style={{ minWidth: 240 }}
-              value={scopeSchoolId}
-              onChange={(e) => {
-                setScopeSchoolId(e.target.value);
-                setCurrentPage(1);
-              }}
-            >
-              <option value="">Select School</option>
-              {(Array.isArray(schools) ? schools : [])
-                .filter(
-                  (school) =>
-                    String(school?.headOfficeId ?? "") ===
-                    String(authHeadOfficeId ?? ""),
-                )
-                .map((school) => (
-                  <option key={school.id} value={String(school.id)}>
-                    {school.schoolName}
-                  </option>
-                ))}
-            </select>
-          ) : null}
-
           {canAdd(PAGE_SLUG) && (
             <button
               type="button"
@@ -580,7 +557,9 @@ const ManageDesignation = ({ onNavigate }) => {
                       colSpan={visibleColumnCount + 2}
                       className="text-center py-40 text-secondary-light"
                     >
-                      No designations found.
+                      {isHeadOfficeAdmin && !activeSchoolId
+                        ? "Select a school from the topbar to load designations."
+                        : "No designations found."}
                     </td>
                   </tr>
                 ) : (

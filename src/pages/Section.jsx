@@ -152,7 +152,7 @@ const Section = () => {
 
   const loadLookups = useCallback(async () => {
     const [headOfficesResult, schoolsResult, teachersResult] = await Promise.allSettled([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
       fetchTeachers(),
     ])
@@ -175,7 +175,7 @@ const Section = () => {
         .filter((t) => t.id != null && t.name)
         .sort((a, b) => a.name.localeCompare(b.name)),
     )
-  }, [])
+  }, [isSuperAdmin])
 
   const loadSections = useCallback(async () => {
     setLoading(true)

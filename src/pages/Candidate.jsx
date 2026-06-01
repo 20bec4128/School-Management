@@ -46,8 +46,19 @@ const getSchoolById = (rows, schoolId) =>
   (Array.isArray(rows) ? rows : []).find((row) => String(row?.id ?? '') === String(schoolId ?? '')) || null
 
 const Candidate = ({ onNavigate }) => {
-  const { canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    schoolId: authSchoolId,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const PAGE_SLUG = 'candidate'
+  const normalizedRole = String(role || '').toUpperCase()
+  const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -76,10 +87,38 @@ const Candidate = ({ onNavigate }) => {
   const schoolOptionsFor = useCallback(
     (headOfficeId) =>
       [...schoolsLookup]
-        .filter((school) => !headOfficeId || String(school?.headOfficeId ?? '') === String(headOfficeId))
+        .filter((school) => {
+          if (isSchoolAdmin && authSchoolId != null) {
+            return String(school?.id ?? '') === String(authSchoolId)
+          }
+          if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+            return String(school?.headOfficeId ?? '') === String(authHeadOfficeId)
+          }
+          return !headOfficeId || String(school?.headOfficeId ?? '') === String(headOfficeId)
+        })
         .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b))),
-    [schoolsLookup],
+    [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, schoolsLookup],
   )
+
+  const fixedHeadOfficeId = !isSuperAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : ''
+  const fixedSchoolId = isSchoolAdmin && authSchoolId != null ? String(authSchoolId) : ''
+  const pendingHeadOfficeId = isSuperAdmin
+    ? (pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)
+    : fixedHeadOfficeId
+  const pendingSchoolId = isSuperAdmin
+    ? (pendingFilters.school === 'Select' ? '' : pendingFilters.school)
+    : fixedSchoolId || (pendingFilters.school === 'Select' ? '' : pendingFilters.school)
+
+  const getDefaultFilters = useCallback(() => {
+    if (isSuperAdmin) return { ...emptyFilters }
+    return {
+      headOfficeId: fixedHeadOfficeId || 'Select',
+      school: fixedSchoolId || 'Select',
+      academicYear: 'Select',
+      classId: 'Select',
+      sectionId: 'Select',
+    }
+  }, [fixedHeadOfficeId, fixedSchoolId, isSuperAdmin])
 
   const academicYearOptions = useMemo(
     () =>
@@ -93,8 +132,6 @@ const Candidate = ({ onNavigate }) => {
     [academicYearsLookup],
   )
 
-  const pendingHeadOfficeId = pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId
-  const pendingSchoolId = pendingFilters.school === 'Select' ? '' : pendingFilters.school
   const pendingSchoolSet = useMemo(() => {
     const ids = new Set(
       schoolOptionsFor(pendingHeadOfficeId).map((school) => String(school?.id ?? '')),
@@ -153,7 +190,7 @@ const Candidate = ({ onNavigate }) => {
 
   const loadLookups = useCallback(async () => {
     const [headOfficesResult, schoolsResult, classesResult, sectionsResult, academicYearsResult] = await Promise.allSettled([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
       fetchClasses(),
       fetchSections(),
@@ -161,24 +198,32 @@ const Candidate = ({ onNavigate }) => {
     ])
 
     setHeadOffices(
-      unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
-        .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
-        .filter((ho) => ho.id != null && ho.name)
-        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+      isSuperAdmin
+        ? unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
+            .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
+            .filter((ho) => ho.id != null && ho.name)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+        : [],
     )
     setSchoolsLookup(unwrapCollection(schoolsResult.status === 'fulfilled' ? schoolsResult.value : []))
     setClassesLookup(unwrapCollection(classesResult.status === 'fulfilled' ? classesResult.value : []))
     setSectionsLookup(unwrapCollection(sectionsResult.status === 'fulfilled' ? sectionsResult.value : []))
     setAcademicYearsLookup(unwrapCollection(academicYearsResult.status === 'fulfilled' ? academicYearsResult.value : []))
-  }, [])
+  }, [isSuperAdmin])
 
   const loadCandidates = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      const effectiveHeadOfficeId = isSuperAdmin
+        ? (filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined)
+        : fixedHeadOfficeId || undefined
+      const effectiveSchoolId = isSuperAdmin
+        ? (filters.school !== 'Select' ? filters.school : undefined)
+        : fixedSchoolId || (filters.school !== 'Select' ? filters.school : undefined)
       const data = await fetchCandidatesPage(currentPage - 1, rowsPerPage, {
-        headOfficeId: filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined,
-        schoolId: filters.school !== 'Select' ? filters.school : undefined,
+        headOfficeId: effectiveHeadOfficeId,
+        schoolId: effectiveSchoolId,
         classId: filters.classId !== 'Select' ? filters.classId : undefined,
         sectionId: filters.sectionId !== 'Select' ? filters.sectionId : undefined,
         academicYear: filters.academicYear !== 'Select' ? filters.academicYear : undefined,
@@ -195,7 +240,7 @@ const Candidate = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, filters.academicYear, filters.classId, filters.headOfficeId, filters.school, filters.sectionId, rowsPerPage, search])
+  }, [currentPage, filters.academicYear, filters.classId, filters.headOfficeId, filters.school, filters.sectionId, fixedHeadOfficeId, fixedSchoolId, isSuperAdmin, rowsPerPage, search])
 
   useEffect(() => {
     void loadLookups()
@@ -210,6 +255,13 @@ const Candidate = ({ onNavigate }) => {
       setCurrentPage(totalPages)
     }
   }, [currentPage, totalPages])
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    const defaults = getDefaultFilters()
+    setPendingFilters(defaults)
+    setFilters(defaults)
+  }, [getDefaultFilters, isSuperAdmin])
 
 
 
@@ -253,8 +305,9 @@ const Candidate = ({ onNavigate }) => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const defaults = getDefaultFilters()
+    setPendingFilters(defaults)
+    setFilters(defaults)
     setCurrentPage(1)
   }
 
@@ -569,9 +622,6 @@ const Candidate = ({ onNavigate }) => {
           </div>
         </div>
       </div>
-
-
-
       <SlideSidebar
         isOpen={isFilterSidebarOpen}
         title="Filter Candidates"
@@ -580,31 +630,52 @@ const Candidate = ({ onNavigate }) => {
       >
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <ManualScopeSelectors
-              enabled
-              headOffices={headOffices}
-              schoolOptions={schoolOptionsFor(pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)}
-              selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
-              onHeadOfficeChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  headOfficeId: value || 'Select',
-                  school: 'Select',
-                  classId: 'Select',
-                  sectionId: 'Select',
-                }))
-              }
-              selectedSchoolId={pendingFilters.school === 'Select' ? '' : pendingFilters.school}
-              onSchoolChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  school: value || 'Select',
-                  classId: 'Select',
-                  sectionId: 'Select',
-                }))
-              }
-              schoolLabel="School"
-            />
+            {isSuperAdmin ? (
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOffices}
+                schoolOptions={schoolOptionsFor(pendingHeadOfficeId)}
+                selectedHeadOfficeId={pendingHeadOfficeId}
+                onHeadOfficeChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    headOfficeId: value || 'Select',
+                    school: 'Select',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }
+                selectedSchoolId={pendingSchoolId}
+                onSchoolChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    school: value || 'Select',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }
+                schoolLabel="School"
+              />
+            ) : (
+              <ManualScopeSelectors
+                enabled
+                headOffices={[]}
+                schoolOptions={schoolOptionsFor(fixedHeadOfficeId)}
+                selectedSchoolId={pendingSchoolId}
+                onSchoolChange={(value) =>
+                  !isSchoolAdmin &&
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    school: value || 'Select',
+                    classId: 'Select',
+                    sectionId: 'Select',
+                  }))
+                }
+                schoolLabel="School"
+                showHeadOfficeSelector={false}
+                disabled={isSchoolAdmin}
+              />
+            )}
           </div>
 
           <div>

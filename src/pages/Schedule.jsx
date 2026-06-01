@@ -306,7 +306,7 @@ const Schedule = ({ onNavigate }) => {
     }
 
     const [headOfficePage, allSchools] = await Promise.all([
-      fetchHeadOfficesPage(0, 500),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup(),
     ])
     const accessibleSchools = isHeadOfficeAdmin

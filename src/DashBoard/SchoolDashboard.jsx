@@ -9,7 +9,7 @@ import { normalizeRole } from '../utils/roles'
 import { fetchStudentsPage } from '../apis/studentsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
-import { fetchFeeCollections } from '../apis/feeCollectionApi'
+import { fetchFeeCollectionsBySchool } from '../apis/feeCollectionApi'
 import { fetchBooksPage } from '../apis/booksApi'
 import { fetchEvents } from '../apis/eventApi'
 import { fetchLeaveApplications } from '../apis/leaveApplicationsApi'
@@ -211,8 +211,19 @@ const Dashboard = () => {
   const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
   const isRealSuperAdmin = normalizeRole(role) === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizeRole(role) === 'HEAD_OFFICE_ADMIN'
-  const isSuperAdmin = isRealSuperAdmin || isHeadOfficeAdmin
-  const manualScope = useManualSchoolScope(isSuperAdmin, isHeadOfficeAdmin ? authHeadOfficeId : null)
+  const isScopeSelectorVisible = isRealSuperAdmin || isHeadOfficeAdmin
+  const manualScope = useManualSchoolScope(
+    isScopeSelectorVisible,
+    isHeadOfficeAdmin ? authHeadOfficeId : null,
+    { autoSelectSchool: !isHeadOfficeAdmin }
+  )
+  const activeSchoolId = useMemo(() => {
+    if (isHeadOfficeAdmin) return manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : ''
+    if (manualScope.selectedSchoolId) return String(manualScope.selectedSchoolId)
+    if (authSchoolId != null && String(authSchoolId).trim()) return String(authSchoolId)
+    return ''
+  }, [authSchoolId, isHeadOfficeAdmin, manualScope.selectedSchoolId])
+  const hasSelectedSchool = Boolean(activeSchoolId)
   const [totalStudents, setTotalStudents] = useState(null)
   const [monthlyStudentsTrend, setMonthlyStudentsTrend] = useState(null)
   const [studentsLoading, setStudentsLoading] = useState(false)
@@ -248,34 +259,25 @@ const Dashboard = () => {
   const [incomeExpenseLoading, setIncomeExpenseLoading] = useState(false)
 
   const studentScope = useMemo(() => {
-    if (isSuperAdmin) {
-      if (manualScope.selectedSchoolId) {
-        return { schoolId: manualScope.selectedSchoolId }
-      }
-      if (manualScope.selectedHeadOfficeId) {
-        return { headOfficeId: manualScope.selectedHeadOfficeId }
-      }
-      return null
-    }
-
-    if (authSchoolId != null && String(authSchoolId).trim()) {
-      return { schoolId: String(authSchoolId) }
-    }
-
-    if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-      return { headOfficeId: String(authHeadOfficeId) }
-    }
-
-    return null
-  }, [authHeadOfficeId, authSchoolId, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.selectedSchoolId])
+    if (!hasSelectedSchool) return null
+    return { schoolId: activeSchoolId }
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadTotalStudents = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) {
+          setTotalStudents(0)
+          setMonthlyStudentsTrend(null)
+        }
+        return
+      }
+
       setStudentsLoading(true)
       try {
-        const { rows, totalElements } = await fetchAllStudents(studentScope || {})
+        const { rows, totalElements } = await fetchAllStudents(studentScope)
         if (cancelled) return
         setTotalStudents(Number(totalElements ?? 0))
 
@@ -324,12 +326,20 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope])
+  }, [hasSelectedSchool, studentScope])
 
   useEffect(() => {
     let cancelled = false
 
     const loadTotalTeachers = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) {
+          setTotalTeachers(0)
+          setMonthlyTeachersTrend(null)
+        }
+        return
+      }
+
       setTeachersLoading(true)
       try {
         const [teachersList, schoolsList] = await Promise.all([
@@ -346,28 +356,7 @@ const Dashboard = () => {
 
         const filteredTeachers = teachersList.filter((t) => {
           const teacherSchoolId = t?.schoolId != null ? String(t.schoolId) : ''
-          const teacherSchool = teacherSchoolId ? schoolsById.get(teacherSchoolId) : null
-          const teacherHeadOfficeId = String(t?.headOfficeId ?? t?.headOffice?.id ?? teacherSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(teacherSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(teacherHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(teacherSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(teacherHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
+          return String(teacherSchoolId) === String(activeSchoolId)
         })
 
         setTotalTeachers(filteredTeachers.length)
@@ -417,51 +406,32 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadTotalFees = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) {
+          setTotalFees(0)
+          setMonthlyFeesTrend(null)
+          setRevenueTotalFee(0)
+          setRevenueCollectedFee(0)
+          setRevenueChartSeries([
+            { name: 'Total Fee', color: '#25A194', data: Array(12).fill(0) },
+            { name: 'Collected Fee', color: '#FF7A2C', data: Array(12).fill(0) },
+          ])
+        }
+        return
+      }
+
       setFeesLoading(true)
       try {
-        const [feesList, schoolsList] = await Promise.all([
-          fetchFeeCollections(),
-          fetchSchoolsLookup(),
-        ])
+        const feesList = await fetchFeeCollectionsBySchool(activeSchoolId)
         if (cancelled) return
 
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
-
-        const filteredFees = (Array.isArray(feesList) ? feesList : []).filter((f) => {
-          const feeSchoolId = f?.schoolId != null ? String(f.schoolId) : ''
-          const feeSchool = feeSchoolId ? schoolsById.get(feeSchoolId) : null
-          const feeHeadOfficeId = String(f?.headOfficeId ?? f?.headOffice?.id ?? feeSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(feeSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(feeHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(feeSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(feeHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
-        })
+        const filteredFees = Array.isArray(feesList) ? feesList : []
 
         let sumCollected = 0
         let sumTotalFee = 0
@@ -555,16 +525,24 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadTotalBooks = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) {
+          setTotalBooks(0)
+          setMonthlyBooksTrend(null)
+        }
+        return
+      }
+
       setBooksLoading(true)
       try {
         const [booksData, schoolsList] = await Promise.all([
-          fetchAllBooks(studentScope || {}),
+          fetchAllBooks({ schoolId: activeSchoolId }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
@@ -576,31 +554,7 @@ const Dashboard = () => {
         }
 
         const booksList = booksData.rows || []
-        const filteredBooks = booksList.filter((b) => {
-          const bookSchoolId = b?.schoolId != null ? String(b.schoolId) : ''
-          const bookSchool = bookSchoolId ? schoolsById.get(bookSchoolId) : null
-          const bookHeadOfficeId = String(b?.headOfficeId ?? b?.headOffice?.id ?? bookSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(bookSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(bookHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(bookSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(bookHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
-        })
+        const filteredBooks = booksList.filter((b) => String(b?.schoolId ?? '') === String(activeSchoolId))
 
         let sumQuantity = 0
         const now = new Date()
@@ -656,16 +610,21 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadUpcomingEvents = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) setEvents([])
+        return
+      }
+
       setEventsLoading(true)
       try {
         const [eventsList, schoolsList] = await Promise.all([
-          fetchEvents(),
+          fetchEvents({ schoolId: activeSchoolId }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
@@ -676,31 +635,7 @@ const Dashboard = () => {
           schoolsById.set(String(school.id), school)
         }
 
-        const filteredEvents = (Array.isArray(eventsList) ? eventsList : []).filter((e) => {
-          const eventSchoolId = e?.schoolId != null ? String(e.schoolId) : ''
-          const eventSchool = eventSchoolId ? schoolsById.get(eventSchoolId) : null
-          const eventHeadOfficeId = String(e?.headOfficeId ?? e?.headOffice?.id ?? eventSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(eventSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(eventHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(eventSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(eventHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
-        })
+        const filteredEvents = Array.isArray(eventsList) ? eventsList : []
 
         const today = new Date()
         today.setHours(0, 0, 0, 0)
@@ -731,16 +666,21 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadLeaveRequests = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) setLeaveRequests([])
+        return
+      }
+
       setLeaveRequestsLoading(true)
       try {
         const [leaveList, schoolsList] = await Promise.all([
-          fetchLeaveApplications(),
+          fetchLeaveApplications({ schoolId: activeSchoolId }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
@@ -751,31 +691,7 @@ const Dashboard = () => {
           schoolsById.set(String(school.id), school)
         }
 
-        const filteredLeaves = (Array.isArray(leaveList) ? leaveList : []).filter((leave) => {
-          const leaveSchoolId = leave?.schoolId != null ? String(leave.schoolId) : ''
-          const leaveSchool = leaveSchoolId ? schoolsById.get(leaveSchoolId) : null
-          const leaveHeadOfficeId = String(leave?.headOfficeId ?? leave?.headOffice?.id ?? leaveSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(leaveSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(leaveHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(leaveSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(leaveHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
-        })
+        const filteredLeaves = Array.isArray(leaveList) ? leaveList : []
 
         const sortedLeaves = filteredLeaves.sort((a, b) => {
           const dateA = new Date(a.createdAt || a.applicationDate || 0)
@@ -797,51 +713,26 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadTotalEmployees = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) setTotalEmployees(0)
+        return
+      }
+
       setEmployeesLoading(true)
       try {
         const [employeesList, schoolsList] = await Promise.all([
-          fetchEmployees(),
+          fetchEmployees({ schoolId: activeSchoolId }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
 
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
-
-        const filteredEmployees = (Array.isArray(employeesList) ? employeesList : []).filter((emp) => {
-          const empSchoolId = emp?.schoolId != null ? String(emp.schoolId) : ''
-          const empSchool = empSchoolId ? schoolsById.get(empSchoolId) : null
-          const empHeadOfficeId = String(emp?.headOfficeId ?? emp?.headOffice?.id ?? empSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(empSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(empHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(empSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(empHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
-        })
+        const filteredEmployees = (Array.isArray(employeesList) ? employeesList : []).filter((emp) => String(emp?.schoolId ?? '') === String(activeSchoolId))
 
         setTotalEmployees(filteredEmployees.length)
       } catch (err) {
@@ -857,55 +748,36 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   useEffect(() => {
     let cancelled = false
 
     const loadIncomeVsExpense = async () => {
+      if (!hasSelectedSchool) {
+        if (!cancelled) {
+          setTotalIncome(0)
+          setTotalExpense(0)
+          setIncomeExpenseChartLabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'])
+          setIncomeExpenseChartSeries([
+            { name: 'Income', color: '#25A194', fill: '#25A194', data: Array(9).fill(0) },
+            { name: 'Expense', color: '#FF7A2C', fill: '#FF7A2C', data: Array(9).fill(0) },
+          ])
+        }
+        return
+      }
+
       setIncomeExpenseLoading(true)
       try {
         const [incomesList, expendituresList, schoolsList] = await Promise.all([
-          fetchIncomes(),
-          fetchExpenditures(),
+          fetchIncomes({ schoolId: activeSchoolId }),
+          fetchExpenditures({ schoolId: activeSchoolId }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
 
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
-
-        const filterRecord = (item) => {
-          const itemSchoolId = item?.schoolId != null ? String(item.schoolId) : ''
-          const itemSchool = itemSchoolId ? schoolsById.get(itemSchoolId) : null
-          const itemHeadOfficeId = String(item?.headOfficeId ?? item?.headOffice?.id ?? itemSchool?.headOfficeId ?? '')
-
-          if (isSuperAdmin) {
-            if (manualScope.selectedSchoolId) {
-              return String(itemSchoolId) === String(manualScope.selectedSchoolId)
-            }
-            if (manualScope.selectedHeadOfficeId) {
-              return String(itemHeadOfficeId) === String(manualScope.selectedHeadOfficeId)
-            }
-            return true
-          }
-
-          if (authSchoolId != null && String(authSchoolId).trim()) {
-            return String(itemSchoolId) === String(authSchoolId)
-          }
-
-          if (authHeadOfficeId != null && String(authHeadOfficeId).trim()) {
-            return String(itemHeadOfficeId) === String(authHeadOfficeId)
-          }
-
-          return true
-        }
-
-        const filteredIncomes = (Array.isArray(incomesList) ? incomesList : []).filter(filterRecord)
-        const filteredExpenditures = (Array.isArray(expendituresList) ? expendituresList : []).filter(filterRecord)
+        const filteredIncomes = Array.isArray(incomesList) ? incomesList : []
+        const filteredExpenditures = Array.isArray(expendituresList) ? expendituresList : []
 
         const parseIncomeDate = (income) => {
           const rawValue = income?.incomeDate || income?.createdAt
@@ -983,7 +855,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [studentScope, isSuperAdmin, manualScope.selectedSchoolId, manualScope.selectedHeadOfficeId, authSchoolId, authHeadOfficeId])
+  }, [activeSchoolId, hasSelectedSchool])
 
   const totalStudentsLabel = studentsLoading ? '...' : new Intl.NumberFormat(undefined).format(totalStudents ?? 0)
   const monthlyStudentsCountLabel = studentsLoading
@@ -1060,10 +932,10 @@ const Dashboard = () => {
             <h6 className="fw-semibold mb-0">Dashboard</h6>
             <p className="text-neutral-600 mt-4 mb-0">School - Manage your school, track attendance, expense, and net worth.</p>
           </div>
-          {isSuperAdmin ? (
+          {isScopeSelectorVisible ? (
             <div className="school-dashboard__scope-selector">
               <ManualScopeSelectors
-                enabled={isSuperAdmin}
+                enabled={isScopeSelectorVisible}
                 headOffices={manualScope.headOffices}
                 schoolOptions={manualScope.schoolOptions}
                 selectedHeadOfficeId={manualScope.selectedHeadOfficeId}

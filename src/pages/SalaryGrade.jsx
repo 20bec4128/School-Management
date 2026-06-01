@@ -5,6 +5,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { deleteSalaryGrade, fetchSalaryGradesPage } from '../apis/salaryGradeApi'
@@ -30,6 +31,7 @@ const columnOptions = [
 
 const SalaryGrade = ({ onNavigate }) => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const { activeSchoolId } = useSchool()
   const PAGE_SLUG = 'salary-grade'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -44,8 +46,6 @@ const SalaryGrade = ({ onNavigate }) => {
 
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
-
-  const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -92,7 +92,7 @@ const SalaryGrade = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     if (isSchoolAdmin) return
     const tasks = []
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       tasks.push(
         fetchHeadOfficesPage(0, 500)
           .then((page) => {
@@ -113,14 +113,14 @@ const SalaryGrade = ({ onNavigate }) => {
 
   const loadSalaryGrades = async ({ headOfficeId, schoolId, page = 0, size = 10, search = '' } = {}) => {
     const effectiveSchoolId = (() => {
-      if (isSchoolAdmin) return authSchoolId
-      return schoolId || null
+      if (isSchoolAdmin) return authSchoolId || null
+      if (schoolId) return schoolId
+      if (isHeadOfficeAdmin && activeSchoolId) return Number(activeSchoolId)
+      return null
     })()
     const effectiveHeadOfficeId = (() => {
-      if (isSchoolAdmin) {
-        const school = schoolsById.get(String(authSchoolId ?? ''))
-        return school?.headOfficeId ?? authHeadOfficeId ?? null
-      }
+      if (effectiveSchoolId != null) return null
+      if (isSuperAdmin) return headOfficeId || null
       if (isHeadOfficeAdmin) return authHeadOfficeId ?? null
       return headOfficeId || null
     })()
@@ -156,8 +156,10 @@ const SalaryGrade = ({ onNavigate }) => {
 
   const initialSchoolId = useMemo(() => {
     if (isSchoolAdmin) return authSchoolId ?? null
-    return scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId !== 'Select' ? Number(filters.schoolId) : null)
-  }, [authSchoolId, filters.schoolId, isSchoolAdmin, scopeSchoolId])
+    if (filters.schoolId !== 'Select' && filters.schoolId) return Number(filters.schoolId)
+    if (isHeadOfficeAdmin) return activeSchoolId ? Number(activeSchoolId) : null
+    return null
+  }, [activeSchoolId, authSchoolId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin])
 
   const initialHeadOfficeId = useMemo(() => {
     if (isSuperAdmin && filters.headOfficeId !== 'Select') return Number(filters.headOfficeId)
@@ -173,7 +175,7 @@ const SalaryGrade = ({ onNavigate }) => {
       .then(loadLookups)
       .then(() => {
         return loadSalaryGrades({ 
-          headOfficeId: isSchoolAdmin ? resolvedSchoolHeadOfficeId : initialHeadOfficeId,
+          headOfficeId: isSchoolAdmin ? null : initialHeadOfficeId,
           schoolId: initialSchoolId,
           page: currentPage - 1,
           size: rowsPerPage,
@@ -235,13 +237,6 @@ const SalaryGrade = ({ onNavigate }) => {
     for (let p = start; p <= end; p++) pages.push(p)
     return pages
   }
-
-  const schoolOptionsForScope = useMemo(() => {
-    const list = Array.isArray(schools) ? schools : []
-    if (isSuperAdmin) return list
-    if (isHeadOfficeAdmin) return list.filter(s => String(s.headOfficeId) === String(authHeadOfficeId))
-    return []
-  }, [schools, isSuperAdmin, isHeadOfficeAdmin, authHeadOfficeId])
 
   const selectedFilterHeadOfficeId =
     isSuperAdmin ? filters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : ''
@@ -320,23 +315,6 @@ const SalaryGrade = ({ onNavigate }) => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isHeadOfficeAdmin && !isSuperAdmin ? (
-            <select
-              className="form-select"
-              style={{ minWidth: 240 }}
-              value={scopeSchoolId}
-              onChange={(e) => {
-                setScopeSchoolId(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="">Select School</option>
-              {schoolOptionsForScope.map((s) => (
-                <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
-              ))}
-            </select>
-          ) : null}
-
           {canAdd(PAGE_SLUG) && (
             <button
               type="button"
@@ -469,7 +447,9 @@ const SalaryGrade = ({ onNavigate }) => {
                       colSpan={visibleColumnCount + 1}
                       className="text-center py-40 text-secondary-light"
                     >
-                      No salary grade records found.
+                      {isHeadOfficeAdmin && !activeSchoolId && !filters.schoolId
+                        ? 'Select a school from the topbar or filter panel to load salary grades.'
+                        : 'No salary grade records found.'}
                     </td>
                   </tr>
                 ) : (
@@ -528,16 +508,8 @@ const SalaryGrade = ({ onNavigate }) => {
                                     headOfficeId:
                                       isSuperAdmin && filters.headOfficeId !== 'Select'
                                         ? Number(filters.headOfficeId)
-                                        : isHeadOfficeAdmin
-                                          ? authHeadOfficeId
-                                          : null,
-                                    schoolId: isSchoolAdmin
-                                      ? authSchoolId
-                                      : scopeSchoolId
-                                        ? Number(scopeSchoolId)
-                                        : filters.schoolId !== 'Select'
-                                          ? Number(filters.schoolId)
-                                          : null,
+                                        : null,
+                                    schoolId: initialSchoolId,
                                     page: currentPage - 1,
                                     size: rowsPerPage,
                                     search: debouncedSearch

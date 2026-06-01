@@ -3,6 +3,7 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { normalizeRole } from '../utils/roles'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
@@ -143,6 +144,7 @@ const LeaveApplicationWorkspace = ({
   onNavigate = null,
 }) => {
   const { status, token, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
+  const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole), [authRole])
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
@@ -180,7 +182,6 @@ const LeaveApplicationWorkspace = ({
   const [editForm, setEditForm] = useState(createEmptyForm())
   const [addAttachment, setAddAttachment] = useState(null)
   const [editAttachment, setEditAttachment] = useState(null)
-  const [scopeSchoolId, setScopeSchoolId] = useState(() => (isFixedSchoolRole && authSchoolId != null ? String(authSchoolId) : ''))
 
   const columnOptions = useMemo(() => {
     const columns = [
@@ -270,7 +271,7 @@ const LeaveApplicationWorkspace = ({
 
   const getListingSchoolId = () => {
     if (isFixedSchoolRole) return authSchoolId
-    if (isHeadOfficeAdmin) return scopeSchoolId ? Number(scopeSchoolId) : null
+    if (isHeadOfficeAdmin) return activeSchoolId ? Number(activeSchoolId) : null
     return null
   }
 
@@ -415,7 +416,7 @@ const LeaveApplicationWorkspace = ({
     }
     const [schoolList, headOfficePage] = await Promise.all([
       fetchSchoolsLookup().catch(() => []),
-      fetchHeadOfficesPage(0, 500).catch(() => ({ content: [] })),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500).catch(() => ({ content: [] })) : Promise.resolve({ content: [] }),
     ])
     setSchools(Array.isArray(schoolList) ? schoolList : [])
     const content = Array.isArray(headOfficePage?.content) ? headOfficePage.content : []
@@ -550,7 +551,7 @@ const LeaveApplicationWorkspace = ({
   }
 
   const loadRowData = async () => {
-    if (isHeadOfficeAdmin && !scopeSchoolId) {
+    if (isHeadOfficeAdmin && !activeSchoolId) {
       setRows([])
       return
     }
@@ -571,7 +572,7 @@ const LeaveApplicationWorkspace = ({
         } else if (isSuperAdmin) {
           await refreshRows(null)
         } else if (isHeadOfficeAdmin) {
-          if (scopeSchoolId) await refreshRows(Number(scopeSchoolId))
+          if (activeSchoolId) await refreshRows(Number(activeSchoolId))
           else setRows([])
         } else {
           await refreshRows(authSchoolId)
@@ -586,7 +587,7 @@ const LeaveApplicationWorkspace = ({
     return () => {
       active = false
     }
-  }, [status, token, role, authSchoolId, scopeSchoolId, statusFilter])
+  }, [status, token, role, authSchoolId, activeSchoolId, statusFilter])
 
   useEffect(() => {
     if (defaultOpenAdd && showForm && showTable) {
@@ -599,7 +600,7 @@ const LeaveApplicationWorkspace = ({
     if (status !== 'ready' || !token) return
     if (!isHeadOfficeAdmin) return
     void loadRowData()
-  }, [scopeSchoolId, status, token, isHeadOfficeAdmin])
+  }, [activeSchoolId, status, token, isHeadOfficeAdmin])
 
   const resetFormLookups = () => {
     setRoles([])
@@ -747,7 +748,7 @@ const LeaveApplicationWorkspace = ({
         : isHeadOfficeAdmin
           ? authHeadOfficeId
           : '',
-      schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? scopeSchoolId || '' : '',
+      schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? activeSchoolId || '' : '',
     }
     const nextForm = createEmptyForm(defaults)
     setAddForm(nextForm)
@@ -836,7 +837,7 @@ const LeaveApplicationWorkspace = ({
           : isHeadOfficeAdmin
             ? authHeadOfficeId
             : '',
-        schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? scopeSchoolId || '' : '',
+        schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? activeSchoolId || '' : '',
       }))
       setAddAttachment(null)
       if (!showTable && typeof onNavigate === 'function') {
@@ -874,7 +875,7 @@ const LeaveApplicationWorkspace = ({
           : isHeadOfficeAdmin
             ? authHeadOfficeId
             : '',
-        schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? scopeSchoolId || '' : '',
+        schoolId: isFixedSchoolRole ? authSchoolId : isHeadOfficeAdmin ? activeSchoolId || '' : '',
       }))
       setEditAttachment(null)
       setEditingId(null)
@@ -1337,7 +1338,7 @@ const LeaveApplicationWorkspace = ({
     )
   }
 
-  const canCreate = !isHeadOfficeAdmin || !!scopeSchoolId
+  const canCreate = true
 
   const renderInlineAddPage = () => (
     <div className="card h-100">
@@ -1470,21 +1471,6 @@ const LeaveApplicationWorkspace = ({
         </div>
         {showCreateButton ? (
           <div className="d-flex align-items-center gap-12 flex-wrap">
-            {isHeadOfficeAdmin ? (
-              <select
-                className="form-select border border-neutral-300 radius-8 text-secondary-light"
-                style={{ minWidth: 240 }}
-                value={scopeSchoolId}
-                onChange={(e) => setScopeSchoolId(e.target.value)}
-              >
-                <option value="">Select School</option>
-                {schoolSelectOptions.map((item) => (
-                  <option key={item.id} value={String(item.id)}>
-                    {item.schoolName}
-                  </option>
-                ))}
-              </select>
-            ) : null}
             {showForm ? (
               <button
                 type="button"
@@ -1577,7 +1563,7 @@ const LeaveApplicationWorkspace = ({
                 ) : paginatedRows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
-                      {isHeadOfficeAdmin && !scopeSchoolId ? 'Select a school to view leave applications.' : 'No leave applications found.'}
+                      {isHeadOfficeAdmin && !activeSchoolId ? 'Select a school from the topbar to load leave applications.' : 'No leave applications found.'}
                     </td>
                   </tr>
                 ) : (

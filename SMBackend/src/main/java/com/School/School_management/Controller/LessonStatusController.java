@@ -5,7 +5,7 @@ import com.School.School_management.Dto.UpdateLessonStatusRequest;
 import com.School.School_management.Dto.UpdateStatusResponseDto;
 import com.School.School_management.Dto.UpdateTopicStatusRequest;
 import com.School.School_management.Service.LessonStatusService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,8 +19,8 @@ public class LessonStatusController {
         this.service = service;
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "LESSON_PLAN_VIEW_OWN", "LESSON_PLAN_VIEW_CHILD", "*"})
     @GetMapping("/page-data")
+    @RequirePagePermission(slug = "lesson-status", action = "view")
     public LessonStatusPageDataDto pageData(
             @RequestParam Long schoolId,
             @RequestParam Long classId,
@@ -30,14 +30,14 @@ public class LessonStatusController {
         return service.pageData(schoolId, classId, subjectId, academicYear);
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "*"})
     @PutMapping("/update-topic")
+    @RequirePagePermission(slug = "lesson-status", action = "edit")
     public UpdateStatusResponseDto updateTopic(@Valid @RequestBody UpdateTopicStatusRequest request) {
         return service.updateTopic(request);
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "*"})
     @PutMapping("/update-lesson")
+    @RequirePagePermission(slug = "lesson-status", action = "edit")
     public UpdateStatusResponseDto updateLesson(@Valid @RequestBody UpdateLessonStatusRequest request) {
         return service.updateLesson(request);
     }

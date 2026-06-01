@@ -328,7 +328,7 @@ const FeeCollection = ({ onNavigate } = {}) => {
     if (status !== 'ready' || !token) return
     if (isSchoolAdmin) return
     const tasks = []
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       tasks.push(
         fetchHeadOfficesPage(0, 500)
           .then((page) => {

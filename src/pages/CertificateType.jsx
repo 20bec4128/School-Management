@@ -126,11 +126,11 @@ const CertificateType = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     try {
       const [headOfficePage, schools] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
         fetchSchoolsLookup(),
       ])
       setHeadOffices(
-        Array.isArray(headOfficePage?.content)
+        isSuperAdmin && Array.isArray(headOfficePage?.content)
           ? headOfficePage.content
               .map((ho) => ({
                 id: ho?.id,
@@ -146,7 +146,7 @@ const CertificateType = ({ onNavigate }) => {
       setHeadOffices([])
       setAllSchools([])
     }
-  }, [])
+  }, [isSuperAdmin])
 
   const loadCertificateTypes = useCallback(async () => {
     if (status !== 'ready' || !token) return

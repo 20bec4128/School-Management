@@ -59,6 +59,7 @@ const LessonPlan = () => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const roleUpper = String(role || '').toUpperCase()
+  const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(
     () => getChildScope(parentChildren, selectedChildId),
@@ -140,7 +141,7 @@ const LessonPlan = () => {
         }
 
         const [headOffices, schools, classes, subjects] = await Promise.all([
-          fetchHeadOfficesPage(0, 500),
+          isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
           fetchSchoolsLookup(),
           fetchClasses(),
           fetchSubjects(),
@@ -160,7 +161,7 @@ const LessonPlan = () => {
     return () => {
       ignore = true
     }
-  }, [defaultAcademicYear, effectiveClassId, effectiveSchoolId, isStudentScope])
+  }, [defaultAcademicYear, effectiveClassId, effectiveSchoolId, isStudentScope, isSuperAdmin])
 
   const filtered = useMemo(() => {
     if (!hasSearched) return []

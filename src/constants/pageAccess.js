@@ -168,8 +168,8 @@ export const PAGE_KEY_PERMISSIONS = {
   'result-sms-create': ['*'],
 
   // HR module
-  'manage-designation': ['DEPARTMENT_MANAGE', '*'],
-  'manage-employee': ['ADMIN_USER_MANAGE', '*'],
+  'manage-designation': ['DEPARTMENT_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
+  'manage-employee': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'leave-type': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'leave-application': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'waiting-application': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],

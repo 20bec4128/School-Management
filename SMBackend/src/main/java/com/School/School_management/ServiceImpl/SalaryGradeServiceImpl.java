@@ -79,33 +79,30 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
         List<Long> scopedSchoolIds = resolveSchoolIds(user, headOfficeId, schoolId);
 
         if (scopedSchoolIds == null) {
-            List<SalaryGradeDto> rows = salaryGradeRepository.findAllByOrderByIdDesc()
-                    .stream()
-                    .map(this::toDto)
-                    .filter(dto -> {
-                        if (normalizedSearch == null) return true;
-                        String haystack = String.join(" ",
-                                safe(dto.getSchoolName()),
-                                safe(dto.getGradeName()),
-                                safe(dto.getNote()))
-                                .toLowerCase();
-                        return haystack.contains(normalizedSearch.toLowerCase());
-                    })
-                    .toList();
-            return slice(rows, pageable);
+            return slice(filterRows(
+                    salaryGradeRepository.findAllByOrderByIdDesc().stream().map(this::toDto).toList(),
+                    normalizedSearch),
+                pageable);
         }
 
         if (scopedSchoolIds.isEmpty()) {
             return Page.empty(pageable);
         }
 
+        List<SalaryGradeDto> rows;
         if (scopedSchoolIds.size() == 1) {
-            return salaryGradeRepository.searchSalaryGrades(scopedSchoolIds.get(0), normalizedSearch, pageable)
-                    .map(this::toDto);
+            rows = salaryGradeRepository.findBySchoolIdOrderByIdDesc(scopedSchoolIds.get(0))
+                    .stream()
+                    .map(this::toDto)
+                    .toList();
+        } else {
+            rows = salaryGradeRepository.findBySchoolIdInOrderByIdDesc(scopedSchoolIds)
+                    .stream()
+                    .map(this::toDto)
+                    .toList();
         }
 
-        return salaryGradeRepository.searchSalaryGradesIn(scopedSchoolIds, normalizedSearch, pageable)
-                .map(this::toDto);
+        return slice(filterRows(rows, normalizedSearch), pageable);
     }
 
     @Override
@@ -306,6 +303,21 @@ public class SalaryGradeServiceImpl implements SalaryGradeService {
         int start = Math.min(pageable.getPageNumber() * pageable.getPageSize(), rows.size());
         int end = Math.min(start + pageable.getPageSize(), rows.size());
         return new PageImpl<>(rows.subList(start, end), pageable, rows.size());
+    }
+
+    private List<SalaryGradeDto> filterRows(List<SalaryGradeDto> rows, String normalizedSearch) {
+        if (normalizedSearch == null) return rows;
+        String needle = normalizedSearch.toLowerCase();
+        return rows.stream()
+                .filter(dto -> {
+                    String haystack = String.join(" ",
+                            safe(dto.getSchoolName()),
+                            safe(dto.getGradeName()),
+                            safe(dto.getNote()))
+                            .toLowerCase();
+                    return haystack.contains(needle);
+                })
+                .toList();
     }
 
     private String safe(String value) {

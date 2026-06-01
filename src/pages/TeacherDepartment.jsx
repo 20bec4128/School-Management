@@ -217,6 +217,10 @@ const TeacherDepartment = () => {
     let ignore = false
     const run = async () => {
       try {
+        if (!isSuperAdmin) {
+          if (!ignore) setHeadOfficesLookup([])
+          return
+        }
         const page = await fetchHeadOfficesPage(0, 500)
         if (!ignore) setHeadOfficesLookup(Array.isArray(page?.content) ? page.content : [])
       } catch {
@@ -227,7 +231,7 @@ const TeacherDepartment = () => {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [isSuperAdmin])
 
   useEffect(() => {
     if (currentPage > totalPages) {

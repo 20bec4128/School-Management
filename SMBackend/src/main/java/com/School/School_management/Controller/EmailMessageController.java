@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.EmailMessageDto;
 import com.School.School_management.Service.EmailMessageService;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,7 @@ public class EmailMessageController {
     private EmailMessageService service;
 
     @GetMapping
+    @RequirePagePermission(slug = "absent-email", action = "view")
     public ResponseEntity<List<EmailMessageDto>> getEmails(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -35,6 +37,7 @@ public class EmailMessageController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "absent-email", action = "view")
     public ResponseEntity<Page<EmailMessageDto>> getEmailsPaginated(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -46,21 +49,25 @@ public class EmailMessageController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "absent-email", action = "view")
     public ResponseEntity<EmailMessageDto> getEmailById(@PathVariable Long id) {
         return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "absent-email", action = "add")
     public ResponseEntity<EmailMessageDto> sendEmail(@RequestBody EmailMessageDto dto) {
         return new ResponseEntity<>(service.create(dto), HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "absent-email", action = "edit")
     public ResponseEntity<EmailMessageDto> updateEmail(@PathVariable Long id, @RequestBody EmailMessageDto dto) {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "absent-email", action = "delete")
     public ResponseEntity<Void> deleteEmail(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.noContent().build();

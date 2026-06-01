@@ -5,16 +5,11 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import ExportDropdown from '../components/ExportDropdown'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import TablePagination from '../components/table/TablePagination'
+import { useAuth } from '../context/useAuth'
 import '../assets/css/addModalShared.css'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { deleteGuardian, fetchGuardiansPage } from '../apis/guardiansApi'
-
-const emptyFilters = {
-  headOfficeId: 'Select',
-  schoolId: 'Select',
-  profession: 'Select',
-}
 
 const columnOptions = [
   { key: 'schoolName', label: 'School' },
@@ -47,8 +42,20 @@ const unwrapCollection = (value) => {
 const schoolLabel = (row) => row?.schoolName || row?.name || ''
 
 const Guardian = ({ onNavigate }) => {
-  const { canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    headOfficeId: authHeadOfficeId,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const PAGE_SLUG = 'guardian'
+  const normalizedRole = String(role || '').toUpperCase()
+  const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -66,42 +73,89 @@ const Guardian = ({ onNavigate }) => {
   const [selectedRows, setSelectedRows] = useState([])
 
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false)
-  const [pendingFilters, setPendingFilters] = useState(emptyFilters)
-  const [filters, setFilters] = useState(emptyFilters)
+  const initialFilters = {
+    headOfficeId: isSuperAdmin ? 'Select' : authHeadOfficeId != null ? String(authHeadOfficeId) : 'Select',
+    schoolId: isSchoolAdmin ? (authSchoolId != null ? String(authSchoolId) : 'Select') : 'Select',
+    profession: 'Select',
+  }
+  const [pendingFilters, setPendingFilters] = useState(initialFilters)
+  const [filters, setFilters] = useState(initialFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
-  const schoolOptionsFor = useCallback(
-    (headOfficeId) =>
-      schoolsLookup
-        .filter((s) => !headOfficeId || String(s?.headOfficeId ?? '') === String(headOfficeId))
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
+  const scopedSchoolOptions = useMemo(() => {
+    if (isSchoolAdmin) {
+      return currentSchoolOption ? [currentSchoolOption] : []
+    }
+
+    if (isHeadOfficeAdmin) {
+      return schoolsLookup
+        .filter((s) => String(s?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
         .slice()
-        .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b))),
-    [schoolsLookup],
-  )
+        .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b)))
+    }
+
+    if (pendingFilters.headOfficeId && pendingFilters.headOfficeId !== 'Select') {
+      return schoolsLookup
+        .filter((s) => String(s?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
+        .slice()
+        .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b)))
+    }
+
+    return schoolsLookup.slice().sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b)))
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schoolsLookup])
 
   const loadLookups = useCallback(async () => {
-    const [headOfficesResult, schoolsResult] = await Promise.allSettled([
-      fetchHeadOfficesPage(0, 500),
-      fetchSchoolsLookup(),
-    ])
+    try {
+      if (isSuperAdmin) {
+        const [headOfficesResult, schoolsResult] = await Promise.allSettled([
+          fetchHeadOfficesPage(0, 500),
+          fetchSchoolsLookup(),
+        ])
 
-    setHeadOffices(
-      unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
-        .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
-        .filter((ho) => ho.id != null && ho.name)
-        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
-    )
-    setSchoolsLookup(unwrapCollection(schoolsResult.status === 'fulfilled' ? schoolsResult.value : []))
-  }, [])
+        setHeadOffices(
+          unwrapCollection(headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : [])
+            .map((ho) => ({ id: ho?.id, name: ho?.name || ho?.headOfficeName || '' }))
+            .filter((ho) => ho.id != null && ho.name)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        )
+        setSchoolsLookup(unwrapCollection(schoolsResult.status === 'fulfilled' ? schoolsResult.value : []))
+        return
+      }
+
+      const schoolsResult = await fetchSchoolsLookup()
+      setSchoolsLookup(unwrapCollection(schoolsResult))
+    } catch {
+      setHeadOffices([])
+      setSchoolsLookup([])
+    }
+  }, [isSuperAdmin])
 
   const loadGuardians = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      const effectiveHeadOfficeId = isSuperAdmin
+        ? (filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined)
+        : authHeadOfficeId ?? undefined
+      const effectiveSchoolId = isSuperAdmin
+        ? (filters.schoolId !== 'Select' ? filters.schoolId : undefined)
+        : isSchoolAdmin
+          ? authSchoolId ?? undefined
+          : (filters.schoolId !== 'Select' ? filters.schoolId : undefined)
+
       const data = await fetchGuardiansPage(currentPage - 1, rowsPerPage, {
-        headOfficeId: filters.headOfficeId !== 'Select' ? filters.headOfficeId : undefined,
-        schoolId: filters.schoolId !== 'Select' ? filters.schoolId : undefined,
+        headOfficeId: effectiveHeadOfficeId,
+        schoolId: effectiveSchoolId,
         profession: filters.profession !== 'Select' ? filters.profession : undefined,
         search: search.trim(),
       })
@@ -116,7 +170,7 @@ const Guardian = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, rowsPerPage, filters, search])
+  }, [authHeadOfficeId, authSchoolId, currentPage, isSchoolAdmin, isSuperAdmin, rowsPerPage, filters, search])
 
   useEffect(() => {
     loadLookups().catch(() => {})
@@ -153,8 +207,8 @@ const Guardian = ({ onNavigate }) => {
   }
 
   const handleResetFilters = () => {
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    setPendingFilters(initialFilters)
+    setFilters(initialFilters)
     setCurrentPage(1)
     setIsFilterSidebarOpen(false)
   }
@@ -396,27 +450,44 @@ const Guardian = ({ onNavigate }) => {
       <SlideSidebar isOpen={isFilterSidebarOpen} title="Filter Guardians" onClose={() => setIsFilterSidebarOpen(false)} className="filter-sidebar">
         <form className="p-20 d-grid grid-cols-2 gap-16" onSubmit={handleApplyFilters}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <ManualScopeSelectors
-              enabled
-              headOffices={headOffices}
-              schoolOptions={schoolOptionsFor(pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId)}
-              selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
-              onHeadOfficeChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  headOfficeId: value || 'Select',
-                  schoolId: 'Select',
-                }))
-              }
-              selectedSchoolId={pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId}
-              onSchoolChange={(value) =>
-                setPendingFilters((prev) => ({
-                  ...prev,
-                  schoolId: value || 'Select',
-                }))
-              }
-              schoolLabel="School"
-            />
+            {isSuperAdmin ? (
+              <ManualScopeSelectors
+                enabled
+                headOffices={headOffices}
+                schoolOptions={scopedSchoolOptions}
+                selectedHeadOfficeId={pendingFilters.headOfficeId === 'Select' ? '' : pendingFilters.headOfficeId}
+                onHeadOfficeChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    headOfficeId: value || 'Select',
+                    schoolId: 'Select',
+                  }))
+                }
+                selectedSchoolId={pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId}
+                onSchoolChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: value || 'Select',
+                  }))
+                }
+                schoolLabel="School"
+              />
+            ) : (
+              <ManualScopeSelectors
+                enabled
+                showHeadOfficeSelector={false}
+                schoolOptions={scopedSchoolOptions}
+                selectedSchoolId={pendingFilters.schoolId === 'Select' ? '' : pendingFilters.schoolId}
+                onSchoolChange={(value) =>
+                  setPendingFilters((prev) => ({
+                    ...prev,
+                    schoolId: value || 'Select',
+                  }))
+                }
+                schoolLabel="School"
+                disabled={isSchoolAdmin}
+              />
+            )}
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>

@@ -205,14 +205,14 @@ const Lesson = ({ onNavigate }) => {
   useEffect(() => {
     const loadLookups = async () => {
       const [ho, s] = await Promise.allSettled([
-        fetchHeadOfficesPage(0, 500),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
         fetchSchoolsLookup(),
       ]);
       setHeadOfficesLookup(ho.status === "fulfilled" ? (Array.isArray(ho.value?.content) ? ho.value.content : []) : []);
       setSchoolsLookup(s.status === "fulfilled" ? s.value : []);
     };
     loadLookups();
-  }, []);
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     if (!selectedSchoolIdForLookups) {

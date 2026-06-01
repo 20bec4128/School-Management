@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.ComplainDto;
 import com.School.School_management.Service.ComplainService;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +27,13 @@ public class ComplainController {
     }
 
     @GetMapping("/school/{schoolId}")
+    @RequirePagePermission(slug = "manage-complain", action = "view")
     public List<ComplainDto> getAllBySchool(@PathVariable Long schoolId) {
         return service.getAllBySchool(schoolId);
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "manage-complain", action = "view")
     public Page<ComplainDto> page(
             @RequestParam Long schoolId,
             @RequestParam(required = false) String search,
@@ -44,16 +47,19 @@ public class ComplainController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "manage-complain", action = "add")
     public ComplainDto create(@RequestBody ComplainDto dto) {
         return service.save(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "manage-complain", action = "edit")
     public ComplainDto update(@PathVariable Long id, @RequestBody ComplainDto dto) {
         return service.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "manage-complain", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.ok().build();

@@ -3,6 +3,7 @@ import WizardPopup from '../components/WizardPopup'
 import SlideSidebar from '../components/SlideSidebar'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { normalizeRole } from '../utils/roles'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
@@ -112,6 +113,7 @@ const LeaveType = ({ onNavigate } = {}) => {
     canEdit,
     canDelete,
   } = useAuth()
+  const { activeSchoolId } = useSchool()
   const PAGE_SLUG = 'leave-type'
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
@@ -129,10 +131,6 @@ const LeaveType = ({ onNavigate } = {}) => {
   const [schools, setSchools] = useState([])
   const [applicantRoles, setApplicantRoles] = useState([])
   const [designations, setDesignations] = useState([])
-  const [scopeSchoolId, setScopeSchoolId] = useState(() =>
-    isFixedSchoolRole && authSchoolId != null ? String(authSchoolId) : '',
-  )
-
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -323,7 +321,7 @@ const LeaveType = ({ onNavigate } = {}) => {
 
   const getListingSchoolIdNumber = () => {
     if (isFixedSchoolRole) return authSchoolId
-    if (isHeadOfficeAdmin) return scopeSchoolId ? Number(scopeSchoolId) : null
+    if (isHeadOfficeAdmin) return activeSchoolId ? Number(activeSchoolId) : null
     return null
   }
 
@@ -413,12 +411,6 @@ const LeaveType = ({ onNavigate } = {}) => {
   }
 
   useEffect(() => {
-    if (isFixedSchoolRole && authSchoolId != null) {
-      setScopeSchoolId(String(authSchoolId))
-    }
-  }, [isFixedSchoolRole, authSchoolId])
-
-  useEffect(() => {
     if (status !== 'ready' || !token) return
 
     let active = true
@@ -429,7 +421,7 @@ const LeaveType = ({ onNavigate } = {}) => {
         await loadSchools()
         const initialSchoolId = (() => {
           if (isFixedSchoolRole) return authSchoolId
-          if (isHeadOfficeAdmin) return scopeSchoolId ? Number(scopeSchoolId) : null
+          if (isHeadOfficeAdmin) return activeSchoolId ? Number(activeSchoolId) : null
           return null
         })()
         if (initialSchoolId) {
@@ -442,8 +434,8 @@ const LeaveType = ({ onNavigate } = {}) => {
         } else if (isSuperAdmin) {
           await loadRows()
         } else if (isHeadOfficeAdmin) {
-          if (scopeSchoolId) {
-            await loadRows(Number(scopeSchoolId))
+          if (activeSchoolId) {
+            await loadRows(Number(activeSchoolId))
           } else if (active) {
             setRows([])
           }
@@ -459,7 +451,7 @@ const LeaveType = ({ onNavigate } = {}) => {
     return () => {
       active = false
     }
-  }, [status, token, role, authSchoolId])
+  }, [status, token, role, authSchoolId, activeSchoolId])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -467,7 +459,7 @@ const LeaveType = ({ onNavigate } = {}) => {
 
     let active = true
     const run = async () => {
-      if (!scopeSchoolId) {
+      if (!activeSchoolId) {
         setRows([])
         setApplicantRoles([])
         return
@@ -475,8 +467,8 @@ const LeaveType = ({ onNavigate } = {}) => {
       setError('')
       setBusy(true)
       try {
-        await loadApplicantRolesForSchool(Number(scopeSchoolId))
-        await loadRows(Number(scopeSchoolId))
+        await loadApplicantRolesForSchool(Number(activeSchoolId))
+        await loadRows(Number(activeSchoolId))
       } catch (e) {
         if (active) setError(e?.message || 'Failed to load leave types')
       } finally {
@@ -488,7 +480,7 @@ const LeaveType = ({ onNavigate } = {}) => {
     return () => {
       active = false
     }
-  }, [status, token, isHeadOfficeAdmin, scopeSchoolId])
+  }, [status, token, isHeadOfficeAdmin, activeSchoolId])
 
   const handleFormChange = (form, setter) => (e) => {
     const { id, value } = e.target
@@ -538,7 +530,7 @@ const LeaveType = ({ onNavigate } = {}) => {
     const defaultSchoolId = isFixedSchoolRole
       ? authSchoolId
       : isHeadOfficeAdmin
-        ? scopeSchoolId || ''
+        ? activeSchoolId || ''
         : ''
     const nextForm = makeEmptyForm(defaultSchoolId, '')
     setAddForm(nextForm)
@@ -905,7 +897,7 @@ const LeaveType = ({ onNavigate } = {}) => {
     )
   }
 
-  const canCreate = !isHeadOfficeAdmin || !!scopeSchoolId
+  const canCreate = true
   const selectedFilterHeadOfficeId =
     isSuperAdmin ? pendingFilters.headOfficeId : isHeadOfficeAdmin ? String(authHeadOfficeId ?? '') : ''
 
@@ -926,23 +918,6 @@ const LeaveType = ({ onNavigate } = {}) => {
         </div>
 
         <div className="d-flex align-items-center gap-12 flex-wrap">
-          {isHeadOfficeAdmin ? (
-            <select
-              className="form-select border border-neutral-300 radius-8 text-secondary-light"
-              style={{ minWidth: 240 }}
-              value={scopeSchoolId}
-              onChange={(e) => setScopeSchoolId(e.target.value)}
-            >
-              <option value="">Select School</option>
-              {schools
-                .filter((item) => item?.headOfficeId == null || String(item.headOfficeId) === String(authHeadOfficeId))
-                .map((item) => (
-                  <option key={item.id} value={String(item.id)}>
-                    {item.schoolName}
-                  </option>
-                ))}
-            </select>
-          ) : null}
           {canAdd(PAGE_SLUG) && (
             <button
               type="button"
@@ -1078,8 +1053,8 @@ const LeaveType = ({ onNavigate } = {}) => {
                       colSpan={visibleColumnCount + 2}
                       className="text-center py-40 text-secondary-light"
                     >
-                      {isHeadOfficeAdmin && !scopeSchoolId
-                        ? 'Select a school to view leave types.'
+                      {isHeadOfficeAdmin && !activeSchoolId
+                        ? 'Select a school from the topbar to load leave types.'
                         : 'No leave type records found.'}
                     </td>
                   </tr>

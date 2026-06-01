@@ -65,6 +65,7 @@ const LiveClass = ({ onNavigate }) => {
   const { user, role, schoolId, studentClassId, studentSectionId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
+  const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
@@ -100,7 +101,7 @@ const LiveClass = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     if (isStudentScope) return
     const [headOffices, schools, classes, sections, subjects] = await Promise.all([
-      fetchHeadOfficesPage(0, 500).catch(() => ({ content: [] })),
+      isSuperAdmin ? fetchHeadOfficesPage(0, 500).catch(() => ({ content: [] })) : Promise.resolve({ content: [] }),
       fetchSchoolsLookup().catch(() => []),
       fetchClasses().catch(() => []),
       fetchSections().catch(() => []),
@@ -111,7 +112,7 @@ const LiveClass = ({ onNavigate }) => {
     setClassesLookup(classes)
     setSectionsLookup(sections)
     setSubjectsLookup(subjects)
-  }, [isStudentScope])
+  }, [isStudentScope, isSuperAdmin])
 
   const loadRows = useCallback(async () => {
     setLoading(true)

@@ -55,6 +55,7 @@ const Submission = ({ onNavigate }) => {
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : () => {}
 
   const roleUpper = String(role || '').toUpperCase()
+  const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isStudent = roleUpper === 'STUDENT'
   const isParent = roleUpper === 'PARENT'
 
@@ -129,10 +130,15 @@ const Submission = ({ onNavigate }) => {
   }, [loadData])
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setHeadOffices([])
+      return
+    }
+
     void fetchHeadOfficesPage(0, 500)
       .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
       .catch(() => setHeadOffices([]))
-  }, [])
+  }, [isSuperAdmin])
 
   const nameMaps = useMemo(() => {
     const schoolMap = new Map(schools.map(s => [String(s.id), s.schoolName || s.name]))

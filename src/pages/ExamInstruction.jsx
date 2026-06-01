@@ -86,7 +86,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ExamInstruction = () => {
-  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'exam-instruction'
   const isSuperAdmin = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === 'SUPER_ADMIN',
@@ -128,7 +128,7 @@ const ExamInstruction = () => {
     const loadLookups = async () => {
       try {
         const [headOfficePage, schoolList] = await Promise.all([
-          fetchHeadOfficesPage(0, 500),
+          isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
@@ -146,7 +146,7 @@ const ExamInstruction = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token])
+  }, [isSuperAdmin, status, token])
 
   const scopeSchoolOptions = useMemo(() => {
     const rows = Array.isArray(schools) ? schools : []

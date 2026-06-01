@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.LessonPlanEntryDto;
 import com.School.School_management.Service.LessonPlanEntryService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.School.School_management.auth.SchoolGuard;
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
@@ -20,8 +20,8 @@ public class LessonPlanEntryController {
         this.schoolGuard = schoolGuard;
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "LESSON_PLAN_VIEW_OWN", "LESSON_PLAN_VIEW_CHILD", "*"})
     @GetMapping
+    @RequirePagePermission(slug = "lesson-plan", action = "view")
     public List<LessonPlanEntryDto> getAll(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String academicYear,
@@ -34,24 +34,23 @@ public class LessonPlanEntryController {
         return service.getAll(schoolId, academicYear, classId, subjectId, lessonId, topicId);
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "*"})
     @PostMapping
+    @RequirePagePermission(slug = "lesson-plan", action = "add")
     public LessonPlanEntryDto create(@RequestBody LessonPlanEntryDto dto) {
         dto.setSchoolId(schoolGuard.schoolIdForWrite(CurrentUserHolder.get(), dto.getSchoolId()));
         return service.create(dto);
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "*"})
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "lesson-plan", action = "edit")
     public LessonPlanEntryDto update(@PathVariable Long id, @RequestBody LessonPlanEntryDto dto) {
         dto.setSchoolId(schoolGuard.schoolIdForWrite(CurrentUserHolder.get(), dto.getSchoolId()));
         return service.update(id, dto);
     }
 
-    @RequirePermission({"LESSON_PLAN_MANAGE", "LESSON_PLAN_MANAGE_ASSIGNED", "*"})
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "lesson-plan", action = "delete")
     public void delete(@PathVariable Long id) {
         service.delete(id);
     }
 }
-

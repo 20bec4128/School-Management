@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.PaymentSettingDto;
 import com.School.School_management.Service.PaymentSettingService;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,7 @@ public class PaymentSettingController {
     private PaymentSettingService service;
 
     @GetMapping
+    @RequirePagePermission(slug = "payment-setting", action = "view")
     public ResponseEntity<List<PaymentSettingDto>> getPaymentSettingsList(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId) {
@@ -34,6 +36,7 @@ public class PaymentSettingController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "payment-setting", action = "view")
     public ResponseEntity<Page<PaymentSettingDto>> getPaymentSettingsPaginated(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -44,21 +47,25 @@ public class PaymentSettingController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "payment-setting", action = "view")
     public ResponseEntity<PaymentSettingDto> getPaymentSettingById(@PathVariable Long id) {
         return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "payment-setting", action = "add")
     public ResponseEntity<PaymentSettingDto> createPaymentSetting(@RequestBody PaymentSettingDto dto) {
         return new ResponseEntity<>(service.create(dto), HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "payment-setting", action = "edit")
     public ResponseEntity<PaymentSettingDto> updatePaymentSetting(@PathVariable Long id, @RequestBody PaymentSettingDto dto) {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "payment-setting", action = "delete")
     public ResponseEntity<Void> deletePaymentSetting(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.noContent().build();

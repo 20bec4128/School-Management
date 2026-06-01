@@ -141,6 +141,10 @@ const ManageTeacher = ({ onNavigate }) => {
     let ignore = false
     const run = async () => {
       try {
+        if (!isSuperAdmin) {
+          if (!ignore) setHeadOffices([])
+          return
+        }
         const page = await fetchHeadOfficesPage(0, 500)
         if (!ignore) setHeadOffices(Array.isArray(page?.content) ? page.content : [])
       } catch {
@@ -151,7 +155,7 @@ const ManageTeacher = ({ onNavigate }) => {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [isSuperAdmin])
 
   const handleApplyFilters = (e) => {
     if (e) e.preventDefault()

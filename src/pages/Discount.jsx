@@ -6,6 +6,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { createDiscount, deleteDiscount, fetchDiscountsPage, updateDiscount } from '../apis/discountsApi'
@@ -83,6 +84,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 
 const Discount = () => {
   const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const { activeSchoolId } = useSchool()
   const PAGE_SLUG = 'discount'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -97,8 +99,6 @@ const Discount = () => {
 
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
-
-  const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -149,10 +149,17 @@ const Discount = () => {
     return row?.name || ''
   }
 
+  const currentSchoolId = useMemo(() => {
+    if (isSchoolAdmin) return authSchoolId != null ? Number(authSchoolId) : null
+    if (filters.schoolId) return Number(filters.schoolId)
+    if (isHeadOfficeAdmin) return activeSchoolId ? Number(activeSchoolId) : null
+    return null
+  }, [activeSchoolId, authSchoolId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin])
+
   const loadLookups = async () => {
     if (isSchoolAdmin) return
     const tasks = []
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       tasks.push(
         fetchHeadOfficesPage(0, 500).then((page) => {
           const content = Array.isArray(page?.content) ? page.content : []
@@ -201,9 +208,8 @@ const Discount = () => {
     Promise.resolve()
       .then(loadLookups)
       .then(() => {
-        const initialSchoolId = isSchoolAdmin ? authSchoolId : (scopeSchoolId ? Number(scopeSchoolId) : (filters.schoolId ? Number(filters.schoolId) : null))
-        return loadDiscounts({ 
-          schoolId: initialSchoolId,
+        return loadDiscounts({
+          schoolId: currentSchoolId,
           page: currentPage - 1,
           size: rowsPerPage,
           search: debouncedSearch
@@ -211,7 +217,7 @@ const Discount = () => {
       })
       .catch((e) => setLoadError(e?.message || 'Failed to load discounts'))
       .finally(() => setBusy(false))
-  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters])
+  }, [status, token, role, currentPage, rowsPerPage, debouncedSearch, filters, currentSchoolId])
 
   const handleChange = (setter) => (e) => {
     const { id, value } = e.target
@@ -404,23 +410,6 @@ const Discount = () => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isHeadOfficeAdmin && !isSuperAdmin ? (
-            <select
-              className="form-select"
-              style={{ minWidth: 240 }}
-              value={scopeSchoolId}
-              onChange={(e) => {
-                setScopeSchoolId(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="">Select School</option>
-              {schoolOptionsForScope.map((s) => (
-                <option key={s.id} value={String(s.id)}>{s.schoolName}</option>
-              ))}
-            </select>
-          ) : null}
-
           {canAdd(PAGE_SLUG) && (
             <button
               type="button"
@@ -552,7 +541,9 @@ const Discount = () => {
                       colSpan={visibleColumnCount + 1}
                       className="text-center py-40 text-secondary-light"
                     >
-                      No discount records found.
+                      {isHeadOfficeAdmin && !activeSchoolId && !filters.schoolId
+                        ? 'Select a school from the topbar or filter panel to load discounts.'
+                        : 'No discount records found.'}
                     </td>
                   </tr>
                 ) : (
@@ -613,7 +604,7 @@ const Discount = () => {
                                 try {
                                   await deleteDiscount(row.id)
                                   await loadDiscounts({
-                                    schoolId: isSchoolAdmin ? authSchoolId : (scopeSchoolId || filters.schoolId || null),
+                                    schoolId: currentSchoolId,
                                     page: currentPage - 1,
                                     size: rowsPerPage,
                                     search: debouncedSearch

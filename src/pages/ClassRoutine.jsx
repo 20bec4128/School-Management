@@ -938,8 +938,8 @@ const ClassRoutine = () => {
                       <div className="cr-month-calendar__viewport">
                         <div className="cr-month-calendar__surface">
                           <div className="d-grid gap-8 text-center cr-month-calendar__week">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label) => (
-                              <div key={label} className="text-secondary-light fw-semibold py-4">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
+                              <div key={`${label}-${index}`} className="text-secondary-light fw-semibold py-4">
                                 {label}
                               </div>
                             ))}

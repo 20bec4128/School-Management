@@ -2,6 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.QuestionBankDto;
 import com.School.School_management.Service.QuestionBankService;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +25,7 @@ public class QuestionBankController {
     private QuestionBankService questionBankService;
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "question-bank", action = "view")
     public ResponseEntity<Map<String, Object>> getQuestionBanksPage(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -39,16 +41,19 @@ public class QuestionBankController {
     }
 
     @PostMapping("/create")
+    @RequirePagePermission(slug = "question-bank", action = "add")
     public ResponseEntity<QuestionBankDto> createQuestionBank(@RequestBody QuestionBankDto dto) {
         return ResponseEntity.ok(questionBankService.createQuestionBank(dto));
     }
 
     @PutMapping("/update/{id}")
+    @RequirePagePermission(slug = "question-bank", action = "edit")
     public ResponseEntity<QuestionBankDto> updateQuestionBank(@PathVariable Long id, @RequestBody QuestionBankDto dto) {
         return ResponseEntity.ok(questionBankService.updateQuestionBank(id, dto));
     }
 
     @DeleteMapping("/delete/{id}")
+    @RequirePagePermission(slug = "question-bank", action = "delete")
     public ResponseEntity<Void> deleteQuestionBank(@PathVariable Long id) {
         questionBankService.deleteQuestionBank(id);
         return ResponseEntity.noContent().build();

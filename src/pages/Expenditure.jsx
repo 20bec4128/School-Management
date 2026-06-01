@@ -7,6 +7,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchExpenditureHeads } from '../apis/expenditureHeadsApi'
@@ -95,6 +96,7 @@ const Expenditure = ({ onNavigate } = {}) => {
     canEdit,
     canDelete,
   } = useAuth()
+  const { activeSchoolId } = useSchool()
   const PAGE_SLUG = 'expenditure'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -113,9 +115,6 @@ const Expenditure = ({ onNavigate } = {}) => {
   const [expenditureHeads, setExpenditureHeads] = useState([])
 
   const [scopeHeadOfficeId, setScopeHeadOfficeId] = useState(() => (authHeadOfficeId != null ? String(authHeadOfficeId) : ''))
-  const [scopeSchoolId, setScopeSchoolId] = useState(() =>
-    isHeadOfficeAdmin && authSchoolId != null ? String(authSchoolId) : '',
-  )
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -170,9 +169,9 @@ const Expenditure = ({ onNavigate } = {}) => {
   const currentSchoolId = useMemo(() => {
     if (isSchoolAdmin) return authSchoolId ? String(authSchoolId) : ''
     if (filters.schoolId) return String(filters.schoolId)
-    if (scopeSchoolId) return String(scopeSchoolId)
+    if (isHeadOfficeAdmin) return activeSchoolId ? String(activeSchoolId) : ''
     return ''
-  }, [authSchoolId, filters.schoolId, isSchoolAdmin, scopeSchoolId])
+  }, [activeSchoolId, authSchoolId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin])
 
   const currentExpenditureHeadId = useMemo(() => {
     if (filters.expenditureHeadId) return String(filters.expenditureHeadId)
@@ -180,7 +179,7 @@ const Expenditure = ({ onNavigate } = {}) => {
   }, [filters.expenditureHeadId])
 
   const loadLookups = async () => {
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       await Promise.all([
         fetchHeadOfficesPage(0, 500)
           .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
@@ -346,24 +345,6 @@ const Expenditure = ({ onNavigate } = {}) => {
           </div>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-12">
-          {isHeadOfficeAdmin && (
-            <select
-              className="form-select"
-              style={{ minWidth: 240 }}
-              value={scopeSchoolId}
-              onChange={(e) => {
-                setScopeSchoolId(e.target.value)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="">All Schools</option>
-              {schoolOptionsForScope.map((school) => (
-                <option key={school.id} value={String(school.id)}>
-                  {school.schoolName}
-                </option>
-              ))}
-            </select>
-          )}
           {canAdd(PAGE_SLUG) && (
             <button type="button" className="btn btn-primary-600 d-flex align-items-center gap-6" onClick={openAdd}>
               <span className="d-flex text-md"><i className="ri-add-large-line"></i></span>
@@ -459,7 +440,9 @@ const Expenditure = ({ onNavigate } = {}) => {
                 ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
-                      No expenditure records found.
+                      {isHeadOfficeAdmin && !activeSchoolId && !filters.schoolId
+                        ? 'Select a school from the topbar or filter panel to load expenditures.'
+                        : 'No expenditure records found.'}
                     </td>
                   </tr>
                 ) : (

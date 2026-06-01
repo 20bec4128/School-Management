@@ -7,6 +7,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import '../assets/css/addModalShared.css'
 
 import { useAuth } from '../context/useAuth'
+import { useSchool } from '../context/useSchool'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
 import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { createExpenditureHead, deleteExpenditureHead, fetchExpenditureHeadsPage, updateExpenditureHead } from '../apis/expenditureHeadsApi'
@@ -87,6 +88,7 @@ const ExpenditureHead = () => {
     canEdit,
     canDelete,
   } = useAuth()
+  const { activeSchoolId } = useSchool()
   const PAGE_SLUG = 'expenditure-head'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -101,8 +103,6 @@ const ExpenditureHead = () => {
 
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
-
-  const [scopeSchoolId, setScopeSchoolId] = useState(() => (authSchoolId != null ? String(authSchoolId) : ''))
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -162,12 +162,12 @@ const ExpenditureHead = () => {
   const currentSchoolId = useMemo(() => {
     if (isSchoolAdmin) return authSchoolId ? String(authSchoolId) : ''
     if (filters.schoolId) return String(filters.schoolId)
-    if (scopeSchoolId) return String(scopeSchoolId)
+    if (isHeadOfficeAdmin) return activeSchoolId ? String(activeSchoolId) : ''
     return ''
-  }, [authSchoolId, filters.schoolId, isSchoolAdmin, scopeSchoolId])
+  }, [activeSchoolId, authSchoolId, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin])
 
   const loadLookups = async () => {
-    if (isSuperAdmin || isHeadOfficeAdmin) {
+    if (isSuperAdmin) {
       await Promise.all([
         fetchHeadOfficesPage(0, 500)
           .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
@@ -385,7 +385,9 @@ const ExpenditureHead = () => {
                 ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumnCount + 2} className="text-center py-40 text-secondary-light">
-                      No expenditure head records found.
+                      {isHeadOfficeAdmin && !activeSchoolId && !filters.schoolId
+                        ? 'Select a school from the topbar or filter panel to load expenditure heads.'
+                        : 'No expenditure head records found.'}
                     </td>
                   </tr>
                 ) : (
