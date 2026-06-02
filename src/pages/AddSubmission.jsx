@@ -16,6 +16,7 @@ import { useAuth } from "../context/useAuth";
 import { useSchool } from "../context/useSchool";
 import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
 import { findSchoolById } from "../utils/schoolScope";
+import { getParentChildScope } from "../utils/parentChildScope";
 import ManualScopeSelectors from "../components/ManualScopeSelectors";
 import "../assets/css/addModalShared.css";
 
@@ -146,6 +147,8 @@ const AddSubmission = ({ onNavigate }) => {
       (c) => String(c.studentId || c.id) === String(selectedChildId),
     );
   }, [isParent, parentChildren, selectedChildId]);
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId]);
+  const isParentMultiChildScope = isParent && parentScope.isAllChildrenSelected;
 
   const fixedStudentId = isStudent
     ? studentId
@@ -392,6 +395,10 @@ const AddSubmission = ({ onNavigate }) => {
   };
 
   const save = async () => {
+    if (isParentMultiChildScope) {
+      setError("Select one child from the top bar to create a submission.");
+      return;
+    }
     const msg = validate();
     if (msg) {
       setError(msg);
@@ -425,7 +432,13 @@ const AddSubmission = ({ onNavigate }) => {
   const renderStep = () => {
     if (activeStep === 0) {
       return (
-        <div className="row g-20">
+        <>
+          {isParentMultiChildScope ? (
+            <div className="alert alert-info mb-20">
+              Select one child from the top bar before creating a submission.
+            </div>
+          ) : null}
+          <div className="row g-20">
           {isSuperAdmin ? (
             <div className="col-12 mb-20">
               <ManualScopeSelectors
@@ -576,7 +589,8 @@ const AddSubmission = ({ onNavigate }) => {
               placeholder="Optional note"
             />
           </FormField>
-        </div>
+          </div>
+        </>
       );
     }
 

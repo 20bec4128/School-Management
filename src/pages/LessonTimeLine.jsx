@@ -10,6 +10,7 @@ import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
+import { dedupeByKey, getParentChildClassId, getParentChildScope, getParentChildSchoolId, uniqueScopeCombos } from '../utils/parentChildScope'
 import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import FindEmptyState from '../components/FindEmptyState'
@@ -27,18 +28,21 @@ const lessonColumnOptions = [
   { key: 'endDate', label: 'End' },
 ]
 
-const getChildScope = (children, selectedChildId) => {
-  const list = Array.isArray(children) ? children : []
-  const selected = selectedChildId != null && selectedChildId !== ''
-    ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
-    : null
-  return selected || list[0] || null
-}
-
 const toDateInputValue = (d) => (d ? String(d) : '')
 
 const LessonTimeline = () => {
-  const { role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren, user, canEdit } = useAuth()
+  const {
+    role,
+    schoolId,
+    schoolName,
+    studentClassId,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    user,
+    canEdit,
+  } = useAuth()
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -66,16 +70,17 @@ const LessonTimeline = () => {
   const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const isTeacherScope = roleUpper === 'TEACHER'
   const isFixedSchoolScope = isSchoolAdmin || isTeacherScope
-  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
   const effectiveSchoolId = roleUpper === 'STUDENT'
     ? schoolId
-    : roleUpper === 'PARENT'
-      ? selectedChild?.schoolId ?? null
+    : roleUpper === 'PARENT' && !isAllChildrenSelected
+      ? getParentChildSchoolId(selectedChild)
       : null
   const effectiveClassId = roleUpper === 'STUDENT'
     ? studentClassId
-    : roleUpper === 'PARENT'
-      ? selectedChild?.classId ?? null
+    : roleUpper === 'PARENT' && !isAllChildrenSelected
+      ? getParentChildClassId(selectedChild)
       : null
   const PAGE_SLUG = 'lesson-timeline'
   const canManageTimeline = canEdit(PAGE_SLUG)
@@ -84,10 +89,13 @@ const LessonTimeline = () => {
     return { id: schoolId, schoolName: schoolName || `School ${schoolId}` }
   }, [isFixedSchoolScope, schoolId, schoolName])
   const fixedSchoolId = currentSchoolOption?.id != null ? String(currentSchoolOption.id) : ''
+  const parentScopeSchoolId = useMemo(() => getParentChildSchoolId(parentScope.children[0]), [parentScope.children])
   const academicYearOptions = useAcademicYearOptions({
     schoolId:
       isStudentScope
         ? effectiveSchoolId ?? ''
+        : roleUpper === 'PARENT' && isAllChildrenSelected
+          ? parentScopeSchoolId || ''
         : fixedSchoolId
           ? fixedSchoolId
         : pendingFilters.schoolId !== 'Select'
@@ -95,6 +103,7 @@ const LessonTimeline = () => {
           : '',
     enabled:
       (isStudentScope && Boolean(effectiveSchoolId)) ||
+      (roleUpper === 'PARENT' && isAllChildrenSelected && Boolean(parentScopeSchoolId)) ||
       Boolean(fixedSchoolId) ||
       pendingFilters.schoolId !== 'Select',
   })
@@ -186,13 +195,29 @@ const LessonTimeline = () => {
   }
 
   const reloadLessons = async (nextFilters = filters) => {
-    const data = await fetchLessonTimelines({
-      schoolId: nextFilters.schoolId,
-      academicYear: nextFilters.academicYear,
-      classId: nextFilters.classId,
-      subjectId: nextFilters.subjectId,
-    })
-    const rows = Array.isArray(data) ? data : []
+    let rows = []
+    if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+      const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${getParentChildSchoolId(child)}:${getParentChildClassId(child)}`)
+      const perScope = await Promise.all(
+        scopedChildren.map((child) =>
+          fetchLessonTimelines({
+            schoolId: getParentChildSchoolId(child),
+            academicYear: nextFilters.academicYear,
+            classId: getParentChildClassId(child),
+            subjectId: nextFilters.subjectId,
+          }).catch(() => []),
+        ),
+      )
+      rows = dedupeByKey(perScope.flat(), (row) => row?.lessonId ?? row?.id ?? `${row?.lessonName ?? ''}-${row?.classId ?? ''}-${row?.subjectId ?? ''}`)
+    } else {
+      const data = await fetchLessonTimelines({
+        schoolId: nextFilters.schoolId,
+        academicYear: nextFilters.academicYear,
+        classId: nextFilters.classId,
+        subjectId: nextFilters.subjectId,
+      })
+      rows = Array.isArray(data) ? data : []
+    }
     setLessons(rows)
     if (rows.length === 0) {
       setSelectedLessonId(null)

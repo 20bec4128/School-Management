@@ -31,13 +31,31 @@ public class EventServiceImpl implements EventService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<EventDto.Response> list(Long schoolId) {
+    public List<EventDto.Response> list(Long headOfficeId, Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         if (user == null) throw new ForbiddenException();
 
         List<SchoolEvent> rows;
-        if (user.isSuperAdmin() && schoolId == null) {
-            rows = eventRepository.findAllByIsDeletedFalseOrderByIdDesc();
+        if (user.isSuperAdmin()) {
+            if (schoolId != null) {
+                Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+                rows = eventRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId);
+            } else if (headOfficeId != null) {
+                rows = listByHeadOffice(headOfficeId);
+            } else {
+                rows = eventRepository.findAllByIsDeletedFalseOrderByIdDesc();
+            }
+        } else if (user.isHeadOfficeScopedAdmin()) {
+            Long effectiveHeadOfficeId = user.headOfficeId();
+            if (headOfficeId != null && !Objects.equals(headOfficeId, effectiveHeadOfficeId)) {
+                throw new ForbiddenException();
+            }
+            if (schoolId == null) {
+                rows = listByHeadOffice(effectiveHeadOfficeId);
+            } else {
+                Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
+                rows = eventRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId);
+            }
         } else {
             Long effectiveSchoolId = effectiveSchoolIdForRead(user, schoolId);
             rows = eventRepository.findBySchoolIdAndIsDeletedFalseOrderByIdDesc(effectiveSchoolId);
@@ -118,6 +136,16 @@ public class EventServiceImpl implements EventService {
 
     private Long effectiveSchoolIdForWrite(CurrentUser user, Long requestedSchoolId) {
         return effectiveSchoolIdForRead(user, requestedSchoolId);
+    }
+
+    private List<SchoolEvent> listByHeadOffice(Long headOfficeId) {
+        if (headOfficeId == null) throw new BadRequestException("headOfficeId is required");
+        List<Long> schoolIds = schoolRepository.findAllByIsDeletedFalseAndHeadOfficeId(headOfficeId)
+                .stream()
+                .map(ManageSchool::getId)
+                .toList();
+        if (schoolIds.isEmpty()) return List.of();
+        return eventRepository.findAllByIsDeletedFalseAndSchoolIdInOrderByIdDesc(schoolIds);
     }
 
     private void ensureSchoolInHeadOffice(Long schoolId, Long headOfficeId) {

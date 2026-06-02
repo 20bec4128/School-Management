@@ -62,6 +62,22 @@ const emptyFilters = {
 
 const STEPS = ['Basic Information', 'Setting Information', 'Social Information', 'Other Information', 'Preview']
 
+const CURRENCIES = [
+  { code: 'INR', symbol: '\u20B9', label: 'INR - Indian Rupee' },
+  { code: 'USD', symbol: '$', label: 'USD - US Dollar' },
+  { code: 'EUR', symbol: '\u20AC', label: 'EUR - Euro' },
+  { code: 'GBP', symbol: '\u00A3', label: 'GBP - British Pound' },
+  { code: 'BDT', symbol: '\u09F3', label: 'BDT - Bangladeshi Taka' },
+  { code: 'AED', symbol: '\u062F.\u0625', label: 'AED - UAE Dirham' },
+  { code: 'AUD', symbol: 'A$', label: 'AUD - Australian Dollar' },
+  { code: 'CAD', symbol: 'C$', label: 'CAD - Canadian Dollar' },
+  { code: 'CNY', symbol: '\u00A5', label: 'CNY - Chinese Yuan' },
+  { code: 'JPY', symbol: '\u00A5', label: 'JPY - Japanese Yen' },
+  { code: 'SAR', symbol: '\uFDFC', label: 'SAR - Saudi Riyal' },
+  { code: 'SGD', symbol: 'S$', label: 'SGD - Singapore Dollar' },
+  { code: 'PKR', symbol: '\u20A8', label: 'PKR - Pakistani Rupee' },
+]
+
 const FIELD_ICONS = {
   'School URL': 'ri-link',
   'School Code': 'ri-barcode-box-line',
@@ -187,6 +203,7 @@ const ManageSchool = ({ onNavigate }) => {
     canAdd,
     canEdit,
     canDelete,
+    canView,
   } = useAuth()
   const PAGE_SLUG = 'school'
   const [schools, setSchools] = useState([])
@@ -220,6 +237,7 @@ const ManageSchool = ({ onNavigate }) => {
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const isHeadOfficeScoped = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const isSchoolScoped = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
+  const canViewSubscriptionPlans = canView('subscription-plan')
 
   const schoolLookupOptions = useMemo(() => {
     const rows = Array.isArray(allSchools) ? allSchools : []
@@ -248,8 +266,8 @@ const ManageSchool = ({ onNavigate }) => {
   }, [currentHeadOfficeId, currentHeadOfficeName, headOffices, isHeadOfficeScoped])
 
   const subscriptionOptions = useMemo(() => {
-    return Array.isArray(subscriptionPlans) ? subscriptionPlans : []
-  }, [subscriptionPlans])
+    return canViewSubscriptionPlans && Array.isArray(subscriptionPlans) ? subscriptionPlans : []
+  }, [canViewSubscriptionPlans, subscriptionPlans])
 
   const selectedSubscriptionValue = useMemo(() => {
     return editForm.subscription || ''
@@ -275,7 +293,14 @@ const ManageSchool = ({ onNavigate }) => {
 
   const handleChange = (setter) => (e) => {
     const { id, value, type, checked } = e.target
-    setter((prev) => ({ ...prev, [id]: type === 'checkbox' ? (checked ? 'Yes' : 'No') : value }))
+    setter((prev) => {
+      const next = { ...prev, [id]: type === 'checkbox' ? (checked ? 'Yes' : 'No') : value }
+      if (id === 'currency') {
+        const matchedCurrency = CURRENCIES.find((item) => item.code === value)
+        if (matchedCurrency) next.currencySymbol = matchedCurrency.symbol
+      }
+      return next
+    })
   }
 
   const handleFrontendLogoChange = (setter, setPreview) => (e) => {
@@ -435,13 +460,17 @@ const ManageSchool = ({ onNavigate }) => {
   }, [currentHeadOfficeId, currentHeadOfficeName, isHeadOfficeScoped, isSuperAdmin])
 
   const loadSubscriptionPlans = useCallback(async () => {
+    if (!canViewSubscriptionPlans) {
+      setSubscriptionPlans([])
+      return
+    }
     try {
       const plans = await fetchSubscriptionPlans()
       setSubscriptionPlans(Array.isArray(plans) ? plans : [])
     } catch {
       setSubscriptionPlans([])
     }
-  }, [])
+  }, [canViewSubscriptionPlans])
 
   const loadAllSchools = useCallback(async () => {
     try {
@@ -618,22 +647,33 @@ const ManageSchool = ({ onNavigate }) => {
               </FormField>
 
               <FormField label="Subscription" required>
-                <select
-                  id="subscription"
-                  className="avm-input"
-                  value={form.subscription}
-                  onChange={handleChange(setter)}
-                >
-                  <option value="">--Select Plan--</option>
-                  {subscriptionOptions.map((plan) => (
-                    <option key={plan.id} value={plan.planName}>
-                      {plan.planName}
-                    </option>
-                  ))}
-                  {selectedSubscriptionValue && !subscriptionOptions.some((plan) => plan.planName === selectedSubscriptionValue) ? (
-                    <option value={selectedSubscriptionValue}>{selectedSubscriptionValue} (Legacy)</option>
-                  ) : null}
-                </select>
+                {canViewSubscriptionPlans ? (
+                  <select
+                    id="subscription"
+                    className="avm-input"
+                    value={form.subscription}
+                    onChange={handleChange(setter)}
+                  >
+                    <option value="">--Select Plan--</option>
+                    {subscriptionOptions.map((plan) => (
+                      <option key={plan.id} value={plan.planName}>
+                        {plan.planName}
+                      </option>
+                    ))}
+                    {selectedSubscriptionValue && !subscriptionOptions.some((plan) => plan.planName === selectedSubscriptionValue) ? (
+                      <option value={selectedSubscriptionValue}>{selectedSubscriptionValue} (Legacy)</option>
+                    ) : null}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    id="subscription"
+                    className="avm-input"
+                    placeholder="Subscription plan name"
+                    value={form.subscription}
+                    onChange={handleChange(setter)}
+                  />
+                )}
               </FormField>
 
               <FormField label="Is Demo?" required>
@@ -778,25 +818,41 @@ const ManageSchool = ({ onNavigate }) => {
             <p className="avm-section-title">{STEPS[1]}</p>
             <div className="avm-grid">
               <FormField label="Currency">
-                <input
-                  type="text"
-                  className="avm-input"
+                <select
+                  className="avm-select"
                   id="currency"
-                  placeholder="Currency (e.g., USD, EUR, GBP)"
                   value={form.currency}
                   onChange={handleChange(setter)}
-                />
+                >
+                  <option value="">Select currency</option>
+                  {CURRENCIES.map((currency) => (
+                    <option key={currency.code} value={currency.code}>
+                      {currency.label}
+                    </option>
+                  ))}
+                  {form.currency && !CURRENCIES.some((currency) => currency.code === form.currency) && (
+                    <option value={form.currency}>{form.currency}</option>
+                  )}
+                </select>
               </FormField>
 
               <FormField label="Currency Symbol">
-                <input
-                  type="text"
-                  className="avm-input"
+                <select
+                  className="avm-select"
                   id="currencySymbol"
-                  placeholder="$"
                   value={form.currencySymbol}
                   onChange={handleChange(setter)}
-                />
+                >
+                  <option value="">Select symbol</option>
+                  {CURRENCIES.map((currency) => (
+                    <option key={currency.code} value={currency.symbol}>
+                      {currency.symbol} ({currency.code})
+                    </option>
+                  ))}
+                  {form.currencySymbol && !CURRENCIES.some((currency) => currency.symbol === form.currencySymbol) && (
+                    <option value={form.currencySymbol}>{form.currencySymbol}</option>
+                  )}
+                </select>
               </FormField>
 
               <FormField label="Enable Frontend">

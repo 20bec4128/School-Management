@@ -27,8 +27,11 @@ public class EventController {
 
     @GetMapping
     @RequirePagePermission(slug = "event", action = "view")
-    public ResponseEntity<List<EventDto.Response>> list(@RequestParam(value = "schoolId", required = false) Long schoolId) {
-        return ResponseEntity.ok(eventService.list(schoolId));
+    public ResponseEntity<List<EventDto.Response>> list(
+            @RequestParam(value = "headOfficeId", required = false) Long headOfficeId,
+            @RequestParam(value = "schoolId", required = false) Long schoolId
+    ) {
+        return ResponseEntity.ok(eventService.list(headOfficeId, schoolId));
     }
 
     @PostMapping

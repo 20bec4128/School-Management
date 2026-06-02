@@ -3,9 +3,10 @@ import { login as loginApi, logout as logoutApi, me as meApi } from '../apis/aut
 import { getToken, setToken } from '../apis/apiClient'
 import { normalizeRole } from '../utils/roles'
 import { AuthContext } from './authContext'
-import { fetchGeneralSettingBySchoolId } from '../apis/generalSettingApi'
+import { fetchGeneralSettings } from '../apis/generalSettingApi'
 import { fetchMyPagePermissions } from '../apis/pagePermissionApi'
 import { normalizePagePermissionSlug } from '../utils/pagePermissionAliases'
+import { getParentChildId, getParentChildScope } from '../utils/parentChildScope'
 
 const USER_KEY = 'sm_user'
 const CHILD_KEY = 'sm_selected_child_id'
@@ -77,6 +78,12 @@ const pickSchoolName = (user) =>
   user?.teacher?.school?.name ??
   null
 
+const pickFirstGeneralSetting = (data) => {
+  if (!data) return null
+  if (Array.isArray(data)) return data[0] ?? null
+  return data
+}
+
 const normalizePagePermissionsMap = (permissions) => {
   if (!permissions || typeof permissions !== 'object') return {}
   if (permissions.superAdmin) return { superAdmin: true }
@@ -119,7 +126,8 @@ export const AuthProvider = ({ children }) => {
 
   const [selectedChildId, setSelectedChildIdState] = useState(() => {
     try {
-      return localStorage.getItem(CHILD_KEY) || null
+      const stored = localStorage.getItem(CHILD_KEY)
+      return stored && String(stored).trim() ? String(stored) : null
     } catch {
       return null
     }
@@ -143,18 +151,23 @@ export const AuthProvider = ({ children }) => {
       setGeneralSettings(null)
       return
     }
-    if (role === 'SCHOOL_ADMIN' || role === 'TEACHER') {
+    if (role === 'SCHOOL_ADMIN' || role === 'TEACHER' || role === 'STUDENT' || role === 'PARENT') {
       setGeneralSettings(null)
       return
     }
     try {
-      const data = await fetchGeneralSettingBySchoolId(schoolId)
-      if (data) setGeneralSettings(data)
+      const data = await fetchGeneralSettings({
+        headOfficeId: role === 'HEAD_OFFICE_ADMIN' ? headOfficeId : null,
+        schoolId,
+      })
+      const nextGeneralSettings = pickFirstGeneralSetting(data)
+      if (nextGeneralSettings) setGeneralSettings(nextGeneralSettings)
+      else setGeneralSettings(null)
     } catch (error) {
       if (error?.status === 403) return
       // ignore
     }
-  }, [schoolId, role])
+  }, [schoolId, headOfficeId, role])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -277,21 +290,32 @@ export const AuthProvider = ({ children }) => {
       return
     }
 
-    const selectedExists = selectedChildId != null && children.some((child) => {
-      const childId = child?.studentId ?? child?.id ?? child?.student?.id ?? null
-      return String(childId) === String(selectedChildId)
-    })
+    const selectedExists = selectedChildId != null && children.some((child) => String(getParentChildId(child) || '') === String(selectedChildId))
 
     if (selectedExists) return
 
-    const firstChildId = children[0]?.studentId ?? children[0]?.id ?? children[0]?.student?.id ?? null
-    if (firstChildId != null) {
+    if (children.length === 1) {
+      const firstChildId = getParentChildId(children[0])
+      if (firstChildId != null) {
+        const timer = setTimeout(() => {
+          setSelectedChildId(firstChildId)
+        }, 0)
+        return () => clearTimeout(timer)
+      }
+    }
+
+    if (selectedChildId != null) {
       const timer = setTimeout(() => {
-        setSelectedChildId(firstChildId)
+        setSelectedChildId(null)
       }, 0)
       return () => clearTimeout(timer)
     }
   }, [parentChildren, role, selectedChildId, setSelectedChildId])
+
+  const parentChildScope = useMemo(
+    () => getParentChildScope(parentChildren, selectedChildId),
+    [parentChildren, selectedChildId],
+  )
 
   const login = useCallback(async ({ username, password, remember = true }) => {
     const result = await loginApi(username, password)
@@ -373,6 +397,7 @@ export const AuthProvider = ({ children }) => {
       studentSectionId,
       parentChildren,
       selectedChildId,
+      ...parentChildScope,
       setSelectedChildId,
       refreshMe,
       login,
@@ -403,6 +428,7 @@ export const AuthProvider = ({ children }) => {
       studentSectionId,
       parentChildren,
       selectedChildId,
+      parentChildScope,
       setSelectedChildId,
       refreshMe,
       login,

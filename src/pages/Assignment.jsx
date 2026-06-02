@@ -9,6 +9,7 @@ import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { dedupeByKey, getParentChildId, getParentChildScope } from '../utils/parentChildScope'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -65,7 +66,19 @@ const getBestLabel = (...values) =>
     .find(Boolean) || ''
 
 const Assignment = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName, studentId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    studentId,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const { activeSchoolId } = useSchool()
 
   const roleUpper = String(role || '').toUpperCase()
@@ -73,12 +86,9 @@ const Assignment = ({ onNavigate }) => {
   const isStudentOrParent = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const isParent = roleUpper === 'PARENT'
 
-  const selectedChild = useMemo(() => {
-    if (roleUpper !== 'PARENT' || !selectedChildId) return null
-    return (parentChildren || []).find(c => String(c.studentId || c.id) === String(selectedChildId))
-  }, [roleUpper, parentChildren, selectedChildId])
-
-  const fixedStudentId = roleUpper === 'STUDENT' ? studentId : roleUpper === 'PARENT' ? (selectedChild?.studentId || selectedChild?.id) : null
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
+  const fixedStudentId = roleUpper === 'STUDENT' ? studentId : roleUpper === 'PARENT' && !isAllChildrenSelected ? (selectedChild?.studentId || selectedChild?.id) : null
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
 
   const [rows, setRows] = useState([])
@@ -108,7 +118,16 @@ const Assignment = ({ onNavigate }) => {
     setError('')
     try {
       let data = []
-      if (fixedStudentId) {
+      if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+        const scopedChildren = selectedChildren.length > 0 ? selectedChildren : parentScope.children
+        const responses = await Promise.all(
+          scopedChildren
+            .map((child) => getParentChildId(child))
+            .filter(Boolean)
+            .map((childId) => fetchAssignmentsForStudent(childId).catch(() => [])),
+        )
+        data = dedupeByKey(responses.flat(), (row) => row?.id ?? `${row?.assignmentId ?? ''}-${row?.studentId ?? ''}`)
+      } else if (fixedStudentId) {
         data = await fetchAssignmentsForStudent(fixedStudentId)
       } else if (resolvedSchoolId) {
         data = await fetchAssignments({ schoolId: resolvedSchoolId })
@@ -140,7 +159,7 @@ const Assignment = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [authSchoolId, authSchoolName, fixedStudentId, resolvedSchoolId, roleUpper])
+  }, [authSchoolId, authSchoolName, fixedStudentId, isAllChildrenSelected, parentScope.children, resolvedSchoolId, roleUpper, selectedChildren])
 
   useEffect(() => {
     void loadData()
@@ -281,13 +300,6 @@ const Assignment = ({ onNavigate }) => {
         <div className="alert alert-danger d-flex align-items-center gap-8 mb-24">
           <i className="ri-error-warning-line"></i>
           <span>{error}</span>
-        </div>
-      )}
-
-      {isParent && !selectedChildId && (
-        <div className="alert alert-info d-flex align-items-center gap-8 mb-24">
-          <i className="ri-information-line"></i>
-          <span>Select a child from the top bar to view assignments.</span>
         </div>
       )}
 

@@ -9,6 +9,7 @@ import { fetchSections } from '../apis/sectionsApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { fetchTeachers } from '../apis/teachersApi'
 import { useAuth } from '../context/useAuth'
+import { dedupeByKey, getParentChildId, getParentChildScope, getParentChildSchoolId, uniqueScopeCombos } from '../utils/parentChildScope'
 import '../assets/css/addModalShared.css'
 const STEPS = ['Basic Info']
 const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -87,11 +88,6 @@ const getTeacherId = (user, teacherContext) => {
   return candidate == null ? null : String(candidate)
 }
 
-const getChildId = (child) => {
-  const candidate = child?.studentId ?? child?.id ?? child?.student?.id ?? null
-  return candidate == null ? null : String(candidate)
-}
-
 const getTodayDate = () => new Date()
 
 const getWeekdayNameFromDate = (date) => {
@@ -113,7 +109,20 @@ const monthLabel = (date) =>
   })
 
 const ClassRoutine = () => {
-  const { user, schoolId, schoolName, role, teacherContext, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    user,
+    schoolId,
+    schoolName,
+    role,
+    teacherContext,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const normalizedRole = String(role || '').toUpperCase()
   const isTeacher = normalizedRole === 'TEACHER'
   const isStudent = normalizedRole === 'STUDENT'
@@ -124,13 +133,12 @@ const ClassRoutine = () => {
   const isReadOnlyViewer = isStudent || isParent
   const defaultSchoolFilter = schoolId != null ? String(schoolId) : 'Select'
   const currentTeacherId = getTeacherId(user, teacherContext)
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
   const effectiveChildId = useMemo(() => {
-    if (!isParent) return null
-    if (selectedChildId != null && String(selectedChildId).trim() !== '') return String(selectedChildId)
-    const children = Array.isArray(parentChildren) ? parentChildren : []
-    if (children.length === 1) return getChildId(children[0])
-    return null
-  }, [isParent, parentChildren, selectedChildId])
+    if (!isParent || isAllChildrenSelected) return null
+    return getParentChildId(selectedChild)
+  }, [isAllChildrenSelected, isParent, selectedChild])
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -208,15 +216,28 @@ const ClassRoutine = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchClassRoutines({ schoolId: effectiveSchoolId, studentId: effectiveStudentId })
-      setRows(Array.isArray(data) ? data : [])
+      if (isParent && isAllChildrenSelected) {
+        const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${getParentChildSchoolId(child)}:${getParentChildId(child)}`)
+        const responses = await Promise.all(
+          scopedChildren.map((child) =>
+            fetchClassRoutines({
+              schoolId: getParentChildSchoolId(child),
+              studentId: getParentChildId(child),
+            }).catch(() => []),
+          ),
+        )
+        setRows(dedupeByKey(responses.flat(), (row) => row?.id ?? `${row?.schoolId ?? ''}-${row?.classId ?? ''}-${row?.sectionId ?? ''}-${row?.day ?? ''}-${row?.startTime ?? ''}`))
+      } else {
+        const data = await fetchClassRoutines({ schoolId: effectiveSchoolId, studentId: effectiveStudentId })
+        setRows(Array.isArray(data) ? data : [])
+      }
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load class routines')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isAllChildrenSelected, parentScope.children, selectedChildren])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -226,11 +247,11 @@ const ClassRoutine = () => {
   }, [loadLookups])
 
   useEffect(() => {
-    const shouldLoad = filters.schoolId !== 'Select' && (!isParent || effectiveChildId != null)
+    const shouldLoad = filters.schoolId !== 'Select' && (!isParent || isAllChildrenSelected || effectiveChildId != null)
     if (!shouldLoad) return
     void loadRows(filters.schoolId, effectiveChildId)
     setHasSearched(true)
-  }, [effectiveChildId, filters.schoolId, isParent, loadRows])
+  }, [effectiveChildId, filters.schoolId, isAllChildrenSelected, isParent, loadRows])
 
   const validateFind = () => {
     const errs = {}

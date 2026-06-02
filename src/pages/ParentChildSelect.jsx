@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/useAuth'
-
-const getChildId = (c) => c?.studentId ?? c?.id ?? c?.student?.id ?? null
-const getChildName = (c) => c?.name ?? c?.studentName ?? c?.fullName ?? c?.student?.name ?? c?.student?.fullName ?? ''
+import { getParentChildId, getParentChildName } from '../utils/parentChildScope'
 
 export default function ParentChildSelect({ onDone }) {
   const { parentChildren, selectedChildId, setSelectedChildId } = useAuth()
@@ -12,7 +10,7 @@ export default function ParentChildSelect({ onDone }) {
   const normalized = useMemo(
     () =>
       children
-        .map((c) => ({ id: getChildId(c), name: getChildName(c), raw: c }))
+        .map((c) => ({ id: getParentChildId(c), name: getParentChildName(c), raw: c }))
         .filter((c) => c.id != null),
     [children],
   )
@@ -45,6 +43,19 @@ export default function ParentChildSelect({ onDone }) {
             <div className="text-secondary-light">No children linked to this account.</div>
           ) : (
             <>
+              <div className="mb-12 text-secondary-light">Scope</div>
+              <div className="list-group mb-16">
+                <button
+                  type="button"
+                  className={`list-group-item list-group-item-action d-flex align-items-center justify-content-between${
+                    !selectedChildId ? ' active' : ''
+                  }`}
+                  onClick={() => setSelectedChildId(null)}
+                >
+                  <span>All children</span>
+                  <span className="text-muted">Family scope</span>
+                </button>
+              </div>
               <div className="mb-12 text-secondary-light">Children</div>
               <div className="list-group">
                 {normalized.map((c) => (
@@ -67,14 +78,9 @@ export default function ParentChildSelect({ onDone }) {
                   type="button"
                   className="btn btn-primary-600"
                   onClick={() => {
-                    if (!selectedChildId) {
-                      setError('Please select a child.')
-                      return
-                    }
                     setError('')
                     onDone?.()
                   }}
-                  disabled={!selectedChildId}
                 >
                   Continue
                 </button>

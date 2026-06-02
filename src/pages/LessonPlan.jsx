@@ -10,6 +10,7 @@ import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSubjects } from '../apis/subjectsApi'
 import { useAuth } from '../context/useAuth'
+import { dedupeByKey, getParentChildClassId, getParentChildScope, getParentChildSchoolId, uniqueScopeCombos } from '../utils/parentChildScope'
 import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 
@@ -30,16 +31,20 @@ const columnOptions = [
   { key: 'topicEndDate', label: 'Topic End' },
 ]
 
-const getChildScope = (children, selectedChildId) => {
-  const list = Array.isArray(children) ? children : []
-  const selected = selectedChildId != null && selectedChildId !== ''
-    ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
-    : null
-  return selected || list[0] || null
-}
-
 const LessonPlan = () => {
-  const { role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    schoolId,
+    schoolName,
+    studentClassId,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const PAGE_SLUG = 'lesson-plan'
   const [rows, setRows] = useState([])
   const [headOfficesLookup, setHeadOfficesLookup] = useState([])
@@ -64,19 +69,17 @@ const LessonPlan = () => {
   const isTeacherScope = roleUpper === 'TEACHER'
   const isFixedSchoolScope = isSchoolAdmin || isTeacherScope
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
-  const selectedChild = useMemo(
-    () => getChildScope(parentChildren, selectedChildId),
-    [parentChildren, selectedChildId],
-  )
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
   const effectiveSchoolId = roleUpper === 'STUDENT'
     ? schoolId
-    : roleUpper === 'PARENT'
-      ? selectedChild?.schoolId ?? null
+    : roleUpper === 'PARENT' && !isAllChildrenSelected
+      ? getParentChildSchoolId(selectedChild)
       : null
   const effectiveClassId = roleUpper === 'STUDENT'
     ? studentClassId
-    : roleUpper === 'PARENT'
-      ? selectedChild?.classId ?? null
+    : roleUpper === 'PARENT' && !isAllChildrenSelected
+      ? getParentChildClassId(selectedChild)
       : null
   const currentSchoolOption = useMemo(() => {
     if (!isFixedSchoolScope || schoolId == null) return null
@@ -106,6 +109,8 @@ const LessonPlan = () => {
     schoolId:
       isStudentScope
         ? effectiveSchoolId ?? ''
+        : roleUpper === 'PARENT' && isAllChildrenSelected
+          ? getParentChildSchoolId(parentScope.children[0]) || ''
         : fixedSchoolId
           ? fixedSchoolId
         : pendingFilters.school !== 'Select'
@@ -113,6 +118,7 @@ const LessonPlan = () => {
           : '',
     enabled:
       (isStudentScope && Boolean(effectiveSchoolId)) ||
+      (roleUpper === 'PARENT' && isAllChildrenSelected && Boolean(parentScope.children[0])) ||
       Boolean(fixedSchoolId) ||
       pendingFilters.school !== 'Select',
   })
@@ -125,6 +131,38 @@ const LessonPlan = () => {
         setLoading(true)
         setError('')
         if (isStudentScope) {
+          if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+            if (defaultAcademicYear === 'Select') {
+              if (!ignore) {
+                setRows([])
+                setHasSearched(false)
+                setLoading(false)
+              }
+              return
+            }
+            const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${getParentChildSchoolId(child)}:${getParentChildClassId(child)}`)
+            const perScope = await Promise.all(
+              scopedChildren.map((child) =>
+                fetchLessonPlanView({
+                  schoolId: getParentChildSchoolId(child),
+                  academicYear: defaultAcademicYear,
+                  classId: getParentChildClassId(child),
+                }).catch(() => []),
+              ),
+            )
+            if (ignore) return
+            setRows(dedupeByKey(perScope.flat(), (row) => row?.id ?? `${row?.lessonName ?? ''}-${row?.classId ?? ''}-${row?.topicName ?? ''}`))
+            const nextFilters = {
+              school: String(getParentChildSchoolId(parentScope.children[0]) || ''),
+              academicYear: defaultAcademicYear,
+              classId: 'Select',
+              subjectId: 'Select',
+            }
+            setPendingFilters(nextFilters)
+            setHasSearched(true)
+            return
+          }
+
           if (!effectiveSchoolId || !effectiveClassId || defaultAcademicYear === 'Select') {
             if (!ignore) {
               setRows([])
@@ -172,7 +210,7 @@ const LessonPlan = () => {
     return () => {
       ignore = true
     }
-  }, [currentSchoolOption, defaultAcademicYear, effectiveClassId, effectiveSchoolId, isFixedSchoolScope, isStudentScope, isSuperAdmin])
+  }, [currentSchoolOption, defaultAcademicYear, effectiveClassId, effectiveSchoolId, isAllChildrenSelected, isFixedSchoolScope, isStudentScope, isSuperAdmin, parentScope.children, selectedChildren, roleUpper])
 
   useEffect(() => {
     if (!fixedSchoolId) return
@@ -235,13 +273,28 @@ const LessonPlan = () => {
       setFindErrors({})
       setError('')
       setLoading(true)
-      const data = await fetchLessonPlanView({
-        schoolId: pendingFilters.school,
-        academicYear: pendingFilters.academicYear,
-        classId: pendingFilters.classId,
-        subjectId: pendingFilters.subjectId === 'Select' ? null : pendingFilters.subjectId,
-      })
-      setRows(Array.isArray(data) ? data : [])
+      if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+        const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${getParentChildSchoolId(child)}:${getParentChildClassId(child)}`)
+        const perScope = await Promise.all(
+          scopedChildren.map((child) =>
+            fetchLessonPlanView({
+              schoolId: getParentChildSchoolId(child),
+              academicYear: pendingFilters.academicYear,
+              classId: getParentChildClassId(child),
+              subjectId: pendingFilters.subjectId === 'Select' ? null : pendingFilters.subjectId,
+            }).catch(() => []),
+          ),
+        )
+        setRows(dedupeByKey(perScope.flat(), (row) => row?.id ?? `${row?.lessonName ?? ''}-${row?.classId ?? ''}-${row?.topicName ?? ''}`))
+      } else {
+        const data = await fetchLessonPlanView({
+          schoolId: pendingFilters.school,
+          academicYear: pendingFilters.academicYear,
+          classId: pendingFilters.classId,
+          subjectId: pendingFilters.subjectId === 'Select' ? null : pendingFilters.subjectId,
+        })
+        setRows(Array.isArray(data) ? data : [])
+      }
       setHasSearched(true)
       setIsFindSidebarOpen(false)
       setCurrentPage(1)

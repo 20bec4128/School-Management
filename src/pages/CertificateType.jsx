@@ -6,8 +6,10 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import TablePagination from '../components/table/TablePagination'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
+import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
   deleteCertificateType,
   fetchCertificateTypesPage,
@@ -76,6 +78,7 @@ const CertificateType = ({ onNavigate }) => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin || isHeadOfficeAdmin, isHeadOfficeAdmin ? authHeadOfficeId : undefined)
 
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
@@ -97,7 +100,8 @@ const CertificateType = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const currentSchoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
-    if (isHeadOfficeAdmin || isSchoolAdmin) {
+    if (isHeadOfficeAdmin) return manualScope.schoolOptions
+    if (isSchoolAdmin) {
       return [{ id: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId }]
     }
     return []
@@ -132,6 +136,7 @@ const CertificateType = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     try {
       const headOfficePage = await (isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }))
+      const schoolList = await (isSuperAdmin || isHeadOfficeAdmin ? fetchSchoolsLookup() : Promise.resolve([]))
       setHeadOffices(
         isSuperAdmin && Array.isArray(headOfficePage?.content)
           ? headOfficePage.content
@@ -143,13 +148,13 @@ const CertificateType = ({ onNavigate }) => {
               .sort((a, b) => String(a.name).localeCompare(String(b.name)))
           : [],
       )
-      setAllSchools(currentSchoolOptions)
+      setAllSchools(Array.isArray(schoolList) ? schoolList : currentSchoolOptions)
     } catch (err) {
       console.error('Failed to load certificate lookups:', err)
       setHeadOffices([])
       setAllSchools(currentSchoolOptions)
     }
-  }, [currentSchoolOptions, isSuperAdmin])
+  }, [currentSchoolOptions, isHeadOfficeAdmin, isSuperAdmin])
 
   const loadCertificateTypes = useCallback(async () => {
     if (status !== 'ready' || !token) return

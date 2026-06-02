@@ -12,6 +12,7 @@ import { fetchStudentsPage } from '../apis/studentsApi'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { dedupeByKey, getParentChildId, getParentChildScope } from '../utils/parentChildScope'
 import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import '../assets/css/addModalShared.css'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -47,7 +48,20 @@ const evaluateBadge = (value) => {
 }
 
 const Submission = ({ onNavigate }) => {
-  const { user, role, schoolId: authSchoolId, schoolName: authSchoolName, studentId, parentChildren, selectedChildId, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    user,
+    role,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    studentId,
+    parentChildren,
+    selectedChildId,
+    selectedChildren,
+    isAllChildrenSelected,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const { activeSchoolId } = useSchool()
 
   const canSubmit = can(user, ['ASSIGNMENT_SUBMIT', '*'])
@@ -59,12 +73,9 @@ const Submission = ({ onNavigate }) => {
   const isStudent = roleUpper === 'STUDENT'
   const isParent = roleUpper === 'PARENT'
 
-  const selectedChild = useMemo(() => {
-    if (!isParent || !selectedChildId) return null
-    return (parentChildren || []).find(c => String(c.studentId || c.id) === String(selectedChildId))
-  }, [isParent, parentChildren, selectedChildId])
-
-  const fixedStudentId = isStudent ? studentId : isParent ? (selectedChild?.studentId || selectedChild?.id) : null
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
+  const fixedStudentId = isStudent ? studentId : isParent && !isAllChildrenSelected ? (selectedChild?.studentId || selectedChild?.id) : null
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
 
   const [submissions, setSubmissions] = useState([])
@@ -97,7 +108,16 @@ const Submission = ({ onNavigate }) => {
     setError('')
     try {
       let subs = []
-      if (fixedStudentId) {
+      if (isParent && isAllChildrenSelected) {
+        const scopedChildren = selectedChildren.length > 0 ? selectedChildren : parentScope.children
+        const perChild = await Promise.all(
+          scopedChildren
+            .map((child) => getParentChildId(child))
+            .filter(Boolean)
+            .map((childId) => fetchSubmissionsForStudent(childId).catch(() => [])),
+        )
+        subs = dedupeByKey(perChild.flat(), (row) => row?.id ?? `${row?.assignmentId ?? ''}-${row?.studentId ?? ''}`)
+      } else if (fixedStudentId) {
         subs = await fetchSubmissionsForStudent(fixedStudentId)
       } else if (resolvedSchoolId) {
         subs = await fetchSubmissions({ schoolId: resolvedSchoolId })
@@ -129,7 +149,7 @@ const Submission = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [authSchoolId, authSchoolName, fixedStudentId, resolvedSchoolId, roleUpper])
+  }, [authSchoolId, authSchoolName, fixedStudentId, isAllChildrenSelected, parentScope.children, resolvedSchoolId, roleUpper, selectedChildren])
 
   useEffect(() => {
     void loadData()

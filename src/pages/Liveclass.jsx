@@ -19,6 +19,7 @@ import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { dedupeByKey, getParentChildClassId, getParentChildScope, getParentChildSectionId, uniqueScopeCombos } from '../utils/parentChildScope'
 import '../assets/css/addModalShared.css'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import ExportDropdown from '../components/ExportDropdown'
@@ -52,25 +53,30 @@ const statusBadge = (status) => {
   return 'bg-neutral-100 text-secondary-light px-12 py-4 radius-4 fw-medium text-sm'
 }
 
-const getChildScope = (children, selectedChildId) => {
-  const list = Array.isArray(children) ? children : []
-  const selected =
-    selectedChildId != null && selectedChildId !== ''
-      ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
-      : null
-  return selected || list[0] || null
-}
-
 const LiveClass = ({ onNavigate }) => {
-  const { user, role, schoolId, studentClassId, studentSectionId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    user,
+    role,
+    schoolId,
+    studentClassId,
+    studentSectionId,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
-  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
-  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
-  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
-  const effectiveSectionId = roleUpper === 'STUDENT' ? studentSectionId : roleUpper === 'PARENT' ? selectedChild?.sectionId ?? null : null
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
+  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' && !isAllChildrenSelected ? selectedChild?.schoolId ?? null : null
+  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' && !isAllChildrenSelected ? selectedChild?.classId ?? null : null
+  const effectiveSectionId = roleUpper === 'STUDENT' ? studentSectionId : roleUpper === 'PARENT' && !isAllChildrenSelected ? selectedChild?.sectionId ?? null : null
   const canManage = canAdd('live-class') || canEdit('live-class') || canDelete('live-class')
   const canJoin = !isStudentScope && can(user, ['LIVE_CLASS_JOIN', 'LIVE_CLASS_MANAGE', 'LIVE_CLASS_MANAGE_ASSIGNED', '*'])
 
@@ -118,17 +124,30 @@ const LiveClass = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      const data = isStudentScope && effectiveClassId && effectiveSectionId
-        ? await fetchStudentLiveClasses({ classId: effectiveClassId, sectionId: effectiveSectionId })
-        : await fetchLiveClasses(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {})
-      setRows(Array.isArray(data) ? data : [])
+      if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+        const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${child?.schoolId ?? ''}:${getParentChildClassId(child)}:${getParentChildSectionId(child)}`)
+        const perScope = await Promise.all(
+          scopedChildren.map((child) =>
+            fetchStudentLiveClasses({
+              classId: getParentChildClassId(child),
+              sectionId: getParentChildSectionId(child),
+            }).catch(() => []),
+          ),
+        )
+        setRows(dedupeByKey(perScope.flat(), (row) => row?.id ?? `${row?.classId ?? ''}-${row?.sectionId ?? ''}-${row?.subjectId ?? ''}-${row?.teacherId ?? ''}-${row?.classDate ?? ''}`))
+      } else {
+        const data = isStudentScope && effectiveClassId && effectiveSectionId
+          ? await fetchStudentLiveClasses({ classId: effectiveClassId, sectionId: effectiveSectionId })
+          : await fetchLiveClasses(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {})
+        setRows(Array.isArray(data) ? data : [])
+      }
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load live classes')
     } finally {
       setLoading(false)
     }
-  }, [effectiveClassId, effectiveSectionId, isStudentScope, resolvedSchoolId])
+  }, [effectiveClassId, effectiveSectionId, isAllChildrenSelected, isStudentScope, parentScope.children, resolvedSchoolId, roleUpper, selectedChildren])
 
   useEffect(() => {
     if (!isStudentScope) loadLookups()

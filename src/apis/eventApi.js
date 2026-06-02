@@ -17,8 +17,9 @@ const readApiError = async (res) => {
   }
 }
 
-export const fetchEvents = async ({ schoolId } = {}) => {
+export const fetchEvents = async ({ headOfficeId, schoolId } = {}) => {
   const qs = new URLSearchParams()
+  if (headOfficeId != null && String(headOfficeId).trim() !== '') qs.set('headOfficeId', String(headOfficeId))
   if (schoolId != null && String(schoolId).trim() !== '') qs.set('schoolId', String(schoolId))
   const url = qs.size ? `${BASE}?${qs.toString()}` : BASE
   const res = await apiFetch(url, { headers: { Accept: 'application/json' } })

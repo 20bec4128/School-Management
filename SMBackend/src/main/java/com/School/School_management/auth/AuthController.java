@@ -123,7 +123,7 @@ public class AuthController {
             case "SCHOOL_ADMIN" -> "school-admin-dashboard";
             case "TEACHER" -> "teacher-dashboard";
             case "STUDENT" -> "student-dashboard";
-            case "PARENT" -> (childCount > 1 ? "parent-child-select" : "parent-dashboard");
+            case "PARENT" -> "parent-dashboard";
             default -> "dashboard";
         };
     }

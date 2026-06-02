@@ -3,7 +3,7 @@ import "../assets/css/addModalShared.css";
 import { useAuth } from "../context/useAuth";
 import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
 import { normalizeRole } from "../utils/roles";
-import { fetchGeneralSettingBySchoolId, saveGeneralSetting } from "../apis/generalSettingApi";
+import { fetchGeneralSettings, saveGeneralSetting } from "../apis/generalSettingApi";
 
 /* ─── Static options ─── */
 const LANGUAGES = [
@@ -97,6 +97,12 @@ const GENERAL_FORM_DEFAULT = {
   googleAnalytics: "",
 };
 
+const pickFirstGeneralSetting = (data) => {
+  if (!data) return null;
+  if (Array.isArray(data)) return data[0] ?? null;
+  return data;
+};
+
 /* ─── Reusable Field component ─── */
 const Field = ({ label, required, icon, children, full = false }) => (
   <div className={full ? "col-12 mb-20" : "col-md-6 mb-20"}>
@@ -181,11 +187,15 @@ const GeneralSetting = () => {
       setLoading(true);
       setError("");
       try {
-        const data = await fetchGeneralSettingBySchoolId(activeSchoolId);
-        if (data) {
+        const data = await fetchGeneralSettings({
+          headOfficeId: activeHeadOfficeId || null,
+          schoolId: activeSchoolId,
+        });
+        const nextSetting = pickFirstGeneralSetting(data);
+        if (nextSetting) {
           setForm({
             ...GENERAL_FORM_DEFAULT,
-            ...data,
+            ...nextSetting,
           });
         }
       } catch (err) {
@@ -210,7 +220,7 @@ const GeneralSetting = () => {
     };
 
     void loadSettings();
-  }, [activeSchoolId, activeHeadOfficeId, isSchoolAdmin]);
+  }, [activeSchoolId, activeHeadOfficeId, authSchoolName, isSchoolAdmin, manualScope.schoolOptions]);
 
   const handleChange = (e) => {
     const { id, value } = e.target;

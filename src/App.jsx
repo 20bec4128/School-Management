@@ -11,6 +11,7 @@ import AppRoute from './AppRoute'
 import { useAuth } from './context/useAuth'
 import { normalizeRole } from './utils/roles'
 import LandingPage from './landingPage/LandingPage'
+import DateFieldGuard from './components/DateFieldGuard'
 
 const isBrowser = typeof window !== 'undefined'
 
@@ -149,6 +150,7 @@ function AppLayout({
 
   return (
     <>
+      <DateFieldGuard />
       <Sidebar onNavigate={onNavigate} currentPage={currentPage} user={user} onLogout={logout} />
 
       <main className={`dashboard-main ${isCollapsed ? 'active' : ''}`}>

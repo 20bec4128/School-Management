@@ -1,8 +1,6 @@
 import { useMemo } from 'react'
 import { useAuth } from '../context/useAuth'
-
-const getChildId = (c) => c?.studentId ?? c?.id ?? c?.student?.id ?? null
-const getChildName = (c) => c?.name ?? c?.studentName ?? c?.fullName ?? c?.student?.name ?? c?.student?.fullName ?? ''
+import { getParentChildId, getParentChildName } from '../utils/parentChildScope'
 
 export default function ParentChildSelector({
   className = '',
@@ -16,7 +14,7 @@ export default function ParentChildSelector({
   const options = useMemo(() => {
     const rows = Array.isArray(parentChildren) ? parentChildren : []
     return rows
-      .map((c) => ({ id: getChildId(c), name: getChildName(c) }))
+      .map((c) => ({ id: getParentChildId(c), name: getParentChildName(c) }))
       .filter((c) => c.id != null)
   }, [parentChildren])
 
@@ -50,14 +48,14 @@ export default function ParentChildSelector({
       {showLabel ? <span className={`text-secondary-light text-sm ${labelClassName}`.trim()}>Child:</span> : null}
       <select
         className={`form-select form-select-sm ${selectClassName}`.trim()}
-        style={{ width: 220 }}
-        value={selectedChildId || ''}
-        onChange={(e) => setSelectedChildId(e.target.value || null)}
-      >
-        <option value="">-- Select --</option>
-        {options.map((o) => (
-          <option key={String(o.id)} value={String(o.id)}>
-            {o.name ? `${o.name} (${o.id})` : String(o.id)}
+      style={{ width: 220 }}
+      value={selectedChildId || ''}
+      onChange={(e) => setSelectedChildId(e.target.value || null)}
+    >
+      <option value="">All children</option>
+      {options.map((o) => (
+        <option key={String(o.id)} value={String(o.id)}>
+          {o.name ? `${o.name} (${o.id})` : String(o.id)}
           </option>
         ))}
       </select>

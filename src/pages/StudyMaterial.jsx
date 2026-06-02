@@ -12,6 +12,7 @@ import ManualScopeSelectors from '../components/ManualScopeSelectors'
 import { can } from '../utils/permissions'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { dedupeByKey, getParentChildClassId, getParentChildScope, getParentChildSchoolId, uniqueScopeCombos } from '../utils/parentChildScope'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
 
@@ -56,25 +57,30 @@ const getStudyMaterialFileName = (row) =>
     .pop() ||
   ''
 
-const getChildScope = (children, selectedChildId) => {
-  const list = Array.isArray(children) ? children : []
-  const selected =
-    selectedChildId != null && selectedChildId !== ''
-      ? list.find((child) => String(child?.studentId ?? child?.id ?? child?.student?.id ?? '') === String(selectedChildId))
-      : null
-  return selected || list[0] || null
-}
-
 const StudyMaterial = ({ onNavigate }) => {
-  const { user, role, schoolId, schoolName, selectedChildId, parentChildren, studentClassId, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    user,
+    role,
+    schoolId,
+    schoolName,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    studentClassId,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
-  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
-  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
-  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' ? selectedChild?.classId ?? null : null
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
+  const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' && !isAllChildrenSelected ? getParentChildSchoolId(selectedChild) : null
+  const effectiveClassId = roleUpper === 'STUDENT' ? studentClassId : roleUpper === 'PARENT' && !isAllChildrenSelected ? getParentChildClassId(selectedChild) : null
   const canManage = !isStudentScope && can(user, ['STUDY_MATERIAL_MANAGE', 'STUDY_MATERIAL_MANAGE_ASSIGNED', '*'])
   const PAGE_SLUG = 'study-material'
 
@@ -125,18 +131,31 @@ const StudyMaterial = ({ onNavigate }) => {
     setLoading(true)
     setError('')
     try {
-      const params = isStudentScope && effectiveSchoolId && effectiveClassId
-        ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
-        : resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}
-      const data = await fetchStudyMaterials(params)
-      setRows(Array.isArray(data) ? data : [])
+      if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+        const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${getParentChildSchoolId(child)}:${getParentChildClassId(child)}`)
+        const perScope = await Promise.all(
+          scopedChildren.map((child) =>
+            fetchStudyMaterials({
+              schoolId: getParentChildSchoolId(child),
+              classId: getParentChildClassId(child),
+            }).catch(() => []),
+          ),
+        )
+        setRows(dedupeByKey(perScope.flat(), (row) => row?.id ?? `${row?.schoolId ?? ''}-${row?.classId ?? ''}-${row?.subjectId ?? ''}-${row?.title ?? ''}`))
+      } else {
+        const params = isStudentScope && effectiveSchoolId && effectiveClassId
+          ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
+          : resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}
+        const data = await fetchStudyMaterials(params)
+        setRows(Array.isArray(data) ? data : [])
+      }
     } catch (e) {
       setRows([])
       setError(e?.message || 'Failed to load study materials')
     } finally {
       setLoading(false)
     }
-  }, [effectiveClassId, effectiveSchoolId, isStudentScope, resolvedSchoolId])
+  }, [effectiveClassId, effectiveSchoolId, isAllChildrenSelected, isStudentScope, parentScope.children, resolvedSchoolId, roleUpper, selectedChildren])
 
   useEffect(() => {
     if (canManage) loadLookups()

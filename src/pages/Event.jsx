@@ -39,11 +39,20 @@ const eventForBadge = (val) => {
 }
 
 const Event = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    schoolId: authSchoolId,
+    schoolName: authSchoolName,
+    headOfficeId: authHeadOfficeId,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const PAGE_SLUG = 'event'
-  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
+  const { schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
-  const manualScope = useManualSchoolScope(isSuperAdmin)
+  const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin || isHeadOfficeAdmin, isHeadOfficeAdmin ? authHeadOfficeId : undefined)
 
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
@@ -58,23 +67,30 @@ const Event = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
   const listSchoolId = isSuperAdmin
-    ? (activeSchoolId ? String(activeSchoolId) : '')
-    : activeSchoolId
-      ? String(activeSchoolId)
+    ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : '')
+    : isHeadOfficeAdmin
+      ? ''
       : authSchoolId
         ? String(authSchoolId)
         : ''
+  const listHeadOfficeId = isSuperAdmin
+    ? (manualScope.selectedHeadOfficeId ? String(manualScope.selectedHeadOfficeId) : '')
+    : isHeadOfficeAdmin
+      ? (authHeadOfficeId ? String(authHeadOfficeId) : '')
+      : ''
 
   const schoolOptions = useMemo(() => {
     const list = isSuperAdmin
       ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
-      : contextSchoolOptions
+      : isHeadOfficeAdmin
+        ? manualScope.schoolOptions
+        : contextSchoolOptions
     const fallback =
       listSchoolId && authSchoolName && !list.some((school) => String(school.id) === listSchoolId)
         ? [{ id: listSchoolId, schoolName: authSchoolName }]
         : []
     return [...list, ...fallback]
-  }, [contextSchoolOptions, listSchoolId, authSchoolName, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.schoolOptions])
+  }, [contextSchoolOptions, isHeadOfficeAdmin, listSchoolId, authSchoolName, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.schoolOptions])
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -107,7 +123,39 @@ const Event = ({ onNavigate }) => {
     setError('')
     try {
       if (isSuperAdmin) {
-        const list = await fetchEvents(listSchoolId ? { schoolId: listSchoolId } : {})
+        const list = await fetchEvents(
+          listSchoolId
+            ? { schoolId: listSchoolId }
+            : listHeadOfficeId
+              ? { headOfficeId: listHeadOfficeId }
+              : {},
+        )
+        setRows(
+          Array.isArray(list)
+            ? list.map((item) => ({
+                id: item?.id,
+                schoolId: item?.schoolId ?? null,
+                schoolName: item?.schoolName || '',
+                title: item?.title || '',
+                eventFor: item?.eventFor || '',
+                eventPlace: item?.eventPlace || '',
+                fromDate: item?.fromDate || '',
+                toDate: item?.toDate || '',
+                image: item?.image || '',
+                note: item?.note || '',
+                isViewOnWeb: Boolean(item?.isViewOnWeb),
+              }))
+            : [],
+        )
+        return
+      }
+      if (isHeadOfficeAdmin) {
+        if (!listHeadOfficeId) {
+          setRows([])
+          setError('Head office scope is unavailable.')
+          return
+        }
+        const list = await fetchEvents({ headOfficeId: listHeadOfficeId })
         setRows(
           Array.isArray(list)
             ? list.map((item) => ({
@@ -156,7 +204,7 @@ const Event = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [listSchoolId, isSuperAdmin])
+  }, [isHeadOfficeAdmin, listHeadOfficeId, listSchoolId, isSuperAdmin])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -191,7 +239,11 @@ const Event = ({ onNavigate }) => {
     setPendingFilters(emptyFilters)
     setFilters(emptyFilters)
     setCurrentPage(1)
-    manualScope.setSelectedHeadOfficeId('')
+    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+      manualScope.setSelectedHeadOfficeId(String(authHeadOfficeId))
+    } else {
+      manualScope.setSelectedHeadOfficeId('')
+    }
     manualScope.setSelectedSchoolId('')
   }
 
@@ -462,7 +514,7 @@ const Event = ({ onNavigate }) => {
               </label>
               <select id="schoolId" className="form-control form-select" value={pendingFilters.schoolId} onChange={handlePendingFilterChange}>
                 <option value="">Select School</option>
-                {contextSchoolOptions.map((school) => (
+                {schoolOptions.map((school) => (
                   <option key={String(school.id)} value={String(school.id)}>
                     {school.schoolName}
                   </option>

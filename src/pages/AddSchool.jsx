@@ -20,6 +20,21 @@ const PHONE_LENGTH_BY_ISO = {
   BR: { min: 10, max: 11 },
 };
 const DEFAULT_PHONE_LENGTH = { min: 6, max: 15 };
+const CURRENCIES = [
+  { code: "INR", symbol: "\u20B9", label: "INR - Indian Rupee" },
+  { code: "USD", symbol: "$", label: "USD - US Dollar" },
+  { code: "EUR", symbol: "\u20AC", label: "EUR - Euro" },
+  { code: "GBP", symbol: "\u00A3", label: "GBP - British Pound" },
+  { code: "BDT", symbol: "\u09F3", label: "BDT - Bangladeshi Taka" },
+  { code: "AED", symbol: "\u062F.\u0625", label: "AED - UAE Dirham" },
+  { code: "AUD", symbol: "A$", label: "AUD - Australian Dollar" },
+  { code: "CAD", symbol: "C$", label: "CAD - Canadian Dollar" },
+  { code: "CNY", symbol: "\u00A5", label: "CNY - Chinese Yuan" },
+  { code: "JPY", symbol: "\u00A5", label: "JPY - Japanese Yen" },
+  { code: "SAR", symbol: "\uFDFC", label: "SAR - Saudi Riyal" },
+  { code: "SGD", symbol: "S$", label: "SGD - Singapore Dollar" },
+  { code: "PKR", symbol: "\u20A8", label: "PKR - Pakistani Rupee" },
+];
 
 const toFlagEmoji = (iso = "") =>
   String(iso || "")
@@ -235,7 +250,12 @@ const ImageUploadField = ({ label, id, onChange }) => {
 };
 
 const AddSchool = ({ onNavigate }) => {
-  const { role, headOfficeId: currentHeadOfficeId, headOfficeName: currentHeadOfficeName } = useAuth();
+  const {
+    role,
+    headOfficeId: currentHeadOfficeId,
+    headOfficeName: currentHeadOfficeName,
+    canView,
+  } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [headOffices, setHeadOffices] = useState([]);
@@ -250,6 +270,7 @@ const AddSchool = ({ onNavigate }) => {
 
   const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
   const isHeadOfficeScoped = String(role || "").toUpperCase() === "HEAD_OFFICE_ADMIN";
+  const canViewSubscriptionPlans = canView("subscription-plan");
 
   useEffect(() => {
     const raw = sessionStorage.getItem(EDIT_STORAGE_KEY);
@@ -297,6 +318,10 @@ const AddSchool = ({ onNavigate }) => {
 
   useEffect(() => {
     const loadSubscriptionPlans = async () => {
+      if (!canViewSubscriptionPlans) {
+        setSubscriptionPlans([]);
+        return;
+      }
       try {
         const plans = await fetchSubscriptionPlans();
         setSubscriptionPlans(Array.isArray(plans) ? plans : []);
@@ -305,7 +330,7 @@ const AddSchool = ({ onNavigate }) => {
       }
     };
     void loadSubscriptionPlans();
-  }, []);
+  }, [canViewSubscriptionPlans]);
 
   useEffect(() => {
     return () => {
@@ -317,7 +342,16 @@ const AddSchool = ({ onNavigate }) => {
 
   const handleChange = (e) => {
     const { id, value } = e.target;
-    setForm((prev) => ({ ...prev, [id]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [id]: value };
+      if (id === "currency") {
+        const matchedCurrency = CURRENCIES.find((item) => item.code === value);
+        if (matchedCurrency) {
+          next.currencySymbol = matchedCurrency.symbol;
+        }
+      }
+      return next;
+    });
   };
 
   const handleFileChange = (id, file) => {
@@ -559,17 +593,29 @@ const AddSchool = ({ onNavigate }) => {
                 </FormField>
 
                 <FormField label="Subscription" required>
-                  <select id="subscription" className="form-control form-select" value={form.subscription} onChange={handleChange} style={{ paddingLeft: '2.5rem' }}>
-                    <option value="">--Select Plan--</option>
-                    {subscriptionPlans.map((plan) => (
-                      <option key={plan.id} value={plan.planName}>
-                        {plan.planName}
-                      </option>
-                    ))}
-                    {form.subscription && !subscriptionPlans.some((plan) => plan.planName === form.subscription) ? (
-                      <option value={form.subscription}>{form.subscription} (Legacy)</option>
-                    ) : null}
-                  </select>
+                  {canViewSubscriptionPlans ? (
+                    <select id="subscription" className="form-control form-select" value={form.subscription} onChange={handleChange} style={{ paddingLeft: '2.5rem' }}>
+                      <option value="">--Select Plan--</option>
+                      {subscriptionPlans.map((plan) => (
+                        <option key={plan.id} value={plan.planName}>
+                          {plan.planName}
+                        </option>
+                      ))}
+                      {form.subscription && !subscriptionPlans.some((plan) => plan.planName === form.subscription) ? (
+                        <option value={form.subscription}>{form.subscription} (Legacy)</option>
+                      ) : null}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      id="subscription"
+                      className="form-control"
+                      placeholder="Subscription plan name"
+                      value={form.subscription}
+                      onChange={handleChange}
+                      style={{ paddingLeft: '2.5rem' }}
+                    />
+                  )}
                 </FormField>
 
                 <FormField label="Is Demo?" required>
@@ -624,11 +670,31 @@ const AddSchool = ({ onNavigate }) => {
             {activeTab === 1 && (
               <div className="row">
                 <FormField label="Currency">
-                  <input type="text" id="currency" className="form-control" placeholder="USD, EUR, INR" value={form.currency} onChange={handleChange} style={{ paddingLeft: '2.5rem' }} />
+                  <select id="currency" className="form-control form-select" value={form.currency} onChange={handleChange} style={{ paddingLeft: '2.5rem' }}>
+                    <option value="">Select currency</option>
+                    {CURRENCIES.map((currency) => (
+                      <option key={currency.code} value={currency.code}>
+                        {currency.label}
+                      </option>
+                    ))}
+                    {form.currency && !CURRENCIES.some((currency) => currency.code === form.currency) && (
+                      <option value={form.currency}>{form.currency}</option>
+                    )}
+                  </select>
                 </FormField>
 
                 <FormField label="Currency Symbol">
-                  <input type="text" id="currencySymbol" className="form-control" placeholder="$, €, ₹" value={form.currencySymbol} onChange={handleChange} style={{ paddingLeft: '2.5rem' }} />
+                  <select id="currencySymbol" className="form-control form-select" value={form.currencySymbol} onChange={handleChange} style={{ paddingLeft: '2.5rem' }}>
+                    <option value="">Select symbol</option>
+                    {CURRENCIES.map((currency) => (
+                      <option key={currency.code} value={currency.symbol}>
+                        {currency.symbol} ({currency.code})
+                      </option>
+                    ))}
+                    {form.currencySymbol && !CURRENCIES.some((currency) => currency.symbol === form.currencySymbol) && (
+                      <option value={form.currencySymbol}>{form.currencySymbol}</option>
+                    )}
+                  </select>
                 </FormField>
 
                 <FormField label="Language">

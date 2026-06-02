@@ -41,6 +41,8 @@ const ManageComplain = ({ onNavigate }) => {
   const PAGE_SLUG = 'manage-complain'
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const roleUpper = String(role || '').toUpperCase()
+  const canLoadAcademicYears = isSuperAdmin || roleUpper === 'HEAD_OFFICE_ADMIN' || roleUpper === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const [data, setData] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -119,8 +121,10 @@ const ManageComplain = ({ onNavigate }) => {
             complainTypeId: filters.complainTypeId !== 'Select' ? filters.complainTypeId : undefined,
             userType: filters.userType !== 'Select' ? filters.userType : undefined,
           }),
-          fetchComplainTypes(scopedSchoolIds[0]),
-          fetchAcademicYears({ schoolId: scopedSchoolIds[0] }),
+          fetchComplainTypes(scopedSchoolIds[0]).catch(() => []),
+          canLoadAcademicYears
+            ? fetchAcademicYears({ schoolId: scopedSchoolIds[0] }).catch(() => [])
+            : Promise.resolve([]),
         ])
 
         setData(Array.isArray(pageData?.content) ? pageData.content : [])
@@ -143,8 +147,10 @@ const ManageComplain = ({ onNavigate }) => {
             userType: filters.userType !== 'Select' ? filters.userType : undefined,
           }).then((res) => Array.isArray(res?.content) ? res.content : []),
         ),
-        fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) => fetchComplainTypes(schoolId)),
-        fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) => fetchAcademicYears({ schoolId })),
+        fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) => fetchComplainTypes(schoolId).catch(() => [])),
+        canLoadAcademicYears
+          ? fetchRowsForSchoolIds(scopedSchoolIds, (schoolId) => fetchAcademicYears({ schoolId }).catch(() => []))
+          : Promise.resolve([]),
       ])
 
       const query = search.trim().toLowerCase()

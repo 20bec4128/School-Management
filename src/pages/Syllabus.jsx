@@ -10,6 +10,7 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { dedupeByKey, getParentChildClassId, getParentChildScope, getParentChildSchoolId, uniqueScopeCombos } from '../utils/parentChildScope'
 import useAcademicYearOptions from '../hooks/useAcademicYearOptions'
 import '../assets/css/addModalShared.css'
 import ExportDropdown from '../components/ExportDropdown'
@@ -38,42 +39,6 @@ const normalizeSyllabus = (row) => ({
   fileUrl: row?.fileUrl || '',
 })
 
-const getChildScope = (children, selectedChildId) => {
-  const list = Array.isArray(children) ? children : []
-  const selected =
-    selectedChildId != null && selectedChildId !== ''
-      ? list.find((child) => String(
-        child?.studentId ??
-        child?.id ??
-        child?.childId ??
-        child?.student?.id ??
-        child?.student?.studentId ??
-        child?.student?.childId ??
-        ''
-      ) === String(selectedChildId))
-      : null
-  return selected || list[0] || null
-}
-
-const getChildSchoolId = (child) =>
-  child?.schoolId ??
-  child?.school?.id ??
-  child?.student?.schoolId ??
-  child?.student?.school?.id ??
-  child?.student?.school?.schoolId ??
-  child?.school?.schoolId ??
-  null
-
-const getChildClassId = (child) =>
-  child?.classId ??
-  child?.schoolClassId ??
-  child?.schoolClass?.id ??
-  child?.student?.classId ??
-  child?.student?.schoolClassId ??
-  child?.student?.schoolClass?.id ??
-  child?.schoolClass?.id ??
-  null
-
 const columnOptions = [
   { key: 'school', label: 'School' },
   { key: 'title', label: 'Title' },
@@ -94,7 +59,19 @@ const getFileIcon = (fileName) => {
 }
 
 const Syllabus = ({ onNavigate }) => {
-  const { role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const {
+    role,
+    schoolId,
+    schoolName,
+    studentClassId,
+    selectedChildId,
+    parentChildren,
+    selectedChildren,
+    isAllChildrenSelected,
+    canAdd,
+    canEdit,
+    canDelete,
+  } = useAuth()
   const { activeSchoolId, isSchoolSelectionEnabled } = useSchool()
   const canManage = canAdd('syllabus') || canEdit('syllabus') || canDelete('syllabus')
 
@@ -129,18 +106,19 @@ const Syllabus = ({ onNavigate }) => {
     }
   }, [isSchoolAdmin, schoolId, schoolName])
   const sessionYearOptions = useAcademicYearOptions()
-  const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const parentScope = useMemo(() => getParentChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
+  const selectedChild = parentScope.selectedChild
   const effectiveSchoolId =
     roleUpper === 'STUDENT'
       ? (schoolId ?? activeSchoolId ?? null)
-      : roleUpper === 'PARENT'
-        ? getChildSchoolId(selectedChild)
+      : roleUpper === 'PARENT' && !isAllChildrenSelected
+        ? getParentChildSchoolId(selectedChild)
         : null
   const effectiveClassId =
     roleUpper === 'STUDENT'
       ? studentClassId ?? null
-      : roleUpper === 'PARENT'
-        ? getChildClassId(selectedChild)
+      : roleUpper === 'PARENT' && !isAllChildrenSelected
+        ? getParentChildClassId(selectedChild)
         : null
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : schoolId ? String(schoolId) : ''
   const resolvedSchoolName = schoolName || ''
@@ -187,6 +165,20 @@ const Syllabus = ({ onNavigate }) => {
     setError('')
 
     try {
+      if (roleUpper === 'PARENT' && isAllChildrenSelected) {
+        const scopedChildren = uniqueScopeCombos(selectedChildren.length > 0 ? selectedChildren : parentScope.children, (child) => `${getParentChildSchoolId(child)}:${getParentChildClassId(child)}`)
+        const perScope = await Promise.all(
+          scopedChildren.map((child) =>
+            fetchSyllabuses({
+              schoolId: getParentChildSchoolId(child),
+              classId: getParentChildClassId(child),
+            }).catch(() => []),
+          ),
+        )
+        setSyllabuses(dedupeByKey(perScope.flat(), (row) => row?.id ?? `${row?.schoolId ?? ''}-${row?.classId ?? ''}-${row?.subjectId ?? ''}-${row?.title ?? ''}`))
+        return
+      }
+
       const scopedParams = isStudentScope
         ? (effectiveSchoolId && effectiveClassId
             ? { schoolId: effectiveSchoolId, classId: effectiveClassId }
@@ -199,7 +191,7 @@ const Syllabus = ({ onNavigate }) => {
 
       if (isStudentScope && !scopedParams) {
         setSyllabuses([])
-        setError(roleUpper === 'PARENT' && !selectedChildId ? 'Please select a child first.' : 'Unable to determine your class scope.')
+        setError('Unable to determine your class scope.')
         return
       }
 
@@ -216,7 +208,7 @@ const Syllabus = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [activeSchoolId, effectiveClassId, effectiveSchoolId, isSchoolSelectionEnabled, isStudentScope, resolvedSchoolId, roleUpper, selectedChildId])
+  }, [activeSchoolId, effectiveClassId, effectiveSchoolId, isAllChildrenSelected, isSchoolSelectionEnabled, isStudentScope, parentScope.children, resolvedSchoolId, roleUpper, selectedChildren])
 
   useEffect(() => {
     void loadLookups()
