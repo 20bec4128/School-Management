@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.SaleRecipientDto;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.School.School_management.Repository.AdminUserRepository;
 import com.School.School_management.Repository.EmployeeRepository;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/sales/lookups")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "sale", action = "view")
 public class SaleLookupController {
 
     private final EmployeeRepository employeeRepository;

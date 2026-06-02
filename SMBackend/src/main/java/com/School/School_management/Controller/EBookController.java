@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.EBookDto;
 import com.School.School_management.Service.EBookService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/ebooks")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "ebook", action = "view")
 public class EBookController {
 
     private final EBookService eBookService;
@@ -32,6 +32,7 @@ public class EBookController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "ebook", action = "view")
     public Page<EBookDto> list(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -46,6 +47,7 @@ public class EBookController {
     }
 
     @PostMapping(consumes = "multipart/form-data")
+    @RequirePagePermission(slug = "ebook", action = "add")
     public EBookDto create(
             @RequestPart("data") String data,
             @RequestPart(value = "ebookFile", required = false) MultipartFile ebookFile
@@ -55,6 +57,7 @@ public class EBookController {
     }
 
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+    @RequirePagePermission(slug = "ebook", action = "edit")
     public EBookDto update(
             @PathVariable Long id,
             @RequestPart("data") String data,
@@ -65,6 +68,7 @@ public class EBookController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "ebook", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         eBookService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();

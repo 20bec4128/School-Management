@@ -102,6 +102,14 @@ const SuggestionCreate = ({ onNavigate }) => {
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [initialEditId] = useState(() => {
     try {
@@ -133,21 +141,20 @@ const SuggestionCreate = ({ onNavigate }) => {
       return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      const match = list.find((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
-      if (match) return [match]
-      if (authSchoolId != null) {
-        return [{ id: authSchoolId, schoolName: authSchoolName || 'My School', headOfficeId: authHeadOfficeId ?? null }]
-      }
-      return []
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return list
-  }, [schools, isSuperAdmin, manualScope.schoolOptions, isHeadOfficeAdmin, isSchoolAdmin, authHeadOfficeId, authSchoolId, authSchoolName])
+  }, [schools, isSuperAdmin, manualScope.schoolOptions, isHeadOfficeAdmin, isSchoolAdmin, currentSchoolOption, authHeadOfficeId])
 
   useEffect(() => {
+    if (isSchoolAdmin) {
+      setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
     fetchSchoolsLookup()
       .then((data) => setSchools(Array.isArray(data) ? data : []))
       .catch(() => setSchools([]))
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   useEffect(() => {
     if (!isSchoolAdmin || authSchoolId == null) return

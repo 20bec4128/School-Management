@@ -49,7 +49,7 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'schoolId', label: 'School ID' },
+  { key: 'schoolId', label: 'School Name' },
   { key: 'callType', label: 'Call Type' },
   { key: 'name', label: 'Name' },
   { key: 'phone', label: 'Phone' },
@@ -98,7 +98,7 @@ const callTypeBadge = (type) => {
 }
 
 const CallLog = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'call-log'
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -131,6 +131,18 @@ const CallLog = ({ onNavigate }) => {
   }, [activeSchoolId, authSchoolId, contextSchoolOptions])
   const schoolHeadOfficeId = currentSchool?.headOfficeId != null ? String(currentSchool.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : '')
   const schoolHeadOfficeName = authHeadOfficeName || (schoolHeadOfficeId ? `Head Office ${schoolHeadOfficeId}` : '')
+  const resolveSchoolName = useCallback((schoolId) => {
+    const targetSchoolId = String(schoolId ?? '').trim()
+    if (!targetSchoolId) return '-'
+
+    const match =
+      findSchoolById(manualScope.schoolOptions, targetSchoolId) ||
+      findSchoolById(contextSchoolOptions, targetSchoolId)
+
+    if (match?.schoolName) return match.schoolName
+    if (String(authSchoolId ?? '') === targetSchoolId) return authSchoolName || `School ${targetSchoolId}`
+    return `School ${targetSchoolId}`
+  }, [authSchoolId, authSchoolName, contextSchoolOptions, manualScope.schoolOptions])
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
       if (filters.schoolId) return [String(filters.schoolId)]
@@ -572,7 +584,7 @@ const CallLog = ({ onNavigate }) => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School Name</th> : null}
                   {visibleColumns.callType ? <th scope="col">Call Type</th> : null}
                   {visibleColumns.name ? <th scope="col">Name</th> : null}
                   {visibleColumns.phone ? <th scope="col">Phone</th> : null}
@@ -594,7 +606,7 @@ const CallLog = ({ onNavigate }) => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                    {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
+                    {visibleColumns.schoolId ? <td>{resolveSchoolName(row.schoolId)}</td> : null}
                     {visibleColumns.callType ? (
                       <td><span className={callTypeBadge(row.callType)}>{row.callType}</span></td>
                     ) : null}

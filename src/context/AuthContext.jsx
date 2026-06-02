@@ -5,6 +5,7 @@ import { normalizeRole } from '../utils/roles'
 import { AuthContext } from './authContext'
 import { fetchGeneralSettingBySchoolId } from '../apis/generalSettingApi'
 import { fetchMyPagePermissions } from '../apis/pagePermissionApi'
+import { normalizePagePermissionSlug } from '../utils/pagePermissionAliases'
 
 const USER_KEY = 'sm_user'
 const CHILD_KEY = 'sm_selected_child_id'
@@ -76,6 +77,19 @@ const pickSchoolName = (user) =>
   user?.teacher?.school?.name ??
   null
 
+const normalizePagePermissionsMap = (permissions) => {
+  if (!permissions || typeof permissions !== 'object') return {}
+  if (permissions.superAdmin) return { superAdmin: true }
+
+  return Object.entries(permissions).reduce((acc, [slug, value]) => {
+    if (slug === 'superAdmin') return acc
+    const key = normalizePagePermissionSlug(slug)
+    if (!key) return acc
+    acc[key] = value
+    return acc
+  }, {})
+}
+
 export const AuthProvider = ({ children }) => {
   const [token, setTokenState] = useState(() => getToken())
   const [user, setUser] = useState(() => readJson(USER_KEY))
@@ -83,7 +97,7 @@ export const AuthProvider = ({ children }) => {
 
   const [pagePermissions, setPagePermissions] = useState(() => {
     const saved = readJson('sm_page_perms')
-    return saved && !saved.superAdmin ? saved : {}
+    return normalizePagePermissionsMap(saved)
   })
   const [isSuperAdminRole, setIsSuperAdminRole] = useState(() => {
     const saved = readJson('sm_page_perms')
@@ -129,13 +143,18 @@ export const AuthProvider = ({ children }) => {
       setGeneralSettings(null)
       return
     }
+    if (role === 'SCHOOL_ADMIN' || role === 'TEACHER') {
+      setGeneralSettings(null)
+      return
+    }
     try {
       const data = await fetchGeneralSettingBySchoolId(schoolId)
       if (data) setGeneralSettings(data)
-    } catch {
+    } catch (error) {
+      if (error?.status === 403) return
       // ignore
     }
-  }, [schoolId])
+  }, [schoolId, role])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -201,8 +220,9 @@ export const AuthProvider = ({ children }) => {
             writeJson('sm_page_perms', { superAdmin: true })
           } else {
             setIsSuperAdminRole(false)
-            setPagePermissions(pp || {})
-            writeJson('sm_page_perms', pp || {})
+            const normalizedPermissions = normalizePagePermissionsMap(pp)
+            setPagePermissions(normalizedPermissions)
+            writeJson('sm_page_perms', normalizedPermissions)
           }
         } catch (e) {
           console.error('Failed to fetch page permissions', e)
@@ -300,33 +320,37 @@ export const AuthProvider = ({ children }) => {
   }, [setSelectedChildId])
 
   const canView = useCallback((slug) => {
+    const key = normalizePagePermissionSlug(slug)
     if (isSuperAdminRole) return true
     if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
-    const perms = pagePermissions[slug]
+    const perms = pagePermissions[key]
     if (!perms) return true
     return perms.view === true
   }, [isSuperAdminRole, pagePermissions])
 
   const canAdd = useCallback((slug) => {
+    const key = normalizePagePermissionSlug(slug)
     if (isSuperAdminRole) return true
     if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
-    const perms = pagePermissions[slug]
+    const perms = pagePermissions[key]
     if (!perms) return true
     return perms.add === true
   }, [isSuperAdminRole, pagePermissions])
 
   const canEdit = useCallback((slug) => {
+    const key = normalizePagePermissionSlug(slug)
     if (isSuperAdminRole) return true
     if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
-    const perms = pagePermissions[slug]
+    const perms = pagePermissions[key]
     if (!perms) return true
     return perms.edit === true
   }, [isSuperAdminRole, pagePermissions])
 
   const canDelete = useCallback((slug) => {
+    const key = normalizePagePermissionSlug(slug)
     if (isSuperAdminRole) return true
     if (!pagePermissions || Object.keys(pagePermissions).length === 0) return true
-    const perms = pagePermissions[slug]
+    const perms = pagePermissions[key]
     if (!perms) return true
     return perms.delete === true
   }, [isSuperAdminRole, pagePermissions])

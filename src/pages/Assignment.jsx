@@ -117,7 +117,13 @@ const Assignment = ({ onNavigate }) => {
       }
       
       const [schoolsData, classesData, sectionsData, subjectsData] = await Promise.all([
-        fetchSchoolsLookup().catch(() => []),
+        roleUpper === 'SCHOOL_ADMIN'
+          ? Promise.resolve(
+              authSchoolId
+                ? [{ id: authSchoolId, schoolName: authSchoolName || `School ${authSchoolId}` }]
+                : [],
+            )
+          : fetchSchoolsLookup().catch(() => []),
         fetchClasses().catch(() => []),
         fetchSections().catch(() => []),
         fetchSubjects().catch(() => []),
@@ -134,7 +140,7 @@ const Assignment = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [fixedStudentId, resolvedSchoolId])
+  }, [authSchoolId, authSchoolName, fixedStudentId, resolvedSchoolId, roleUpper])
 
   useEffect(() => {
     void loadData()

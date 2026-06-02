@@ -5,7 +5,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
-import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import {
   fetchPostalReceivesPage, 
   deletePostalReceive 
@@ -18,7 +18,7 @@ const emptyFilters = {
 }
 
 const columnOptions = [
-  { key: 'schoolId', label: 'School ID' },
+  { key: 'schoolId', label: 'School Name' },
   { key: 'toTitle', label: 'To Title' },
   { key: 'referenceNo', label: 'Reference' },
   { key: 'fromTitle', label: 'From Title' },
@@ -26,7 +26,7 @@ const columnOptions = [
 ]
 
 const PostalReceive = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'postal-receive'
   const PAGE_PERMISSIONS = {
     add: canAdd(PAGE_SLUG),
@@ -50,6 +50,18 @@ const PostalReceive = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions) : contextSchoolOptions
+  const resolveSchoolName = useCallback((schoolId) => {
+    const targetSchoolId = String(schoolId ?? '').trim()
+    if (!targetSchoolId) return '-'
+
+    const match =
+      findSchoolById(manualScope.schoolOptions, targetSchoolId) ||
+      findSchoolById(contextSchoolOptions, targetSchoolId)
+
+    if (match?.schoolName) return match.schoolName
+    if (String(authSchoolId ?? '') === targetSchoolId) return authSchoolName || `School ${targetSchoolId}`
+    return `School ${targetSchoolId}`
+  }, [authSchoolId, authSchoolName, contextSchoolOptions, manualScope.schoolOptions])
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
       if (filters.schoolId) return [String(filters.schoolId)]
@@ -269,7 +281,7 @@ const PostalReceive = ({ onNavigate }) => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School Name</th> : null}
                   {visibleColumns.toTitle ? <th scope="col">To Title</th> : null}
                   {visibleColumns.referenceNo ? <th scope="col">Reference</th> : null}
                   {visibleColumns.fromTitle ? <th scope="col">From Title</th> : null}
@@ -290,7 +302,7 @@ const PostalReceive = ({ onNavigate }) => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                    {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
+                    {visibleColumns.schoolId ? <td>{resolveSchoolName(row.schoolId)}</td> : null}
                     {visibleColumns.toTitle ? <td className="fw-medium text-primary-light">{row.toTitle}</td> : null}
                     {visibleColumns.referenceNo ? <td>{row.referenceNo || '-'}</td> : null}
                     {visibleColumns.fromTitle ? <td>{row.fromTitle}</td> : null}

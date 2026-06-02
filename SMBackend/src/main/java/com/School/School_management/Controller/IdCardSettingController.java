@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.IdCardSettingDto;
 import com.School.School_management.Service.IdCardSettingService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/id-card-settings")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "id-card-setting", action = "view")
 public class IdCardSettingController {
 
     private final IdCardSettingService idCardSettingService;
@@ -28,6 +28,7 @@ public class IdCardSettingController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "id-card-setting", action = "view")
     public Page<IdCardSettingDto> list(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -39,21 +40,25 @@ public class IdCardSettingController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "id-card-setting", action = "view")
     public IdCardSettingDto getById(@PathVariable Long id) {
         return idCardSettingService.getById(id, CurrentUserHolder.get());
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "id-card-setting", action = "add")
     public IdCardSettingDto create(@RequestBody IdCardSettingDto dto) {
         return idCardSettingService.create(dto, CurrentUserHolder.get());
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "id-card-setting", action = "edit")
     public IdCardSettingDto update(@PathVariable Long id, @RequestBody IdCardSettingDto dto) {
         return idCardSettingService.update(id, dto, CurrentUserHolder.get());
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "id-card-setting", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         idCardSettingService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();

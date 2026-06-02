@@ -177,7 +177,15 @@ const Topic = ({ onNavigate }) => {
   const canAddTopics = role !== "STUDENT" && role !== "PARENT";
   const roleUpper = String(role || "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
+  const isSchoolAdmin = roleUpper === "SCHOOL_ADMIN";
   const isHeadOfficeAdmin = roleUpper === "HEAD_OFFICE_ADMIN";
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+    };
+  }, [authSchoolId, authSchoolName, isSchoolAdmin]);
 
   const headOfficeOptions = useMemo(() => {
     const list = (Array.isArray(headOfficesLookup) ? headOfficesLookup : [])
@@ -194,7 +202,9 @@ const Topic = ({ onNavigate }) => {
   }, [authHeadOfficeId, authHeadOfficeName, headOfficesLookup, isHeadOfficeAdmin]);
 
   const schoolOptions = useMemo(() => {
-    const list = Array.isArray(schoolsLookup) ? schoolsLookup.slice() : [];
+    const list = isSchoolAdmin
+      ? (currentSchoolOption ? [currentSchoolOption] : [])
+      : (Array.isArray(schoolsLookup) ? schoolsLookup.slice() : []);
     const selectedHeadOfficeId = pendingFilters.headOfficeId !== "Select"
       ? String(pendingFilters.headOfficeId)
       : isHeadOfficeAdmin && authHeadOfficeId != null
@@ -214,7 +224,7 @@ const Topic = ({ onNavigate }) => {
       }))
       .filter((row) => row.id != null && row.schoolName)
       .sort((a, b) => String(a.schoolName).localeCompare(String(b.schoolName)));
-  }, [authHeadOfficeId, isHeadOfficeAdmin, pendingFilters.headOfficeId, resolvedSchoolId, schoolsLookup]);
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, resolvedSchoolId, schoolsLookup]);
 
   useEffect(() => {
     let ignore = false;
@@ -225,7 +235,7 @@ const Topic = ({ onNavigate }) => {
         const [headOfficesResult, schoolsResult, classesResult, subjectsResult] =
           await Promise.allSettled([
             isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-            fetchSchoolsLookup(),
+            isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
             fetchClasses(),
             fetchSubjects(),
           ]);
@@ -252,7 +262,7 @@ const Topic = ({ onNavigate }) => {
     return () => {
       ignore = true;
     };
-  }, [isSuperAdmin]);
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin]);
 
   const loadLessonsLookup = useCallback(async (base) => {
     if (

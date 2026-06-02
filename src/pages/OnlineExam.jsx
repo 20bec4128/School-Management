@@ -36,7 +36,7 @@ const getClassLabel = (row) => row?.className || row?.numericName || row?.name |
 const getSubjectLabel = (row) => row?.subjectName || row?.name || row?.label || ''
 
 const OnlineExam = ({ onNavigate } = {}) => {
-  const { status, token, role: authRole, user, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
+  const { status, token, role: authRole, user, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'online-exam'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
@@ -65,6 +65,15 @@ const OnlineExam = ({ onNavigate } = {}) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const getSchoolById = (schoolId) =>
     (Array.isArray(schools) ? schools : []).find((school) => String(school?.id ?? '') === String(schoolId ?? '')) || null
 
@@ -72,7 +81,7 @@ const OnlineExam = ({ onNavigate } = {}) => {
     if (status !== 'ready' || !token) return
     Promise.all([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup(),
+      isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
     ])
       .then(([headOfficePage, rowsData]) => {
         setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
@@ -83,7 +92,7 @@ const OnlineExam = ({ onNavigate } = {}) => {
         setHeadOffices([])
         setSchools([])
       })
-  }, [isSuperAdmin, status, token])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   const selectedSchoolId = useMemo(() => {
     if (pendingFilters.schoolId) return String(pendingFilters.schoolId)
@@ -100,10 +109,10 @@ const OnlineExam = ({ onNavigate } = {}) => {
       return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return list
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schools])
 
   useEffect(() => {
     if (!selectedSchoolId) {

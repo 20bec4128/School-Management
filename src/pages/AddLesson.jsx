@@ -73,7 +73,16 @@ const AddLesson = ({ onNavigate }) => {
   } = useAuth();
   const { activeSchoolId } = useSchool();
   const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
+  const isSchoolAdmin = String(role || "").toUpperCase() === "SCHOOL_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin]);
 
   const [schoolsLookup, setSchoolsLookup] = useState([]);
   const [academicYearsLookup, setAcademicYearsLookup] = useState([]);
@@ -94,19 +103,25 @@ const AddLesson = ({ onNavigate }) => {
   useEffect(() => {
     const loadStatic = async () => {
       try {
+        if (isSchoolAdmin) {
+          setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : []);
+          return;
+        }
         const s = await fetchSchoolsLookup();
         setSchoolsLookup(s);
       } catch (err) {
         console.error("Error loading static lookups:", err);
+        setSchoolsLookup(isSchoolAdmin && currentSchoolOption ? [currentSchoolOption] : []);
       }
     };
     loadStatic();
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin]);
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.schoolOptions;
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : [];
     return Array.isArray(schoolsLookup) ? schoolsLookup : [];
-  }, [isSuperAdmin, manualScope.schoolOptions, schoolsLookup]);
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schoolsLookup]);
 
   useEffect(() => {
     const sid = isSuperAdmin

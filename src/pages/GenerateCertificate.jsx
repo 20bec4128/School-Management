@@ -7,9 +7,9 @@ import ExportDropdown from '../components/ExportDropdown'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
+import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchStudentsPage } from '../apis/studentsApi'
@@ -330,8 +330,8 @@ const GenerateCertificate = ({ onNavigate }) => {
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
+  const manualScope = useManualSchoolScope(isSuperAdmin)
 
-  const [schools, setSchools] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [students, setStudents] = useState([])
   const [classes, setClasses] = useState([])
@@ -351,6 +351,13 @@ const GenerateCertificate = ({ onNavigate }) => {
   const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentSchoolOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    if (isHeadOfficeAdmin || isSchoolAdmin) {
+      return [{ id: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId }]
+    }
+    return []
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
   const selectedSchoolId = useMemo(() => {
     if (isSuperAdmin) return filters.schoolId || pendingFilters.schoolId || ''
@@ -364,15 +371,15 @@ const GenerateCertificate = ({ onNavigate }) => {
     if (isSuperAdmin) return filters.headOfficeId || pendingFilters.headOfficeId || ''
     if (isHeadOfficeAdmin) return authHeadOfficeId != null ? String(authHeadOfficeId) : ''
     if (selectedSchoolId) {
-      const school = schools.find((row) => String(row?.id ?? '') === String(selectedSchoolId))
+      const school = currentSchoolOptions.find((row) => String(row?.id ?? '') === String(selectedSchoolId))
       if (school?.headOfficeId != null) return String(school.headOfficeId)
     }
     return filters.headOfficeId || ''
-  }, [authHeadOfficeId, filters.headOfficeId, isHeadOfficeAdmin, isSuperAdmin, pendingFilters.headOfficeId, schools, selectedSchoolId])
+  }, [authHeadOfficeId, currentSchoolOptions, filters.headOfficeId, isHeadOfficeAdmin, isSuperAdmin, pendingFilters.headOfficeId, selectedSchoolId])
 
   const selectedSchool = useMemo(
-    () => schools.find((row) => String(row?.id ?? '') === String(selectedSchoolId)) || null,
-    [schools, selectedSchoolId],
+    () => currentSchoolOptions.find((row) => String(row?.id ?? '') === String(selectedSchoolId)) || null,
+    [currentSchoolOptions, selectedSchoolId],
   )
 
   const selectedCertificateType = useMemo(
@@ -381,7 +388,7 @@ const GenerateCertificate = ({ onNavigate }) => {
   )
 
   const scopeSchoolOptions = useMemo(() => {
-    const allRows = Array.isArray(schools) ? schools : []
+    const allRows = Array.isArray(currentSchoolOptions) ? currentSchoolOptions : []
     if (isSuperAdmin && pendingFilters.headOfficeId) {
       return allRows
         .filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
@@ -396,7 +403,7 @@ const GenerateCertificate = ({ onNavigate }) => {
       return allRows.filter((school) => String(school?.id ?? '') === String(authSchoolId))
     }
     return [...allRows].sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, pendingFilters.headOfficeId, schools])
+  }, [authHeadOfficeId, authSchoolId, currentSchoolOptions, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, pendingFilters.headOfficeId])
 
   const classOptions = useMemo(
     () =>
@@ -440,10 +447,7 @@ const GenerateCertificate = ({ onNavigate }) => {
 
   const loadLookups = useCallback(async () => {
     try {
-      const [headOfficePage, schoolList] = await Promise.all([
-        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-        fetchSchoolsLookup(),
-      ])
+      const headOfficePage = await (isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }))
 
       setHeadOffices(
         isSuperAdmin && Array.isArray(headOfficePage?.content)
@@ -453,10 +457,8 @@ const GenerateCertificate = ({ onNavigate }) => {
               .sort((a, b) => String(a.name).localeCompare(String(b.name)))
           : [],
       )
-      setSchools(Array.isArray(schoolList) ? schoolList : [])
     } catch {
       setHeadOffices([])
-      setSchools([])
     }
   }, [isSuperAdmin])
 
@@ -573,7 +575,7 @@ const GenerateCertificate = ({ onNavigate }) => {
     const next = String(authSchoolId)
     setPendingFilters((prev) => ({ ...prev, schoolId: next }))
     setFilters((prev) => ({ ...prev, schoolId: next }))
-  }, [authSchoolId, isSchoolAdmin])
+  }, [authSchoolId, currentSchoolOptions, isSchoolAdmin])
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages)

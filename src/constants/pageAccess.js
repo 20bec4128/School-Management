@@ -1,3 +1,5 @@
+import { normalizePagePermissionSlug } from '../utils/pagePermissionAliases'
+
 export const PAGE_GROUPS = [
   {
     key: 'core-system',
@@ -14,7 +16,7 @@ export const PAGE_GROUPS = [
   {
     key: 'administrator',
     label: 'Administrator',
-    pageKeys: ['head-offices', 'manage-school', 'academic-year', 'user-role-acl', 'payment-setting', 'payment-setting-create', 'sms-setting', 'sms-setting-create', 'general-settings'],
+    pageKeys: ['head-offices', 'school', 'manage-school', 'academic-year', 'user-role-acl', 'payment-setting', 'payment-setting-create', 'sms-setting', 'sms-setting-create', 'general-settings', 'feedback'],
   },
   {
     key: 'student-management',
@@ -29,7 +31,7 @@ export const PAGE_GROUPS = [
   {
     key: 'teacher-management',
     label: 'Teacher',
-    pageKeys: ['teacher-department', 'manage-teacher', 'class-lecture', 'rating', 'teacher-attendance'],
+    pageKeys: ['teacher-department', 'teacher', 'manage-teacher', 'class-lecture', 'rating', 'teacher-attendance'],
   },
   {
     key: 'lesson-plan',
@@ -42,6 +44,7 @@ export const PAGE_GROUPS = [
     pageKeys: [
       'exam-instruction',
       'question-bank',
+      'online-exam',
       'onlineexam',
       'exam-result',
       'exam-grade',
@@ -67,7 +70,7 @@ export const PAGE_GROUPS = [
   {
     key: 'hr',
     label: 'Human Resource',
-    pageKeys: ['manage-designation', 'manage-employee', 'leave-type', 'leave-application', 'waiting-application', 'approved-application', 'declined-application', 'salary-grade', 'salary-payment', 'salary-history', 'employee-attendance-report'],
+    pageKeys: ['designation', 'manage-designation', 'employee', 'manage-employee', 'leave-type', 'leave-application', 'waiting-application', 'approved-application', 'declined-application', 'salary-grade', 'salary-payment', 'salary-history', 'employee-attendance-report'],
   },
   {
     key: 'finance',
@@ -84,12 +87,19 @@ export const PAGE_GROUPS = [
     label: 'Certificates',
     pageKeys: ['id-card-setting', 'admit-card-setting', 'certificate-type', 'generate-certificate', 'candidate', 'donar', 'scholarship', 'guardian'],
   },
+  {
+    key: 'miscellaneous',
+    label: 'Miscellaneous',
+    pageKeys: ['award', 'manage-award', 'faq', 'manage-todo', 'feedback', 'manage-feedback'],
+  },
 ]
 
 export const ROUTE_ACCESS_RULES = [
   { pageKeys: ['head-offices'], permissions: ['HEAD_OFFICE_MANAGE', '*'] },
   { pageKeys: ['academic-year'], permissions: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
-  { pageKeys: ['manage-school', 'payment-setting', 'payment-setting-create', 'sms-setting', 'sms-setting-create', 'general-settings'], permissions: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
+  { pageKeys: ['school', 'manage-school'], permissions: ['HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
+  { pageKeys: ['general-settings'], permissions: ['HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
+  { pageKeys: ['payment-setting', 'payment-setting-create', 'sms-setting', 'sms-setting-create'], permissions: ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
   { pageKeys: ['user-role-acl'], permissions: ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*'] },
   { pageKeys: ['class-routine'], permissions: ['CLASS_ROUTINE_VIEW', 'CLASS_ROUTINE_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'] },
 ]
@@ -126,6 +136,7 @@ export const PAGE_KEY_PERMISSIONS = {
 
   // Teacher module
   'teacher-department': ['DEPARTMENT_MANAGE', '*'],
+  teacher: ['TEACHER_MANAGE', '*'],
   'manage-teacher': ['TEACHER_MANAGE', '*'],
   'class-lecture': ['CLASS_VIEW_ASSIGNED', 'CLASS_MANAGE', '*'],
   rating: ['TEACHER_MANAGE', '*'],
@@ -143,6 +154,7 @@ export const PAGE_KEY_PERMISSIONS = {
   // Examination system (conservative: tie to result/exam permissions if present, otherwise require all-access)
   'exam-instruction': ['*'],
   'question-bank': ['*'],
+  'online-exam': ['*'],
   onlineexam: ['*'],
   'exam-result': ['RESULT_VIEW_OWN', 'RESULT_VIEW_CHILD', '*'],
   'exam-grade': ['*'],
@@ -168,7 +180,9 @@ export const PAGE_KEY_PERMISSIONS = {
   'result-sms-create': ['*'],
 
   // HR module
+  designation: ['DEPARTMENT_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'manage-designation': ['DEPARTMENT_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
+  employee: ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'manage-employee': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'leave-type': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'leave-application': ['ADMIN_USER_MANAGE', 'SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
@@ -219,13 +233,14 @@ export const PAGE_KEY_PERMISSIONS = {
   guardian: ['GUARDIAN', '*'],
   'sms-setting': ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
   'sms-setting-create': ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
-  'general-settings': ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*'],
+  'general-settings': ['HEAD_OFFICE_SCHOOL_MANAGE', '*'],
 }
 
-export const getPageGroup = (pageKey) => PAGE_GROUPS.find((group) => group.pageKeys.includes(pageKey)) || null
+export const getPageGroup = (pageKey) =>
+  PAGE_GROUPS.find((group) => group.pageKeys.includes(normalizePagePermissionSlug(pageKey))) || null
 
 export const getRouteAccessRule = (pageKey) =>
-  ROUTE_ACCESS_RULES.find((rule) => rule.pageKeys.includes(pageKey)) ||
-  (PAGE_KEY_PERMISSIONS[pageKey]
-    ? { pageKeys: [pageKey], permissions: PAGE_KEY_PERMISSIONS[pageKey] }
+  ROUTE_ACCESS_RULES.find((rule) => rule.pageKeys.includes(normalizePagePermissionSlug(pageKey))) ||
+  (PAGE_KEY_PERMISSIONS[normalizePagePermissionSlug(pageKey)]
+    ? { pageKeys: [normalizePagePermissionSlug(pageKey)], permissions: PAGE_KEY_PERMISSIONS[normalizePagePermissionSlug(pageKey)] }
     : null)

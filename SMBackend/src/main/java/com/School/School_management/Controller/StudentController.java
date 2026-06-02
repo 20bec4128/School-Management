@@ -6,14 +6,14 @@ import com.School.School_management.Dto.StudentDto;
 import com.School.School_management.Service.StudentService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/students")
-@RequirePermission({"STUDENT_MANAGE", "*"})
+@RequirePagePermission(slug = "student-list", action = "view")
 public class StudentController {
 
     private final StudentService studentService;
@@ -23,6 +23,7 @@ public class StudentController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "student-list", action = "view")
     public ResponseEntity<PaginationResponse<StudentDto.Response>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -47,17 +48,20 @@ public class StudentController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "student-list", action = "add")
     public ResponseEntity<StudentDto.Response> create(@RequestBody StudentDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(studentService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "student-list", action = "edit")
     public ResponseEntity<StudentDto.Response> update(@PathVariable Long id, 
                                                         @RequestBody StudentDto.Request request) {
         return ResponseEntity.ok(studentService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "student-list", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         studentService.delete(id);
         return ResponseEntity.ok("Student deleted successfully");

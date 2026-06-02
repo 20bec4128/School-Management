@@ -66,10 +66,11 @@ const getChildScope = (children, selectedChildId) => {
 }
 
 const StudyMaterial = ({ onNavigate }) => {
-  const { user, role, schoolId, selectedChildId, parentChildren, studentClassId, canAdd, canEdit, canDelete } = useAuth()
+  const { user, role, schoolId, schoolName, selectedChildId, parentChildren, studentClassId, canAdd, canEdit, canDelete } = useAuth()
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
+  const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const effectiveSchoolId = roleUpper === 'STUDENT' ? schoolId : roleUpper === 'PARENT' ? selectedChild?.schoolId ?? null : null
@@ -99,11 +100,18 @@ const StudyMaterial = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : schoolId ? String(schoolId) : ''
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || schoolId == null) return null
+    return {
+      id: schoolId,
+      schoolName: schoolName || `School ${schoolId}`,
+    }
+  }, [isSchoolAdmin, schoolId, schoolName])
 
   const loadLookups = useCallback(async () => {
     const [headOffices, schools, classes, subjects] = await Promise.all([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500).catch(() => ({ content: [] })) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup().catch(() => []),
+      isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup().catch(() => []),
       fetchClasses().catch(() => []),
       fetchSubjects().catch(() => []),
     ])
@@ -111,7 +119,7 @@ const StudyMaterial = ({ onNavigate }) => {
     setSchoolsLookup(schools)
     setClassesLookup(classes)
     setSubjectsLookup(subjects)
-  }, [isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadRows = useCallback(async () => {
     setLoading(true)

@@ -50,6 +50,7 @@ const Candidate = ({ onNavigate }) => {
     role,
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
+    schoolName: authSchoolName,
     canAdd,
     canEdit,
     canDelete,
@@ -59,6 +60,15 @@ const Candidate = ({ onNavigate }) => {
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
+  const currentSchoolOptions = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return []
+    return [
+      {
+        id: authSchoolId,
+        schoolName: authSchoolName || `School ${authSchoolId}`,
+      },
+    ]
+  }, [authSchoolId, authSchoolName, isSchoolAdmin])
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -86,7 +96,7 @@ const Candidate = ({ onNavigate }) => {
 
   const schoolOptionsFor = useCallback(
     (headOfficeId) =>
-      [...schoolsLookup]
+      [...(isSchoolAdmin ? currentSchoolOptions : schoolsLookup)]
         .filter((school) => {
           if (isSchoolAdmin && authSchoolId != null) {
             return String(school?.id ?? '') === String(authSchoolId)
@@ -97,7 +107,7 @@ const Candidate = ({ onNavigate }) => {
           return !headOfficeId || String(school?.headOfficeId ?? '') === String(headOfficeId)
         })
         .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b))),
-    [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, schoolsLookup],
+    [authHeadOfficeId, authSchoolId, currentSchoolOptions, isHeadOfficeAdmin, isSchoolAdmin, schoolsLookup],
   )
 
   const fixedHeadOfficeId = !isSuperAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : ''
@@ -191,7 +201,7 @@ const Candidate = ({ onNavigate }) => {
   const loadLookups = useCallback(async () => {
     const [headOfficesResult, schoolsResult, classesResult, sectionsResult, academicYearsResult] = await Promise.allSettled([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup(),
+      isSchoolAdmin ? Promise.resolve(currentSchoolOptions) : fetchSchoolsLookup(),
       fetchClasses(),
       fetchSections(),
       fetchAcademicYears(),
@@ -209,7 +219,7 @@ const Candidate = ({ onNavigate }) => {
     setClassesLookup(unwrapCollection(classesResult.status === 'fulfilled' ? classesResult.value : []))
     setSectionsLookup(unwrapCollection(sectionsResult.status === 'fulfilled' ? sectionsResult.value : []))
     setAcademicYearsLookup(unwrapCollection(academicYearsResult.status === 'fulfilled' ? academicYearsResult.value : []))
-  }, [isSuperAdmin])
+  }, [currentSchoolOptions, isSchoolAdmin, isSuperAdmin])
 
   const loadCandidates = useCallback(async () => {
     setLoading(true)

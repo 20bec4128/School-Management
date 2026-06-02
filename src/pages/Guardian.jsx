@@ -132,13 +132,18 @@ const Guardian = ({ onNavigate }) => {
         return
       }
 
+      if (isSchoolAdmin) {
+        setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : [])
+        return
+      }
+
       const schoolsResult = await fetchSchoolsLookup()
       setSchoolsLookup(unwrapCollection(schoolsResult))
     } catch {
       setHeadOffices([])
-      setSchoolsLookup([])
+      setSchoolsLookup(isSchoolAdmin && currentSchoolOption ? [currentSchoolOption] : [])
     }
-  }, [isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadGuardians = useCallback(async () => {
     setLoading(true)

@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.LeaveTypeDto;
 import com.School.School_management.Service.LeaveTypeService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/leave-types")
-@RequirePermission({"ADMIN_USER_MANAGE", "SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "leave-type", action = "view")
 public class LeaveTypeController {
 
     private final LeaveTypeService leaveTypeService;
@@ -28,6 +28,7 @@ public class LeaveTypeController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "leave-type", action = "view")
     public ResponseEntity<List<LeaveTypeDto.Response>> list(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String role,
@@ -37,16 +38,19 @@ public class LeaveTypeController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "leave-type", action = "add")
     public ResponseEntity<LeaveTypeDto.Response> create(@RequestBody LeaveTypeDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(leaveTypeService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "leave-type", action = "edit")
     public ResponseEntity<LeaveTypeDto.Response> update(@PathVariable Long id, @RequestBody LeaveTypeDto.Request request) {
         return ResponseEntity.ok(leaveTypeService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "leave-type", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         leaveTypeService.delete(id);
         return ResponseEntity.ok("Leave type deleted successfully");

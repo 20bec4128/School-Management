@@ -80,12 +80,20 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const Class = () => {
-  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'class'
   const { activeSchoolId } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
   const [classes, setClasses] = useState([])
   const [headOfficesLookup, setHeadOfficesLookup] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -115,11 +123,13 @@ const Class = () => {
   const isHeadOfficeLocked = isHeadOfficeAdmin
 
   const getSchoolOptionsForHeadOffice = useCallback((headOfficeId) => {
-    const rows = Array.isArray(schoolsLookup) ? schoolsLookup : []
+    const rows = isSchoolAdmin
+      ? (currentSchoolOption ? [currentSchoolOption] : [])
+      : (Array.isArray(schoolsLookup) ? schoolsLookup : [])
     const normalizedHeadOfficeId = String(headOfficeId || '').trim()
     if (!normalizedHeadOfficeId) return rows
     return rows.filter((school) => String(school?.headOfficeId ?? '') === normalizedHeadOfficeId)
-  }, [schoolsLookup])
+  }, [currentSchoolOption, isSchoolAdmin, schoolsLookup])
 
   const getSchoolHeadOfficeId = useCallback((schoolId) => {
     if (schoolId == null || String(schoolId).trim() === '') return ''
@@ -133,7 +143,7 @@ const Class = () => {
   const loadLookups = useCallback(async () => {
     const [headOfficeResult, schoolsResult, teachersResult] = await Promise.allSettled([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup(),
+      isSchoolAdmin ? Promise.resolve([currentSchoolOption].filter(Boolean)) : fetchSchoolsLookup(),
       fetchTeachers(),
     ])
     const headOfficeRows = headOfficeResult.status === 'fulfilled' ? headOfficeResult.value : null
@@ -154,7 +164,7 @@ const Class = () => {
         .filter((t) => t.id != null && t.name)
         .sort((a, b) => a.name.localeCompare(b.name)),
     )
-  }, [isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadClasses = useCallback(async () => {
     if (!resolvedSchoolId && !isSuperAdmin) {

@@ -103,6 +103,14 @@ const Expenditure = ({ onNavigate } = {}) => {
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -184,16 +192,16 @@ const Expenditure = ({ onNavigate } = {}) => {
         fetchHeadOfficesPage(0, 500)
           .then((page) => setHeadOffices(Array.isArray(page?.content) ? page.content : []))
           .catch(() => {}),
-        fetchSchoolsLookup()
+        Promise.resolve(
+          isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
+        )
           .then((list) => setSchools(Array.isArray(list) ? list : []))
           .catch(() => {}),
       ])
       return
     }
     if (isSchoolAdmin) {
-      await fetchSchoolsLookup()
-        .then((list) => setSchools(Array.isArray(list) ? list : []))
-        .catch(() => {})
+      setSchools(currentSchoolOption ? [currentSchoolOption] : [])
     }
   }
 

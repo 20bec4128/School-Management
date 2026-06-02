@@ -77,6 +77,14 @@ const TeacherDepartment = () => {
   const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const scopedSchoolName = authSchoolName || ''
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const schoolLookupById = useMemo(
     () => new Map((Array.isArray(schoolsLookup) ? schoolsLookup : []).map((row) => [String(row?.id), row])),
@@ -198,12 +206,16 @@ const TeacherDepartment = () => {
 
   const loadSchoolsLookup = useCallback(async () => {
     try {
+      if (isSchoolAdmin) {
+        setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : [])
+        return
+      }
       const rows = await fetchSchoolsLookup()
       setSchoolsLookup(rows)
     } catch {
-      setSchoolsLookup([])
+      setSchoolsLookup(isSchoolAdmin && currentSchoolOption ? [currentSchoolOption] : [])
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   useEffect(() => {
     void loadDepartments()

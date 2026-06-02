@@ -6,7 +6,7 @@ import com.School.School_management.Dto.LiveClassRequestDto;
 import com.School.School_management.Dto.LiveClassResponseDto;
 import com.School.School_management.Dto.LiveClassStartResponseDto;
 import com.School.School_management.Service.LiveClassService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/live-classes")
+@RequirePagePermission(slug = "live-class", action = "view")
 public class LiveClassController {
 
     private final LiveClassService liveClassService;
@@ -28,63 +29,63 @@ public class LiveClassController {
         this.liveClassService = liveClassService;
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_VIEW_OWN", "LIVE_CLASS_VIEW_CHILD", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @GetMapping
+    @RequirePagePermission(slug = "live-class", action = "view")
     public List<LiveClassResponseDto> getAll() {
         return liveClassService.getAll();
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_VIEW_OWN", "LIVE_CLASS_VIEW_CHILD", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "live-class", action = "view")
     public LiveClassResponseDto getById(@PathVariable Long id) {
         return liveClassService.getById(id);
     }
 
-    @RequirePermission({"LIVE_CLASS_VIEW_OWN", "*"})
     @GetMapping("/student")
+    @RequirePagePermission(slug = "live-class", action = "view")
     public List<LiveClassResponseDto> getForStudent(@RequestParam Long classId, @RequestParam Long sectionId) {
         return liveClassService.getForStudent(classId, sectionId);
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @PostMapping
+    @RequirePagePermission(slug = "live-class", action = "add")
     public LiveClassResponseDto create(@RequestBody LiveClassRequestDto dto) {
         return liveClassService.create(dto);
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @PostMapping("/{id}/start")
+    @RequirePagePermission(slug = "live-class", action = "edit")
     public LiveClassStartResponseDto start(@PathVariable Long id) {
         return liveClassService.start(id);
     }
 
-    @RequirePermission({"LIVE_CLASS_JOIN", "LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @PostMapping("/{id}/join")
+    @RequirePagePermission(slug = "live-class", action = "edit")
     public LiveClassJoinResponseDto join(@PathVariable Long id) {
         return liveClassService.join(id);
     }
 
-    @RequirePermission({"LIVE_CLASS_JOIN", "LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @PostMapping("/{id}/leave")
+    @RequirePagePermission(slug = "live-class", action = "edit")
     public String leave(@PathVariable Long id) {
         liveClassService.leave(id);
         return "OK";
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @PostMapping("/{id}/end")
+    @RequirePagePermission(slug = "live-class", action = "edit")
     public LiveClassEndResponseDto end(@PathVariable Long id) {
         return liveClassService.end(id);
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "live-class", action = "edit")
     public LiveClassResponseDto update(@PathVariable Long id, @RequestBody LiveClassRequestDto dto) {
         return liveClassService.update(id, dto);
     }
 
-    @RequirePermission({"LIVE_CLASS_MANAGE", "LIVE_CLASS_MANAGE_ASSIGNED", "*"})
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "live-class", action = "delete")
     public String delete(@PathVariable Long id) {
         liveClassService.delete(id);
         return "Live class deleted successfully";

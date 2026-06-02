@@ -78,7 +78,7 @@ const TransportRouteCreate = ({ onNavigate }) => {
       setLoadingLookups(true)
       try {
         const [headOfficePage, schoolsData] = await Promise.all([
-          isSuperAdmin || isHeadOfficeAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+          isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
           fetchSchoolsLookup(),
         ])
         if (cancelled) return
@@ -98,7 +98,7 @@ const TransportRouteCreate = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin, isHeadOfficeAdmin])
+  }, [status, token, isSuperAdmin])
 
   useEffect(() => {
     if (!isSchoolAdmin) return

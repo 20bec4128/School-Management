@@ -247,7 +247,8 @@ public class PagePermissionController {
         ).stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         for (FunctionPermissionDto p : req.permissions()) {
-            Integer functionId = functionMap.get(p.slug());
+            String storedSlug = PagePermissionSlugAliases.toStoredSlug(p.slug());
+            Integer functionId = functionMap.get(storedSlug);
             if (functionId == null) continue;
 
             // Only insert if at least one checkbox is enabled

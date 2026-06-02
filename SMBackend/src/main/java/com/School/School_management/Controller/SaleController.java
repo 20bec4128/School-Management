@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.SaleDto;
 import com.School.School_management.Service.SaleService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/sales")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "sale", action = "view")
 public class SaleController {
 
     private final SaleService saleService;
@@ -28,6 +28,7 @@ public class SaleController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "sale", action = "view")
     public Page<SaleDto> list(
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
             @RequestParam(name = "schoolId", required = false) Long schoolId,
@@ -40,21 +41,25 @@ public class SaleController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "sale", action = "view")
     public SaleDto getById(@PathVariable("id") Long id) {
         return saleService.getById(id, CurrentUserHolder.get());
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "sale", action = "add")
     public SaleDto create(@RequestBody SaleDto dto) {
         return saleService.create(dto, CurrentUserHolder.get());
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "sale", action = "edit")
     public SaleDto update(@PathVariable("id") Long id, @RequestBody SaleDto dto) {
         return saleService.update(id, dto, CurrentUserHolder.get());
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "sale", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
         saleService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();

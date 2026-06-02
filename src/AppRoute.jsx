@@ -305,12 +305,15 @@ const routeEntries = [
   { pageKey: "admit-card-setting", component: AdmitCardSetting },
   { pageKey: "admit-card-setting-create", component: AdmitCardSettingCreate },
   { pageKey: "bulk-admission", component: BulkAdmission },
+  { pageKey: "teacher", component: ManageTeacher },
   { pageKey: "manage-teacher", component: ManageTeacher },
   { pageKey: "add-teacher", component: AddTeacher },
 
   { pageKey: "class-lecture", component: ClassLecture },
   { pageKey: "rating", component: Rating },
+  { pageKey: "designation", component: ManageDesignation },
   { pageKey: "manage-designation", component: ManageDesignation },
+  { pageKey: "employee", component: ManageEmployee },
   { pageKey: "manage-employee", component: ManageEmployee },
   { pageKey: "visitor-purpose", component: VisitorPurpose },
   { pageKey: "call-log", component: CallLog },
@@ -381,6 +384,7 @@ const routeEntries = [
   { pageKey: "class-routine", component: ClassRoutine },
   { pageKey: "exam-instruction", component: ExamInstruction },
   { pageKey: "question-bank", component: QuestionBank },
+  { pageKey: "online-exam", component: OnlineExam },
   { pageKey: "onlineexam", component: OnlineExam },
   { pageKey: "add-online-exam", component: AddOnlineExam },
   { pageKey: "exam-result", component: ExamResult },
@@ -424,14 +428,16 @@ const routeEntries = [
   { pageKey: "issue-book-create", component: IssueBookCreate },
 
   {
+    pageKey: "school",
+    component: ManageSchool,
+  },
+  {
     pageKey: "manage-school",
     component: ManageSchool,
-    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {
     pageKey: "academic-year",
     component: AcademicYear,
-    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {
     pageKey: "payment-setting",
@@ -626,6 +632,7 @@ const routeEntries = [
   { pageKey: "class-routine", component: ClassRoutine },
   { pageKey: "exam-instruction", component: ExamInstruction },
   { pageKey: "question-bank", component: QuestionBank },
+  { pageKey: "online-exam", component: OnlineExam },
   { pageKey: "onlineexam", component: OnlineExam },
   { pageKey: "add-online-exam", component: AddOnlineExam },
   { pageKey: "exam-result", component: ExamResult },
@@ -670,12 +677,10 @@ const routeEntries = [
   {
     pageKey: "manage-school",
     component: ManageSchool,
-    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {
     pageKey: "academic-year",
     component: AcademicYear,
-    permission: ["SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"],
   },
   {
     pageKey: "payment-setting",
@@ -800,6 +805,7 @@ const routeEntries = [
   { pageKey: "slider", component: Slider },
   { pageKey: "slider-create", component: SliderCreate },
   { pageKey: "about-school", component: AboutSchool },
+  { pageKey: "award", component: ManageAward },
   { pageKey: "manage-award", component: ManageAward },
   { pageKey: "manage-award-create", component: AwardCreate },
   { pageKey: "manage-todo", component: ManageTodo },
@@ -825,6 +831,7 @@ const routeEntries = [
   { pageKey: "add-manage-employee", component: AddManageEmployee },
   { pageKey: "manage-super-admin", component: SuperAdmin },
   { pageKey: "add-super-admin", component: SuperAdminCreate },
+  { pageKey: "feedback", component: ManageFeedback },
   { pageKey: "manage-feedback", component: ManageFeedback },
   { pageKey: "backup-database", component: BackupDatabase },
   { pageKey: "opening-hour", component: OpeningHour },

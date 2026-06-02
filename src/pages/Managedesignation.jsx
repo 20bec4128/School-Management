@@ -47,7 +47,7 @@ const ManageDesignation = ({ onNavigate }) => {
     canDelete,
   } = useAuth();
   const { activeSchoolId } = useSchool();
-  const PAGE_SLUG = "manage-designation";
+  const PAGE_SLUG = "designation";
 
   const role = useMemo(
     () =>

@@ -94,6 +94,14 @@ const Section = () => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authSchoolId != null ? null : null,
+    }
+  }, [authSchoolId, authSchoolName, isSchoolAdmin])
   const [sections, setSections] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -153,7 +161,7 @@ const Section = () => {
   const loadLookups = useCallback(async () => {
     const [headOfficesResult, schoolsResult, teachersResult] = await Promise.allSettled([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup(),
+      isSchoolAdmin ? Promise.resolve([currentSchoolOption].filter(Boolean)) : fetchSchoolsLookup(),
       fetchTeachers(),
     ])
     const headOfficesData = headOfficesResult.status === 'fulfilled' ? headOfficesResult.value : []
@@ -175,7 +183,7 @@ const Section = () => {
         .filter((t) => t.id != null && t.name)
         .sort((a, b) => a.name.localeCompare(b.name)),
     )
-  }, [isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadSections = useCallback(async () => {
     setLoading(true)

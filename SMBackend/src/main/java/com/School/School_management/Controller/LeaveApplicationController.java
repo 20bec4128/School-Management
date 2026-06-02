@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.LeaveApplicationDto;
 import com.School.School_management.Service.LeaveApplicationService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -24,7 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/leave-applications")
-@RequirePermission({"ADMIN_USER_MANAGE", "SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "leave-application", action = "view")
 public class LeaveApplicationController {
 
     private final LeaveApplicationService leaveApplicationService;
@@ -36,6 +36,7 @@ public class LeaveApplicationController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "leave-application", action = "view")
     public ResponseEntity<List<LeaveApplicationDto.Response>> list(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String status
@@ -44,6 +45,7 @@ public class LeaveApplicationController {
     }
 
     @GetMapping("/coverage")
+    @RequirePagePermission(slug = "leave-application", action = "view")
     public ResponseEntity<List<LeaveApplicationDto.Response>> coverage(
             @RequestParam Long schoolId,
             @RequestParam String applicantType,
@@ -68,6 +70,7 @@ public class LeaveApplicationController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "leave-application", action = "add")
     public ResponseEntity<LeaveApplicationDto.Response> create(
             @RequestPart("data") String data,
             @RequestPart(value = "attachment", required = false) MultipartFile attachment
@@ -77,6 +80,7 @@ public class LeaveApplicationController {
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "leave-application", action = "edit")
     public ResponseEntity<LeaveApplicationDto.Response> update(
             @PathVariable Long id,
             @RequestPart("data") String data,
@@ -87,6 +91,7 @@ public class LeaveApplicationController {
     }
 
     @PatchMapping("/{id}/status")
+    @RequirePagePermission(slug = "leave-application", action = "edit")
     public ResponseEntity<LeaveApplicationDto.Response> updateStatus(
             @PathVariable Long id,
             @RequestParam String status
@@ -95,12 +100,14 @@ public class LeaveApplicationController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "leave-application", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         leaveApplicationService.delete(id);
         return ResponseEntity.ok("Leave application deleted successfully");
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "leave-application", action = "view")
     public ResponseEntity<LeaveApplicationDto.Response> getById(@PathVariable Long id) {
         return ResponseEntity.ok(leaveApplicationService.getById(id));
     }

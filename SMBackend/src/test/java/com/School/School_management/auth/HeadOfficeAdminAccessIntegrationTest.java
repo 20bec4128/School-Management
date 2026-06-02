@@ -215,6 +215,34 @@ class HeadOfficeAdminAccessIntegrationTest {
                 .param("size", "10")
                 .header("Authorization", bearer(adminJwt)));
 
+        assertOk(get("/api/departments/all")
+                .header("Authorization", bearer(adminJwt)));
+
+        assertOk(get("/api/students")
+                .param("headOfficeId", headOfficeId.toString())
+                .param("schoolId", schoolId.toString())
+                .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", bearer(adminJwt)));
+
+        assertOk(get("/api/schools")
+                .param("headOfficeId", headOfficeId.toString())
+                .param("schoolId", schoolId.toString())
+                .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", bearer(adminJwt)));
+
+        assertOk(get("/api/general-settings")
+                .param("schoolId", schoolId.toString())
+                .header("Authorization", bearer(adminJwt)));
+
+        assertOk(get("/api/library-issues")
+                .param("headOfficeId", headOfficeId.toString())
+                .param("schoolId", schoolId.toString())
+                .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", bearer(adminJwt)));
+
         Long paymentSettingId = createPaymentSetting();
         assertOk(get("/api/payment-settings/" + paymentSettingId)
                 .header("Authorization", bearer(adminJwt)));
@@ -355,6 +383,28 @@ class HeadOfficeAdminAccessIntegrationTest {
                 .param("schoolId", schoolId.toString())
                 .header("Authorization", bearer(schoolAdminJwt)));
         assertOk(get("/api/fee-collections/page")
+                .param("schoolId", schoolId.toString())
+                .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", bearer(schoolAdminJwt)));
+        assertForbidden(get("/api/schools")
+                .param("headOfficeId", headOfficeId.toString())
+                .param("schoolId", schoolId.toString())
+                .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", bearer(schoolAdminJwt)));
+        assertForbidden(get("/api/general-settings")
+                .param("schoolId", schoolId.toString())
+                .header("Authorization", bearer(schoolAdminJwt)));
+        assertOk(get("/api/library-issues")
+                .param("headOfficeId", headOfficeId.toString())
+                .param("schoolId", schoolId.toString())
+                .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", bearer(schoolAdminJwt)));
+        assertOk(get("/api/departments/all")
+                .header("Authorization", bearer(schoolAdminJwt)));
+        assertOk(get("/api/students")
                 .param("schoolId", schoolId.toString())
                 .param("page", "0")
                 .param("size", "10")
@@ -756,8 +806,10 @@ class HeadOfficeAdminAccessIntegrationTest {
         grantAllActions("ADMIN", "complain-type");
         grantAllActions("ADMIN", "manage-complain");
         grantViewOnlyGlobal("ADMIN", "head-offices");
+        grantAllActions("ADMIN", "teacher-department");
         grantAllActions("ADMIN", "question-bank");
         grantAllActions("ADMIN", "attendance");
+        grantAllActions("ADMIN", "student-list");
         grantAllActions("ADMIN", "exam-grade");
         grantAllActions("ADMIN", "exam-term");
         grantAllActions("ADMIN", "schedule");
@@ -767,6 +819,9 @@ class HeadOfficeAdminAccessIntegrationTest {
         grantAllActions("ADMIN", "call-log");
         grantAllActions("ADMIN", "postal-dispatch");
         grantAllActions("ADMIN", "postal-receive");
+        grantAllActions("ADMIN", "manage-school");
+        grantAllActions("ADMIN", "general-settings");
+        grantAllActions("ADMIN", "issue-return");
         grantAllActions("ADMIN", "gallery");
         grantAllActions("ADMIN", "guardian");
         grantAllActions("ADMIN", "fee-collection");
@@ -777,11 +832,14 @@ class HeadOfficeAdminAccessIntegrationTest {
         grantAllActions("SCHOOL_ADMIN", "postal-dispatch");
         grantAllActions("SCHOOL_ADMIN", "postal-receive");
         grantAllActions("SCHOOL_ADMIN", "absent-email");
+        grantAllActions("SCHOOL_ADMIN", "issue-return");
+        grantAllActions("SCHOOL_ADMIN", "teacher-department");
         grantAllActions("SCHOOL_ADMIN", "complain-type");
         grantAllActions("SCHOOL_ADMIN", "manage-complain");
         grantAllActions("SCHOOL_ADMIN", "exam-grade");
         grantAllActions("SCHOOL_ADMIN", "exam-term");
         grantAllActions("SCHOOL_ADMIN", "schedule");
+        grantAllActions("SCHOOL_ADMIN", "student-list");
         grantAllActions("SCHOOL_ADMIN", "suggestion");
         grantAllActions("SCHOOL_ADMIN", "gallery");
         grantAllActions("SCHOOL_ADMIN", "notice");

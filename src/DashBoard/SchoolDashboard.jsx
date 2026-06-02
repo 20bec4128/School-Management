@@ -8,7 +8,6 @@ import { useAuth } from '../context/useAuth'
 import { normalizeRole } from '../utils/roles'
 import { fetchStudentsPage } from '../apis/studentsApi'
 import { fetchTeachers } from '../apis/teachersApi'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchFeeCollectionsBySchool } from '../apis/feeCollectionApi'
 import { fetchBooksPage } from '../apis/booksApi'
 import { fetchEvents } from '../apis/eventApi'
@@ -342,17 +341,8 @@ const Dashboard = () => {
 
       setTeachersLoading(true)
       try {
-        const [teachersList, schoolsList] = await Promise.all([
-          fetchTeachers(),
-          fetchSchoolsLookup(),
-        ])
+        const teachersList = await fetchTeachers()
         if (cancelled) return
-
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
 
         const filteredTeachers = teachersList.filter((t) => {
           const teacherSchoolId = t?.schoolId != null ? String(t.schoolId) : ''
@@ -541,17 +531,8 @@ const Dashboard = () => {
 
       setBooksLoading(true)
       try {
-        const [booksData, schoolsList] = await Promise.all([
-          fetchAllBooks({ schoolId: activeSchoolId }),
-          fetchSchoolsLookup(),
-        ])
+        const booksData = await fetchAllBooks({ schoolId: activeSchoolId })
         if (cancelled) return
-
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
 
         const booksList = booksData.rows || []
         const filteredBooks = booksList.filter((b) => String(b?.schoolId ?? '') === String(activeSchoolId))
@@ -623,18 +604,8 @@ const Dashboard = () => {
 
       setEventsLoading(true)
       try {
-        const [eventsList, schoolsList] = await Promise.all([
-          fetchEvents({ schoolId: activeSchoolId }),
-          fetchSchoolsLookup(),
-        ])
+        const eventsList = await fetchEvents({ schoolId: activeSchoolId })
         if (cancelled) return
-
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
-
         const filteredEvents = Array.isArray(eventsList) ? eventsList : []
 
         const today = new Date()
@@ -679,18 +650,8 @@ const Dashboard = () => {
 
       setLeaveRequestsLoading(true)
       try {
-        const [leaveList, schoolsList] = await Promise.all([
-          fetchLeaveApplications({ schoolId: activeSchoolId }),
-          fetchSchoolsLookup(),
-        ])
+        const leaveList = await fetchLeaveApplications({ schoolId: activeSchoolId })
         if (cancelled) return
-
-        const schoolsById = new Map()
-        for (const school of Array.isArray(schoolsList) ? schoolsList : []) {
-          if (school?.id == null) continue
-          schoolsById.set(String(school.id), school)
-        }
-
         const filteredLeaves = Array.isArray(leaveList) ? leaveList : []
 
         const sortedLeaves = filteredLeaves.sort((a, b) => {
@@ -726,10 +687,7 @@ const Dashboard = () => {
 
       setEmployeesLoading(true)
       try {
-        const [employeesList, schoolsList] = await Promise.all([
-          fetchEmployees({ schoolId: activeSchoolId }),
-          fetchSchoolsLookup(),
-        ])
+        const employeesList = await fetchEmployees({ schoolId: activeSchoolId })
         if (cancelled) return
 
         const filteredEmployees = (Array.isArray(employeesList) ? employeesList : []).filter((emp) => String(emp?.schoolId ?? '') === String(activeSchoolId))
@@ -769,10 +727,9 @@ const Dashboard = () => {
 
       setIncomeExpenseLoading(true)
       try {
-        const [incomesList, expendituresList, schoolsList] = await Promise.all([
+        const [incomesList, expendituresList] = await Promise.all([
           fetchIncomes({ schoolId: activeSchoolId }),
           fetchExpenditures({ schoolId: activeSchoolId }),
-          fetchSchoolsLookup(),
         ])
         if (cancelled) return
 

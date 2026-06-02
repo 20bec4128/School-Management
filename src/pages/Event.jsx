@@ -5,7 +5,6 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { deleteEvent, fetchEvents } from '../apis/eventApi'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -47,7 +46,6 @@ const Event = ({ onNavigate }) => {
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [rows, setRows] = useState([])
-  const [schools, setSchools] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -68,14 +66,15 @@ const Event = ({ onNavigate }) => {
         : ''
 
   const schoolOptions = useMemo(() => {
-    const list = Array.isArray(schools) ? schools : []
-    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    const list = isSuperAdmin
+      ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
+      : contextSchoolOptions
     const fallback =
       listSchoolId && authSchoolName && !list.some((school) => String(school.id) === listSchoolId)
         ? [{ id: listSchoolId, schoolName: authSchoolName }]
         : []
     return [...list, ...fallback]
-  }, [schools, listSchoolId, authSchoolName, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.schoolOptions])
+  }, [contextSchoolOptions, listSchoolId, authSchoolName, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.schoolOptions])
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -102,15 +101,6 @@ const Event = ({ onNavigate }) => {
   }, [currentPage, filteredRows, rowsPerPage])
 
   const allSelected = paginatedRows.length > 0 && paginatedRows.every((row) => selectedRows.includes(String(row.id)))
-
-  const loadSchools = useCallback(async () => {
-    try {
-      const list = await fetchSchoolsLookup()
-      setSchools(Array.isArray(list) ? list : [])
-    } catch {
-      setSchools([])
-    }
-  }, [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -167,11 +157,6 @@ const Event = ({ onNavigate }) => {
       setLoading(false)
     }
   }, [listSchoolId, isSuperAdmin])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadSchools()
-  }, [loadSchools])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

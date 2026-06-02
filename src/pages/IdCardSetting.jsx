@@ -8,7 +8,6 @@ import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
   deleteIdCardSetting,
   fetchIdCardSettingsPage,
@@ -286,8 +285,18 @@ const IdCardSetting = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentSchoolOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    if (isHeadOfficeAdmin || isSchoolAdmin) {
+      return [{ id: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId }]
+    }
+    return []
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
-  const resolveSchoolById = useCallback((schoolId) => getSchoolById(allSchools, schoolId), [allSchools])
+  const resolveSchoolById = useCallback(
+    (schoolId) => getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, schoolId),
+    [allSchools, currentSchoolOptions],
+  )
 
   const resolveHeadOfficeName = useCallback(
     (headOfficeId) => {
@@ -306,7 +315,7 @@ const IdCardSetting = ({ onNavigate }) => {
 
 
   const filterSchoolOptions = useMemo(() => {
-    const rowsList = Array.isArray(allSchools) ? allSchools : []
+    const rowsList = Array.isArray(allSchools) && allSchools.length > 0 ? allSchools : currentSchoolOptions
     if (pendingFilters.headOfficeId) {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
     }
@@ -320,20 +329,7 @@ const IdCardSetting = ({ onNavigate }) => {
       return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
     }
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
-
-  const loadLookups = useCallback(async () => {
-    setLookupLoading(true)
-    try {
-      const schools = await fetchSchoolsLookup()
-      setAllSchools(Array.isArray(schools) ? schools : [])
-    } catch (err) {
-      console.error('Failed to load ID card lookups:', err)
-      setAllSchools([])
-    } finally {
-      setLookupLoading(false)
-    }
-  }, [])
+  }, [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOptions, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
 
   const loadIdCardSettings = useCallback(async () => {
     if (status !== 'ready' || !token) return
@@ -368,8 +364,9 @@ const IdCardSetting = ({ onNavigate }) => {
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
-    void loadLookups()
-  }, [loadLookups, status, token])
+    setLookupLoading(false)
+    setAllSchools(currentSchoolOptions)
+  }, [currentSchoolOptions, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -379,7 +376,7 @@ const IdCardSetting = ({ onNavigate }) => {
   useEffect(() => {
     if (!isSuperAdmin) return
     if (!activeSchoolId) return
-    const school = getSchoolById(allSchools, activeSchoolId)
+    const school = getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, activeSchoolId)
     if (school?.headOfficeId == null) return
     setPendingFilters((prev) => ({
       ...prev,
@@ -391,7 +388,7 @@ const IdCardSetting = ({ onNavigate }) => {
       headOfficeId: String(school.headOfficeId),
       schoolId: String(activeSchoolId),
     }))
-  }, [activeSchoolId, allSchools, isSuperAdmin])
+  }, [activeSchoolId, allSchools, currentSchoolOptions, isSuperAdmin])
 
   useEffect(() => {
     if (!isHeadOfficeAdmin || authHeadOfficeId == null) return
@@ -401,7 +398,7 @@ const IdCardSetting = ({ onNavigate }) => {
 
   useEffect(() => {
     if (!isSchoolAdmin || authSchoolId == null) return
-    const school = getSchoolById(allSchools, authSchoolId)
+    const school = getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, authSchoolId)
     const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
     setPendingFilters((prev) => ({
       ...prev,
@@ -413,7 +410,7 @@ const IdCardSetting = ({ onNavigate }) => {
       headOfficeId: nextHeadOfficeId || prev.headOfficeId,
       schoolId: String(authSchoolId),
     }))
-  }, [allSchools, authSchoolId, isSchoolAdmin])
+  }, [allSchools, authSchoolId, currentSchoolOptions, isSchoolAdmin])
 
   useEffect(() => {
     if (currentPage > 1 && totalPages > 0 && currentPage > totalPages) {
@@ -430,7 +427,7 @@ const IdCardSetting = ({ onNavigate }) => {
 
   const openEdit = (row) => {
     try {
-      const school = getSchoolById(allSchools, row?.schoolId)
+      const school = getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, row?.schoolId)
       const headOfficeId = row?.headOfficeId != null ? String(row.headOfficeId) : school?.headOfficeId != null ? String(school.headOfficeId) : ''
       const payload = { ...row, headOfficeId }
       sessionStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(payload))

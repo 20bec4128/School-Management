@@ -84,7 +84,16 @@ const AddTopic = ({ onNavigate }) => {
   const { activeSchoolId } = useSchool()
   const roleUpper = String(role || '').toUpperCase()
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
+  const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: activeSchoolId ?? null,
+    }
+  }, [activeSchoolId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [initialEditRow] = useState(() => {
     try {
@@ -136,14 +145,18 @@ const AddTopic = ({ onNavigate }) => {
   useEffect(() => {
     const loadSchools = async () => {
       try {
+        if (isSchoolAdmin) {
+          setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : [])
+          return
+        }
         const schools = await fetchSchoolsLookup()
         setSchoolsLookup(Array.isArray(schools) ? schools : [])
       } catch {
-        setSchoolsLookup([])
+        setSchoolsLookup(isSchoolAdmin && currentSchoolOption ? [currentSchoolOption] : [])
       }
     }
     loadSchools()
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   useEffect(() => {
     if (!initialEditRow || !isSuperAdmin || schoolsLookup.length === 0) return
@@ -159,8 +172,9 @@ const AddTopic = ({ onNavigate }) => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.schoolOptions
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return Array.isArray(schoolsLookup) ? schoolsLookup : []
-  }, [isSuperAdmin, manualScope.schoolOptions, schoolsLookup])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schoolsLookup])
 
   const schoolIdForLookups = form.schoolId !== 'Select' ? form.schoolId : ''
   const academicYearOptions = useAcademicYearOptions({

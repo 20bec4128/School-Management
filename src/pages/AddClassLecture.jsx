@@ -123,7 +123,16 @@ const AddClassLecture = ({ onNavigate }) => {
 
   const roleUpper = String(role || '').toUpperCase()
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
+  const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: activeSchoolId ?? null,
+    }
+  }, [activeSchoolId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [initialEditRow] = useState(() => {
     try {
@@ -192,12 +201,16 @@ const AddClassLecture = ({ onNavigate }) => {
 
   const loadSchoolsLookup = useCallback(async () => {
     try {
+      if (isSchoolAdmin) {
+        setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : [])
+        return
+      }
       const schools = await fetchSchoolsLookup()
       setSchoolsLookup(Array.isArray(schools) ? schools : [])
     } catch {
-      setSchoolsLookup([])
+      setSchoolsLookup(isSchoolAdmin && currentSchoolOption ? [currentSchoolOption] : [])
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const loadTeachersLookup = useCallback(async () => {
     try {

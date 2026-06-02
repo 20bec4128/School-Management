@@ -11,7 +11,7 @@ import com.School.School_management.Entity.Student;
 import com.School.School_management.Service.ClassRoutineService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.School.School_management.auth.SchoolGuard;
 import java.util.List;
 import java.util.Objects;
@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/class-routines")
-@RequirePermission({"CLASS_ROUTINE_VIEW", "CLASS_ROUTINE_MANAGE", "*"})
+@RequirePagePermission(slug = "class-routine", action = "view")
 public class ClassRoutineController {
 
     private final ClassRoutineService service;
@@ -50,8 +50,8 @@ public class ClassRoutineController {
         this.parentStudentRepository = parentStudentRepository;
     }
 
-    @RequirePermission({"CLASS_ROUTINE_MANAGE", "*"})
     @PostMapping
+    @RequirePagePermission(slug = "class-routine", action = "add")
     public ClassRoutineDto create(@RequestBody ClassRoutineDto dto) {
         CurrentUser user = CurrentUserHolder.get();
         dto.setSchoolId(schoolGuard.schoolIdForWrite(user, dto.getSchoolId()));
@@ -59,8 +59,8 @@ public class ClassRoutineController {
         return service.create(dto);
     }
 
-    @RequirePermission({"CLASS_ROUTINE_VIEW", "CLASS_ROUTINE_MANAGE", "*"})
     @GetMapping
+    @RequirePagePermission(slug = "class-routine", action = "view")
     @Transactional(readOnly = true)
     public List<ClassRoutineDto> getAll(@RequestParam(required = false) Long schoolId, @RequestParam(required = false) Long studentId) {
         CurrentUser user = CurrentUserHolder.get();
@@ -101,16 +101,16 @@ public class ClassRoutineController {
         return rows;
     }
 
-    @RequirePermission({"CLASS_ROUTINE_VIEW", "CLASS_ROUTINE_MANAGE", "*"})
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "class-routine", action = "view")
     public ClassRoutineDto getById(@PathVariable Long id, @RequestParam(required = false) Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         Long effectiveSchoolId = schoolGuard.schoolIdForRead(user, schoolId);
         return service.getById(id, effectiveSchoolId);
     }
 
-    @RequirePermission({"CLASS_ROUTINE_MANAGE", "*"})
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "class-routine", action = "edit")
     public ClassRoutineDto update(@PathVariable Long id, @RequestBody ClassRoutineDto dto) {
         CurrentUser user = CurrentUserHolder.get();
         Long effectiveSchoolId = schoolGuard.schoolIdForWrite(user, dto.getSchoolId());
@@ -121,8 +121,8 @@ public class ClassRoutineController {
         return service.update(id, dto, effectiveSchoolId);
     }
 
-    @RequirePermission({"CLASS_ROUTINE_MANAGE", "*"})
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "class-routine", action = "delete")
     public String delete(@PathVariable Long id, @RequestParam(required = false) Long schoolId) {
         CurrentUser user = CurrentUserHolder.get();
         Long effectiveSchoolId = schoolGuard.schoolIdForWrite(user, schoolId);

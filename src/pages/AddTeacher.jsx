@@ -92,10 +92,19 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const AddTeacher = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isSchoolAdmin = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: activeSchoolId ?? null,
+    }
+  }, [activeSchoolId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [initialEditRow] = useState(() => {
     try {
@@ -134,9 +143,13 @@ const AddTeacher = ({ onNavigate }) => {
   useEffect(() => () => sessionStorage.removeItem(EDIT_STORAGE_KEY), [])
 
   useEffect(() => {
+    if (isSchoolAdmin) {
+      setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
     fetchSchoolsLookup().then(setSchools).catch(() => setSchools([]))
     fetchAllDepartments().then(setDepartments).catch(() => setDepartments([]))
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   useEffect(() => {
     if (!form.schoolId) {
@@ -204,8 +217,9 @@ const AddTeacher = ({ onNavigate }) => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.schoolOptions
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return contextSchoolOptions || []
-  }, [isSuperAdmin, manualScope.schoolOptions, contextSchoolOptions])
+  }, [currentSchoolOption, contextSchoolOptions, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions])
 
   const handleChange = (e) => {
     const { id, value, type, checked } = e.target

@@ -53,7 +53,7 @@ const getStatusBadge = (status) => {
 }
 
 const DueFeeReport = () => {
-  const { status, token, user, role: authRole, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
+  const { status, token, user, role: authRole, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -64,6 +64,14 @@ const DueFeeReport = () => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
 
   const [rows, setRows] = useState([])
@@ -89,8 +97,9 @@ const DueFeeReport = () => {
   const selectedSchoolId = useMemo(() => {
     if (filters.schoolId && filters.schoolId !== 'Select') return String(filters.schoolId)
     if (isSchoolAdmin) return authSchoolId != null ? String(authSchoolId) : ''
+    if (isSuperAdmin) return manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : ''
     return ''
-  }, [filters.schoolId, isSchoolAdmin, authSchoolId])
+  }, [authSchoolId, filters.schoolId, isSchoolAdmin, isSuperAdmin, manualScope.selectedSchoolId])
 
   const canLoadRows = isSuperAdmin || Boolean(selectedSchoolId)
 
@@ -103,10 +112,10 @@ const DueFeeReport = () => {
       return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rows.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rows
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
 
   const classOptions = useMemo(() => (Array.isArray(classes) ? classes : []), [classes])
   const feeTypeOptions = useMemo(() => (Array.isArray(feeTypes) ? feeTypes : []), [feeTypes])
@@ -139,7 +148,7 @@ const DueFeeReport = () => {
     let cancelled = false
     const load = async () => {
       try {
-        const list = await fetchSchoolsLookup()
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setSchools([])
@@ -150,7 +159,7 @@ const DueFeeReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
@@ -158,7 +167,23 @@ const DueFeeReport = () => {
 
     const load = async () => {
       try {
-        const schoolId = pendingFilters.schoolId && pendingFilters.schoolId !== 'Select' ? pendingFilters.schoolId : null
+        const schoolId =
+          pendingFilters.schoolId && pendingFilters.schoolId !== 'Select'
+            ? pendingFilters.schoolId
+            : isSuperAdmin
+              ? manualScope.selectedSchoolId || ''
+              : isSchoolAdmin && authSchoolId != null
+                ? String(authSchoolId)
+                : ''
+
+        if (!schoolId) {
+          if (!cancelled) {
+            setClasses([])
+            setFeeTypes([])
+          }
+          return
+        }
+
         const [classData, feeTypeData] = await Promise.all([
           fetchClasses({ schoolId }),
           fetchFeeTypes({ schoolId }),
@@ -177,7 +202,7 @@ const DueFeeReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, pendingFilters.schoolId])
+  }, [status, token, pendingFilters.schoolId, isSuperAdmin, manualScope.selectedSchoolId, isSchoolAdmin, authSchoolId])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

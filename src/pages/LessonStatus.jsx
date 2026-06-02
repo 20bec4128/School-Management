@@ -55,7 +55,7 @@ const canCompleteLesson = (lesson) => {
 }
 
 const LessonStatus = () => {
-  const { role, schoolId, studentClassId, selectedChildId, parentChildren, user, canEdit } = useAuth()
+  const { role, schoolId, schoolName, studentClassId, selectedChildId, parentChildren, user, canEdit } = useAuth()
   const [schoolsLookup, setSchoolsLookup] = useState([])
   const [classesLookup, setClassesLookup] = useState([])
   const [subjectsLookup, setSubjectsLookup] = useState([])
@@ -80,6 +80,9 @@ const LessonStatus = () => {
 
   const roleUpper = String(role || '').toUpperCase()
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
+  const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
+  const isTeacherScope = roleUpper === 'TEACHER'
+  const isFixedSchoolScope = isSchoolAdmin || isTeacherScope
   const isStudentScope = roleUpper === 'STUDENT' || roleUpper === 'PARENT'
   const selectedChild = useMemo(() => getChildScope(parentChildren, selectedChildId), [parentChildren, selectedChildId])
   const effectiveSchoolId = roleUpper === 'STUDENT'
@@ -94,15 +97,23 @@ const LessonStatus = () => {
       : null
   const PAGE_SLUG = 'lesson-status'
   const canManageLessonStatus = canEdit(PAGE_SLUG)
+  const currentSchoolOption = useMemo(() => {
+    if (!isFixedSchoolScope || schoolId == null) return null
+    return { id: schoolId, schoolName: schoolName || `School ${schoolId}` }
+  }, [isFixedSchoolScope, schoolId, schoolName])
+  const fixedSchoolId = currentSchoolOption?.id != null ? String(currentSchoolOption.id) : ''
   const academicYearOptions = useAcademicYearOptions({
     schoolId:
       isStudentScope
         ? effectiveSchoolId ?? ''
+        : fixedSchoolId
+          ? fixedSchoolId
         : pendingFilters.schoolId !== 'Select'
           ? pendingFilters.schoolId
           : '',
     enabled:
       (isStudentScope && Boolean(effectiveSchoolId)) ||
+      Boolean(fixedSchoolId) ||
       pendingFilters.schoolId !== 'Select',
   })
   const defaultAcademicYear = academicYearOptions[0] || 'Select'
@@ -138,7 +149,7 @@ const LessonStatus = () => {
         }
         const [headOffices, schools, classes, subjects] = await Promise.all([
           isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-          fetchSchoolsLookup(),
+          isFixedSchoolScope ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
           fetchClasses(),
           fetchSubjects(),
         ])
@@ -157,7 +168,13 @@ const LessonStatus = () => {
     return () => {
       ignore = true
     }
-  }, [defaultAcademicYear, effectiveClassId, effectiveSchoolId, isStudentScope, isSuperAdmin])
+  }, [currentSchoolOption, defaultAcademicYear, effectiveClassId, effectiveSchoolId, isFixedSchoolScope, isStudentScope, isSuperAdmin])
+
+  useEffect(() => {
+    if (!fixedSchoolId) return
+    setPendingFilters((prev) => (prev.schoolId === fixedSchoolId ? prev : { ...prev, schoolId: fixedSchoolId }))
+    setFilters((prev) => (prev.schoolId === fixedSchoolId ? prev : { ...prev, schoolId: fixedSchoolId }))
+  }, [fixedSchoolId])
 
   const filteredLessons = useMemo(() => {
     if (!hasSearched) return []
@@ -240,8 +257,9 @@ const LessonStatus = () => {
 
   const handleResetFilters = () => {
     if (isStudentScope) return
-    setPendingFilters(emptyFilters)
-    setFilters(emptyFilters)
+    const nextFilters = fixedSchoolId ? { ...emptyFilters, schoolId: fixedSchoolId } : emptyFilters
+    setPendingFilters(nextFilters)
+    setFilters(nextFilters)
     setFindErrors({})
     setHasSearched(false)
     setLessons([])
@@ -644,19 +662,23 @@ const LessonStatus = () => {
             <label htmlFor="schoolId" className="text-sm fw-semibold text-primary-light d-inline-block mb-8">
               School <span className="text-danger-600">*</span>
             </label>
-            <select
-              id="schoolId"
-              className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`}
-              value={pendingFilters.schoolId}
-              onChange={handlePendingFilterChange}
-            >
-              <option value="Select">--Select School--</option>
-              {schoolOptions.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.schoolName}
-                </option>
-              ))}
-            </select>
+            {isFixedSchoolScope ? (
+              <input className="form-control" value={currentSchoolOption?.schoolName || schoolName || ''} readOnly />
+            ) : (
+              <select
+                id="schoolId"
+                className={`form-control form-select${findErrors.schoolId ? ' is-invalid' : ''}`}
+                value={pendingFilters.schoolId}
+                onChange={handlePendingFilterChange}
+              >
+                <option value="Select">--Select School--</option>
+                {schoolOptions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.schoolName}
+                  </option>
+                ))}
+              </select>
+            )}
             {findErrors.schoolId ? <div className="text-danger-600 text-sm mt-4">{findErrors.schoolId}</div> : null}
           </div>
 

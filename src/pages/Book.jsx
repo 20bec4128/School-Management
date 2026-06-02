@@ -108,6 +108,15 @@ const Book = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const filterSchoolOptions = useMemo(() => {
     const rowsList = Array.isArray(allSchools) ? allSchools : []
     const scopeHeadOfficeId = pendingFilters.headOfficeId || filters.headOfficeId
@@ -118,10 +127,10 @@ const Book = ({ onNavigate }) => {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
+  }, [allSchools, authHeadOfficeId, currentSchoolOption, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
 
   const resolveSchoolName = useCallback(
     (schoolId) => getSchoolById(allSchools, schoolId)?.schoolName || (String(schoolId ?? '') === String(authSchoolId ?? '') ? authSchoolName || '' : ''),
@@ -140,7 +149,7 @@ const Book = ({ onNavigate }) => {
     const loadLookups = async () => {
       setLookupLoading(true)
       try {
-        const schools = await fetchSchoolsLookup()
+        const schools = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (cancelled) return
         setAllSchools(Array.isArray(schools) ? schools : [])
       } catch (err) {
@@ -156,7 +165,7 @@ const Book = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [status, token])
+  }, [currentSchoolOption, isSchoolAdmin, status, token])
 
   useEffect(() => {
     if (!isSuperAdmin) return

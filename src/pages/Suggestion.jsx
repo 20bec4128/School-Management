@@ -124,6 +124,14 @@ const Suggestion = ({ onNavigate }) => {
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [rows, setRows] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -255,10 +263,14 @@ const Suggestion = ({ onNavigate }) => {
   }, [totalPages])
 
   useEffect(() => {
+    if (isSchoolAdmin) {
+      setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
     fetchSchoolsLookup()
       .then((data) => setSchoolsLookup(Array.isArray(data) ? data : []))
       .catch(() => setSchoolsLookup([]))
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const loadSuggestions = useCallback(async () => {
     setLoading(true)

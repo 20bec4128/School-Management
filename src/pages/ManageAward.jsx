@@ -52,7 +52,7 @@ const fetchAllPages = async (baseQuery) => {
 
 const ManageAward = ({ onNavigate }) => {
   const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
-  const PAGE_SLUG = 'manage-award'
+  const PAGE_SLUG = 'award'
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'

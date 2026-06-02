@@ -4,8 +4,6 @@ import { useManualSchoolScope } from "../hooks/useManualSchoolScope";
 import { useAuth } from "../context/useAuth";
 import { useSchool } from "../context/useSchool";
 import { createEvent, updateEvent } from "../apis/eventApi";
-import { fetchSchoolsLookup } from "../apis/schoolsApi";
-import { findSchoolById } from "../utils/schoolScope";
 import "../assets/css/addModalShared.css";
 
 const EDIT_STORAGE_KEY = "event-edit-row";
@@ -61,11 +59,10 @@ const AddEvent = ({ onNavigate }) => {
     schoolId: authSchoolId,
     schoolName: authSchoolName,
   } = useAuth();
-  const { activeSchoolId } = useSchool();
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool();
   const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
   const photoRef = useRef(null);
-  const [schools, setSchools] = useState([]);
   const [initialEditRow] = useState(() => readEditRow());
   const [form, setForm] = useState(() => {
     if (initialEditRow) {
@@ -97,31 +94,20 @@ const AddEvent = ({ onNavigate }) => {
   useEffect(() => () => sessionStorage.removeItem(EDIT_STORAGE_KEY), []);
 
   useEffect(() => {
-    const loadSchools = async () => {
-      try {
-        const list = await fetchSchoolsLookup();
-        setSchools(Array.isArray(list) ? list : []);
-      } catch {
-        setSchools([]);
-      }
-    };
-    void loadSchools();
-  }, []);
-
-  useEffect(() => {
-    if (!initialEditRow || !isSuperAdmin || schools.length === 0) return;
-    const school = findSchoolById(schools, initialEditRow.schoolId);
+    if (!initialEditRow || !isSuperAdmin) return;
+    const list = manualScope.schoolOptions.length > 0 ? manualScope.schoolOptions : contextSchoolOptions;
+    if (list.length === 0) return;
+    const school = list.find((item) => String(item?.id) === String(initialEditRow.schoolId));
     if (school?.headOfficeId != null) {
       manualScope.setSelectedScope(
         String(school.headOfficeId),
         String(initialEditRow.schoolId ?? ""),
       );
     }
-  }, [initialEditRow, isSuperAdmin, schools, manualScope]);
+  }, [contextSchoolOptions, initialEditRow, isSuperAdmin, manualScope]);
 
   const schoolOptions = useMemo(() => {
-    const list = Array.isArray(schools) ? schools : [];
-    if (isSuperAdmin) return manualScope.schoolOptions;
+    const list = isSuperAdmin ? manualScope.schoolOptions : contextSchoolOptions;
     const fallback =
       form.schoolId &&
       authSchoolName &&
@@ -130,7 +116,7 @@ const AddEvent = ({ onNavigate }) => {
         : [];
     return [...list, ...fallback];
   }, [
-    schools,
+    contextSchoolOptions,
     form.schoolId,
     isSuperAdmin,
     manualScope.schoolOptions,

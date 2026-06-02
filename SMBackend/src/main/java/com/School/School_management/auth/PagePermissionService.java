@@ -24,8 +24,9 @@ public class PagePermissionService {
         String normalizedRole = normalizeRole(role);
         if (normalizedRole == null) return false;
         if ("SUPER_ADMIN".equals(normalizedRole)) return true;
+        String storedSlug = PagePermissionSlugAliases.toStoredSlug(slug);
 
-        String key = String.format("%s:%s:%s", normalizedRole, schoolId == null ? "-" : schoolId, slug);
+        String key = String.format("%s:%s:%s", normalizedRole, schoolId == null ? "-" : schoolId, storedSlug);
         CacheEntry cached = cache.get(key);
         if (cached != null && !cached.isExpired()) {
             return cached.hasAction(action);
@@ -60,7 +61,7 @@ public class PagePermissionService {
                         "LEFT JOIN rbac_role_page_permissions global " +
                         "  ON global.function_id = rf.id AND global.role_name = ? AND global.school_id IS NULL " +
                         "WHERE rf.slug = ?", column, column);
-                hasAccess = jdbcTemplate.queryForObject(sql, Boolean.class, normalizedRole, schoolId, normalizedRole, slug);
+                hasAccess = jdbcTemplate.queryForObject(sql, Boolean.class, normalizedRole, schoolId, normalizedRole, storedSlug);
             } else {
                 String sql = String.format(
                         "SELECT COALESCE(global.%s, false) " +
@@ -68,7 +69,7 @@ public class PagePermissionService {
                         "LEFT JOIN rbac_role_page_permissions global " +
                         "  ON global.function_id = rf.id AND global.role_name = ? AND global.school_id IS NULL " +
                         "WHERE rf.slug = ?", column);
-                hasAccess = jdbcTemplate.queryForObject(sql, Boolean.class, normalizedRole, slug);
+                hasAccess = jdbcTemplate.queryForObject(sql, Boolean.class, normalizedRole, storedSlug);
             }
         } catch (Exception e) {
             // Under default-deny, if query fails or no row found, return false
@@ -78,7 +79,7 @@ public class PagePermissionService {
         boolean finalAccess = hasAccess != null && hasAccess;
         // Since we cache per role:school:slug, we can fetch all 4 permissions or just store this action.
         // To keep it simple, we cache all 4 permissions for the slug. Let's load the full permission record.
-        PermissionsRecord record = fetchPermissionsRecord(normalizedRole, schoolId, slug);
+        PermissionsRecord record = fetchPermissionsRecord(normalizedRole, schoolId, storedSlug);
         cache.put(key, new CacheEntry(record, Instant.now().plus(CACHE_TTL)));
 
         return record.hasAction(action);
@@ -135,7 +136,7 @@ public class PagePermissionService {
     public void evict(String role, Long schoolId, String slug) {
         String normalized = normalizeRole(role);
         if (normalized == null) return;
-        String key = String.format("%s:%s:%s", normalized, schoolId == null ? "-" : schoolId, slug);
+        String key = String.format("%s:%s:%s", normalized, schoolId == null ? "-" : schoolId, PagePermissionSlugAliases.toStoredSlug(slug));
         cache.remove(key);
     }
 

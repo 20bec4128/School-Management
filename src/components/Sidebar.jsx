@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import "../css/sidebar.css";
 import { useSidebar } from "../context/SidebarContext";
 import { normalizeRole } from "../utils/roles";
+import { normalizePagePermissionSlug } from "../utils/pagePermissionAliases";
 import { useAuth } from "../context/useAuth";
 import { canShowNavPage } from "../utils/navigationVisibility";
 
@@ -39,7 +40,7 @@ const menuSections = [
           {
             label: "Manage School",
             href: "#",
-            page: "manage-school",
+            page: "school",
             perm: "SCHOOL_MANAGE",
           },
           {
@@ -81,7 +82,7 @@ const menuSections = [
           {
             label: "Manage Feedback",
             href: "#",
-            page: "manage-feedback",
+            page: "feedback",
             perm: "SCHOOL_MANAGE",
           },
           {
@@ -252,7 +253,7 @@ const menuSections = [
         icon: "ri:user-star-line",
         submenu: [
           { label: "Department", href: "#", page: "teacher-department" },
-          { label: "Manage Teacher", href: "#", page: "manage-teacher" },
+          { label: "Manage Teacher", href: "#", page: "teacher" },
           { label: "Class Lecture", href: "#", page: "class-lecture" },
           { label: "Rating", href: "#", page: "rating" },
         ],
@@ -269,7 +270,7 @@ const menuSections = [
         submenu: [
           { label: "Exam Instruction", href: "#", page: "exam-instruction" },
           { label: "Question Bank", href: "#", page: "question-bank" },
-          { label: "Online Exam", href: "#", page: "onlineexam" },
+          { label: "Online Exam", href: "#", page: "online-exam" },
           { label: "Exam Result", href: "#", page: "exam-result" },
         ],
       },
@@ -313,9 +314,9 @@ const menuSections = [
           {
             label: "Manage Designation",
             href: "#",
-            page: "manage-designation",
+            page: "designation",
           },
-          { label: "Manage Employees", href: "#", page: "manage-employee" },
+          { label: "Manage Employees", href: "#", page: "employee" },
         ],
       },
        {
@@ -585,7 +586,7 @@ const menuSections = [
         title: "Miscellaneous",
         icon: "ri:more-2-line",
         submenu: [
-          { label: "Manage Award", href: "#", page: "manage-award" },
+          { label: "Manage Award", href: "#", page: "award" },
           { label: "Todo", href: "#", page: "manage-todo" },
           { label: "FAQ", href: "#", page: "faq" },
         ],
@@ -631,6 +632,7 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
     "User";
 
   const role = normalizeRole(user?.role || user?.userRole || user?.authority);
+  const normalizedCurrentPage = normalizePagePermissionSlug(currentPage);
 
   const canOpenUserRoles = () => true;
 
@@ -688,14 +690,14 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
         const item = section.items[ii];
         if (Array.isArray(item.submenu)) {
           const isActiveChild = item.submenu.some(
-            (sub) => sub.page && sub.page === currentPage,
+            (sub) => sub.page && normalizePagePermissionSlug(sub.page) === normalizedCurrentPage,
           );
           if (isActiveChild) return buildOpenKey(si, ii);
         }
       }
     }
     return null;
-  }, [filteredSections, currentPage]);
+  }, [filteredSections, normalizedCurrentPage]);
 
   // undefined = follow the active route, false = explicitly closed, string = explicitly opened
   const [manualOpenKey, setManualOpenKey] = useState(undefined);
@@ -910,7 +912,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                     Array.isArray(item.submenu) && item.submenu.length > 0;
                   const key = buildOpenKey(sectionIndex, itemIndex);
                   const isOpenDropdown = hasSubmenu && openKey === key;
-                  const isItemActive = item.page && item.page === currentPage;
+                  const isItemActive =
+                    item.page &&
+                    normalizePagePermissionSlug(item.page) === normalizedCurrentPage;
 
                   const filteredSubs = hasSubmenu ? item.submenu : [];
 
@@ -963,7 +967,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                               <a
                                 href={sub.href || "#"}
                                 className={
-                                  sub.page && sub.page === currentPage
+                                  sub.page &&
+                                  normalizePagePermissionSlug(sub.page) === normalizedCurrentPage
                                     ? "active-page"
                                     : ""
                                 }
@@ -992,7 +997,8 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                             <a
                               href={item.href || "#"}
                               className={`flyout-title flyout-title-clickable ${
-                                item.page && item.page === currentPage
+                                item.page &&
+                                normalizePagePermissionSlug(item.page) === normalizedCurrentPage
                                   ? "active-page"
                                   : ""
                               }`}
@@ -1007,8 +1013,9 @@ const Sidebar = ({ onNavigate, currentPage, user, onLogout }) => {
                             <a
                               key={subIndex}
                               href={sub.href || "#"}
-                              className={`flyout-link ${
-                                sub.page && sub.page === currentPage
+                            className={`flyout-link ${
+                                sub.page &&
+                                normalizePagePermissionSlug(sub.page) === normalizedCurrentPage
                                   ? "active-page"
                                   : ""
                               }`}

@@ -72,6 +72,7 @@ const IncomeReport = () => {
     user,
     role: authRole,
     schoolId: authSchoolId,
+    schoolName: authSchoolName,
     headOfficeId: authHeadOfficeId,
   } = useAuth();
   const role = useMemo(
@@ -86,6 +87,14 @@ const IncomeReport = () => {
   const isHeadOfficeAdmin = role === "HEAD_OFFICE_ADMIN";
   const isSchoolAdmin = role === "SCHOOL_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? "",
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName]);
 
   const initialSchoolId =
     authSchoolId != null ? String(authSchoolId) : "Select";
@@ -144,12 +153,11 @@ const IncomeReport = () => {
       );
     }
     if (isSchoolAdmin) {
-      return rows.filter(
-        (school) => String(school?.id ?? "") === String(authSchoolId ?? ""),
-      );
+      return currentSchoolOption ? [currentSchoolOption] : [];
     }
     return rows;
   }, [
+    currentSchoolOption,
     authHeadOfficeId,
     authSchoolId,
     isHeadOfficeAdmin,
@@ -170,7 +178,7 @@ const IncomeReport = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const list = await fetchSchoolsLookup();
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup();
         if (!cancelled) setSchools(Array.isArray(list) ? list : []);
       } catch {
         if (!cancelled) setSchools([]);
@@ -181,7 +189,7 @@ const IncomeReport = () => {
     return () => {
       cancelled = true;
     };
-  }, [status, token]);
+  }, [currentSchoolOption, isSchoolAdmin, status, token]);
 
   useEffect(() => {
     if (status !== "ready" || !token) return;

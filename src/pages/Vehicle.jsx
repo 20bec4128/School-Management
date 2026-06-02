@@ -87,6 +87,15 @@ const Vehicle = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const currentSchoolId = isSuperAdmin
     ? (manualScope.selectedSchoolId ? String(manualScope.selectedSchoolId) : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : '')
     : activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
@@ -110,10 +119,10 @@ const Vehicle = ({ onNavigate }) => {
       return rows.filter((school) => String(school.headOfficeId ?? '') === String(authHeadOfficeId))
     }
     if (isSchoolAdmin) {
-      return rows.filter((school) => String(school.id ?? '') === String(authSchoolId))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rows
-  }, [allSchools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, currentHeadOfficeId, authHeadOfficeId, authSchoolId])
+  }, [allSchools, currentSchoolOption, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, currentHeadOfficeId, authHeadOfficeId])
 
   const filterSchoolOptions = useMemo(() => {
     const rows = Array.isArray(allSchools) ? allSchools : []
@@ -197,8 +206,8 @@ const Vehicle = ({ onNavigate }) => {
       setLoadingLookups(true)
       try {
         const [headOfficePage, schoolsData] = await Promise.all([
-          isSuperAdmin || isHeadOfficeAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-          fetchSchoolsLookup(),
+          isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+          isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
         ])
         if (cancelled) return
         setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
@@ -217,7 +226,7 @@ const Vehicle = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin, isHeadOfficeAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, status, token, isSuperAdmin])
 
   useEffect(() => {
     if (!isEditOpen) return

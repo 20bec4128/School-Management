@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.CertificateTypeDto;
 import com.School.School_management.Service.CertificateTypeService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/certificate-types")
-@RequirePermission({"CERTIFICATE_TYPE", "SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "certificate-type", action = "view")
 public class CertificateTypeController {
 
     private final CertificateTypeService certificateTypeService;
@@ -39,21 +39,25 @@ public class CertificateTypeController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "certificate-type", action = "view")
     public CertificateTypeDto getById(@PathVariable Long id) {
         return certificateTypeService.getById(id, CurrentUserHolder.get());
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "certificate-type", action = "add")
     public CertificateTypeDto create(@RequestBody CertificateTypeDto dto) {
         return certificateTypeService.create(dto, CurrentUserHolder.get());
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "certificate-type", action = "edit")
     public CertificateTypeDto update(@PathVariable Long id, @RequestBody CertificateTypeDto dto) {
         return certificateTypeService.update(id, dto, CurrentUserHolder.get());
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "certificate-type", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         certificateTypeService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();

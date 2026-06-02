@@ -133,12 +133,21 @@ const Product = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const loadLookups = useCallback(async () => {
     setLookupLoading(true)
     try {
       const [headOfficePage, schools, categories, warehouses] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
-        fetchSchoolsLookup(),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
         fetchAllPages((page, size) => fetchCategoriesPage({ page, size })),
         fetchAllPages((page, size) => fetchWarehousesPage({ page, size })),
       ])
@@ -155,7 +164,7 @@ const Product = () => {
     } finally {
       setLookupLoading(false)
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadProducts = useCallback(async () => {
     if (status !== 'ready' || !token) return
@@ -261,11 +270,11 @@ const Product = () => {
         return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
       }
       if (isSchoolAdmin) {
-        return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+        return currentSchoolOption ? [currentSchoolOption] : []
       }
       return list
     },
-    [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+    [allSchools, authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
   )
 
   const categoryOptionsFor = useCallback(

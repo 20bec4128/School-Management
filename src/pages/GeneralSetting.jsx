@@ -152,7 +152,10 @@ const GeneralSetting = () => {
   const isHeadOfficeAdmin = role === "HEAD_OFFICE_ADMIN";
   const isSchoolAdmin = role === "SCHOOL_ADMIN";
 
-  const manualScope = useManualSchoolScope(isSuperAdmin || isHeadOfficeAdmin);
+  const manualScope = useManualSchoolScope(
+    isSuperAdmin || isHeadOfficeAdmin,
+    isHeadOfficeAdmin ? authHeadOfficeId : undefined
+  );
 
   const activeSchoolId = isSchoolAdmin ? authSchoolId : manualScope.selectedSchoolId;
   const activeHeadOfficeId = isSchoolAdmin ? authHeadOfficeId : manualScope.selectedHeadOfficeId;
@@ -166,6 +169,10 @@ const GeneralSetting = () => {
   // Fetch settings whenever selected school changes
   useEffect(() => {
     if (!activeSchoolId) {
+      setForm(GENERAL_FORM_DEFAULT);
+      return;
+    }
+    if (isSchoolAdmin) {
       setForm(GENERAL_FORM_DEFAULT);
       return;
     }

@@ -5,7 +5,6 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { deleteNews, fetchNewsPage } from '../apis/newsApi'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
@@ -41,7 +40,6 @@ const News = ({ onNavigate }) => {
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const [rows, setRows] = useState([])
-  const [schools, setSchools] = useState([])
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -59,8 +57,8 @@ const News = ({ onNavigate }) => {
     if (isSuperAdmin) {
       return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions
     }
-    const filtered = Array.isArray(schools)
-      ? schools.filter((school) => {
+    const filtered = Array.isArray(contextSchoolOptions)
+      ? contextSchoolOptions.filter((school) => {
           if (isHeadOfficeAdmin && authHeadOfficeId != null) {
             return String(school?.headOfficeId ?? '') === String(authHeadOfficeId)
           }
@@ -73,7 +71,7 @@ const News = ({ onNavigate }) => {
         ? [{ id: fallbackSchoolId, schoolName: authSchoolName }]
         : []
     return [...filtered, ...fallback]
-  }, [activeSchoolId, authHeadOfficeId, authSchoolId, authSchoolName, contextSchoolOptions, isHeadOfficeAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, schools])
+  }, [activeSchoolId, authHeadOfficeId, authSchoolId, authSchoolName, contextSchoolOptions, isHeadOfficeAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
@@ -102,15 +100,6 @@ const News = ({ onNavigate }) => {
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
   const allSelected = rows.length > 0 && rows.every((row) => selectedRows.includes(String(row.id)))
-
-  const loadSchools = useCallback(async () => {
-    try {
-      const list = await fetchSchoolsLookup()
-      setSchools(Array.isArray(list) ? list : [])
-    } catch {
-      setSchools([])
-    }
-  }, [])
 
   const loadData = useCallback(async () => {
     if (scopedSchoolIds.length === 0) {
@@ -188,11 +177,6 @@ const News = ({ onNavigate }) => {
       setLoading(false)
     }
   }, [currentPage, filters.isViewOnWeb, rowsPerPage, scopedSchoolIds, search])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadSchools()
-  }, [loadSchools])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

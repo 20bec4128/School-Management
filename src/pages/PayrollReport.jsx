@@ -63,7 +63,7 @@ const fetchAllPages = async (loader, params) => {
 }
 
 const PayrollReport = () => {
-  const { status, token, user, role: authRole, schoolId: authSchoolId } = useAuth()
+  const { status, token, user, role: authRole, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -72,6 +72,14 @@ const PayrollReport = () => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
 
@@ -99,8 +107,9 @@ const PayrollReport = () => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return Array.isArray(schools) ? schools : []
-  }, [manualScope.schoolOptions, isSuperAdmin, schools])
+  }, [currentSchoolOption, isSchoolAdmin, manualScope.schoolOptions, isSuperAdmin, schools])
 
   const filteredData = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
@@ -160,7 +169,7 @@ const PayrollReport = () => {
     let cancelled = false
     const load = async () => {
       try {
-        const list = await fetchSchoolsLookup()
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setSchools([])
@@ -171,7 +180,7 @@ const PayrollReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

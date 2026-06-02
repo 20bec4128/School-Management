@@ -7,7 +7,6 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
   deleteAdmitCardSetting,
   fetchAdmitCardSettingsPage,
@@ -238,8 +237,14 @@ const AdmitCardSetting = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentSchoolOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    if (isHeadOfficeAdmin) return [{ id: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId }]
+    if (isSchoolAdmin) return [{ id: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId }]
+    return []
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
-  const resolveSchoolById = useCallback((schoolId) => getSchoolById(allSchools, schoolId), [allSchools])
+  const resolveSchoolById = useCallback((schoolId) => getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, schoolId), [allSchools, currentSchoolOptions])
 
   const resolveHeadOfficeName = useCallback(
     (headOfficeId) => {
@@ -256,7 +261,7 @@ const AdmitCardSetting = ({ onNavigate }) => {
   )
 
   const filterSchoolOptions = useMemo(() => {
-    const rowsList = Array.isArray(allSchools) ? allSchools : []
+    const rowsList = Array.isArray(allSchools) && allSchools.length > 0 ? allSchools : currentSchoolOptions
     if (pendingFilters.headOfficeId) {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
     }
@@ -270,20 +275,7 @@ const AdmitCardSetting = ({ onNavigate }) => {
       return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
     }
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
-
-  const loadLookups = useCallback(async () => {
-    setLookupLoading(true)
-    try {
-      const schools = await fetchSchoolsLookup()
-      setAllSchools(Array.isArray(schools) ? schools : [])
-    } catch (err) {
-      console.error('Failed to load admit card lookups:', err)
-      setAllSchools([])
-    } finally {
-      setLookupLoading(false)
-    }
-  }, [])
+  }, [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOptions, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
 
   const loadAdmitCardSettings = useCallback(async () => {
     if (status !== 'ready' || !token) return
@@ -318,8 +310,9 @@ const AdmitCardSetting = ({ onNavigate }) => {
 
   useEffect(() => {
     if (status !== 'ready' || !token) return
-    void loadLookups()
-  }, [loadLookups, status, token])
+    setLookupLoading(false)
+    setAllSchools(currentSchoolOptions)
+  }, [currentSchoolOptions, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

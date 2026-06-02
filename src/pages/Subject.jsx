@@ -36,10 +36,18 @@ const typeBadge = (type) => {
 }
 
 const SubjectList = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'subject'
   const { activeSchoolId } = useSchool()
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
+  const isSchoolAdmin = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+    }
+  }, [authSchoolId, authSchoolName, isSchoolAdmin])
   
   const [subjects, setSubjects] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -82,8 +90,12 @@ const SubjectList = ({ onNavigate }) => {
   }, [loadData, refreshKey])
 
   useEffect(() => {
+    if (isSchoolAdmin) {
+      setSchoolsLookup(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
     fetchSchoolsLookup().then(setSchoolsLookup).catch(() => setSchoolsLookup([]))
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   useEffect(() => {
     if (!isSuperAdmin) {

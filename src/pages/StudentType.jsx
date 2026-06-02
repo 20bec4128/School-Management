@@ -6,7 +6,6 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useAuth } from '../context/useAuth'
 import { useSchool } from '../context/useSchool'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
   createStudentType,
   deleteStudentType,
@@ -85,11 +84,10 @@ const getSchoolById = (rows, schoolId) =>
 
 const StudentType = () => {
   const { role, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
-  const { activeSchoolId } = useSchool()
+  const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool()
   const manualScope = useManualSchoolScope(normalizeRole(role) === 'SUPER_ADMIN')
 
   const [studentTypes, setStudentTypes] = useState([])
-  const [schools, setSchools] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -123,22 +121,45 @@ const StudentType = () => {
 
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const resolvedSchoolLabel = authSchoolName || (resolvedSchoolId ? `School ${resolvedSchoolId}` : '')
+  const availableSchools = useMemo(() => {
+    const base = isSuperAdmin
+      ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions)
+      : contextSchoolOptions
+    const rows = Array.isArray(base) ? base.slice() : []
+
+    if (isHeadOfficeAdmin && authHeadOfficeId != null) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
+    }
+
+    if (isSchoolAdmin || isTeacherScope) {
+      const own = rows.filter((school) => String(school?.id ?? '') === String(resolvedSchoolId))
+      return own.length > 0
+        ? own
+        : resolvedSchoolId
+          ? [{ id: resolvedSchoolId, schoolName: resolvedSchoolLabel, headOfficeId: authHeadOfficeId ?? '' }]
+          : rows
+    }
+
+    return rows
+  }, [
+    authHeadOfficeId,
+    contextSchoolOptions,
+    isHeadOfficeAdmin,
+    isSchoolAdmin,
+    isSuperAdmin,
+    isTeacherScope,
+    manualScope.schoolOptions,
+    manualScope.selectedHeadOfficeId,
+    resolvedSchoolId,
+    resolvedSchoolLabel,
+  ])
 
   const schoolOptions = useMemo(() => {
-    const rows = Array.isArray(schools) ? schools : []
     if (isSuperAdmin) {
-      return manualScope.selectedHeadOfficeId
-        ? manualScope.schoolOptions
-        : []
+      return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions
     }
-    if (isHeadOfficeAdmin) {
-      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    }
-    if (isSchoolAdmin || isTeacherScope) {
-      return rows.filter((school) => String(school?.id ?? '') === String(resolvedSchoolId))
-    }
-    return rows
-  }, [authHeadOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, isTeacherScope, manualScope.schoolOptions, manualScope.selectedHeadOfficeId, resolvedSchoolId, schools])
+    return availableSchools
+  }, [availableSchools, contextSchoolOptions, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
   const studentTypeOptions = useMemo(
     () => Array.from(new Set(studentTypes.map((item) => item.studentType))).filter(Boolean).sort(),
@@ -158,11 +179,6 @@ const StudentType = () => {
   }, [filters.studentType, search, studentTypes])
 
   const allSelected = filtered.length > 0 && filtered.every((row) => selectedRows.includes(row.id))
-
-  const loadSchools = async () => {
-    const list = await fetchSchoolsLookup()
-    setSchools(Array.isArray(list) ? list : [])
-  }
 
   const loadRows = async () => {
     setLoading(true)
@@ -198,21 +214,6 @@ const StudentType = () => {
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        await loadSchools()
-      } catch {
-        if (!cancelled) setSchools([])
-      }
-    }
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     if (isSuperAdmin) return
@@ -280,7 +281,7 @@ const StudentType = () => {
     setError('')
     setEditingId(null)
     const schoolId = (isSchoolAdmin || isTeacherScope) && resolvedSchoolId ? resolvedSchoolId : ''
-    const school = getSchoolById(schools, schoolId)
+    const school = getSchoolById(availableSchools, schoolId)
     const headOfficeId = isSuperAdmin
       ? (manualScope.selectedHeadOfficeId || filters.headOfficeId || '')
       : isHeadOfficeAdmin
@@ -306,8 +307,12 @@ const StudentType = () => {
   const openEdit = (row) => {
     setError('')
     setEditingId(row.id)
-    const school = getSchoolById(schools, row.schoolId)
-    const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
+    const school = getSchoolById(availableSchools, row.schoolId)
+    const headOfficeId = row.headOfficeId != null
+      ? String(row.headOfficeId)
+      : school?.headOfficeId != null
+        ? String(school.headOfficeId)
+        : ''
     setEditForm({
       headOfficeId,
       schoolId: row.schoolId != null ? String(row.schoolId) : '',
@@ -322,7 +327,7 @@ const StudentType = () => {
   }
 
   const buildPayload = (form) => {
-    const school = getSchoolById(schools, form.schoolId)
+    const school = getSchoolById(availableSchools, form.schoolId)
     return {
       headOfficeId: form.headOfficeId ? Number(form.headOfficeId) : school?.headOfficeId != null ? Number(school.headOfficeId) : null,
       schoolId: form.schoolId ? Number(form.schoolId) : null,
@@ -389,11 +394,11 @@ const StudentType = () => {
 
   const schoolNameById = useMemo(() => {
     const map = {}
-    schools.forEach((s) => {
+    availableSchools.forEach((s) => {
       map[s.id] = s.schoolName
     })
     return map
-  }, [schools])
+  }, [availableSchools])
 
   const teacherSchoolName = resolvedSchoolLabel || schoolNameById[resolvedSchoolId] || ''
 
@@ -415,7 +420,7 @@ const StudentType = () => {
             }}
             selectedSchoolId={form.schoolId}
             onSchoolChange={(value) => {
-              const school = getSchoolById(schools, value)
+              const school = getSchoolById(availableSchools, value)
               const nextHeadOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : form.headOfficeId
               setter((prev) => ({
                 ...prev,

@@ -33,17 +33,63 @@ const writeStored = (key, value) => {
   }
 }
 
+const pickSchoolOption = (user) => {
+  const schoolId =
+    user?.schoolId ??
+    user?.school?.id ??
+    user?.teacherContext?.schoolId ??
+    user?.teacherContext?.school?.id ??
+    user?.teacher?.schoolId ??
+    user?.teacher?.school?.id ??
+    null
+
+  if (schoolId == null) return null
+
+  const schoolName =
+    user?.schoolName ??
+    user?.school?.schoolName ??
+    user?.school?.name ??
+    user?.teacherContext?.schoolName ??
+    user?.teacherContext?.school?.schoolName ??
+    user?.teacherContext?.school?.name ??
+    user?.teacher?.schoolName ??
+    user?.teacher?.school?.schoolName ??
+    user?.teacher?.school?.name ??
+    `School ${schoolId}`
+
+  const headOfficeId =
+    user?.headOfficeId ??
+    user?.headOffice?.id ??
+    user?.teacherContext?.headOfficeId ??
+    user?.teacherContext?.headOffice?.id ??
+    user?.teacher?.headOfficeId ??
+    user?.teacher?.headOffice?.id ??
+    null
+
+  return {
+    id: String(schoolId),
+    schoolName,
+    headOfficeId: headOfficeId == null ? '' : String(headOfficeId),
+  }
+}
+
 export const SchoolProvider = ({ user, children }) => {
   const role = normalizeRole(user?.role || user?.userRole || user?.authority)
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const fixedSchoolOption = useMemo(() => (isSchoolAdmin ? pickSchoolOption(user) : null), [isSchoolAdmin, user])
 
   const isSchoolSelectionEnabled = isHeadOfficeAdmin || isSuperAdmin
 
-  const [activeSchoolId, setActiveSchoolIdState] = useState(() => readStored(STORAGE_KEY_SCHOOL))
+  const [activeSchoolId, setActiveSchoolIdState] = useState(() => readStored(STORAGE_KEY_SCHOOL) ?? fixedSchoolOption?.id ?? null)
   const [allSchools, setAllSchools] = useState([])
 
   const refreshSchools = useCallback(async () => {
+    if (isSchoolAdmin) {
+      setAllSchools(fixedSchoolOption ? [fixedSchoolOption] : [])
+      return
+    }
     if (!isSchoolSelectionEnabled) {
       setAllSchools([])
       return
@@ -54,7 +100,7 @@ export const SchoolProvider = ({ user, children }) => {
     } catch {
       setAllSchools([])
     }
-  }, [isSchoolSelectionEnabled])
+  }, [fixedSchoolOption, isSchoolAdmin, isSchoolSelectionEnabled])
 
   const setActiveSchoolId = useCallback(
     (value) => {
@@ -67,6 +113,13 @@ export const SchoolProvider = ({ user, children }) => {
   )
 
   useEffect(() => {
+    if (isSchoolAdmin) {
+      const nextSchoolId = fixedSchoolOption?.id ?? null
+      setActiveSchoolIdState(nextSchoolId)
+      writeStored(STORAGE_KEY_SCHOOL, nextSchoolId)
+      setAllSchools(fixedSchoolOption ? [fixedSchoolOption] : [])
+      return
+    }
     if (!isSchoolSelectionEnabled) {
       setActiveSchoolIdState(null)
       writeStored(STORAGE_KEY_SCHOOL, null)
@@ -74,9 +127,12 @@ export const SchoolProvider = ({ user, children }) => {
     } else {
       void refreshSchools()
     }
-  }, [isSchoolSelectionEnabled, refreshSchools])
+  }, [fixedSchoolOption, isSchoolAdmin, isSchoolSelectionEnabled, refreshSchools])
 
-  const schoolOptions = useMemo(() => allSchools, [allSchools])
+  const schoolOptions = useMemo(() => {
+    if (isSchoolAdmin) return fixedSchoolOption ? [fixedSchoolOption] : []
+    return allSchools
+  }, [allSchools, fixedSchoolOption, isSchoolAdmin])
 
   const value = useMemo(
     () => ({

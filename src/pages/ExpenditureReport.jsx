@@ -60,7 +60,7 @@ const formatDateTime = (value) => {
 }
 
 const ExpenditureReport = () => {
-  const { status, token, user, role: authRole, schoolId: authSchoolId, headOfficeId: authHeadOfficeId } = useAuth()
+  const { status, token, user, role: authRole, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -70,6 +70,14 @@ const ExpenditureReport = () => {
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
   const initialHeadOfficeId = authHeadOfficeId != null ? String(authHeadOfficeId) : 'Select'
@@ -113,10 +121,10 @@ const ExpenditureReport = () => {
       return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rows.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rows
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -129,7 +137,7 @@ const ExpenditureReport = () => {
 
     const load = async () => {
       try {
-        const list = await fetchSchoolsLookup()
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setSchools([])
@@ -140,7 +148,7 @@ const ExpenditureReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token])
+  }, [currentSchoolOption, isSchoolAdmin, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

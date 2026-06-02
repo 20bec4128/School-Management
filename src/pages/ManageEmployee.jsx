@@ -56,7 +56,7 @@ const ManageEmployee = ({ onNavigate }) => {
     canEdit,
     canDelete,
   } = useAuth();
-  const PAGE_SLUG = "manage-employee";
+  const PAGE_SLUG = "employee";
 
   const { activeSchoolId } = useSchool();
 

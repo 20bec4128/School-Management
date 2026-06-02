@@ -72,7 +72,7 @@ const fetchAllPages = async (loader, params) => {
 }
 
 const SalaryPayment = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'salary-payment'
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
@@ -85,6 +85,14 @@ const SalaryPayment = () => {
 
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(false)
@@ -122,10 +130,10 @@ const SalaryPayment = () => {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rowsList
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, manualScope.schoolOptions, schools, isSuperAdmin])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, manualScope.schoolOptions, schools, isSuperAdmin])
 
   const filteredData = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
@@ -202,7 +210,7 @@ const SalaryPayment = () => {
     let cancelled = false
     const load = async () => {
       try {
-        const list = await fetchSchoolsLookup()
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setSchools([])
@@ -213,7 +221,7 @@ const SalaryPayment = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   const loadRows = async () => {
     if (status !== 'ready' || !token) return

@@ -141,6 +141,14 @@ const ManageInvoice = () => {
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -194,10 +202,10 @@ const ManageInvoice = () => {
       return rows.filter((school) => String(school.headOfficeId ?? '') === String(authHeadOfficeId))
     }
     if (isSchoolAdmin) {
-      return rows.filter((school) => String(school.id ?? '') === String(authSchoolId))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rows
-  }, [schools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, manualScope.selectedHeadOfficeId, authHeadOfficeId, authSchoolId])
+  }, [currentSchoolOption, schools, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin, manualScope.selectedHeadOfficeId, authHeadOfficeId])
 
   const formSchoolOptions = isSuperAdmin ? manualScope.schoolOptions : schoolOptions
 
@@ -267,18 +275,18 @@ const ManageInvoice = () => {
     setLoading(true)
     setError('')
     try {
+      const querySchoolId = filters.schoolId || currentScopeSchoolId || null
       const [schoolsData, classesData, feeTypesData, discountsData] = await Promise.all([
-        fetchSchoolsLookup(),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
         fetchClasses(),
-        fetchFeeTypes(),
-        fetchDiscounts(),
+        querySchoolId ? fetchFeeTypes({ schoolId: querySchoolId }) : Promise.resolve([]),
+        querySchoolId ? fetchDiscounts({ schoolId: querySchoolId }) : Promise.resolve([]),
       ])
       setSchools(Array.isArray(schoolsData) ? schoolsData : [])
       setClasses(Array.isArray(classesData) ? classesData : [])
       setFeeTypes(Array.isArray(feeTypesData) ? feeTypesData : [])
       setDiscounts(Array.isArray(discountsData) ? discountsData : [])
 
-      const querySchoolId = filters.schoolId || currentScopeSchoolId || null
       const pageData = await fetchFeeCollectionsPage({
         schoolId: querySchoolId,
         classId: filters.classId,
@@ -304,7 +312,7 @@ const ManageInvoice = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, currentScopeSchoolId, debouncedSearch, filters.classId, filters.feeTypeId, filters.month, filters.schoolId, filters.status, rowsPerPage, status, token])
+  }, [currentPage, currentScopeSchoolId, currentSchoolOption, debouncedSearch, filters.classId, filters.feeTypeId, filters.month, filters.schoolId, filters.status, isSchoolAdmin, rowsPerPage, status, token])
 
   useEffect(() => {
     const timer = setTimeout(() => {

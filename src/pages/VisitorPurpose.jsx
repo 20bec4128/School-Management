@@ -36,7 +36,7 @@ const FIELD_ICONS = {
 }
 
 const columnOptions = [
-  { key: 'schoolId', label: 'School ID' },
+  { key: 'schoolId', label: 'School Name' },
   { key: 'purpose', label: 'Visitor Purpose' },
 ]
 
@@ -75,7 +75,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const VisitorPurpose = () => {
-  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'visitor-purpose'
   const PAGE_PERMISSIONS = {
     add: canAdd(PAGE_SLUG),
@@ -138,6 +138,18 @@ const VisitorPurpose = () => {
   const listSchoolId = scopedSchoolIds[0] || ''
   const showSchoolSelector = schoolOptions.length > 1
   const isSchoolLocked = !isSuperAdmin && !!listSchoolId
+  const resolveSchoolName = useCallback((schoolId) => {
+    const targetSchoolId = String(schoolId ?? '').trim()
+    if (!targetSchoolId) return '-'
+
+    const match =
+      findSchoolById(manualScope.schoolOptions, targetSchoolId) ||
+      findSchoolById(contextSchoolOptions, targetSchoolId)
+
+    if (match?.schoolName) return match.schoolName
+    if (String(authSchoolId ?? '') === targetSchoolId) return authSchoolName || `School ${targetSchoolId}`
+    return `School ${targetSchoolId}`
+  }, [authSchoolId, authSchoolName, contextSchoolOptions, manualScope.schoolOptions])
   const currentStart = totalElements === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1
   const currentEnd = totalElements === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalElements)
 
@@ -442,7 +454,7 @@ const VisitorPurpose = () => {
                       <label className="form-check-label">S.L</label>
                     </div>
                   </th>
-                  {visibleColumns.schoolId ? <th scope="col">School ID</th> : null}
+                  {visibleColumns.schoolId ? <th scope="col">School Name</th> : null}
                   {visibleColumns.purpose ? <th scope="col">Visitor Purpose</th> : null}
                   <th scope="col">Action</th>
                 </tr>
@@ -460,7 +472,7 @@ const VisitorPurpose = () => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                    {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
+                    {visibleColumns.schoolId ? <td>{resolveSchoolName(row.schoolId)}</td> : null}
                     {visibleColumns.purpose ? <td className="fw-medium text-primary-light">{row.purpose}</td> : null}
                     <td>
                       <div className="d-flex align-items-center gap-10">

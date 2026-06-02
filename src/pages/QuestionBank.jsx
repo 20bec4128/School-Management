@@ -59,7 +59,7 @@ const statusBadge = (status) => {
 }
 
 const QuestionBank = ({ onNavigate } = {}) => {
-  const { status: authStatus, token, role: authRole, user, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
+  const { status: authStatus, token, role: authRole, user, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'question-bank'
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
   const isSuperAdmin = role === 'SUPER_ADMIN'
@@ -88,6 +88,15 @@ const QuestionBank = ({ onNavigate } = {}) => {
   const [filters, setFilters] = useState(emptyFilters)
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const getSchoolById = (schoolId) =>
     (Array.isArray(schools) ? schools : []).find((school) => String(school?.id ?? '') === String(schoolId ?? '')) || null
 
@@ -95,7 +104,7 @@ const QuestionBank = ({ onNavigate } = {}) => {
     if (authStatus === 'ready' && token) {
       Promise.all([
         isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-        fetchSchoolsLookup(),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       ])
         .then(([headOfficePage, schoolRows]) => {
           setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
@@ -107,7 +116,7 @@ const QuestionBank = ({ onNavigate } = {}) => {
           setSchools([])
         })
     }
-  }, [authStatus, isSuperAdmin, token])
+  }, [authStatus, currentSchoolOption, isSchoolAdmin, isSuperAdmin, token])
 
   const filterSchoolId = useMemo(() => {
     if (pendingFilters.schoolId) return pendingFilters.schoolId
@@ -124,10 +133,10 @@ const QuestionBank = ({ onNavigate } = {}) => {
       return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return list
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId, schools])
 
   useEffect(() => {
     if (authStatus !== 'ready' || !token) return

@@ -65,12 +65,21 @@ const Sale = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const loadLookups = useCallback(async () => {
     setLookupLoading(true)
     try {
       const [headOfficePage, schools] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
-        fetchSchoolsLookup(),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       ])
       setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
       setAllSchools(Array.isArray(schools) ? schools : [])
@@ -81,7 +90,7 @@ const Sale = ({ onNavigate }) => {
     } finally {
       setLookupLoading(false)
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadSales = useCallback(async () => {
     if (status !== 'ready' || !token) return
@@ -167,11 +176,11 @@ const Sale = ({ onNavigate }) => {
         return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
       }
       if (isSchoolAdmin) {
-        return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+        return currentSchoolOption ? [currentSchoolOption] : []
       }
       return list
     },
-    [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+    [allSchools, authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
   )
 
   const filterSchoolOptions = useMemo(() => schoolOptionsFor(pendingFilters.headOfficeId), [pendingFilters.headOfficeId, schoolOptionsFor])

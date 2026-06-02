@@ -104,12 +104,21 @@ const Category = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const loadLookups = useCallback(async () => {
     setLookupLoading(true)
     try {
       const [headOfficePage, schools] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
-        fetchSchoolsLookup(),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       ])
       setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
       setAllSchools(Array.isArray(schools) ? schools : [])
@@ -120,7 +129,7 @@ const Category = () => {
     } finally {
       setLookupLoading(false)
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const resolveSchoolName = useCallback(
     (schoolId) => {
@@ -142,11 +151,11 @@ const Category = () => {
         return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
       }
       if (isSchoolAdmin) {
-        return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? fallbackSchoolId ?? ''))
+        return currentSchoolOption ? [currentSchoolOption] : []
       }
       return rowsList
     },
-    [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+    [allSchools, authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
   )
 
   const addSchoolOptions = useMemo(

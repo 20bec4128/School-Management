@@ -84,7 +84,7 @@ const buildStudentRows = (students = []) => {
 }
 
 const StudentReport = () => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -95,6 +95,14 @@ const StudentReport = () => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
 
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
 
   const [rows, setRows] = useState([])
@@ -128,8 +136,9 @@ const StudentReport = () => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return Array.isArray(schools) ? schools : []
-  }, [manualScope.schoolOptions, isSuperAdmin, schools])
+  }, [currentSchoolOption, isSchoolAdmin, manualScope.schoolOptions, isSuperAdmin, schools])
 
   const filterSchoolOptions = useMemo(() => {
     const rowsList = Array.isArray(schoolOptions) ? schoolOptions : []
@@ -191,7 +200,7 @@ const StudentReport = () => {
     let cancelled = false
     const load = async () => {
       try {
-        const list = await fetchSchoolsLookup()
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setSchools([])
@@ -202,7 +211,7 @@ const StudentReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   useEffect(() => {
     if (!isSuperAdmin && isHeadOfficeAdmin && authHeadOfficeId != null) {

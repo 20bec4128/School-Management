@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.DesignationDto;
 import com.School.School_management.Service.DesignationService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/designations")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "designation", action = "view")
 public class DesignationController {
 
     private final DesignationService designationService;
@@ -26,6 +26,7 @@ public class DesignationController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "designation", action = "view")
     public java.util.List<DesignationDto> list(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) String role
@@ -34,6 +35,7 @@ public class DesignationController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "designation", action = "view")
     public org.springframework.data.domain.Page<DesignationDto> listPaginated(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(defaultValue = "0") int page,
@@ -44,16 +46,19 @@ public class DesignationController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "designation", action = "add")
     public DesignationDto create(@RequestBody DesignationDto dto) {
         return designationService.create(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "designation", action = "edit")
     public DesignationDto update(@PathVariable Long id, @RequestBody DesignationDto dto) {
         return designationService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "designation", action = "delete")
     public String delete(@PathVariable Long id) {
         designationService.delete(id);
         return "Designation deleted successfully";

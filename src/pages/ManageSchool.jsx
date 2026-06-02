@@ -188,7 +188,7 @@ const ManageSchool = ({ onNavigate }) => {
     canEdit,
     canDelete,
   } = useAuth()
-  const PAGE_SLUG = 'manage-school'
+  const PAGE_SLUG = 'school'
   const [schools, setSchools] = useState([])
   const [allSchools, setAllSchools] = useState([])
   const [headOffices, setHeadOffices] = useState([])

@@ -86,15 +86,23 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const ExamInstruction = () => {
-  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { status, token, role: authRole, user, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'exam-instruction'
-  const isSuperAdmin = useMemo(
-    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === 'SUPER_ADMIN',
-    [authRole, user],
-  )
+  const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
+  const isSuperAdmin = role === 'SUPER_ADMIN'
+  const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const [headOffices, setHeadOffices] = useState([])
   const [schools, setSchools] = useState([])
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
   
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -129,7 +137,7 @@ const ExamInstruction = () => {
       try {
         const [headOfficePage, schoolList] = await Promise.all([
           isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-          fetchSchoolsLookup(),
+          isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
         ])
         if (cancelled) return
         setHeadOffices(Array.isArray(headOfficePage?.content) ? headOfficePage.content : [])
@@ -146,7 +154,7 @@ const ExamInstruction = () => {
     return () => {
       cancelled = true
     }
-  }, [isSuperAdmin, status, token])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   const scopeSchoolOptions = useMemo(() => {
     const rows = Array.isArray(schools) ? schools : []
@@ -154,25 +162,34 @@ const ExamInstruction = () => {
       if (!manualScope.selectedHeadOfficeId) return []
       return rows.filter((school) => String(school?.headOfficeId ?? '') === String(manualScope.selectedHeadOfficeId))
     }
+    if (isSchoolAdmin) {
+      return currentSchoolOption ? [currentSchoolOption] : []
+    }
+    if (isHeadOfficeAdmin) {
+      return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
     if (authHeadOfficeId != null) {
       return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
     }
     return rows
-  }, [authHeadOfficeId, isSuperAdmin, manualScope.selectedHeadOfficeId, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.selectedHeadOfficeId, schools])
 
   const filterSchoolOptions = useMemo(() => {
     const list = Array.isArray(schools) ? schools : []
     if (filters.headOfficeId) {
       return list.filter((school) => String(school?.headOfficeId ?? '') === String(filters.headOfficeId))
     }
+    if (isSchoolAdmin) {
+      return currentSchoolOption ? [currentSchoolOption] : []
+    }
+    if (isHeadOfficeAdmin) {
+      return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
+    }
     if (authHeadOfficeId != null) {
       return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))
     }
-    if (authSchoolId != null) {
-      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId))
-    }
     return list
-  }, [authHeadOfficeId, authSchoolId, filters.headOfficeId, schools])
+  }, [authHeadOfficeId, currentSchoolOption, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, schools])
 
   const loadData = async () => {
     if (status !== 'ready' || !token) return

@@ -134,7 +134,12 @@ const Lesson = ({ onNavigate }) => {
   const roleUpper = String(role || "").toUpperCase();
   const isSuperAdmin = roleUpper === "SUPER_ADMIN";
   const isHeadOfficeAdmin = roleUpper === "HEAD_OFFICE_ADMIN";
+  const isSchoolAdmin = roleUpper === "SCHOOL_ADMIN";
   const isTeacherScope = String(role || "").toUpperCase() === "TEACHER";
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return { id: authSchoolId, schoolName: authSchoolName || `School ${authSchoolId}` };
+  }, [authSchoolId, authSchoolName, isSchoolAdmin]);
   const resolvedSchoolId = activeSchoolId
     ? String(activeSchoolId)
     : authSchoolId
@@ -206,13 +211,13 @@ const Lesson = ({ onNavigate }) => {
     const loadLookups = async () => {
       const [ho, s] = await Promise.allSettled([
         isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-        fetchSchoolsLookup(),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       ]);
       setHeadOfficesLookup(ho.status === "fulfilled" ? (Array.isArray(ho.value?.content) ? ho.value.content : []) : []);
       setSchoolsLookup(s.status === "fulfilled" ? s.value : []);
     };
     loadLookups();
-  }, [isSuperAdmin]);
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin]);
 
   useEffect(() => {
     if (!selectedSchoolIdForLookups) {

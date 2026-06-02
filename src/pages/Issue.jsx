@@ -179,6 +179,15 @@ const Issue = ({ onNavigate } = {}) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const schoolOptionsFor = useCallback(
     (list, selectedHeadOfficeId) => {
       const rows = Array.isArray(list) ? list : []
@@ -190,14 +199,14 @@ const Issue = ({ onNavigate } = {}) => {
         return rows.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
       }
       if (isSchoolAdmin) {
-        return rows.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+        return currentSchoolOption ? [currentSchoolOption] : []
       }
       if (selectedHeadOfficeId) {
         return rows.filter((school) => String(school?.headOfficeId ?? '') === String(selectedHeadOfficeId))
       }
       return rows
     },
-    [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+    [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
   )
 
   const schoolOptions = useMemo(() => schoolOptionsFor(schools), [schoolOptionsFor, schools])
@@ -230,8 +239,8 @@ const Issue = ({ onNavigate } = {}) => {
     setLookupLoading(true)
     try {
       const [headOfficePage, schoolRows, categoryRows, productRows] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
-        fetchSchoolsLookup(),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
+        isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
         fetchAllPages((page, size) => fetchCategoriesPage({ page, size })),
         fetchAllPages((page, size) => fetchProductsPage({ page, size })),
       ])
@@ -248,7 +257,7 @@ const Issue = ({ onNavigate } = {}) => {
     } finally {
       setLookupLoading(false)
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin])
 
   const loadIssues = useCallback(async () => {
     if (status !== 'ready' || !token) return

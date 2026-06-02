@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.SchoolSectionDto;
 import com.School.School_management.Service.SchoolSectionService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
 import java.util.List;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/sections")
-@RequirePermission({"SECTION_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "section", action = "view")
 public class SchoolSectionController {
 
   private final SchoolSectionService schoolSectionService;
@@ -28,14 +28,7 @@ public class SchoolSectionController {
   }
 
   @GetMapping
-  @RequirePermission({
-    "SECTION_MANAGE",
-    "SECTION_VIEW_ASSIGNED",
-    "SECTION_VIEW_OWN",
-    "SECTION_VIEW_CHILD",
-    "HEAD_OFFICE_SCHOOL_MANAGE",
-    "*"
-  })
+  @RequirePagePermission(slug = "section", action = "view")
   public List<SchoolSectionDto> getAll(
       @RequestParam(required = false) Long headOfficeId,
       @RequestParam(required = false) Long schoolId,
@@ -55,21 +48,25 @@ public class SchoolSectionController {
   }
 
   @GetMapping("/{id}")
+  @RequirePagePermission(slug = "section", action = "view")
   public SchoolSectionDto getById(@PathVariable Long id) {
     return schoolSectionService.getById(id);
   }
 
   @PostMapping
+  @RequirePagePermission(slug = "section", action = "add")
   public SchoolSectionDto create(@RequestBody SchoolSectionDto dto) {
     return schoolSectionService.create(dto);
   }
 
   @PutMapping("/{id}")
+  @RequirePagePermission(slug = "section", action = "edit")
   public SchoolSectionDto update(@PathVariable Long id, @RequestBody SchoolSectionDto dto) {
     return schoolSectionService.update(id, dto);
   }
 
   @DeleteMapping("/{id}")
+  @RequirePagePermission(slug = "section", action = "delete")
   public String delete(@PathVariable Long id) {
     schoolSectionService.delete(id);
     return "Section deleted successfully";

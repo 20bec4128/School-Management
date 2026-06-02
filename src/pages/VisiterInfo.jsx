@@ -55,7 +55,7 @@ const FIELD_ICONS = {
 };
 
 const columnOptions = [
-  { key: "schoolId", label: "School ID" },
+  { key: "schoolId", label: "School Name" },
   { key: "name", label: "Name" },
   { key: "phone", label: "Phone" },
   { key: "purposeName", label: "Visitor Purpose" },
@@ -105,7 +105,7 @@ const FormField = ({
 };
 
 const VisitorInfo = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName } = useAuth();
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName } = useAuth();
   const { activeSchoolId, schoolOptions: contextSchoolOptions } = useSchool();
   const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
@@ -137,6 +137,18 @@ const VisitorInfo = ({ onNavigate }) => {
   }, [activeSchoolId, authSchoolId, contextSchoolOptions]);
   const schoolHeadOfficeId = currentSchool?.headOfficeId != null ? String(currentSchool.headOfficeId) : (authHeadOfficeId != null ? String(authHeadOfficeId) : "");
   const schoolHeadOfficeName = authHeadOfficeName || (schoolHeadOfficeId ? `Head Office ${schoolHeadOfficeId}` : "");
+  const resolveSchoolName = useCallback((schoolId) => {
+    const targetSchoolId = String(schoolId ?? "").trim();
+    if (!targetSchoolId) return "-";
+
+    const match =
+      findSchoolById(manualScope.schoolOptions, targetSchoolId) ||
+      findSchoolById(contextSchoolOptions, targetSchoolId);
+
+    if (match?.schoolName) return match.schoolName;
+    if (String(authSchoolId ?? "") === targetSchoolId) return authSchoolName || `School ${targetSchoolId}`;
+    return `School ${targetSchoolId}`;
+  }, [authSchoolId, authSchoolName, contextSchoolOptions, manualScope.schoolOptions]);
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
       if (filters.schoolId) return [String(filters.schoolId)];
@@ -454,7 +466,7 @@ const VisitorInfo = ({ onNavigate }) => {
                     </div>
                   </th>
                   {visibleColumns.schoolId ? (
-                    <th scope="col">School ID</th>
+                    <th scope="col">School Name</th>
                   ) : null}
                   {visibleColumns.name ? <th scope="col">Name</th> : null}
                   {visibleColumns.phone ? <th scope="col">Phone</th> : null}
@@ -504,7 +516,7 @@ const VisitorInfo = ({ onNavigate }) => {
                           </label>
                         </div>
                       </td>
-                      {visibleColumns.schoolId ? <td>{row.schoolId}</td> : null}
+                      {visibleColumns.schoolId ? <td>{resolveSchoolName(row.schoolId)}</td> : null}
                       {visibleColumns.name ? (
                         <td className="fw-medium text-primary-light">
                           {row.name}

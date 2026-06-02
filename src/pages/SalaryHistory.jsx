@@ -68,7 +68,7 @@ const fetchAllPages = async (params) => {
 }
 
 const SalaryHistory = () => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'salary-history'
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
@@ -77,6 +77,14 @@ const SalaryHistory = () => {
   const manualScope = useManualSchoolScope(isSuperAdmin)
 
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(false)
@@ -104,7 +112,7 @@ const SalaryHistory = () => {
     let cancelled = false
     const loadSchools = async () => {
       try {
-        const list = await fetchSchoolsLookup()
+        const list = isSchoolAdmin ? (currentSchoolOption ? [currentSchoolOption] : []) : await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
         if (!cancelled) setSchools([])
@@ -114,24 +122,23 @@ const SalaryHistory = () => {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
     if (isHeadOfficeAdmin) return schools.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    if (isSchoolAdmin) return schools.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return schools
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, schools])
 
   const effectiveHeadOfficeId = useMemo(() => {
     if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? Number(manualScope.selectedHeadOfficeId) : null
     if (isHeadOfficeAdmin) return authHeadOfficeId ?? null
     if (isSchoolAdmin) {
-      const school = schools.find((item) => String(item?.id ?? '') === String(authSchoolId ?? ''))
-      return school?.headOfficeId != null ? Number(school.headOfficeId) : null
+      return currentSchoolOption?.headOfficeId != null ? Number(currentSchoolOption.headOfficeId) : null
     }
     return null
-  }, [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.selectedHeadOfficeId, schools])
+  }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.selectedHeadOfficeId])
 
   const effectiveSchoolId = useMemo(() => {
     if (isSuperAdmin) return manualScope.selectedSchoolId ? Number(manualScope.selectedSchoolId) : null

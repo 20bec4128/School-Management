@@ -4,7 +4,6 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { TablePagination } from '../components/table'
 import { fetchStudentsPage, deleteStudent } from '../apis/studentsApi'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import { fetchClasses } from '../apis/classesApi'
 import { fetchSections } from '../apis/sectionsApi'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
@@ -61,10 +60,10 @@ const StudentList = ({ onNavigate }) => {
   const [pendingFilters, setPendingFilters] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [schoolList, setSchoolList] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [classOptions, setClassOptions] = useState([])
   const [sectionOptions, setSectionOptions] = useState([])
+  const { schoolOptions: contextSchoolOptions } = useSchool()
 
   const scopedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
@@ -127,12 +126,8 @@ const StudentList = ({ onNavigate }) => {
   }, [loadData, refreshKey])
 
   useEffect(() => {
-    fetchSchoolsLookup().then(setSchoolList).catch(() => {})
-  }, [])
-
-  useEffect(() => {
     setCurrentPage(1)
-    setSelectedRows([])
+    setSelectedRows([]) 
   }, [scopedSchoolId])
 
   useEffect(() => {
@@ -206,7 +201,7 @@ const StudentList = ({ onNavigate }) => {
   }, [pendingFilters.section, sectionOptions])
 
   const schoolOptions = useMemo(() => {
-    const list = Array.isArray(schoolList) ? schoolList.slice() : []
+    const list = Array.isArray(contextSchoolOptions) ? contextSchoolOptions.slice() : []
     const filtered = pendingFilters.headOfficeId
       ? list.filter((s) => String(s?.headOfficeId ?? '') === String(pendingFilters.headOfficeId))
       : isHeadOfficeScoped && authHeadOfficeId != null
@@ -214,8 +209,11 @@ const StudentList = ({ onNavigate }) => {
         : isSchoolScoped && scopedSchoolId
           ? list.filter((s) => String(s?.id ?? '') === String(scopedSchoolId))
           : list
+    if (isSchoolScoped && scopedSchoolId && filtered.length === 0) {
+      filtered.push({ id: scopedSchoolId, schoolName: authSchoolName || `School ${scopedSchoolId}` })
+    }
     return filtered.sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
-  }, [schoolList, pendingFilters.headOfficeId, isHeadOfficeScoped, authHeadOfficeId, isSchoolScoped, scopedSchoolId])
+  }, [authSchoolName, authHeadOfficeId, contextSchoolOptions, isHeadOfficeScoped, isSchoolScoped, pendingFilters.headOfficeId, scopedSchoolId])
 
   const headOfficeOptions = useMemo(() => {
     const normalized = (Array.isArray(headOffices) ? headOffices : [])

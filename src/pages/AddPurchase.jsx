@@ -258,7 +258,7 @@ const AddPurchase = ({ onNavigate } = {}) => {
     setLoading(true)
     try {
       const [headOfficePage, schools, suppliers, categories, products] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
         fetchSchoolsLookup(),
         fetchAllPages((page, size) => fetchSuppliersPage({ page, size })),
         fetchAllPages((page, size) => fetchCategoriesPage({ page, size })),
@@ -280,7 +280,7 @@ const AddPurchase = ({ onNavigate } = {}) => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isSuperAdmin])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

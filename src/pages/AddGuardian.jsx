@@ -149,12 +149,37 @@ const AddGuardian = ({ onNavigate }) => {
 
   const loadSchools = useCallback(async () => {
     try {
+      if (isSchoolAdmin) {
+        setSchools(
+          authSchoolId
+            ? [
+                {
+                  id: authSchoolId,
+                  schoolName: authSchoolName || `School ${authSchoolId}`,
+                  headOfficeId: authHeadOfficeId ?? null,
+                },
+              ]
+            : [],
+        )
+        return
+      }
+
       const data = await fetchSchoolsLookup()
       setSchools(Array.isArray(data) ? data : [])
     } catch {
-      // ignore
+      setSchools(
+        isSchoolAdmin && authSchoolId
+          ? [
+              {
+                id: authSchoolId,
+                schoolName: authSchoolName || `School ${authSchoolId}`,
+                headOfficeId: authHeadOfficeId ?? null,
+              },
+            ]
+          : [],
+      )
     }
-  }, [])
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const loadHeadOffices = useCallback(async () => {
     try {

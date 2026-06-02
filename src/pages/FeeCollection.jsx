@@ -145,7 +145,7 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 }
 
 const FeeCollection = ({ onNavigate } = {}) => {
-  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { status, token, user, role: authRole, headOfficeId: authHeadOfficeId, headOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'fee-collection'
   const { activeSchoolId } = useSchool()
   const role = useMemo(() => normalizeRole(authRole || user?.role || user?.userRole || user?.authority), [authRole, user])
@@ -154,6 +154,14 @@ const FeeCollection = ({ onNavigate } = {}) => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : null
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -276,7 +284,7 @@ const FeeCollection = ({ onNavigate } = {}) => {
     const loadLookupData = async () => {
       try {
         const [schoolsData, classesData] = await Promise.all([
-          fetchSchoolsLookup(),
+          isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
           fetchClasses(),
         ])
         if (cancelled) return
@@ -297,7 +305,7 @@ const FeeCollection = ({ onNavigate } = {}) => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin, isHeadOfficeAdmin, isSchoolAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, status, token, isSuperAdmin, isHeadOfficeAdmin])
 
   useEffect(() => {
     const rows = Array.isArray(allSchools) ? allSchools : []

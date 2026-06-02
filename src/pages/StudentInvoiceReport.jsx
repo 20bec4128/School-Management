@@ -182,7 +182,14 @@ const StudentInvoiceReport = () => {
 
     const load = async () => {
       try {
-        const schoolId = pendingFilters.schoolId && pendingFilters.schoolId !== 'Select' ? pendingFilters.schoolId : null
+        const schoolId = selectedSchoolId || (isSuperAdmin ? manualScope.selectedSchoolId || '' : '')
+        if (!schoolId) {
+          if (!cancelled) {
+            setClasses([])
+            setFeeTypes([])
+          }
+          return
+        }
         const [classData, feeTypeData] = await Promise.all([
           fetchClasses({ schoolId }),
           fetchFeeTypes({ schoolId }),
@@ -201,7 +208,7 @@ const StudentInvoiceReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, pendingFilters.schoolId])
+  }, [status, token, selectedSchoolId, isSuperAdmin, manualScope.selectedSchoolId])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

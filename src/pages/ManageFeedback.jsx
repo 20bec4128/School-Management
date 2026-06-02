@@ -30,7 +30,7 @@ const ManageFeedback = ({ onNavigate }) => {
     canEdit,
     canDelete,
   } = useAuth();
-  const PAGE_SLUG = "manage-feedback";
+  const PAGE_SLUG = "feedback";
 
   const { activeSchoolId, setActiveSchoolId } = useSchool();
 

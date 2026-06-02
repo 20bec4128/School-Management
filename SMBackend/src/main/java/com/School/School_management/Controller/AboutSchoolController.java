@@ -2,14 +2,14 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.AboutSchoolDto;
 import com.School.School_management.Service.AboutSchoolService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/about-schools")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "about-school", action = "view")
 public class AboutSchoolController {
     private final AboutSchoolService service;
 
@@ -37,16 +37,19 @@ public class AboutSchoolController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "about-school", action = "add")
     public AboutSchoolDto create(@RequestBody AboutSchoolDto dto) {
         return service.create(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "about-school", action = "edit")
     public AboutSchoolDto update(@PathVariable Long id, @RequestBody AboutSchoolDto dto) {
         return service.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "about-school", action = "delete")
     public String delete(@PathVariable Long id) {
         service.delete(id);
         return "About School deleted successfully";

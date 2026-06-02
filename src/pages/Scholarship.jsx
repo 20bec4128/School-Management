@@ -116,6 +116,7 @@ const Scholarship = ({ onNavigate } = {}) => {
     role,
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
+    schoolName: authSchoolName,
     canAdd,
     canEdit,
     canDelete,
@@ -125,6 +126,15 @@ const Scholarship = ({ onNavigate } = {}) => {
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
+  const currentSchoolOptions = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return []
+    return [
+      {
+        id: authSchoolId,
+        schoolName: authSchoolName || `School ${authSchoolId}`,
+      },
+    ]
+  }, [authSchoolId, authSchoolName, isSchoolAdmin])
   const [rows, setRows] = useState([])
   const [headOffices, setHeadOffices] = useState([])
   const [schoolsLookup, setSchoolsLookup] = useState([])
@@ -161,7 +171,7 @@ const Scholarship = ({ onNavigate } = {}) => {
 
   const schoolOptionsFor = useCallback(
     (headOfficeId) =>
-      schoolsLookup
+      [...(isSchoolAdmin ? currentSchoolOptions : schoolsLookup)]
         .filter((s) => {
           if (isSchoolAdmin && authSchoolId != null) {
             return String(s?.id ?? '') === String(authSchoolId)
@@ -173,7 +183,7 @@ const Scholarship = ({ onNavigate } = {}) => {
         })
         .slice()
         .sort((a, b) => schoolLabel(a).localeCompare(schoolLabel(b))),
-    [authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, schoolsLookup],
+    [authHeadOfficeId, authSchoolId, currentSchoolOptions, isHeadOfficeAdmin, isSchoolAdmin, schoolsLookup],
   )
 
   const fixedHeadOfficeId = !isSuperAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : ''
@@ -220,7 +230,7 @@ const Scholarship = ({ onNavigate } = {}) => {
   const loadLookups = useCallback(async () => {
     const [headOfficesResult, schoolsResult, classesResult, sectionsResult] = await Promise.allSettled([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup(),
+      isSchoolAdmin ? Promise.resolve(currentSchoolOptions) : fetchSchoolsLookup(),
       fetchClasses(),
       fetchSections(),
     ])
@@ -236,7 +246,7 @@ const Scholarship = ({ onNavigate } = {}) => {
     setSchoolsLookup(unwrapCollection(schoolsResult.status === 'fulfilled' ? schoolsResult.value : []))
     setClassesLookup(unwrapCollection(classesResult.status === 'fulfilled' ? classesResult.value : []))
     setSectionsLookup(unwrapCollection(sectionsResult.status === 'fulfilled' ? sectionsResult.value : []))
-  }, [isSuperAdmin])
+  }, [currentSchoolOptions, isSchoolAdmin, isSuperAdmin])
 
   const loadScholarships = useCallback(async () => {
     setLoading(true)

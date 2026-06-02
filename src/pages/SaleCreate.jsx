@@ -143,7 +143,7 @@ const SaleCreate = ({ onNavigate }) => {
     setLookupBusy(true)
     try {
       const [headOfficePage, schools, categoriesRows, productsRows] = await Promise.all([
-        fetchHeadOfficesPage(0, 500),
+        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
         fetchSchoolsLookup(),
         fetchAllPages((page, size) => fetchCategoriesPage({ page, size })),
         fetchAllPages((page, size) => fetchProductsPage({ page, size })),
@@ -161,7 +161,7 @@ const SaleCreate = ({ onNavigate }) => {
     } finally {
       setLookupBusy(false)
     }
-  }, [])
+  }, [isSuperAdmin])
 
   const schoolOptionsFor = useCallback(
     (headOfficeId) => {

@@ -5,7 +5,7 @@ import com.School.School_management.Dto.StudentActivityDto;
 import com.School.School_management.Service.StudentActivityService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/student-activities")
-@RequirePermission({"STUDENT_MANAGE", "*"})
+@RequirePagePermission(slug = "student-activity", action = "view")
 public class StudentActivityController {
 
     private final StudentActivityService studentActivityService;
@@ -30,6 +30,7 @@ public class StudentActivityController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "student-activity", action = "view")
     public ResponseEntity<PaginationResponse<StudentActivityDto.Response>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -51,11 +52,13 @@ public class StudentActivityController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "student-activity", action = "add")
     public ResponseEntity<StudentActivityDto.Response> create(@RequestBody StudentActivityDto.Request request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(studentActivityService.create(request));
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "student-activity", action = "edit")
     public ResponseEntity<StudentActivityDto.Response> update(
             @PathVariable Long id,
             @RequestBody StudentActivityDto.Request request
@@ -64,6 +67,7 @@ public class StudentActivityController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "student-activity", action = "delete")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         studentActivityService.delete(id);
         return ResponseEntity.ok("Student activity deleted successfully");

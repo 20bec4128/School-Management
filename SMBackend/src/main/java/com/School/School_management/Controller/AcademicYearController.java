@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.AcademicYearDto;
 import com.School.School_management.Service.AcademicYearService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/academic-years")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "academic-year", action = "view")
 public class AcademicYearController {
 
     private final AcademicYearService academicYearService;
@@ -47,16 +47,19 @@ public class AcademicYearController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "academic-year", action = "add")
     public AcademicYearDto create(@RequestBody AcademicYearDto dto) {
         return academicYearService.create(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "academic-year", action = "edit")
     public AcademicYearDto update(@PathVariable Long id, @RequestBody AcademicYearDto dto) {
         return academicYearService.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "academic-year", action = "delete")
     public String delete(@PathVariable Long id) {
         academicYearService.delete(id);
         return "Academic year deleted successfully";

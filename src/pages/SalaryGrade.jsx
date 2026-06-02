@@ -37,6 +37,14 @@ const SalaryGrade = ({ onNavigate }) => {
   const isSuperAdmin = role === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
 
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -90,7 +98,6 @@ const SalaryGrade = ({ onNavigate }) => {
   }
 
   const loadLookups = useCallback(async () => {
-    if (isSchoolAdmin) return
     const tasks = []
     if (isSuperAdmin) {
       tasks.push(
@@ -102,9 +109,14 @@ const SalaryGrade = ({ onNavigate }) => {
           .catch(() => {}),
       )
     }
-    tasks.push(fetchSchoolsLookup().then((list) => setSchools(Array.isArray(list) ? list : [])))
+    tasks.push(
+      (isSchoolAdmin
+        ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : [])
+        : fetchSchoolsLookup()
+      ).then((list) => setSchools(Array.isArray(list) ? list : [])),
+    )
     await Promise.all(tasks)
-  }, [isSchoolAdmin, isSuperAdmin, isHeadOfficeAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, isHeadOfficeAdmin])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500)

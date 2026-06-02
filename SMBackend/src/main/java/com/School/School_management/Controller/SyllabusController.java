@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.SyllabusResponseDto;
 import com.School.School_management.Service.SyllabusService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +19,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/syllabuses")
+@RequirePagePermission(slug = "syllabus", action = "view")
 public class SyllabusController {
 
     private final SyllabusService syllabusService;
@@ -32,8 +33,8 @@ public class SyllabusController {
         this.syllabusRepository = syllabusRepository;
     }
 
-    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "SYLLABUS_VIEW_OWN", "SYLLABUS_VIEW_CHILD", "*"})
     @GetMapping
+    @RequirePagePermission(slug = "syllabus", action = "view")
     public List<SyllabusResponseDto> getAllSyllabuses(
             @RequestParam(required = false) Long schoolId,
             @RequestParam(required = false) Long classId
@@ -41,14 +42,14 @@ public class SyllabusController {
         return syllabusService.getAllSyllabuses(schoolId, classId);
     }
 
-    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "SYLLABUS_VIEW_OWN", "SYLLABUS_VIEW_CHILD", "*"})
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "syllabus", action = "view")
     public SyllabusResponseDto getSyllabusById(@PathVariable Long id) {
         return syllabusService.getSyllabusById(id);
     }
 
-    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "*"})
     @PostMapping(consumes = "multipart/form-data")
+    @RequirePagePermission(slug = "syllabus", action = "add")
     public SyllabusResponseDto createSyllabus(
             @RequestParam Long schoolId,
             @RequestParam Long classId,
@@ -69,8 +70,8 @@ public class SyllabusController {
         );
     }
 
-    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "*"})
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+    @RequirePagePermission(slug = "syllabus", action = "edit")
     public SyllabusResponseDto updateSyllabus(
             @PathVariable Long id,
             @RequestParam Long schoolId,
@@ -93,15 +94,15 @@ public class SyllabusController {
         );
     }
 
-    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "*"})
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "syllabus", action = "delete")
     public String deleteSyllabus(@PathVariable Long id) {
         syllabusService.deleteSyllabus(id);
         return "Syllabus deleted successfully";
     }
 
-    @RequirePermission({"SYLLABUS_MANAGE", "SYLLABUS_MANAGE_ASSIGNED", "SYLLABUS_VIEW_OWN", "SYLLABUS_VIEW_CHILD", "*"})
     @GetMapping("/{id}/file")
+    @RequirePagePermission(slug = "syllabus", action = "view")
     public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
         try {
             Syllabus syllabus = syllabusRepository.findById(id)

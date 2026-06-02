@@ -4,7 +4,7 @@ import com.School.School_management.Dto.IssueDto;
 import com.School.School_management.Dto.IssueRecipientDto;
 import com.School.School_management.Service.IssueService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,7 +21,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/issues")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "issue", action = "view")
 public class IssueController {
 
     private final IssueService issueService;
@@ -31,6 +31,7 @@ public class IssueController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "issue", action = "view")
     public Page<IssueDto> list(
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
             @RequestParam(name = "schoolId", required = false) Long schoolId,
@@ -43,32 +44,38 @@ public class IssueController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "issue", action = "view")
     public IssueDto getById(@PathVariable("id") Long id) {
         return issueService.getById(id, CurrentUserHolder.get());
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "issue", action = "add")
     public IssueDto create(@RequestBody IssueDto dto) {
         return issueService.create(dto, CurrentUserHolder.get());
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "issue", action = "edit")
     public IssueDto update(@PathVariable("id") Long id, @RequestBody IssueDto dto) {
         return issueService.update(id, dto, CurrentUserHolder.get());
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "issue", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
         issueService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/lookups/roles")
+    @RequirePagePermission(slug = "issue", action = "view")
     public List<String> roles(@RequestParam(name = "schoolId", required = false) Long schoolId) {
         return issueService.roles(schoolId, CurrentUserHolder.get());
     }
 
     @GetMapping("/lookups/recipients")
+    @RequirePagePermission(slug = "issue", action = "view")
     public List<IssueRecipientDto> recipients(
             @RequestParam(name = "schoolId", required = false) Long schoolId,
             @RequestParam(name = "role", required = false) String role

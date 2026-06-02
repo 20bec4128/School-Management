@@ -6,7 +6,7 @@ import com.School.School_management.Dto.CreateSchoolWithAdminResponse;
 import com.School.School_management.Service.ManageSchoolService;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
@@ -15,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/schools")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "school", action = "view")
 public class ManageSchoolController {
 
     private final ManageSchoolService manageSchoolService;
@@ -27,6 +27,7 @@ public class ManageSchoolController {
     }
 
     @PostMapping(value = "/create-with-admin", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "school", action = "add")
     public CreateSchoolWithAdminResponse createSchoolWithAdmin(
             @RequestPart("data") String data,
             @RequestPart(value = "adminLogo", required = false) MultipartFile adminLogo,
@@ -37,6 +38,7 @@ public class ManageSchoolController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "school", action = "add")
     public ManageSchoolDto createSchool(
             @RequestPart("data") String data,
             @RequestPart(value = "adminLogo", required = false) MultipartFile adminLogo,
@@ -48,6 +50,7 @@ public class ManageSchoolController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "school", action = "view")
     public Page<ManageSchoolDto> getAllSchools(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -69,11 +72,13 @@ public class ManageSchoolController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "school", action = "view")
     public ManageSchoolDto getSchoolById(@PathVariable Long id) {
         return manageSchoolService.getSchoolById(id);
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequirePagePermission(slug = "school", action = "edit")
     public ManageSchoolDto updateSchool(
             @PathVariable Long id,
             @RequestPart("data") String data,
@@ -86,6 +91,7 @@ public class ManageSchoolController {
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "school", action = "delete")
     public String deleteSchool(@PathVariable Long id) {
         manageSchoolService.deleteSchool(id);
         return "School deleted successfully";

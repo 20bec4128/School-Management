@@ -113,11 +113,14 @@ const monthLabel = (date) =>
   })
 
 const ClassRoutine = () => {
-  const { user, schoolId, role, teacherContext, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
+  const { user, schoolId, schoolName, role, teacherContext, selectedChildId, parentChildren, canAdd, canEdit, canDelete } = useAuth()
   const normalizedRole = String(role || '').toUpperCase()
   const isTeacher = normalizedRole === 'TEACHER'
   const isStudent = normalizedRole === 'STUDENT'
   const isParent = normalizedRole === 'PARENT'
+  const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
+  const isTeacherScope = normalizedRole === 'TEACHER'
+  const isFixedSchoolScope = isSchoolAdmin || isTeacherScope
   const isReadOnlyViewer = isStudent || isParent
   const defaultSchoolFilter = schoolId != null ? String(schoolId) : 'Select'
   const currentTeacherId = getTeacherId(user, teacherContext)
@@ -168,6 +171,10 @@ const ClassRoutine = () => {
   const [hasSearched, setHasSearched] = useState(false)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentSchoolOption = useMemo(() => {
+    if (!isFixedSchoolScope || schoolId == null) return null
+    return { id: schoolId, schoolName: schoolName || `School ${schoolId}` }
+  }, [isFixedSchoolScope, schoolId, schoolName])
 
   const assignedClassIds = useMemo(() => {
     if (!isTeacher || !currentTeacherId) return []
@@ -178,7 +185,7 @@ const ClassRoutine = () => {
 
   const loadLookups = useCallback(async () => {
     const [schools, teachers, classes, sections, subjects] = await Promise.all([
-      fetchSchoolsLookup(),
+      isFixedSchoolScope ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       fetchTeachers(),
       fetchClasses(),
       fetchSections(),
@@ -189,7 +196,7 @@ const ClassRoutine = () => {
     setClassesLookup(Array.isArray(classes) ? classes : [])
     setSectionsLookup(Array.isArray(sections) ? sections : [])
     setSubjectsLookup(Array.isArray(subjects) ? subjects : [])
-  }, [])
+  }, [currentSchoolOption, isFixedSchoolScope])
 
   const loadRows = useCallback(async (effectiveSchoolId, effectiveStudentId) => {
     if (effectiveSchoolId == null || effectiveSchoolId === '' || effectiveSchoolId === 'Select') {

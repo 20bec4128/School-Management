@@ -120,6 +120,15 @@ const EBook = ({ onNavigate }) => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const filterClassOptions = useMemo(() => {
     const list = Array.isArray(allClasses) ? allClasses : []
     const schoolId = pendingFilters.schoolId || filters.schoolId
@@ -139,10 +148,10 @@ const EBook = ({ onNavigate }) => {
       return list.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return list.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return list
-  }, [allSchools, authHeadOfficeId, authSchoolId, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
+  }, [allSchools, authHeadOfficeId, currentSchoolOption, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, pendingFilters.headOfficeId])
 
   const resolveSchoolName = useCallback(
     (schoolId) => getSchoolById(allSchools, schoolId)?.schoolName || (String(schoolId ?? '') === String(authSchoolId ?? '') ? authSchoolName || '' : ''),
@@ -164,7 +173,7 @@ const EBook = ({ onNavigate }) => {
       setLookupLoading(true)
       try {
         const [schools, classes] = await Promise.all([
-          fetchSchoolsLookup(),
+          isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
           fetchClasses(),
         ])
         if (cancelled) return
@@ -184,7 +193,7 @@ const EBook = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [status, token])
+  }, [currentSchoolOption, isSchoolAdmin, status, token])
 
   useEffect(() => {
     if (!isSuperAdmin) return

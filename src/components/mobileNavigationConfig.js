@@ -33,7 +33,7 @@ const ROLE_CONFIGS = {
     centerAction: makeTab('create', 'Create', null, 'ri-add-line'),
     quickActions: [
       makeTab('add-head-office', 'Add Head Office', 'head-offices', 'ri-building-4-line', ['HEAD_OFFICE_MANAGE', '*']),
-      makeTab('add-school', 'Add School', 'manage-school', 'ri-school-add-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
+      makeTab('add-school', 'Add School', 'school', 'ri-school-add-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
       makeTab('manage-roles', 'Manage Roles', 'user-role-acl', 'ri-shield-user-line', ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']),
     ],
     profileItems: [
@@ -46,14 +46,14 @@ const ROLE_CONFIGS = {
     accent: 'head-office',
     tabs: [
       makeTab('dashboard', 'Dashboard', 'school-admin-dashboard', 'ri-dashboard-3-line'),
-      makeTab('schools', 'Schools', 'manage-school', 'ri-school-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
+      makeTab('schools', 'Schools', 'school', 'ri-school-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
       makeTab('roles', 'Manage Users/Roles', 'user-role-acl', 'ri-shield-user-line', ['RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']),
       makeTab('profile', 'Profile', null, 'ri-user-3-line'),
     ],
     centerAction: makeTab('create', 'Create', null, 'ri-add-line'),
     quickActions: [
-      makeTab('add-school', 'Add School', 'manage-school', 'ri-school-add-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
-      makeTab('add-admin', 'Add School Admin', 'manage-school', 'ri-user-add-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', 'RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']),
+      makeTab('add-school', 'Add School', 'school', 'ri-school-add-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
+      makeTab('add-admin', 'Add School Admin', 'school', 'ri-user-add-line', ['SCHOOL_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', 'RBAC_MANAGE', 'SCHOOL_RBAC_MANAGE', '*']),
       makeTab('add-student', 'Add Student', 'student-list', 'ri-user-add-line', ['STUDENT_MANAGE', '*']),
     ],
     profileItems: [
@@ -67,15 +67,15 @@ const ROLE_CONFIGS = {
     tabs: [
       makeTab('dashboard', 'Dashboard', 'school-admin-dashboard', 'ri-dashboard-3-line'),
       makeTab('students', 'Students', 'student-list', 'ri-group-line', ['STUDENT_MANAGE', '*']),
-      makeTab('teachers', 'Teachers', 'manage-teacher', 'ri-user-star-line', ['TEACHER_MANAGE', '*']),
+      makeTab('teachers', 'Teachers', 'teacher', 'ri-user-star-line', ['TEACHER_MANAGE', '*']),
       makeTab('routine', 'Routine', 'class-routine', 'ri-time-line', ['CLASS_ROUTINE_VIEW', 'CLASS_ROUTINE_MANAGE', '*']),
       makeTab('profile', 'Profile', null, 'ri-user-3-line'),
     ],
     centerAction: makeTab('create', 'Create', null, 'ri-add-line'),
     quickActions: [
       makeTab('add-student', 'Add Student', 'student-list', 'ri-user-add-line', ['STUDENT_MANAGE', '*']),
-      makeTab('add-teacher', 'Add Teacher', 'manage-teacher', 'ri-user-add-line', ['TEACHER_MANAGE', '*']),
-      makeTab('manage-teachers', 'Manage Teachers', 'manage-teacher', 'ri-user-settings-line', ['TEACHER_MANAGE', '*']),
+      makeTab('add-teacher', 'Add Teacher', 'teacher', 'ri-user-add-line', ['TEACHER_MANAGE', '*']),
+      makeTab('manage-teachers', 'Manage Teachers', 'teacher', 'ri-user-settings-line', ['TEACHER_MANAGE', '*']),
       makeTab('add-class', 'Add Class', 'class', 'ri-building-4-line', ['CLASS_MANAGE', 'HEAD_OFFICE_SCHOOL_MANAGE', '*']),
     ],
     profileItems: [

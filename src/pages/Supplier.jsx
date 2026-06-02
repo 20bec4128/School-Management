@@ -118,6 +118,15 @@ const Supplier = () => {
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
 
+  const currentSchoolOption = useMemo(() => {
+    if (authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? '',
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName])
+
   const schoolOptions = useMemo(() => {
     const rowsList = Array.isArray(allSchools) ? allSchools : []
     if (isSuperAdmin) {
@@ -129,10 +138,10 @@ const Supplier = () => {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rowsList
-  }, [allSchools, addForm.headOfficeId, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
+  }, [allSchools, addForm.headOfficeId, authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
 
   const editSchoolOptions = useMemo(() => {
     const rowsList = Array.isArray(allSchools) ? allSchools : []
@@ -145,10 +154,10 @@ const Supplier = () => {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, editForm.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
+  }, [allSchools, authHeadOfficeId, currentSchoolOption, editForm.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin])
 
   const filterSchoolOptions = useMemo(() => {
     const rowsList = Array.isArray(allSchools) ? allSchools : []
@@ -159,10 +168,10 @@ const Supplier = () => {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin])
+  }, [allSchools, authHeadOfficeId, currentSchoolOption, filters.headOfficeId, isHeadOfficeAdmin, isSchoolAdmin])
 
   const resolveSchoolName = useCallback(
     (schoolId) => getSchoolById(allSchools, schoolId)?.schoolName || (String(schoolId ?? '') === String(authSchoolId ?? '') ? authSchoolName || '' : ''),
@@ -172,6 +181,10 @@ const Supplier = () => {
   const loadLookups = useCallback(async () => {
     setLookupLoading(true)
     try {
+      if (isSchoolAdmin) {
+        setAllSchools(currentSchoolOption ? [currentSchoolOption] : [])
+        return
+      }
       const schools = await fetchSchoolsLookup()
       setAllSchools(Array.isArray(schools) ? schools : [])
     } catch (err) {
@@ -180,7 +193,7 @@ const Supplier = () => {
     } finally {
       setLookupLoading(false)
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const loadSuppliers = useCallback(async () => {
     if (status !== 'ready' || !token) return

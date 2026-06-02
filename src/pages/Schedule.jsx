@@ -307,7 +307,13 @@ const Schedule = ({ onNavigate }) => {
 
     const [headOfficePage, allSchools] = await Promise.all([
       isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-      fetchSchoolsLookup(),
+      isSchoolAdmin
+        ? Promise.resolve(
+            authSchoolId
+              ? [{ id: authSchoolId, schoolName: authSchoolName || `School ${authSchoolId}` }]
+              : [],
+          )
+        : fetchSchoolsLookup(),
     ])
     const accessibleSchools = isHeadOfficeAdmin
       ? allSchools.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId))

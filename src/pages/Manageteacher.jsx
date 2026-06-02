@@ -37,7 +37,7 @@ const columnOptions = [
 
 const ManageTeacher = ({ onNavigate }) => {
   const { role, headOfficeId: authHeadOfficeId, headOfficeName: authHeadOfficeName, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
-  const PAGE_SLUG = 'manage-teacher'
+  const PAGE_SLUG = 'teacher'
   const { activeSchoolId } = useSchool()
   const [teachers, setTeachers] = useState([])
   const [departments, setDepartments] = useState([])
@@ -62,7 +62,17 @@ const ManageTeacher = ({ onNavigate }) => {
   const isSuperAdmin = roleUpper === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = roleUpper === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = roleUpper === 'SCHOOL_ADMIN'
+  const isTeacherScope = roleUpper === 'TEACHER'
+  const isFixedSchoolScope = isSchoolAdmin || isTeacherScope
   const resolvedSchoolId = activeSchoolId ? String(activeSchoolId) : authSchoolId ? String(authSchoolId) : ''
+  const currentSchoolOption = useMemo(() => {
+    if (!isFixedSchoolScope || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isFixedSchoolScope])
 
   const schoolsById = useMemo(() => {
     const map = new Map()
@@ -117,7 +127,7 @@ const ManageTeacher = ({ onNavigate }) => {
       const [teacherData, deptResult, schoolResult] = await Promise.allSettled([
         fetchTeachers(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}),
         fetchAllDepartments(),
-        fetchSchoolsLookup(),
+        isFixedSchoolScope ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       ])
 
       if (teacherData.status === 'rejected') throw teacherData.reason
@@ -131,7 +141,7 @@ const ManageTeacher = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [resolvedSchoolId])
+  }, [currentSchoolOption, isFixedSchoolScope, resolvedSchoolId])
 
   useEffect(() => {
     void loadData()
@@ -189,7 +199,7 @@ const ManageTeacher = ({ onNavigate }) => {
       const next = {
         ...prev,
         headOfficeId: isHeadOfficeAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : 'Select',
-        schoolId: isSchoolAdmin && resolvedSchoolId ? String(resolvedSchoolId) : 'Select',
+        schoolId: isFixedSchoolScope && resolvedSchoolId ? String(resolvedSchoolId) : 'Select',
       }
       return next
     })
@@ -198,10 +208,10 @@ const ManageTeacher = ({ onNavigate }) => {
       return {
         ...prev,
         headOfficeId: isHeadOfficeAdmin && authHeadOfficeId != null ? String(authHeadOfficeId) : 'Select',
-        schoolId: isSchoolAdmin && resolvedSchoolId ? String(resolvedSchoolId) : 'Select',
+        schoolId: isFixedSchoolScope && resolvedSchoolId ? String(resolvedSchoolId) : 'Select',
       }
     })
-  }, [authHeadOfficeId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, resolvedSchoolId])
+  }, [authHeadOfficeId, isHeadOfficeAdmin, isFixedSchoolScope, isSuperAdmin, resolvedSchoolId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -462,7 +472,11 @@ const ManageTeacher = ({ onNavigate }) => {
           ) : (
             <div>
               <label className="text-sm fw-semibold text-primary-light mb-8">School</label>
-              <input className="form-control" value={scopedSchoolId ? (schoolsById.get(String(scopedSchoolId))?.schoolName || authSchoolName || '') : ''} readOnly />
+              <input
+                className="form-control"
+                value={resolvedSchoolId ? (schoolsById.get(String(resolvedSchoolId))?.schoolName || authSchoolName || '') : ''}
+                readOnly
+              />
             </div>
           )}
           <div>

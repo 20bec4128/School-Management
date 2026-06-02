@@ -2,14 +2,14 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.OnlineExamDto;
 import com.School.School_management.Service.OnlineExamService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/online-exams")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "online-exam", action = "view")
 public class OnlineExamController {
 
     private final OnlineExamService service;
@@ -19,6 +19,7 @@ public class OnlineExamController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "online-exam", action = "view")
     public List<OnlineExamDto> list(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId
@@ -27,6 +28,7 @@ public class OnlineExamController {
     }
 
     @GetMapping("/page")
+    @RequirePagePermission(slug = "online-exam", action = "view")
     public Page<OnlineExamDto> listPaginated(
             @RequestParam(required = false) Long headOfficeId,
             @RequestParam(required = false) Long schoolId,
@@ -41,16 +43,19 @@ public class OnlineExamController {
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "online-exam", action = "add")
     public OnlineExamDto create(@RequestBody OnlineExamDto dto) {
         return service.create(dto);
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "online-exam", action = "edit")
     public OnlineExamDto update(@PathVariable Long id, @RequestBody OnlineExamDto dto) {
         return service.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "online-exam", action = "delete")
     public String delete(@PathVariable Long id) {
         service.delete(id);
         return "Online exam deleted successfully";

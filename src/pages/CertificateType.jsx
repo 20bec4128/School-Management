@@ -8,7 +8,6 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useAuth } from '../context/useAuth'
 import { normalizeRole } from '../utils/roles'
 import { fetchHeadOfficesPage } from '../apis/headOfficesApi'
-import { fetchSchoolsLookup } from '../apis/schoolsApi'
 import {
   deleteCertificateType,
   fetchCertificateTypesPage,
@@ -96,10 +95,17 @@ const CertificateType = ({ onNavigate }) => {
   const [filters, setFilters] = useState(emptyFilters)
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentSchoolOptions = useMemo(() => {
+    if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : []
+    if (isHeadOfficeAdmin || isSchoolAdmin) {
+      return [{ id: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId }]
+    }
+    return []
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, manualScope.selectedHeadOfficeId])
 
   const schoolOptionsFor = useCallback(
     (headOfficeId) => {
-      const list = Array.isArray(allSchools) ? allSchools : []
+      const list = Array.isArray(allSchools) && allSchools.length > 0 ? allSchools : currentSchoolOptions
       if (isSuperAdmin) {
         const normalized = String(headOfficeId || '').trim()
         if (!normalized) return []
@@ -113,7 +119,7 @@ const CertificateType = ({ onNavigate }) => {
       }
       return list
     },
-    [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
+    [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOptions, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin],
   )
 
   const filterSchoolOptions = useMemo(() => {
@@ -125,10 +131,7 @@ const CertificateType = ({ onNavigate }) => {
 
   const loadLookups = useCallback(async () => {
     try {
-      const [headOfficePage, schools] = await Promise.all([
-        isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-        fetchSchoolsLookup(),
-      ])
+      const headOfficePage = await (isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }))
       setHeadOffices(
         isSuperAdmin && Array.isArray(headOfficePage?.content)
           ? headOfficePage.content
@@ -140,13 +143,13 @@ const CertificateType = ({ onNavigate }) => {
               .sort((a, b) => String(a.name).localeCompare(String(b.name)))
           : [],
       )
-      setAllSchools(Array.isArray(schools) ? schools : [])
+      setAllSchools(currentSchoolOptions)
     } catch (err) {
       console.error('Failed to load certificate lookups:', err)
       setHeadOffices([])
-      setAllSchools([])
+      setAllSchools(currentSchoolOptions)
     }
-  }, [isSuperAdmin])
+  }, [currentSchoolOptions, isSuperAdmin])
 
   const loadCertificateTypes = useCallback(async () => {
     if (status !== 'ready' || !token) return
@@ -204,12 +207,12 @@ const CertificateType = ({ onNavigate }) => {
 
   useEffect(() => {
     if (!isSchoolAdmin || authSchoolId == null) return
-    const school = getSchoolById(allSchools, authSchoolId)
+    const school = getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, authSchoolId)
     const headOfficeId = school?.headOfficeId != null ? String(school.headOfficeId) : ''
     const schoolId = String(authSchoolId)
     setPendingFilters((prev) => ({ ...prev, headOfficeId, schoolId }))
     setFilters((prev) => ({ ...prev, headOfficeId, schoolId }))
-  }, [allSchools, authSchoolId, isSchoolAdmin])
+  }, [allSchools, authSchoolId, currentSchoolOptions, isSchoolAdmin])
 
   useEffect(() => {
     if (currentPage > 1 && totalPages > 0 && currentPage > totalPages) {
@@ -280,7 +283,7 @@ const CertificateType = ({ onNavigate }) => {
       ? { headOfficeId: String(authHeadOfficeId ?? ''), schoolId: '' }
       : isSchoolAdmin
         ? {
-            headOfficeId: String(getSchoolById(allSchools, authSchoolId)?.headOfficeId ?? ''),
+            headOfficeId: String(getSchoolById(allSchools.length > 0 ? allSchools : currentSchoolOptions, authSchoolId)?.headOfficeId ?? ''),
             schoolId: String(authSchoolId ?? ''),
           }
         : emptyFilters

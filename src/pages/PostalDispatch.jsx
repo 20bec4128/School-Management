@@ -5,7 +5,7 @@ import useColumnVisibility from '../hooks/useColumnVisibility'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { useSchool } from '../context/useSchool'
 import { useAuth } from '../context/useAuth'
-import { fetchRowsForSchoolIds, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
+import { fetchRowsForSchoolIds, findSchoolById, normalizeSchoolIds, uniqueBy } from '../utils/schoolScope'
 import { fetchPostalDispatchesPage, deletePostalDispatch } from '../apis/postalApi'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -16,7 +16,7 @@ import RowsPerPageSelect from '../components/RowsPerPageSelect'
 const emptyFilters = { headOfficeId: '', schoolId: '' }
 
 const columnOptions = [
-  { key: 'schoolId', label: 'School ID' },
+  { key: 'schoolId', label: 'School Name' },
   { key: 'toTitle', label: 'To Title' },
   { key: 'referenceNo', label: 'Reference' },
   { key: 'fromTitle', label: 'From Title' },
@@ -24,7 +24,7 @@ const columnOptions = [
 ]
 
 const PostalDispatch = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'postal-dispatch'
   const PAGE_PERMISSIONS = {
     add: canAdd(PAGE_SLUG),
@@ -49,6 +49,18 @@ const PostalDispatch = ({ onNavigate }) => {
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
   
   const schoolOptions = isSuperAdmin ? (manualScope.selectedHeadOfficeId ? manualScope.schoolOptions : contextSchoolOptions) : contextSchoolOptions
+  const resolveSchoolName = useCallback((schoolId) => {
+    const targetSchoolId = String(schoolId ?? '').trim()
+    if (!targetSchoolId) return '-'
+
+    const match =
+      findSchoolById(manualScope.schoolOptions, targetSchoolId) ||
+      findSchoolById(contextSchoolOptions, targetSchoolId)
+
+    if (match?.schoolName) return match.schoolName
+    if (String(authSchoolId ?? '') === targetSchoolId) return authSchoolName || `School ${targetSchoolId}`
+    return `School ${targetSchoolId}`
+  }, [authSchoolId, authSchoolName, contextSchoolOptions, manualScope.schoolOptions])
   const scopedSchoolIds = useMemo(() => {
     if (isSuperAdmin) {
       if (filters.schoolId) return [String(filters.schoolId)]
@@ -129,7 +141,7 @@ const PostalDispatch = ({ onNavigate }) => {
 
   const exportRows = data.map((row, index) => ({
     'S.L': index + 1,
-    'School ID': row.schoolId ?? '',
+    'School Name': resolveSchoolName(row.schoolId),
     'To Title': row.toTitle ?? '',
     Reference: row.referenceNo ?? '-',
     'From Title': row.fromTitle ?? '',
@@ -267,7 +279,7 @@ const PostalDispatch = ({ onNavigate }) => {
                 ) : data.map((row, idx) => (
                   <tr key={row.id}>
                     <td>{(currentPage - 1) * rowsPerPage + idx + 1}</td>
-                    {visibleColumns.schoolId && <td>{row.schoolId}</td>}
+                    {visibleColumns.schoolId && <td>{resolveSchoolName(row.schoolId)}</td>}
                     {visibleColumns.toTitle && <td className="fw-medium text-primary-light">{row.toTitle}</td>}
                     {visibleColumns.referenceNo && <td>{row.referenceNo || '-'}</td>}
                     {visibleColumns.fromTitle && <td>{row.fromTitle}</td>}

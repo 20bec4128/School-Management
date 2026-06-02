@@ -3,7 +3,7 @@ package com.School.School_management.Controller;
 import com.School.School_management.Dto.PurchaseDto;
 import com.School.School_management.Service.PurchaseService;
 import com.School.School_management.auth.CurrentUserHolder;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/purchases")
-@RequirePermission({"SCHOOL_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "purchase", action = "view")
 public class PurchaseController {
 
     private final PurchaseService purchaseService;
@@ -28,6 +28,7 @@ public class PurchaseController {
     }
 
     @GetMapping
+    @RequirePagePermission(slug = "purchase", action = "view")
     public Page<PurchaseDto> list(
             @RequestParam(name = "headOfficeId", required = false) Long headOfficeId,
             @RequestParam(name = "schoolId", required = false) Long schoolId,
@@ -42,21 +43,25 @@ public class PurchaseController {
     }
 
     @GetMapping("/{id}")
+    @RequirePagePermission(slug = "purchase", action = "view")
     public PurchaseDto getById(@PathVariable("id") Long id) {
         return purchaseService.getById(id, CurrentUserHolder.get());
     }
 
     @PostMapping
+    @RequirePagePermission(slug = "purchase", action = "add")
     public PurchaseDto create(@RequestBody PurchaseDto dto) {
         return purchaseService.create(dto, CurrentUserHolder.get());
     }
 
     @PutMapping("/{id}")
+    @RequirePagePermission(slug = "purchase", action = "edit")
     public PurchaseDto update(@PathVariable("id") Long id, @RequestBody PurchaseDto dto) {
         return purchaseService.update(id, dto, CurrentUserHolder.get());
     }
 
     @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "purchase", action = "delete")
     public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
         purchaseService.delete(id, CurrentUserHolder.get());
         return ResponseEntity.noContent().build();

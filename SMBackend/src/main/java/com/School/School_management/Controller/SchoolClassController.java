@@ -2,7 +2,7 @@ package com.School.School_management.Controller;
 
 import com.School.School_management.Dto.SchoolClassDto;
 import com.School.School_management.Service.SchoolClassService;
-import com.School.School_management.auth.RequirePermission;
+import com.School.School_management.auth.RequirePagePermission;
 import com.School.School_management.auth.CurrentUser;
 import com.School.School_management.auth.CurrentUserHolder;
 import java.util.List;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/classes")
-@RequirePermission({"CLASS_MANAGE", "HEAD_OFFICE_SCHOOL_MANAGE", "*"})
+@RequirePagePermission(slug = "class", action = "view")
 public class SchoolClassController {
 
   private final SchoolClassService schoolClassService;
@@ -27,9 +27,10 @@ public class SchoolClassController {
     this.schoolClassService = schoolClassService;
   }
 
-  @GetMapping
-  public List<SchoolClassDto> getAll(@RequestParam(required = false) Long schoolId) {
-    CurrentUser user = CurrentUserHolder.get();
+    @GetMapping
+    @RequirePagePermission(slug = "class", action = "view")
+    public List<SchoolClassDto> getAll(@RequestParam(required = false) Long schoolId) {
+      CurrentUser user = CurrentUserHolder.get();
     if (user != null && user.isSchoolScoped()) {
       return schoolClassService.getAll(user.schoolId());
     }
@@ -38,27 +39,31 @@ public class SchoolClassController {
       return schoolClassService.getAllForHeadOffice(user.headOfficeId());
     }
     return schoolClassService.getAll(schoolId);
-  }
+    }
 
-  @GetMapping("/{id}")
-  public SchoolClassDto getById(@PathVariable Long id) {
-    return schoolClassService.getById(id);
-  }
+    @GetMapping("/{id}")
+    @RequirePagePermission(slug = "class", action = "view")
+    public SchoolClassDto getById(@PathVariable Long id) {
+      return schoolClassService.getById(id);
+    }
 
-  @PostMapping
-  public SchoolClassDto create(@RequestBody SchoolClassDto dto) {
-    return schoolClassService.create(dto);
-  }
+    @PostMapping
+    @RequirePagePermission(slug = "class", action = "add")
+    public SchoolClassDto create(@RequestBody SchoolClassDto dto) {
+      return schoolClassService.create(dto);
+    }
 
-  @PutMapping("/{id}")
-  public SchoolClassDto update(@PathVariable Long id, @RequestBody SchoolClassDto dto) {
-    return schoolClassService.update(id, dto);
-  }
+    @PutMapping("/{id}")
+    @RequirePagePermission(slug = "class", action = "edit")
+    public SchoolClassDto update(@PathVariable Long id, @RequestBody SchoolClassDto dto) {
+      return schoolClassService.update(id, dto);
+    }
 
-  @DeleteMapping("/{id}")
-  public String delete(@PathVariable Long id) {
-    schoolClassService.delete(id);
-    return "Class deleted successfully";
+    @DeleteMapping("/{id}")
+    @RequirePagePermission(slug = "class", action = "delete")
+    public String delete(@PathVariable Long id) {
+      schoolClassService.delete(id);
+      return "Class deleted successfully";
   }
 }
 
