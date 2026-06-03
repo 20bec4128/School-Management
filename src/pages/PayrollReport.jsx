@@ -223,10 +223,15 @@ const PayrollReport = () => {
         const nextRows = employeeRows.map((employee) => {
           const key = `${String(employee?.schoolId ?? '')}|${String(employee?.salaryGrade ?? '').trim().toLowerCase()}`
           const matchedGrade = salaryGradeMap.get(key)
+          const resolvedSchoolName =
+            employee.schoolName ||
+            schoolMap.get(String(employee.schoolId ?? '')) ||
+            (isSchoolAdmin && currentSchoolOption ? currentSchoolOption.schoolName : '') ||
+            '--'
           return {
             id: employee.id,
             schoolId: employee.schoolId,
-            schoolName: employee.schoolName || schoolMap.get(String(employee.schoolId ?? '')) || '--',
+            schoolName: resolvedSchoolName,
             employeeName: employee.name || '--',
             role: employee.role || '--',
             salaryGrade: employee.salaryGrade || '--',

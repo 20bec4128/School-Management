@@ -106,12 +106,21 @@ const LiveSubscriptionPreview = ({ form, planName, schoolName }) => {
 }
 
 const SchoolSubscriptionCreate = ({ onNavigate }) => {
-  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, status: authStatus } = useAuth()
+  const { role, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId, status: authStatus, pagePermissions, isSuperAdminRole } = useAuth()
   
   const navigateTo = typeof onNavigate === 'function' ? onNavigate : () => {}
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
+  const canViewSubscriptionPlans = authStatus === 'ready' && (isSuperAdminRole || pagePermissions?.['subscription-plans']?.view === true)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [form, setForm] = useState(INITIAL_FORM)
   const [editId, setEditId] = useState(null)
@@ -127,13 +136,21 @@ const SchoolSubscriptionCreate = ({ onNavigate }) => {
 
   const loadSchoolsAndPlans = useCallback(async () => {
     try {
-      const [schoolList, planList] = await Promise.all([fetchSchoolsLookup(), fetchSubscriptionPlans()])
+      if (isSchoolAdmin) {
+        setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+        setPlans(canViewSubscriptionPlans ? await fetchSubscriptionPlans() : [])
+        return
+      }
+      const [schoolList, planList] = await Promise.all([
+        fetchSchoolsLookup(),
+        canViewSubscriptionPlans ? fetchSubscriptionPlans() : Promise.resolve([]),
+      ])
       setSchools(Array.isArray(schoolList) ? schoolList : [])
       setPlans(Array.isArray(planList) ? planList : [])
     } catch {
       // ignore
     }
-  }, [])
+  }, [canViewSubscriptionPlans, currentSchoolOption, isSchoolAdmin])
 
   const loadHeadOffices = useCallback(async () => {
     try {
@@ -172,13 +189,7 @@ const SchoolSubscriptionCreate = ({ onNavigate }) => {
 
   const schoolOptions = useMemo(() => {
     if (isSchoolAdmin) {
-      return authSchoolId ? [
-        {
-          id: authSchoolId,
-          schoolName: authSchoolName || `School ${authSchoolId}`,
-          headOfficeId: authHeadOfficeId ?? null,
-        }
-      ] : []
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
 
     if (isHeadOfficeAdmin) {
@@ -195,7 +206,7 @@ const SchoolSubscriptionCreate = ({ onNavigate }) => {
     }
 
     return [...schools].sort((a, b) => String(a?.schoolName || '').localeCompare(String(b?.schoolName || '')))
-  }, [authHeadOfficeId, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin, schools, selectedHeadOfficeId])
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, schools, selectedHeadOfficeId])
 
   // Setup Form / Edit mode
   useEffect(() => {

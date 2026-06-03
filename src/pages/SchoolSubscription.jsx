@@ -11,7 +11,6 @@ import {
   deleteSchoolSubscription,
   fetchSchoolSubscriptionsPage,
 } from '../apis/schoolSubscriptionsApi'
-import { fetchSubscriptionPlans } from '../apis/subscriptionPlansApi'
 import { useAuth } from '../context/useAuth'
 import { useManualSchoolScope } from '../hooks/useManualSchoolScope'
 import { normalizeRole } from '../utils/roles'
@@ -38,15 +37,22 @@ const columnOptions = [
 ]
 
 const SchoolSubscription = ({ onNavigate }) => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [allSchools, setAllSchools] = useState([])
-  const [plans, setPlans] = useState([])
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -64,21 +70,23 @@ const SchoolSubscription = ({ onNavigate }) => {
     let cancelled = false
     const loadLookups = async () => {
       try {
-        const [schoolList, planList] = await Promise.all([fetchSchoolsLookup(), fetchSubscriptionPlans()])
+        if (isSchoolAdmin) {
+          if (!cancelled) setAllSchools(currentSchoolOption ? [currentSchoolOption] : [])
+          return
+        }
+        const schoolList = await fetchSchoolsLookup()
         if (cancelled) return
         setAllSchools(Array.isArray(schoolList) ? schoolList : [])
-        setPlans(Array.isArray(planList) ? planList : [])
       } catch {
         if (cancelled) return
         setAllSchools([])
-        setPlans([])
       }
     }
     void loadLookups()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const selectedHeadOfficeId = useMemo(() => {
     if (filters.headOfficeId && filters.headOfficeId !== 'Select') return String(filters.headOfficeId)
@@ -108,10 +116,10 @@ const SchoolSubscription = ({ onNavigate }) => {
       return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
     }
     if (isSchoolAdmin) {
-      return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+      return currentSchoolOption ? [currentSchoolOption] : []
     }
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, selectedHeadOfficeId])
+  }, [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, selectedHeadOfficeId])
 
   const loadRows = async () => {
     setLoading(true)

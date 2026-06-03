@@ -33,12 +33,24 @@ const uniqueStrings = (items) =>
   Array.from(new Set((items || []).map((i) => String(i ?? "").trim()).filter(Boolean))).sort();
 
 const Email = ({ onNavigate }) => {
-  const { role: authRole, user, schoolId, headOfficeId, canAdd, canEdit, canDelete } = useAuth();
+  const { role: authRole, user, schoolId, schoolName: authSchoolName, headOfficeId, canAdd, canEdit, canDelete } = useAuth();
   const PAGE_SLUG = 'email';
   const isSuperAdmin = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === "SUPER_ADMIN",
     [authRole, user],
   );
+  const isSchoolAdmin = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === "SCHOOL_ADMIN",
+    [authRole, user],
+  );
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || schoolId == null) return null;
+    return {
+      id: schoolId,
+      schoolName: authSchoolName || `School ${schoolId}`,
+      headOfficeId: null,
+    };
+  }, [authSchoolName, isSchoolAdmin, schoolId]);
   const [rows, setRows] = useState([]);
   const [headOffices, setHeadOffices] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -79,10 +91,15 @@ const Email = ({ onNavigate }) => {
 
   useEffect(() => {
     const loadLookups = async () => {
+      if (isSchoolAdmin) {
+        setHeadOffices([]);
+        setSchools(currentSchoolOption ? [currentSchoolOption] : []);
+        return;
+      }
       try {
         const [hoList, schoolList] = await Promise.all([
-          fetchHeadOfficesLookup(),
-          fetchSchoolsLookup(),
+          isSuperAdmin ? fetchHeadOfficesLookup() : Promise.resolve([]),
+          isSuperAdmin ? fetchSchoolsLookup() : Promise.resolve([]),
         ]);
         setHeadOffices(Array.isArray(hoList) ? hoList : []);
         setSchools(Array.isArray(schoolList) ? schoolList : []);
@@ -93,7 +110,7 @@ const Email = ({ onNavigate }) => {
     };
 
     void loadLookups();
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin]);
 
   const schoolOptions = useMemo(() => {
     const filtered = Array.isArray(schools)

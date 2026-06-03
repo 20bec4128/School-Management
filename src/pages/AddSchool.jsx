@@ -254,7 +254,9 @@ const AddSchool = ({ onNavigate }) => {
     role,
     headOfficeId: currentHeadOfficeId,
     headOfficeName: currentHeadOfficeName,
-    canView,
+    status,
+    pagePermissions,
+    isSuperAdminRole,
   } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [form, setForm] = useState(emptyForm);
@@ -270,7 +272,7 @@ const AddSchool = ({ onNavigate }) => {
 
   const isSuperAdmin = String(role || "").toUpperCase() === "SUPER_ADMIN";
   const isHeadOfficeScoped = String(role || "").toUpperCase() === "HEAD_OFFICE_ADMIN";
-  const canViewSubscriptionPlans = canView("subscription-plan");
+  const canViewSubscriptionPlans = status === "ready" && (isSuperAdminRole || pagePermissions?.["subscription-plans"]?.view === true);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(EDIT_STORAGE_KEY);

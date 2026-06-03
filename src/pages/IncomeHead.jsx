@@ -269,7 +269,15 @@ const IncomeHead = () => {
     setCurrentPage(1)
   }
 
-  const resolveSchoolName = (schoolId) => schoolsById.get(String(schoolId))?.schoolName || '--'
+  const resolveSchoolName = (rowOrSchoolId) => {
+    const rowSchoolName = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolName : ''
+    if (rowSchoolName) return rowSchoolName
+
+    const schoolId = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolId : rowOrSchoolId
+    if (schoolId == null) return '--'
+
+    return schoolsById.get(String(schoolId))?.schoolName || `School ${schoolId}`
+  }
 
   return (
     <div className="dashboard-main-body">
@@ -403,7 +411,7 @@ const IncomeHead = () => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row.schoolId)}</td>}
+                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row)}</td>}
                       {visibleColumns.incomeHead && <td className="fw-medium">{row.incomeHead}</td>}
                       {visibleColumns.note && <td style={{ maxWidth: 250, whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.note || '-'}</td>}
                       <td>

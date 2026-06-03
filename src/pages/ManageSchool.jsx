@@ -200,10 +200,12 @@ const ManageSchool = ({ onNavigate }) => {
     headOfficeName: currentHeadOfficeName,
     schoolId: currentSchoolId,
     schoolName: currentSchoolName,
+    status,
     canAdd,
     canEdit,
     canDelete,
-    canView,
+    pagePermissions,
+    isSuperAdminRole,
   } = useAuth()
   const PAGE_SLUG = 'school'
   const [schools, setSchools] = useState([])
@@ -237,7 +239,7 @@ const ManageSchool = ({ onNavigate }) => {
   const isSuperAdmin = String(role || '').toUpperCase() === 'SUPER_ADMIN'
   const isHeadOfficeScoped = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const isSchoolScoped = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
-  const canViewSubscriptionPlans = canView('subscription-plan')
+  const canViewSubscriptionPlans = status === 'ready' && (isSuperAdminRole || pagePermissions?.['subscription-plans']?.view === true)
 
   const schoolLookupOptions = useMemo(() => {
     const rows = Array.isArray(allSchools) ? allSchools : []

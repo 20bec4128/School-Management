@@ -139,6 +139,7 @@ const Issue = ({ onNavigate } = {}) => {
     role: authRole,
     headOfficeId: authHeadOfficeId,
     schoolId: authSchoolId,
+    schoolName: authSchoolName,
     canAdd,
     canEdit,
     canDelete,

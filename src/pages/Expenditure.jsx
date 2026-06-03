@@ -330,7 +330,11 @@ const Expenditure = ({ onNavigate } = {}) => {
     setCurrentPage(1)
   }
 
-  const resolveSchoolName = (schoolId) => {
+  const resolveSchoolName = (rowOrSchoolId) => {
+    const rowSchoolName = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolName : ''
+    if (rowSchoolName) return rowSchoolName
+
+    const schoolId = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolId : rowOrSchoolId
     if (schoolId == null) return '--'
     return schoolsById.get(String(schoolId))?.schoolName || authSchoolName || `School ${schoolId}`
   }
@@ -462,7 +466,7 @@ const Expenditure = ({ onNavigate } = {}) => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row.schoolId)}</td>}
+                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row)}</td>}
                       {visibleColumns.expenditureHead && <td className="fw-medium">{resolveExpenditureHeadName(row.expenditureHeadId)}</td>}
                       {visibleColumns.expenditureMethod && <td>{row.expenditureMethod || '--'}</td>}
                       {visibleColumns.reference && <td>{row.reference || '--'}</td>}

@@ -39,9 +39,18 @@ const readEditRow = () => {
   }
 };
 
+const createPlaceholderImage = (width, height) =>
+  `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="100%" height="100%" rx="8" ry="8" fill="#e5e7eb"/>
+      <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="7" ry="7" fill="none" stroke="#cbd5e1"/>
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif" font-size="${Math.max(10, Math.floor(Math.min(width, height) / 7))}">No Image</text>
+    </svg>`,
+  )}`;
+
 const resolveImageSrc = (value) => {
   const src = String(value || "").trim();
-  if (!src) return "https://via.placeholder.com/160x96";
+  if (!src) return createPlaceholderImage(160, 96);
   if (src.startsWith("data:") || src.startsWith("http")) return src;
   return src;
 };
@@ -53,6 +62,15 @@ const AboutSchoolEdit = ({ onNavigate }) => {
   const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
   const isHeadOfficeAdmin = normalizedRole === "HEAD_OFFICE_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
+  const isSchoolAdmin = normalizedRole === "SCHOOL_ADMIN";
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin]);
   const [schools, setSchools] = useState([]);
   const [initialEditRow] = useState(() => readEditRow());
   const [editingId] = useState(() => initialEditRow?.aboutId ?? initialEditRow?.id ?? null);
@@ -79,6 +97,10 @@ const AboutSchoolEdit = ({ onNavigate }) => {
   useEffect(() => {
     const loadSchools = async () => {
       try {
+        if (isSchoolAdmin) {
+          setSchools(currentSchoolOption ? [currentSchoolOption] : []);
+          return;
+        }
         const list = await fetchSchoolsLookup();
         setSchools(Array.isArray(list) ? list : []);
       } catch {
@@ -86,7 +108,7 @@ const AboutSchoolEdit = ({ onNavigate }) => {
       }
     };
     void loadSchools();
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin]);
 
   useEffect(() => {
     if (!initialEditRow || !isSuperAdmin || schools.length === 0) return;

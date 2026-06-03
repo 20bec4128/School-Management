@@ -19,20 +19,37 @@ const columnOptions = [
   { key: "image", label: "Image" },
 ];
 
+const createPlaceholderImage = (width, height) =>
+  `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="100%" height="100%" rx="8" ry="8" fill="#e5e7eb"/>
+      <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="7" ry="7" fill="none" stroke="#cbd5e1"/>
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif" font-size="${Math.max(10, Math.floor(Math.min(width, height) / 7))}">No Image</text>
+    </svg>`,
+  )}`;
+
 const resolveImageSrc = (value) => {
   const src = String(value || "").trim();
-  if (!src) return "https://via.placeholder.com/80x48";
+  if (!src) return createPlaceholderImage(80, 48);
   if (src.startsWith("data:") || src.startsWith("http")) return src;
   return src;
 };
 
 const AboutSchool = ({ onNavigate }) => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth();
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth();
   const normalizedRole = normalizeRole(role);
   const isSuperAdmin = normalizedRole === "SUPER_ADMIN";
   const isHeadOfficeAdmin = normalizedRole === "HEAD_OFFICE_ADMIN";
   const isSchoolAdmin = normalizedRole === "SCHOOL_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin]);
 
   const [allSchools, setAllSchools] = useState([]);
   const [aboutRows, setAboutRows] = useState([]);
@@ -48,6 +65,10 @@ const AboutSchool = ({ onNavigate }) => {
     let cancelled = false;
     const loadSchools = async () => {
       try {
+        if (isSchoolAdmin) {
+          if (!cancelled) setAllSchools(currentSchoolOption ? [currentSchoolOption] : []);
+          return;
+        }
         const list = await fetchSchoolsLookup();
         if (!cancelled) setAllSchools(Array.isArray(list) ? list : []);
       } catch {
@@ -58,7 +79,7 @@ const AboutSchool = ({ onNavigate }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin]);
 
   const selectedHeadOfficeId = useMemo(() => {
     if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? String(manualScope.selectedHeadOfficeId) : "";
@@ -91,10 +112,10 @@ const AboutSchool = ({ onNavigate }) => {
       return rows.filter((school) => String(school?.headOfficeId ?? "") === String(authHeadOfficeId ?? ""));
     }
     if (isSchoolAdmin) {
-      return rows.filter((school) => String(school?.id ?? "") === String(authSchoolId ?? ""));
+      return currentSchoolOption ? [currentSchoolOption] : [];
     }
     return rows;
-  }, [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.selectedSchoolId]);
+  }, [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.selectedHeadOfficeId, manualScope.selectedSchoolId]);
 
   useEffect(() => {
     let cancelled = false;

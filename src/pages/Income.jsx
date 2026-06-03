@@ -336,7 +336,14 @@ const Income = () => {
     setCurrentPage(1)
   }
 
-  const resolveSchoolName = (schoolId) => schoolsById.get(String(schoolId))?.schoolName || '--'
+  const resolveSchoolName = (rowOrSchoolId) => {
+    const rowSchoolName = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolName : ''
+    if (rowSchoolName) return rowSchoolName
+
+    const schoolId = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolId : rowOrSchoolId
+    if (schoolId == null) return '--'
+    return schoolsById.get(String(schoolId))?.schoolName || authSchoolName || `School ${schoolId}`
+  }
   const resolveIncomeHeadName = (incomeHeadId) => incomeHeadsById.get(String(incomeHeadId))?.incomeHead || '--'
 
   return (
@@ -473,7 +480,7 @@ const Income = () => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row.schoolId)}</td>}
+                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row)}</td>}
                       {visibleColumns.incomeHead && <td className="fw-medium">{resolveIncomeHeadName(row.incomeHeadId)}</td>}
                       {visibleColumns.incomeMethod && <td>{row.incomeMethod || '--'}</td>}
                       {visibleColumns.amount && <td>{row.amount != null ? `Rs. ${Number(row.amount).toFixed(2)}` : '--'}</td>}

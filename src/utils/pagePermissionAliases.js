@@ -5,6 +5,8 @@ const PAGE_PERMISSION_ALIASES = {
   'manage-designation': 'designation',
   'manage-employee': 'employee',
   'manage-feedback': 'feedback',
+  'manage-todo': 'todo-task',
+  'subscription-plan': 'subscription-plans',
   onlineexam: 'online-exam',
 }
 
@@ -13,4 +15,3 @@ export const normalizePagePermissionSlug = (slug) => {
   const trimmed = String(slug).trim()
   return PAGE_PERMISSION_ALIASES[trimmed] || trimmed
 }
-

@@ -36,11 +36,23 @@ const uniqueStrings = (items) =>
   ).sort();
 
 const ResultEmail = ({ onNavigate }) => {
-  const { role: authRole, user, schoolId, headOfficeId } = useAuth();
+  const { role: authRole, user, schoolId, schoolName: authSchoolName, headOfficeId } = useAuth();
   const isSuperAdmin = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === "SUPER_ADMIN",
     [authRole, user],
   );
+  const isSchoolAdmin = useMemo(
+    () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority) === "SCHOOL_ADMIN",
+    [authRole, user],
+  );
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || schoolId == null) return null;
+    return {
+      id: schoolId,
+      schoolName: authSchoolName || `School ${schoolId}`,
+      headOfficeId: null,
+    };
+  }, [authSchoolName, isSchoolAdmin, schoolId]);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -86,7 +98,14 @@ const ResultEmail = ({ onNavigate }) => {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchHeadOfficesLookup(), fetchSchoolsLookup()])
+    if (isSchoolAdmin) {
+      setHeadOffices([]);
+      setSchools(currentSchoolOption ? [currentSchoolOption] : []);
+      return () => {
+        cancelled = true;
+      };
+    }
+    Promise.all([fetchHeadOfficesLookup(), isSuperAdmin ? fetchSchoolsLookup() : Promise.resolve([])])
       .then(([hoList, schoolList]) => {
         if (cancelled) return;
         setHeadOffices(Array.isArray(hoList) ? hoList : []);
@@ -101,7 +120,7 @@ const ResultEmail = ({ onNavigate }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin]);
 
   const schoolOptions = useMemo(
     () =>

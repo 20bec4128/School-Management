@@ -52,6 +52,14 @@ const SliderCreate = ({ onNavigate }) => {
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [schools, setSchools] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -90,6 +98,10 @@ const SliderCreate = ({ onNavigate }) => {
     let cancelled = false
     const loadSchools = async () => {
       try {
+        if (isSchoolAdmin) {
+          if (!cancelled) setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+          return
+        }
         const list = await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
@@ -100,14 +112,16 @@ const SliderCreate = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
     if (isHeadOfficeAdmin) return schools.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    if (isSchoolAdmin) return schools.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    if (isSchoolAdmin) {
+      return currentSchoolOption ? [currentSchoolOption] : []
+    }
     return schools
-  }, [schools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions])
+  }, [currentSchoolOption, schools, authHeadOfficeId, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions])
 
   const currentSchoolId = useMemo(() => {
     if (isSuperAdmin) return form.schoolId || manualScope.selectedSchoolId || ''

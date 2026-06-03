@@ -184,6 +184,19 @@ const ResultEmailCreate = ({ onNavigate }) => {
 
   useEffect(() => {
     const loadFormAndSchools = async () => {
+      if (isSchoolAdmin) {
+        setSchools(
+          authSchoolId != null
+            ? [
+                {
+                  id: authSchoolId,
+                  schoolName: authSchoolName || "My School",
+                  headOfficeId: authHeadOfficeId ?? null,
+                },
+              ]
+            : [],
+        );
+      } else {
       try {
         const lookupData = await fetchSchoolsLookup();
         setSchools(Array.isArray(lookupData) ? lookupData : []);
@@ -220,9 +233,10 @@ const ResultEmailCreate = ({ onNavigate }) => {
       } catch (err) {
         setError("Error loading record configuration dependencies.");
       }
+      }
     };
     void loadFormAndSchools();
-  }, [isEditMode, editId]);
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, editId, isEditMode, isSchoolAdmin, isSuperAdmin, manualScope.setSelectedScope]);
 
   useEffect(() => {
     const loadStudents = async () => {

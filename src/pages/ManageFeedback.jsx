@@ -90,6 +90,21 @@ const ManageFeedback = ({ onNavigate }) => {
     return schools.sort((a, b) => String(a?.schoolName || "").localeCompare(String(b?.schoolName || "")));
   }, [authHeadOfficeId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, schools]);
 
+  const resolvedHeadOfficeSchoolId = useMemo(() => {
+    if (!isHeadOfficeAdmin) return "";
+
+    const candidates = [filters.schoolId?.value, activeSchoolId]
+      .map((value) => (value == null ? "" : String(value).trim()))
+      .filter(Boolean);
+
+    const validCandidate = candidates.find((candidate) =>
+      schoolPickerOptions.some((school) => String(school.id) === candidate),
+    );
+
+    if (validCandidate) return validCandidate;
+    return schoolPickerOptions.length > 0 ? String(schoolPickerOptions[0].id) : "";
+  }, [activeSchoolId, filters.schoolId, isHeadOfficeAdmin, schoolPickerOptions]);
+
   const filterColumns = useMemo(
     () => [
       {
@@ -145,6 +160,39 @@ const ManageFeedback = ({ onNavigate }) => {
   }, [loadScopeLookups]);
 
   useEffect(() => {
+    if (status !== "ready" || !isHeadOfficeAdmin) return;
+    if (schoolPickerOptions.length === 0) return;
+
+    const fallbackSchoolId = String(schoolPickerOptions[0].id);
+    const selectedSchoolId = String(filters.schoolId?.value || activeSchoolId || "").trim();
+    const selectedIsValid = schoolPickerOptions.some(
+      (school) => String(school.id) === selectedSchoolId,
+    );
+
+    const nextSchoolId = selectedIsValid ? selectedSchoolId : fallbackSchoolId;
+
+    if (nextSchoolId && activeSchoolId !== nextSchoolId) {
+      setActiveSchoolId(nextSchoolId);
+    }
+
+    if (String(filters.schoolId?.value || "") !== nextSchoolId) {
+      setFilters((prev) => ({ ...prev, schoolId: { value: nextSchoolId } }));
+    }
+
+    if (String(pendingFilters.schoolId?.value || "") !== nextSchoolId) {
+      setPendingFilters((prev) => ({ ...prev, schoolId: { value: nextSchoolId } }));
+    }
+  }, [
+    activeSchoolId,
+    filters.schoolId,
+    isHeadOfficeAdmin,
+    pendingFilters.schoolId,
+    schoolPickerOptions,
+    setActiveSchoolId,
+    status,
+  ]);
+
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(timer);
   }, [search]);
@@ -157,7 +205,7 @@ const ManageFeedback = ({ onNavigate }) => {
         ? String(authSchoolId)
         : ""
       : isHeadOfficeAdmin
-      ? filters.schoolId?.value || (activeSchoolId ? String(activeSchoolId) : "")
+      ? resolvedHeadOfficeSchoolId
       : filters.schoolId?.value || "";
 
     if (isHeadOfficeAdmin && !effectiveSchoolId) {
@@ -190,7 +238,7 @@ const ManageFeedback = ({ onNavigate }) => {
     } finally {
       setBusy(false);
     }
-  }, [activeSchoolId, authSchoolId, currentPage, debouncedSearch, filters.schoolId, isHeadOfficeAdmin, isSchoolAdmin, rowsPerPage, status]);
+  }, [authSchoolId, currentPage, debouncedSearch, isHeadOfficeAdmin, isSchoolAdmin, resolvedHeadOfficeSchoolId, rowsPerPage, status, filters.schoolId]);
 
   useEffect(() => {
     void loadRows();

@@ -74,13 +74,22 @@ const FormField = ({ label, required, children, full = false, noIcon = false }) 
 };
 
 const EmailCreate = ({ onNavigate }) => {
-  const { role: authRole, user } = useAuth();
+  const { role: authRole, user, schoolId: authSchoolId, schoolName: authSchoolName, headOfficeId: authHeadOfficeId } = useAuth();
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
   );
   const isSuperAdmin = role === "SUPER_ADMIN";
+  const isSchoolAdmin = role === "SCHOOL_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin]);
 
   const [editId] = useState(() => readEditId());
   const [editingRow, setEditingRow] = useState(null);
@@ -98,6 +107,10 @@ const EmailCreate = ({ onNavigate }) => {
 
   useEffect(() => {
     const loadSchools = async () => {
+      if (isSchoolAdmin) {
+        setSchools(currentSchoolOption ? [currentSchoolOption] : []);
+        return;
+      }
       try {
         const data = await fetchSchoolsLookup();
         setSchools(Array.isArray(data) ? data : []);
@@ -106,7 +119,7 @@ const EmailCreate = ({ onNavigate }) => {
       }
     };
     void loadSchools();
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin, isEditMode, editId, isSuperAdmin, manualScope.setSelectedScope]);
 
   useEffect(() => {
     const loadEdit = async () => {
@@ -251,8 +264,9 @@ const EmailCreate = ({ onNavigate }) => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.schoolOptions || [];
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : [];
     return Array.isArray(schools) ? schools : [];
-  }, [schools, isSuperAdmin, manualScope.schoolOptions]);
+  }, [currentSchoolOption, isSchoolAdmin, schools, isSuperAdmin, manualScope.schoolOptions]);
 
   const selectedSchool = useMemo(
     () => schoolOptions.find((school) => String(school.id) === String(form.schoolId)),

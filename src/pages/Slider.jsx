@@ -51,12 +51,20 @@ const fetchAllPages = async (query) => {
 }
 
 const Slider = ({ onNavigate }) => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId } = useAuth()
+  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const normalizedRole = normalizeRole(role)
   const isSuperAdmin = normalizedRole === 'SUPER_ADMIN'
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [allSchools, setAllSchools] = useState([])
   const [rows, setRows] = useState([])
@@ -75,6 +83,10 @@ const Slider = ({ onNavigate }) => {
     let cancelled = false
     const load = async () => {
       try {
+        if (isSchoolAdmin) {
+          if (!cancelled) setAllSchools(currentSchoolOption ? [currentSchoolOption] : [])
+          return
+        }
         const list = await fetchSchoolsLookup()
         if (!cancelled) setAllSchools(Array.isArray(list) ? list : [])
       } catch {
@@ -85,7 +97,7 @@ const Slider = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const selectedHeadOfficeId = useMemo(() => {
     if (filters.headOfficeId && filters.headOfficeId !== 'Select') return String(filters.headOfficeId)
@@ -112,9 +124,9 @@ const Slider = ({ onNavigate }) => {
     }
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : rowsList
     if (isHeadOfficeAdmin) return rowsList.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    if (isSchoolAdmin) return rowsList.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return rowsList
-  }, [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, selectedHeadOfficeId])
+  }, [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions, selectedHeadOfficeId])
 
   const loadRows = async () => {
     setLoading(true)

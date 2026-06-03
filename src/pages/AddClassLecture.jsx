@@ -130,9 +130,9 @@ const AddClassLecture = ({ onNavigate }) => {
     return {
       id: authSchoolId,
       schoolName: authSchoolName || `School ${authSchoolId}`,
-      headOfficeId: activeSchoolId ?? null,
+      headOfficeId: null,
     }
-  }, [activeSchoolId, authSchoolId, authSchoolName, isSchoolAdmin])
+  }, [authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [initialEditRow] = useState(() => {
     try {

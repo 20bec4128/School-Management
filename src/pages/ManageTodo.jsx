@@ -47,7 +47,7 @@ const fetchAllPages = async (query) => {
 }
 
 const ManageTodo = ({ onNavigate }) => {
-  const { role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, canAdd, canEdit, canDelete } = useAuth()
+  const { status, role, headOfficeId: authHeadOfficeId, schoolId: authSchoolId, schoolName: authSchoolName, pagePermissions, isSuperAdminRole, canAdd, canEdit, canDelete } = useAuth()
   const PAGE_SLUG = 'manage-todo'
   const PAGE_PERMISSIONS = {
     add: canAdd(PAGE_SLUG),
@@ -59,6 +59,15 @@ const ManageTodo = ({ onNavigate }) => {
   const isHeadOfficeAdmin = normalizedRole === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = normalizedRole === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const canViewTodo = status === 'ready' && (isSuperAdminRole || pagePermissions?.['todo-task']?.view === true)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [allSchools, setAllSchools] = useState([])
   const [rows, setRows] = useState([])
@@ -77,6 +86,10 @@ const ManageTodo = ({ onNavigate }) => {
     let cancelled = false
     const loadSchools = async () => {
       try {
+        if (isSchoolAdmin) {
+          if (!cancelled) setAllSchools(currentSchoolOption ? [currentSchoolOption] : [])
+          return
+        }
         const list = await fetchSchoolsLookup()
         if (!cancelled) setAllSchools(Array.isArray(list) ? list : [])
       } catch {
@@ -87,14 +100,14 @@ const ManageTodo = ({ onNavigate }) => {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [currentSchoolOption, isSchoolAdmin])
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
     if (isHeadOfficeAdmin) return allSchools.filter((school) => String(school?.headOfficeId ?? '') === String(authHeadOfficeId ?? ''))
-    if (isSchoolAdmin) return allSchools.filter((school) => String(school?.id ?? '') === String(authSchoolId ?? ''))
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return allSchools
-  }, [allSchools, authHeadOfficeId, authSchoolId, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions])
+  }, [allSchools, authHeadOfficeId, authSchoolId, currentSchoolOption, isHeadOfficeAdmin, isSchoolAdmin, isSuperAdmin, manualScope.schoolOptions])
 
   const effectiveHeadOfficeId = useMemo(() => {
     if (isSuperAdmin) return manualScope.selectedHeadOfficeId ? Number(manualScope.selectedHeadOfficeId) : null
@@ -113,6 +126,12 @@ const ManageTodo = ({ onNavigate }) => {
   }, [authSchoolId, filters.schoolId, isSchoolAdmin, isSuperAdmin, manualScope.selectedSchoolId])
 
   const handleLoad = async () => {
+    if (!canViewTodo) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      return
+    }
     setLoading(true)
     try {
       const result = await fetchTodoTasksPage({
@@ -137,9 +156,10 @@ const ManageTodo = ({ onNavigate }) => {
   }
 
   useEffect(() => {
+    if (status !== 'ready') return
     void handleLoad()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, effectiveHeadOfficeId, effectiveSchoolId, filters.userType, filters.workStatus, rowsPerPage, search])
+  }, [status, canViewTodo, currentPage, effectiveHeadOfficeId, effectiveSchoolId, filters.userType, filters.workStatus, rowsPerPage, search])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -207,6 +227,9 @@ const ManageTodo = ({ onNavigate }) => {
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
+          {status === 'ready' && !canViewTodo ? (
+            <div className="px-20 py-12 text-danger">You do not have permission to view todo tasks.</div>
+          ) : null}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown onExportExcel={handleExportExcel} />

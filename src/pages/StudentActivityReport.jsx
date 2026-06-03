@@ -67,6 +67,14 @@ const StudentActivityReport = () => {
 
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: `School ${authSchoolId}`,
+      headOfficeId: null,
+    }
+  }, [authSchoolId, isSchoolAdmin])
 
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(false)
@@ -98,8 +106,9 @@ const StudentActivityReport = () => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return Array.isArray(schools) ? schools : []
-  }, [manualScope.schoolOptions, isSuperAdmin, schools])
+  }, [currentSchoolOption, isSchoolAdmin, manualScope.schoolOptions, isSuperAdmin, schools])
 
   const filteredData = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
@@ -159,10 +168,14 @@ const StudentActivityReport = () => {
     let cancelled = false
     const load = async () => {
       try {
+        if (isSchoolAdmin) {
+          if (!cancelled) setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+          return
+        }
         const list = await fetchSchoolsLookup()
         if (!cancelled) setSchools(Array.isArray(list) ? list : [])
       } catch {
-        if (!cancelled) setSchools([])
+        if (!cancelled) setSchools(isSchoolAdmin && currentSchoolOption ? [currentSchoolOption] : [])
       }
     }
 
@@ -170,7 +183,7 @@ const StudentActivityReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, status, token, isSuperAdmin])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

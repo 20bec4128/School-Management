@@ -287,7 +287,11 @@ const ExpenditureHead = () => {
     setCurrentPage(1)
   }
 
-  const resolveSchoolName = (schoolId) => {
+  const resolveSchoolName = (rowOrSchoolId) => {
+    const rowSchoolName = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolName : ''
+    if (rowSchoolName) return rowSchoolName
+
+    const schoolId = rowOrSchoolId && typeof rowOrSchoolId === 'object' ? rowOrSchoolId.schoolId : rowOrSchoolId
     if (schoolId == null) return '--'
     return schoolsById.get(String(schoolId))?.schoolName || authSchoolName || `School ${schoolId}`
   }
@@ -407,7 +411,7 @@ const ExpenditureHead = () => {
                           <label className="form-check-label">{(currentPage - 1) * rowsPerPage + idx + 1}</label>
                         </div>
                       </td>
-                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row.schoolId)}</td>}
+                      {visibleColumns.school && <td className="fw-medium text-primary-light">{resolveSchoolName(row)}</td>}
                       {visibleColumns.expenditureHead && <td className="fw-medium">{row.expenditureHead}</td>}
                       {visibleColumns.note && <td style={{ maxWidth: 250, whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.note || '-'}</td>}
                       <td>

@@ -4,6 +4,7 @@ import SlideSidebar from '../components/SlideSidebar'
 import ExportDropdown from '../components/ExportDropdown'
 import RowsPerPageSelect from '../components/RowsPerPageSelect'
 import { TablePagination } from '../components/table'
+import { useAuth } from '../context/useAuth'
 import useColumnVisibility from '../hooks/useColumnVisibility'
 import { deleteSubscriptionPlan, fetchSubscriptionPlansPage } from '../apis/subscriptionPlansApi'
 import '../assets/css/addModalShared.css'
@@ -23,6 +24,7 @@ const columnOptions = [
 ]
 
 const SubscriptionPlan = ({ onNavigate }) => {
+  const { status, pagePermissions, isSuperAdminRole } = useAuth()
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -34,23 +36,37 @@ const SubscriptionPlan = ({ onNavigate }) => {
   const [selectedRows, setSelectedRows] = useState([])
 
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const canViewPlans = status === 'ready' && (isSuperAdminRole || pagePermissions?.['subscription-plans']?.view === true)
 
   const loadRows = async () => {
-    const result = await fetchSubscriptionPlansPage({
-      status: filters.status !== 'Select' ? filters.status : undefined,
-      search,
-      page: currentPage - 1,
-      size: rowsPerPage,
-    })
-    setRows(Array.isArray(result?.content) ? result.content : [])
-    setTotalElements(Number(result?.totalElements ?? 0))
-    setTotalPages(Number(result?.totalPages ?? 1) || 1)
+    if (!canViewPlans) {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+      return
+    }
+    try {
+      const result = await fetchSubscriptionPlansPage({
+        status: filters.status !== 'Select' ? filters.status : undefined,
+        search,
+        page: currentPage - 1,
+        size: rowsPerPage,
+      })
+      setRows(Array.isArray(result?.content) ? result.content : [])
+      setTotalElements(Number(result?.totalElements ?? 0))
+      setTotalPages(Number(result?.totalPages ?? 1) || 1)
+    } catch {
+      setRows([])
+      setTotalElements(0)
+      setTotalPages(1)
+    }
   }
 
   useEffect(() => {
+    if (status !== 'ready') return
     void loadRows()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, rowsPerPage, search, filters.status])
+  }, [status, canViewPlans, currentPage, rowsPerPage, search, filters.status])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -108,6 +124,9 @@ const SubscriptionPlan = ({ onNavigate }) => {
 
       <div className="card h-100">
         <div className="card-body p-0 dataTable-wrapper">
+          {status === 'ready' && !canViewPlans ? (
+            <div className="px-20 py-12 text-danger">You do not have permission to view subscription plans.</div>
+          ) : null}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-16 px-20 py-12 border-bottom border-neutral-200">
             <div className="d-flex flex-wrap align-items-center gap-16">
               <ExportDropdown onExportExcel={handleExportExcel} />

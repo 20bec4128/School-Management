@@ -64,7 +64,7 @@ const fetchAllPages = async (loader, params) => {
 }
 
 const DailyTransactionReport = () => {
-  const { status, token, user, role: authRole, schoolId: authSchoolId } = useAuth()
+  const { status, token, user, role: authRole, schoolId: authSchoolId, schoolName: authSchoolName } = useAuth()
   const role = useMemo(
     () => normalizeRole(authRole || user?.role || user?.userRole || user?.authority),
     [authRole, user],
@@ -74,6 +74,14 @@ const DailyTransactionReport = () => {
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
   const initialSchoolId = authSchoolId != null ? String(authSchoolId) : 'Select'
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: null,
+    }
+  }, [authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(false)
@@ -99,8 +107,9 @@ const DailyTransactionReport = () => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return Array.isArray(manualScope.schoolOptions) ? manualScope.schoolOptions : []
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : []
     return Array.isArray(schools) ? schools : []
-  }, [manualScope.schoolOptions, isSuperAdmin, schools])
+  }, [currentSchoolOption, isSchoolAdmin, manualScope.schoolOptions, isSuperAdmin, schools])
 
   const filteredData = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
@@ -182,6 +191,10 @@ const DailyTransactionReport = () => {
   useEffect(() => {
     if (status !== 'ready' || !token) return
     if (isSuperAdmin) return
+    if (isSchoolAdmin) {
+      setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
 
     let cancelled = false
     const load = async () => {
@@ -197,7 +210,7 @@ const DailyTransactionReport = () => {
     return () => {
       cancelled = true
     }
-  }, [status, token, isSuperAdmin])
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin, status, token])
 
   useEffect(() => {
     if (status !== 'ready' || !token) return

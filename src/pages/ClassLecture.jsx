@@ -74,6 +74,15 @@ const ClassLecture = ({ onNavigate }) => {
     : authSchoolId
       ? String(authSchoolId)
       : "";
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin]);
+
   const resolvedSchoolName = authSchoolName || "";
   const schoolByName = useMemo(() => {
     const map = new Map();
@@ -150,7 +159,7 @@ const ClassLecture = ({ onNavigate }) => {
       try {
         const [headOfficePage, schoolRows] = await Promise.allSettled([
           isSuperAdmin ? fetchHeadOfficesPage(0, 500) : Promise.resolve({ content: [] }),
-          fetchSchoolsLookup(),
+          isSchoolAdmin ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
         ]);
 
         if (ignore) return;
@@ -177,7 +186,7 @@ const ClassLecture = ({ onNavigate }) => {
     return () => {
       ignore = true;
     };
-  }, [isSuperAdmin]);
+  }, [currentSchoolOption, isSchoolAdmin, isSuperAdmin]);
 
   const previewLectures = useMemo(() => {
     const selectedSchoolIdValue = pendingSchoolId;

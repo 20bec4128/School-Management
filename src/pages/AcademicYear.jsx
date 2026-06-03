@@ -113,6 +113,14 @@ const AcademicYear = () => {
   const isHeadOfficeAdmin = role === 'HEAD_OFFICE_ADMIN'
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const manualScope = useManualSchoolScope(isSuperAdmin)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin])
 
   const [rows, setRows] = useState([])
   const [totalElements, setTotalElements] = useState(0)
@@ -171,6 +179,11 @@ const AcademicYear = () => {
   }, [authHeadOfficeId, authHeadOfficeName, authSchoolId, authSchoolName, isHeadOfficeAdmin, isSchoolAdmin])
 
   const loadSchools = async () => {
+    if (isSchoolAdmin) {
+      setSchools(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
+
     const list = await fetchSchoolsLookup()
     setSchools(Array.isArray(list) ? list : [])
   }

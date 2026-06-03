@@ -11,6 +11,7 @@ public final class PagePermissionSlugAliases {
             Map.entry("designation", "manage-designation"),
             Map.entry("employee", "manage-employee"),
             Map.entry("feedback", "manage-feedback"),
+            Map.entry("subscription-plan", "subscription-plans"),
             Map.entry("online-exam", "onlineexam")
     );
 

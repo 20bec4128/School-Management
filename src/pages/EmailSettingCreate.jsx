@@ -160,6 +160,20 @@ const EmailSettingCreate = ({ onNavigate }) => {
 
   useEffect(() => {
     const loadData = async () => {
+      if (isSchoolAdmin) {
+        setSchools(
+          authSchoolId != null
+            ? [
+                {
+                  id: authSchoolId,
+                  schoolName: authSchoolName || `School ${authSchoolId}`,
+                  headOfficeId: authHeadOfficeId ?? null,
+                },
+              ]
+            : [],
+        );
+        return;
+      }
       try {
         const lookupData = await fetchSchoolsLookup();
         setSchools(Array.isArray(lookupData) ? lookupData : []);
@@ -209,7 +223,7 @@ const EmailSettingCreate = ({ onNavigate }) => {
     };
 
     void loadData();
-  }, [isEditMode, editId]);
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, editId, isEditMode, isSchoolAdmin]);
 
   useEffect(() => {
     if (!isSchoolAdmin || authSchoolId == null) return;

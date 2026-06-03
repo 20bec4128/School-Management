@@ -68,6 +68,14 @@ const StudentActivity = ({ onNavigate }) => {
   const isHeadOfficeScoped = String(role || '').toUpperCase() === 'HEAD_OFFICE_ADMIN'
   const isSchoolScoped = String(role || '').toUpperCase() === 'SCHOOL_ADMIN'
   const { visibleColumns, visibleColumnCount, toggleColumn } = useColumnVisibility(columnOptions)
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolScoped || authSchoolId == null) return null
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    }
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolScoped])
 
   const selectedSchoolIdForLookups = useMemo(() => {
     if (isSchoolScoped && scopedSchoolId) return scopedSchoolId
@@ -131,8 +139,13 @@ const StudentActivity = ({ onNavigate }) => {
   }, [loadData, refreshKey])
 
   useEffect(() => {
+    if (isSchoolScoped) {
+      setSchoolList(currentSchoolOption ? [currentSchoolOption] : [])
+      return
+    }
+
     fetchSchoolsLookup().then(setSchoolList).catch(() => setSchoolList([]))
-  }, [])
+  }, [currentSchoolOption, isSchoolScoped])
 
   useEffect(() => {
     if (!isSuperAdmin) {

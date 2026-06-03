@@ -73,6 +73,14 @@ const FrontendPageCreate = ({ onNavigate }) => {
   const isHeadOfficeAdmin = normalizedRole === "HEAD_OFFICE_ADMIN";
   const isSchoolAdmin = normalizedRole === "SCHOOL_ADMIN";
   const manualScope = useManualSchoolScope(isSuperAdmin);
+  const currentSchoolOption = useMemo(() => {
+    if (!isSchoolAdmin || authSchoolId == null) return null;
+    return {
+      id: authSchoolId,
+      schoolName: authSchoolName || `School ${authSchoolId}`,
+      headOfficeId: authHeadOfficeId ?? null,
+    };
+  }, [authHeadOfficeId, authSchoolId, authSchoolName, isSchoolAdmin]);
 
   const [initialEditRow] = useState(() => readEditRow());
 
@@ -105,6 +113,10 @@ const FrontendPageCreate = ({ onNavigate }) => {
   useEffect(() => {
     const loadSchools = async () => {
       try {
+        if (isSchoolAdmin) {
+          setSchools(currentSchoolOption ? [currentSchoolOption] : []);
+          return;
+        }
         const list = await fetchSchoolsLookup();
         setSchools(Array.isArray(list) ? list : []);
       } catch {
@@ -112,7 +124,7 @@ const FrontendPageCreate = ({ onNavigate }) => {
       }
     };
     void loadSchools();
-  }, []);
+  }, [currentSchoolOption, isSchoolAdmin]);
 
   useEffect(() => {
     if (!initialEditRow || !isSuperAdmin || schools.length === 0) return;
@@ -124,6 +136,7 @@ const FrontendPageCreate = ({ onNavigate }) => {
 
   const schoolOptions = useMemo(() => {
     if (isSuperAdmin) return manualScope.schoolOptions;
+    if (isSchoolAdmin) return currentSchoolOption ? [currentSchoolOption] : [];
     const filtered = Array.isArray(schools)
       ? schools.filter((school) => {
           if (isHeadOfficeAdmin && authHeadOfficeId != null) {
@@ -137,7 +150,7 @@ const FrontendPageCreate = ({ onNavigate }) => {
       ? [{ id: fallbackSchoolId, schoolName: authSchoolName }]
       : [];
     return [...filtered, ...fallback];
-  }, [isSuperAdmin, manualScope.schoolOptions, schools, isHeadOfficeAdmin, authHeadOfficeId, form.schoolId, authSchoolId, authSchoolName]);
+  }, [currentSchoolOption, isSuperAdmin, manualScope.schoolOptions, schools, isHeadOfficeAdmin, isSchoolAdmin, authHeadOfficeId, form.schoolId, authSchoolId, authSchoolName]);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
