@@ -28,17 +28,18 @@ public class DepartmentController {
 
     @GetMapping("/all")
     @RequirePagePermission(slug = "teacher-department", action = "view")
-    public List<DepartmentDto> getAll() {
-        return departmentService.getAll();
+    public List<DepartmentDto> getAll(@RequestParam(required = false) Long schoolId) {
+        return departmentService.getAll(schoolId);
     }
 
     @GetMapping
     @RequirePagePermission(slug = "teacher-department", action = "view")
     public Page<DepartmentDto> getAll(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Long schoolId
     ) {
-        return departmentService.getAll(page, size);
+        return departmentService.getAll(page, size, schoolId);
     }
 
     @PostMapping

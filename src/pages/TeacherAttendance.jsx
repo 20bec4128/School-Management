@@ -299,7 +299,7 @@ const TeacherAttendance = () => {
     let cancelled = false
     const run = async () => {
       try {
-        const rows = await fetchAllDepartments()
+        const rows = await fetchAllDepartments(schoolId)
         if (cancelled) return
         setDepartments(Array.isArray(rows) ? rows : [])
       } catch {

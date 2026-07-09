@@ -139,6 +139,11 @@ const AddTeacher = ({ onNavigate }) => {
 
   const [photoPreview, setPhotoPreview] = useState(initialEditRow?.photoUrl || null)
   const photoRef = useRef()
+  const selectedDepartmentSchoolId = useMemo(() => {
+    if (form.schoolId) return String(form.schoolId)
+    if (isSchoolAdmin && currentSchoolOption?.id != null) return String(currentSchoolOption.id)
+    return ''
+  }, [currentSchoolOption, form.schoolId, isSchoolAdmin])
 
   useEffect(() => () => sessionStorage.removeItem(EDIT_STORAGE_KEY), [])
 
@@ -148,8 +153,30 @@ const AddTeacher = ({ onNavigate }) => {
       return
     }
     fetchSchoolsLookup().then(setSchools).catch(() => setSchools([]))
-    fetchAllDepartments().then(setDepartments).catch(() => setDepartments([]))
   }, [currentSchoolOption, isSchoolAdmin])
+
+  useEffect(() => {
+    if (!selectedDepartmentSchoolId) {
+      setDepartments([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      try {
+        const rows = await fetchAllDepartments(selectedDepartmentSchoolId)
+        if (!cancelled) setDepartments(Array.isArray(rows) ? rows : [])
+      } catch {
+        if (!cancelled) setDepartments([])
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedDepartmentSchoolId])
 
   useEffect(() => {
     if (!form.schoolId) {
@@ -269,7 +296,11 @@ const AddTeacher = ({ onNavigate }) => {
   }
 
   const handleDeptAdded = (created) => {
-    setDepartments((prev) => [...prev, created].sort((a, b) => a.title.localeCompare(b.title)))
+    if (!created) return
+    setDepartments((prev) => {
+      const next = [...prev.filter((row) => String(row?.id) !== String(created.id)), created]
+      return next.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
+    })
     setForm((prev) => ({ ...prev, department: created.title }))
   }
 

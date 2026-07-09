@@ -194,7 +194,13 @@ const TeacherDepartment = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchAllDepartments()
+      const schoolId =
+        pendingFilters.schoolId !== 'Select'
+          ? pendingFilters.schoolId
+          : isSchoolAdmin && scopedSchoolId
+            ? scopedSchoolId
+            : ''
+      const data = await fetchAllDepartments(schoolId)
       setDepartments(Array.isArray(data) ? data : [])
     } catch (e) {
       setDepartments([])
@@ -202,7 +208,7 @@ const TeacherDepartment = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isSchoolAdmin, pendingFilters.schoolId, scopedSchoolId])
 
   const loadSchoolsLookup = useCallback(async () => {
     try {

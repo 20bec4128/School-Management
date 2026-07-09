@@ -126,7 +126,7 @@ const ManageTeacher = ({ onNavigate }) => {
     try {
       const [teacherData, deptResult, schoolResult] = await Promise.allSettled([
         fetchTeachers(resolvedSchoolId ? { schoolId: resolvedSchoolId } : {}),
-        fetchAllDepartments(),
+        fetchAllDepartments(resolvedSchoolId || authSchoolId || activeSchoolId || ''),
         isFixedSchoolScope ? Promise.resolve(currentSchoolOption ? [currentSchoolOption] : []) : fetchSchoolsLookup(),
       ])
 
@@ -141,7 +141,7 @@ const ManageTeacher = ({ onNavigate }) => {
     } finally {
       setLoading(false)
     }
-  }, [currentSchoolOption, isFixedSchoolScope, resolvedSchoolId])
+  }, [activeSchoolId, authSchoolId, currentSchoolOption, isFixedSchoolScope, resolvedSchoolId])
 
   useEffect(() => {
     void loadData()
